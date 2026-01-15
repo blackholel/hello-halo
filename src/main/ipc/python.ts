@@ -18,6 +18,7 @@ import {
   PipInstallProgress,
   VenvCreateProgress
 } from '../services/python.service'
+import { cleanupAllProcesses } from '../services/python.async-utils'
 
 /**
  * Standard IPC response type
@@ -197,5 +198,20 @@ export function registerPythonHandlers(window: BrowserWindow | null): void {
  */
 export function cleanupPythonHandlers(): void {
   mainWindow = null
-  console.log('[Python] IPC handlers cleaned up')
+
+  // 清理所有活跃的 Python 进程
+  cleanupAllProcesses()
+
+  // 移除所有 IPC handlers
+  ipcMain.removeHandler('python:detect')
+  ipcMain.removeHandler('python:execute')
+  ipcMain.removeHandler('python:install-package')
+  ipcMain.removeHandler('python:uninstall-package')
+  ipcMain.removeHandler('python:list-packages')
+  ipcMain.removeHandler('python:create-venv')
+  ipcMain.removeHandler('python:delete-venv')
+  ipcMain.removeHandler('python:has-venv')
+  ipcMain.removeHandler('python:get-environment')
+
+  console.log('[Python] IPC handlers and processes cleaned up')
 }
