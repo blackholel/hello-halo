@@ -163,7 +163,21 @@ export function getGlobalPackagesDir(): string {
  * Get the virtual environment directory for a space
  */
 export function getSpaceVenvDir(spaceId: string): string {
-  return join(app.getPath('userData'), 'spaces', spaceId, '.venv')
+  // 验证 spaceId 防止路径遍历
+  const validation = validateSpaceId(spaceId)
+  if (!validation.valid) {
+    throw new Error(`Invalid spaceId: ${validation.error}`)
+  }
+
+  const userDataPath = app.getPath('userData')
+  const venvDir = join(userDataPath, 'spaces', spaceId, '.venv')
+
+  // 二次验证：确保路径在预期目录内
+  if (!venvDir.startsWith(userDataPath)) {
+    throw new Error('Path traversal detected')
+  }
+
+  return venvDir
 }
 
 // ============================================
