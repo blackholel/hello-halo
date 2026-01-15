@@ -29,7 +29,7 @@ import { registerOverlayHandlers, cleanupOverlayHandlers } from '../ipc/overlay'
 import { initializeSearchHandlers, cleanupSearchHandlers } from '../ipc/search'
 import { registerPerfHandlers } from '../ipc/perf'
 import { registerGitBashHandlers, initializeGitBashOnStartup } from '../ipc/git-bash'
-import { registerPythonHandlers } from '../ipc/python'
+import { registerPythonHandlers, cleanupPythonHandlers } from '../ipc/python'
 
 /**
  * Initialize extended services after window is visible
@@ -106,6 +106,9 @@ export function cleanupExtendedServices(): void {
 
   // Search: Cancel any ongoing searches
   cleanupSearchHandlers()
+
+  // Python: Cleanup handlers and kill active processes
+  cleanupPythonHandlers()
 
   console.log('[Bootstrap] Extended services cleaned up')
 }
