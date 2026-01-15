@@ -505,6 +505,9 @@ export async function installPackage(
       env: process.env as Record<string, string>
     })
 
+    // 追踪进程以便在应用关闭时清理
+    trackProcess(pipProcess)
+
     let stderr = ''
     let lastPhase: 'downloading' | 'installing' = 'downloading'
 
@@ -605,6 +608,9 @@ export async function uninstallPackage(
     const pipProcess = spawn(env.pythonPath, args, {
       env: process.env as Record<string, string>
     })
+
+    // 追踪进程以便在应用关闭时清理
+    trackProcess(pipProcess)
 
     let stderr = ''
 
