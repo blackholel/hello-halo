@@ -12,7 +12,8 @@ import { app } from 'electron'
 import { existsSync, mkdirSync, writeFileSync, unlinkSync, statSync, chmodSync } from 'fs'
 import { rm } from 'fs/promises'
 import { join, resolve } from 'path'
-import { spawn, execFileSync } from 'child_process'
+import { spawn } from 'child_process'
+import { execFilePromise, trackProcess, cleanupAllProcesses } from './python.async-utils'
 
 // ============================================
 // Types (imported from shared)
@@ -187,7 +188,7 @@ export function getSpaceVenvDir(spaceId: string): string {
 /**
  * Detect and validate the embedded Python installation
  */
-export function detectPython(): PythonDetectionResult {
+export async function detectPython(): Promise<PythonDetectionResult> {
   const pythonPath = getPythonExecutable()
   const pipPath = getPipExecutable()
 
@@ -195,27 +196,24 @@ export function detectPython(): PythonDetectionResult {
     return {
       found: false,
       environment: null,
-      error: `Python executable not found at: ${pythonPath}`
+      error: `Python 环境未找到，请确保应用已正确安装`
     }
   }
 
   try {
-    // Get Python version using execFileSync (safer than execSync)
-    const versionOutput = execFileSync(pythonPath, ['--version'], {
-      encoding: 'utf8',
+    // 异步获取 Python 版本
+    const versionResult = await execFilePromise(pythonPath, ['--version'], {
       timeout: 5000
-    }).trim()
-    const version = versionOutput.replace('Python ', '')
+    })
+    const version = versionResult.stdout.trim().replace('Python ', '')
 
-    // Get site-packages path
-    const sitePackagesOutput = execFileSync(
+    // 异步获取 site-packages 路径
+    const sitePackagesResult = await execFilePromise(
       pythonPath,
       ['-c', 'import site; print(site.getsitepackages()[0])'],
-      {
-        encoding: 'utf8',
-        timeout: 5000
-      }
-    ).trim()
+      { timeout: 5000 }
+    )
+    const sitePackages = sitePackagesResult.stdout.trim()
 
     return {
       found: true,
@@ -224,14 +222,14 @@ export function detectPython(): PythonDetectionResult {
         pythonPath,
         pipPath,
         version,
-        sitePackages: sitePackagesOutput
+        sitePackages
       }
     }
   } catch (error) {
     return {
       found: false,
       environment: null,
-      error: `Failed to validate Python: ${(error as Error).message}`
+      error: `Python 环境验证失败: ${(error as Error).message}`
     }
   }
 }
