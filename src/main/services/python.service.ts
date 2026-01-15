@@ -246,8 +246,8 @@ export function hasSpaceVenv(spaceId: string): boolean {
 /**
  * Get the Python environment for a space (venv if exists, otherwise global)
  */
-export function getSpaceEnvironment(spaceId: string): PythonEnvironment | null {
-  const detection = detectPython()
+export async function getSpaceEnvironment(spaceId: string): Promise<PythonEnvironment | null> {
+  const detection = await detectPython()
   if (!detection.found || !detection.environment) {
     return null
   }
@@ -295,7 +295,9 @@ export async function executePythonCode(
   const timeout = options.timeout || EXECUTION_TIMEOUT_MS
 
   // Get appropriate Python environment
-  const env = options.spaceId ? getSpaceEnvironment(options.spaceId) : detectPython().environment
+  const env = options.spaceId
+    ? await getSpaceEnvironment(options.spaceId)
+    : (await detectPython()).environment
 
   if (!env) {
     return {
@@ -465,7 +467,9 @@ export async function installPackage(
     }
   }
 
-  const env = options.spaceId ? getSpaceEnvironment(options.spaceId) : detectPython().environment
+  const env = options.spaceId
+    ? await getSpaceEnvironment(options.spaceId)
+    : (await detectPython()).environment
 
   if (!env) {
     return { success: false, error: 'Python environment not available' }
@@ -584,7 +588,9 @@ export async function uninstallPackage(
     }
   }
 
-  const env = options.spaceId ? getSpaceEnvironment(options.spaceId) : detectPython().environment
+  const env = options.spaceId
+    ? await getSpaceEnvironment(options.spaceId)
+    : (await detectPython()).environment
 
   if (!env) {
     return { success: false, error: 'Python environment not available' }
@@ -623,7 +629,9 @@ export async function uninstallPackage(
 export async function listPackages(
   spaceId?: string
 ): Promise<{ success: boolean; packages?: PackageInfo[]; error?: string }> {
-  const env = spaceId ? getSpaceEnvironment(spaceId) : detectPython().environment
+  const env = spaceId
+    ? await getSpaceEnvironment(spaceId)
+    : (await detectPython()).environment
 
   if (!env) {
     return { success: false, error: 'Python environment not available' }
@@ -641,13 +649,18 @@ export async function listPackages(
       }
     }
 
-    const result = execFileSync(env.pythonPath, ['-m', 'pip', 'list', '--format=json'], {
-      encoding: 'utf8',
-      env: processEnv,
-      timeout: 30000
-    })
+    // 使用异步版本避免阻塞主进程
+    const result = await execFilePromise(
+      env.pythonPath,
+      ['-m', 'pip', 'list', '--format=json'],
+      {
+        env: processEnv,
+        timeout: 30000,
+        maxBuffer: 5 * 1024 * 1024 // 5MB for large package lists
+      }
+    )
 
-    const packages = JSON.parse(result) as PackageInfo[]
+    const packages = JSON.parse(result.stdout) as PackageInfo[]
     return { success: true, packages }
   } catch (error) {
     return { success: false, error: (error as Error).message }
@@ -665,7 +678,7 @@ export async function createSpaceVenv(
   spaceId: string,
   onProgress?: (progress: VenvCreateProgress) => void
 ): Promise<{ success: boolean; path?: string; error?: string }> {
-  const detection = detectPython()
+  const detection = await detectPython()
   if (!detection.found || !detection.environment) {
     return { success: false, error: 'Embedded Python not available' }
   }
