@@ -342,6 +342,9 @@ export async function executePythonCode(
         env: processEnv
       })
 
+      // 追踪进程以便在应用关闭时清理
+      trackProcess(pythonProcess)
+
       // Set up timeout
       const timeoutId = setTimeout(() => {
         killed = true
