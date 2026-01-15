@@ -27,6 +27,8 @@ import type {
   PackageInfo
 } from '../../shared/types/python.types'
 
+import { validatePackageName, validateVersion, validateSpaceId } from './python.validation'
+
 // Re-export types for consumers of this service
 export type {
   PythonEnvironment,
@@ -429,6 +431,28 @@ export async function installPackage(
     onProgress?: (progress: PipInstallProgress) => void
   } = {}
 ): Promise<{ success: boolean; error?: string }> {
+  // 验证包名
+  const packageValidation = validatePackageName(packageName)
+  if (!packageValidation.valid) {
+    return { success: false, error: packageValidation.error }
+  }
+
+  // 验证版本号（如果提供）
+  if (options.version) {
+    const versionValidation = validateVersion(options.version)
+    if (!versionValidation.valid) {
+      return { success: false, error: versionValidation.error }
+    }
+  }
+
+  // 验证 spaceId（如果提供）
+  if (options.spaceId) {
+    const spaceValidation = validateSpaceId(options.spaceId)
+    if (!spaceValidation.valid) {
+      return { success: false, error: spaceValidation.error }
+    }
+  }
+
   const env = options.spaceId ? getSpaceEnvironment(options.spaceId) : detectPython().environment
 
   if (!env) {
