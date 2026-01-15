@@ -32,3 +32,6 @@ website/
 
 # OS files
 .DS_Store
+
+# Bundled Python runtime (downloaded at build time)
+resources/python/

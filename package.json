@@ -11,9 +11,11 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "postinstall": "patch-package && electron-builder install-app-deps",
-    "build:mac": "npm run build && electron-builder --mac",
+    "prepare:python-mac": "node scripts/prepare-python-darwin-arm64.mjs",
+    "prepare:python-win": "node scripts/prepare-python-win-x64.mjs",
+    "build:mac": "npm run prepare:python-mac && npm run build && electron-builder --mac",
     "build:win": "npm run build && electron-builder --win",
-    "build:win-x64": "npm run build && electron-builder --win --x64",
+    "build:win-x64": "npm run prepare:win-x64 && npm run prepare:python-win && npm run build && electron-builder --win --x64",
     "prepare:win-x64": "node scripts/prepare-cloudflared-win-x64.mjs",
     "build:linux": "npm run build && electron-builder --linux",
     "icons": "bash scripts/generate-icons.sh",
@@ -103,7 +105,8 @@
       "resources/**/*"
     ],
     "asarUnpack": [
-      "node_modules/cloudflared/**/*"
+      "node_modules/cloudflared/**/*",
+      "resources/python/**/*"
     ],
     "publish": {
       "provider": "github",
@@ -117,6 +120,13 @@
       "hardenedRuntime": false,
       "gatekeeperAssess": false,
       "notarize": false,
+      "extraResources": [
+        {
+          "from": "resources/python/darwin-arm64",
+          "to": "python",
+          "filter": ["**/*"]
+        }
+      ],
       "target": [
         {
           "target": "dmg",
@@ -158,6 +168,13 @@
     },
     "win": {
       "icon": "resources/icon.ico",
+      "extraResources": [
+        {
+          "from": "resources/python/win32-x64",
+          "to": "python",
+          "filter": ["**/*"]
+        }
+      ],
       "target": [
         {
           "target": "nsis",

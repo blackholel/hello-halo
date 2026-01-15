@@ -5,6 +5,7 @@
 
 import { app, BrowserWindow } from 'electron'
 import { join, dirname } from 'path'
+import { getEmbeddedPythonDir, getPythonEnhancedPath } from './python.service'
 import { existsSync, mkdirSync, symlinkSync, unlinkSync, lstatSync, readlinkSync } from 'fs'
 import { getConfig, getTempSpacePath, onApiConfigChange } from './config.service'
 import { getConversation, saveSessionId, addMessage, updateLastMessage } from './conversation.service'
@@ -487,6 +488,8 @@ export async function ensureSessionWarm(
     abortController,  // Consistent with sendMessage
     env: {
       ...process.env,
+      // Add embedded Python to PATH (prepend to ensure it's found first)
+      PATH: getPythonEnhancedPath(),
       ELECTRON_RUN_AS_NODE: 1,
       ELECTRON_NO_ATTACH_CONSOLE: 1,
       ANTHROPIC_API_KEY: anthropicApiKey,
@@ -1066,6 +1069,8 @@ export async function sendMessage(
       abortController: abortController,
       env: {
         ...process.env,
+        // Add embedded Python to PATH (prepend to ensure it's found first)
+        PATH: getPythonEnhancedPath(),
         ELECTRON_RUN_AS_NODE: 1,
         ELECTRON_NO_ATTACH_CONSOLE: 1,
         ANTHROPIC_API_KEY: anthropicApiKey,
@@ -1735,9 +1740,30 @@ function parseSDKMessage(message: any): Thought | null {
 
 // Build system prompt append - minimal context, preserve Claude Code's native behavior
 function buildSystemPromptAppend(workDir: string): string {
+  // Get embedded Python path for system prompt
+  const pythonDir = getEmbeddedPythonDir()
+  const pythonBinDir = process.platform === 'win32' ? pythonDir : join(pythonDir, 'bin')
+  const pythonExecutable = process.platform === 'win32'
+    ? join(pythonDir, 'python.exe')
+    : join(pythonBinDir, 'python3')
+
+  console.log(`[Agent] System prompt Python executable: ${pythonExecutable}`)
+
   return `
 You are Halo, an AI assistant that helps users accomplish real work.
 All created files will be saved in the user's workspace. Current workspace: ${workDir}.
+
+## Built-in Python Environment (IMPORTANT)
+This application has a built-in Python 3.11.9 environment. You MUST use the built-in Python for all Python operations:
+
+**Built-in Python path:** ${pythonExecutable}
+
+When executing Python commands, ALWAYS use the full path:
+- Check version: \`${pythonExecutable} --version\`
+- Run script: \`${pythonExecutable} script.py\`
+- Install package: \`${pythonExecutable} -m pip install package_name\`
+
+DO NOT use \`python\`, \`python3\`, or any other Python command without the full path, as they may point to different Python versions on the system.
 `
 }
 

@@ -231,6 +231,71 @@ export interface HaloAPI {
     error?: string
   }) => void) => Promise<{ success: boolean; path?: string; error?: string }>
   openExternal: (url: string) => Promise<void>
+
+  // Python Environment
+  pythonDetect: () => Promise<IpcResponse<{
+    found: boolean
+    environment: {
+      type: 'embedded' | 'venv'
+      pythonPath: string
+      pipPath: string
+      version: string
+      sitePackages: string
+    } | null
+    error?: string
+  }>>
+  pythonExecute: (request: {
+    code: string
+    spaceId?: string
+    cwd?: string
+    timeout?: number
+  }) => Promise<IpcResponse<{
+    success: boolean
+    stdout: string
+    stderr: string
+    exitCode: number | null
+    duration: number
+    error?: string
+  }>>
+  pythonInstallPackage: (
+    packageName: string,
+    options: { spaceId?: string; version?: string },
+    onProgress: (progress: {
+      phase: 'downloading' | 'installing' | 'done' | 'error'
+      package: string
+      progress: number
+      message: string
+      error?: string
+    }) => void
+  ) => Promise<{ success: boolean; error?: string }>
+  pythonUninstallPackage: (
+    packageName: string,
+    options: { spaceId?: string }
+  ) => Promise<{ success: boolean; error?: string }>
+  pythonListPackages: (spaceId?: string) => Promise<IpcResponse<{
+    packages?: Array<{ name: string; version: string }>
+    error?: string
+  }>>
+  pythonCreateVenv: (
+    spaceId: string,
+    onProgress: (progress: {
+      phase: 'creating' | 'configuring' | 'done' | 'error'
+      progress: number
+      message: string
+      error?: string
+    }) => void
+  ) => Promise<{ success: boolean; path?: string; error?: string }>
+  pythonDeleteVenv: (spaceId: string) => Promise<{ success: boolean; error?: string }>
+  pythonHasVenv: (spaceId: string) => Promise<IpcResponse<boolean>>
+  pythonGetEnvironment: (spaceId?: string) => Promise<IpcResponse<{
+    type: 'embedded' | 'venv'
+    pythonPath: string
+    pipPath: string
+    version: string
+    sitePackages: string
+  } | null>>
+  onPythonStdout: (callback: (data: { spaceId?: string; data: string }) => void) => () => void
+  onPythonStderr: (callback: (data: { spaceId?: string; data: string }) => void) => () => void
 }
 
 interface IpcResponse<T = unknown> {
@@ -253,6 +318,26 @@ function createEventListener(channel: string, callback: (data: unknown) => void)
   return () => {
     console.log(`[Preload] Removing event listener for channel: ${channel}`)
     ipcRenderer.removeListener(channel, handler)
+  }
+}
+
+// Generic IPC invoke with progress callback
+async function invokeWithProgress<TResult, TProgress>(
+  channel: string,
+  request: Record<string, unknown>,
+  onProgress: (progress: TProgress) => void,
+  progressChannelPrefix: string
+): Promise<TResult> {
+  const progressChannel = `${progressChannelPrefix}-${Date.now()}`
+  const progressHandler = (_event: Electron.IpcRendererEvent, progress: unknown) => {
+    onProgress(progress as TProgress)
+  }
+  ipcRenderer.on(progressChannel, progressHandler)
+  try {
+    const result = await ipcRenderer.invoke(channel, { ...request, progressChannel })
+    return result as TResult
+  } finally {
+    ipcRenderer.removeListener(progressChannel, progressHandler)
   }
 }
 
@@ -407,24 +492,34 @@ const api: HaloAPI = {
 
   // Git Bash (Windows only)
   getGitBashStatus: () => ipcRenderer.invoke('git-bash:status'),
-  installGitBash: async (onProgress) => {
-    // Create a unique channel for this installation
-    const progressChannel = `git-bash:install-progress-${Date.now()}`
-
-    // Set up progress listener
-    const progressHandler = (_event: Electron.IpcRendererEvent, progress: unknown) => {
-      onProgress(progress as Parameters<typeof onProgress>[0])
-    }
-    ipcRenderer.on(progressChannel, progressHandler)
-
-    try {
-      const result = await ipcRenderer.invoke('git-bash:install', { progressChannel })
-      return result as { success: boolean; path?: string; error?: string }
-    } finally {
-      ipcRenderer.removeListener(progressChannel, progressHandler)
-    }
-  },
+  installGitBash: (onProgress) =>
+    invokeWithProgress<
+      { success: boolean; path?: string; error?: string },
+      Parameters<typeof onProgress>[0]
+    >('git-bash:install', {}, onProgress, 'git-bash:install-progress'),
   openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),
+
+  // Python Environment
+  pythonDetect: () => ipcRenderer.invoke('python:detect'),
+  pythonExecute: (request) => ipcRenderer.invoke('python:execute', request),
+  pythonInstallPackage: (packageName, options, onProgress) =>
+    invokeWithProgress<
+      { success: boolean; error?: string },
+      Parameters<typeof onProgress>[0]
+    >('python:install-package', { packageName, ...options }, onProgress, 'python:install-progress'),
+  pythonUninstallPackage: (packageName, options) =>
+    ipcRenderer.invoke('python:uninstall-package', { packageName, ...options }),
+  pythonListPackages: (spaceId) => ipcRenderer.invoke('python:list-packages', spaceId),
+  pythonCreateVenv: (spaceId, onProgress) =>
+    invokeWithProgress<
+      { success: boolean; path?: string; error?: string },
+      Parameters<typeof onProgress>[0]
+    >('python:create-venv', { spaceId }, onProgress, 'python:venv-progress'),
+  pythonDeleteVenv: (spaceId) => ipcRenderer.invoke('python:delete-venv', spaceId),
+  pythonHasVenv: (spaceId) => ipcRenderer.invoke('python:has-venv', spaceId),
+  pythonGetEnvironment: (spaceId) => ipcRenderer.invoke('python:get-environment', spaceId),
+  onPythonStdout: (callback) => createEventListener('python:stdout', callback as (data: unknown) => void),
+  onPythonStderr: (callback) => createEventListener('python:stderr', callback as (data: unknown) => void),
 }
 
 contextBridge.exposeInMainWorld('halo', api)

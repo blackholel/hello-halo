@@ -29,6 +29,7 @@ import { registerOverlayHandlers, cleanupOverlayHandlers } from '../ipc/overlay'
 import { initializeSearchHandlers, cleanupSearchHandlers } from '../ipc/search'
 import { registerPerfHandlers } from '../ipc/perf'
 import { registerGitBashHandlers, initializeGitBashOnStartup } from '../ipc/git-bash'
+import { registerPythonHandlers } from '../ipc/python'
 
 /**
  * Initialize extended services after window is visible
@@ -72,6 +73,9 @@ export function initializeExtendedServices(mainWindow: BrowserWindow): void {
 
   // GitBash: Windows Git Bash detection and setup
   registerGitBashHandlers(mainWindow)
+
+  // Python: Embedded Python environment for code execution
+  registerPythonHandlers(mainWindow)
 
   // Windows-specific: Initialize Git Bash in background
   if (process.platform === 'win32') {

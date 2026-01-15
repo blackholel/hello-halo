@@ -143,6 +143,9 @@ export {
   MessageSquare,
   Zap,
   Braces,
+  Package,
+  Trash2,
+  ArrowLeft,
 }
 
 // Icon wrapper component with consistent styling
@@ -441,8 +444,6 @@ export {
   Hand,
   Settings,
   Plus,
-  Trash2,
-  ArrowLeft,
   Folder,
   FolderOpen,
   Palette,
@@ -456,7 +457,6 @@ export {
   Coffee,
   Gem,
   Apple,
-  Package,
   Book,
   Cpu,
   HardDrive,
