@@ -47,6 +47,42 @@ export type {
 const PYTHON_VERSION_EXPECTED = '3.11'
 const EXECUTION_TIMEOUT_MS = 300000 // 5 minutes default
 const MAX_OUTPUT_SIZE = 1024 * 1024 // 1MB max output
+const CACHE_TTL_MS = 60000 // 1 minute cache for detection results
+
+// ============================================
+// Detection Cache
+// ============================================
+
+let cachedDetectionResult: PythonDetectionResult | null = null
+let cacheTimestamp: number = 0
+
+/**
+ * 清除检测缓存（在环境可能变化时调用）
+ */
+export function clearDetectionCache(): void {
+  cachedDetectionResult = null
+  cacheTimestamp = 0
+  console.log('[Python] Detection cache cleared')
+}
+
+/**
+ * Detect Python with caching to avoid repeated process spawning
+ */
+export async function detectPythonCached(): Promise<PythonDetectionResult> {
+  const now = Date.now()
+
+  // 返回缓存结果（如果有效）
+  if (cachedDetectionResult && (now - cacheTimestamp) < CACHE_TTL_MS) {
+    return cachedDetectionResult
+  }
+
+  // 执行检测并缓存
+  const result = await detectPython()
+  cachedDetectionResult = result
+  cacheTimestamp = now
+
+  return result
+}
 
 // ============================================
 // Platform Configuration
@@ -247,7 +283,7 @@ export function hasSpaceVenv(spaceId: string): boolean {
  * Get the Python environment for a space (venv if exists, otherwise global)
  */
 export async function getSpaceEnvironment(spaceId: string): Promise<PythonEnvironment | null> {
-  const detection = await detectPython()
+  const detection = await detectPythonCached()
   if (!detection.found || !detection.environment) {
     return null
   }
@@ -297,7 +333,7 @@ export async function executePythonCode(
   // Get appropriate Python environment
   const env = options.spaceId
     ? await getSpaceEnvironment(options.spaceId)
-    : (await detectPython()).environment
+    : (await detectPythonCached()).environment
 
   if (!env) {
     return {
@@ -472,7 +508,7 @@ export async function installPackage(
 
   const env = options.spaceId
     ? await getSpaceEnvironment(options.spaceId)
-    : (await detectPython()).environment
+    : (await detectPythonCached()).environment
 
   if (!env) {
     return { success: false, error: 'Python environment not available' }
@@ -596,7 +632,7 @@ export async function uninstallPackage(
 
   const env = options.spaceId
     ? await getSpaceEnvironment(options.spaceId)
-    : (await detectPython()).environment
+    : (await detectPythonCached()).environment
 
   if (!env) {
     return { success: false, error: 'Python environment not available' }
@@ -640,7 +676,7 @@ export async function listPackages(
 ): Promise<{ success: boolean; packages?: PackageInfo[]; error?: string }> {
   const env = spaceId
     ? await getSpaceEnvironment(spaceId)
-    : (await detectPython()).environment
+    : (await detectPythonCached()).environment
 
   if (!env) {
     return { success: false, error: 'Python environment not available' }
@@ -687,7 +723,7 @@ export async function createSpaceVenv(
   spaceId: string,
   onProgress?: (progress: VenvCreateProgress) => void
 ): Promise<{ success: boolean; path?: string; error?: string }> {
-  const detection = await detectPython()
+  const detection = await detectPythonCached()
   if (!detection.found || !detection.environment) {
     return { success: false, error: 'Embedded Python not available' }
   }
