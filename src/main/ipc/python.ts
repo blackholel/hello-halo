@@ -184,8 +184,8 @@ export function registerPythonHandlers(window: BrowserWindow | null): void {
   // Get space environment info
   ipcMain.handle(
     'python:get-environment',
-    createHandler((_event: Electron.IpcMainInvokeEvent, spaceId?: string) =>
-      spaceId ? getSpaceEnvironment(spaceId) : detectPython().environment
+    createHandler(async (_event: Electron.IpcMainInvokeEvent, spaceId?: string) =>
+      spaceId ? getSpaceEnvironment(spaceId) : (await detectPython()).environment
     )
   )
 
