@@ -558,6 +558,20 @@ export async function uninstallPackage(
     spaceId?: string
   } = {}
 ): Promise<{ success: boolean; error?: string }> {
+  // 验证包名
+  const packageValidation = validatePackageName(packageName)
+  if (!packageValidation.valid) {
+    return { success: false, error: packageValidation.error }
+  }
+
+  // 验证 spaceId（如果提供）
+  if (options.spaceId) {
+    const spaceValidation = validateSpaceId(options.spaceId)
+    if (!spaceValidation.valid) {
+      return { success: false, error: spaceValidation.error }
+    }
+  }
+
   const env = options.spaceId ? getSpaceEnvironment(options.spaceId) : detectPython().environment
 
   if (!env) {
