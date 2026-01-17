@@ -7,7 +7,7 @@ import { app, BrowserWindow } from 'electron'
 import { join, dirname } from 'path'
 import { getEmbeddedPythonDir, getPythonEnhancedPath } from './python.service'
 import { existsSync, mkdirSync, symlinkSync, unlinkSync, lstatSync, readlinkSync } from 'fs'
-import { getConfig, getTempSpacePath, onApiConfigChange } from './config.service'
+import { getConfig, getTempSpacePath, getHaloDir, onApiConfigChange } from './config.service'
 import { getConversation, saveSessionId, addMessage, updateLastMessage } from './conversation.service'
 import { getSpace } from './space.service'
 import {
@@ -16,15 +16,15 @@ import {
 } from '@anthropic-ai/claude-agent-sdk'
 
 /**
- * SDK Patch Notes (patches/@anthropic-ai+claude-agent-sdk+0.1.76.patch)
+ * SDK Patch Notes (patches/@anthropic-ai+claude-agent-sdk+0.2.7.patch)
  *
  * The @anthropic-ai/claude-agent-sdk unstable_v2_createSession API has limitations
  * that we've patched. These patches can be removed when officially supported.
  *
- * SDK Version: 0.1.76 (upgraded from 0.1.55)
+ * SDK Version: 0.2.7 (upgraded from 0.1.76)
  * Change: receive() method renamed to stream()
  *
- * Official 0.1.76 SDKSessionOptions only supports:
+ * Official 0.2.7 SDKSessionOptions only supports:
  *   - model, pathToClaudeCodeExecutable, executable, executableArgs, env
  *
  * Patch contents:
@@ -42,7 +42,7 @@ import {
  *    - Original SDK Session doesn't expose interrupt method
  *    - After patch: can call session.interrupt() to interrupt generation
  *
- * Patch file location: patches/@anthropic-ai+claude-agent-sdk+0.1.76.patch
+ * Patch file location: patches/@anthropic-ai+claude-agent-sdk+0.2.7.patch
  * Applied automatically via patch-package on npm install
  *
  * Tracking issue: Remove when officially supported
@@ -482,46 +482,21 @@ export async function ensureSessionWarm(
     console.log(`[Agent] OpenAI provider enabled (warm): routing via ${anthropicBaseUrl}`)
   }
 
-  const sdkOptions: Record<string, any> = {
-    model: sdkModel,
-    cwd: workDir,
-    abortController,  // Consistent with sendMessage
-    env: {
-      ...process.env,
-      // Add embedded Python to PATH (prepend to ensure it's found first)
-      PATH: getPythonEnhancedPath(),
-      ELECTRON_RUN_AS_NODE: 1,
-      ELECTRON_NO_ATTACH_CONSOLE: 1,
-      ANTHROPIC_API_KEY: anthropicApiKey,
-      ANTHROPIC_BASE_URL: anthropicBaseUrl,
-      // Ensure localhost bypasses proxy
-      NO_PROXY: 'localhost,127.0.0.1',
-      no_proxy: 'localhost,127.0.0.1'
-    },
-    extraArgs: {
-      'dangerously-skip-permissions': null
-    },
-    stderr: (data: string) => {  // Consistent with sendMessage
-      console.error(`[Agent][${conversationId}] CLI stderr (warm):`, data)
-    },
-    systemPrompt: {
-      type: 'preset' as const,
-      preset: 'claude_code' as const,
-      append: buildSystemPromptAppend(workDir)
-    },
-    maxTurns: 50,
-    allowedTools: ['Read', 'Write', 'Edit', 'Grep', 'Glob', 'Bash'],
-    permissionMode: 'acceptEdits' as const,
-    canUseTool: createCanUseTool(workDir, spaceId, conversationId),  // Consistent with sendMessage
-    includePartialMessages: true,
-    executable: electronPath,
-    executableArgs: ['--no-warnings'],
-    // MCP servers configuration - pass through enabled servers only
-    ...((() => {
-      const enabledMcp = getEnabledMcpServers(config.mcpServers || {})
-      return enabledMcp ? { mcpServers: enabledMcp } : {}
-    })())
-  }
+  // Build SDK options using shared function (ensures consistency with sendMessage)
+  const sdkOptions = buildSdkOptions({
+    spaceId,
+    conversationId,
+    workDir,
+    config,
+    abortController,
+    anthropicApiKey,
+    anthropicBaseUrl,
+    sdkModel,
+    electronPath,
+    aiBrowserEnabled: false,  // Warm-up doesn't enable AI Browser
+    thinkingEnabled: false,   // Warm-up doesn't enable thinking
+    stderrSuffix: ' (warm)'   // Mark stderr logs as from warm-up
+  })
 
   try {
     console.log(`[Agent] Warming up V2 session: ${conversationId}`)
@@ -625,6 +600,161 @@ function getWorkingDir(spaceId: string): string {
 
   console.log(`[Agent] WARNING: Space not found, falling back to temp path`)
   return getTempSpacePath()
+}
+
+// Plugin configuration type for skills loading
+type PluginConfig = { type: 'local'; path: string }
+
+/**
+ * Build SDK options for V2 Session creation
+ * Centralizes configuration to ensure consistency between ensureSessionWarm() and sendMessage()
+ *
+ * @param params - Configuration parameters
+ * @returns SDK options object ready for getOrCreateV2Session()
+ */
+function buildSdkOptions(params: {
+  spaceId: string
+  conversationId: string
+  workDir: string
+  config: ReturnType<typeof getConfig>
+  abortController: AbortController
+  anthropicApiKey: string
+  anthropicBaseUrl: string
+  sdkModel: string
+  electronPath: string
+  aiBrowserEnabled?: boolean
+  thinkingEnabled?: boolean
+  stderrSuffix?: string  // Optional suffix for stderr logs (e.g., "(warm)")
+}): Record<string, any> {
+  const {
+    spaceId,
+    conversationId,
+    workDir,
+    config,
+    abortController,
+    anthropicApiKey,
+    anthropicBaseUrl,
+    sdkModel,
+    electronPath,
+    aiBrowserEnabled,
+    thinkingEnabled,
+    stderrSuffix = ''
+  } = params
+
+  const sdkOptions: Record<string, any> = {
+    model: sdkModel,
+    cwd: workDir,
+    abortController,
+    env: {
+      ...process.env,
+      // Add embedded Python to PATH (prepend to ensure it's found first)
+      PATH: getPythonEnhancedPath(),
+      ELECTRON_RUN_AS_NODE: 1,
+      ELECTRON_NO_ATTACH_CONSOLE: 1,
+      ANTHROPIC_API_KEY: anthropicApiKey,
+      ANTHROPIC_BASE_URL: anthropicBaseUrl,
+      // Ensure localhost bypasses proxy
+      NO_PROXY: 'localhost,127.0.0.1',
+      no_proxy: 'localhost,127.0.0.1'
+    },
+    extraArgs: {
+      'dangerously-skip-permissions': null
+    },
+    stderr: (data: string) => {
+      console.error(`[Agent][${conversationId}] CLI stderr${stderrSuffix}:`, data)
+    },
+    systemPrompt: {
+      type: 'preset' as const,
+      preset: 'claude_code' as const,
+      // Append AI Browser system prompt if enabled
+      append: buildSystemPromptAppend(workDir) + (aiBrowserEnabled ? AI_BROWSER_SYSTEM_PROMPT : '')
+    },
+    maxTurns: 50,
+    allowedTools: ['Read', 'Write', 'Edit', 'Grep', 'Glob', 'Bash'],
+    permissionMode: 'acceptEdits' as const,
+    canUseTool: createCanUseTool(workDir, spaceId, conversationId),
+    includePartialMessages: true,
+    executable: electronPath,
+    executableArgs: ['--no-warnings'],
+    // Disable filesystem settings loading - app controls all settings
+    settingSources: [],
+    // Load skills from app-level (~/.halo/skills/) and space-level ({workDir}/.claude/)
+    plugins: buildPluginsConfig(workDir),
+    // Extended thinking: enable when user requests it (10240 tokens, same as Claude Code CLI Tab)
+    ...(thinkingEnabled ? { maxThinkingTokens: 10240 } : {}),
+    // MCP servers configuration
+    // - Pass through enabled user MCP servers
+    // - Add AI Browser MCP server if enabled
+    ...((() => {
+      const enabledMcp = getEnabledMcpServers(config.mcpServers || {})
+      const mcpServers: Record<string, any> = enabledMcp ? { ...enabledMcp } : {}
+
+      // Add AI Browser as SDK MCP server if enabled
+      if (aiBrowserEnabled) {
+        mcpServers['ai-browser'] = createAIBrowserMcpServer()
+        console.log(`[Agent][${conversationId}] AI Browser MCP server added`)
+      }
+
+      return Object.keys(mcpServers).length > 0 ? { mcpServers } : {}
+    })())
+  }
+
+  return sdkOptions
+}
+
+// Build plugins configuration for skills loading
+// Supports two-tier skills: app-level (shared) and space-level (project-specific)
+function buildPluginsConfig(workDir: string): PluginConfig[] {
+  const plugins: PluginConfig[] = []
+
+  // Helper to validate plugin path (not a symlink, is a directory)
+  const isValidPluginPath = (pluginPath: string): boolean => {
+    try {
+      const stat = lstatSync(pluginPath)
+      if (stat.isSymbolicLink()) {
+        console.warn(`[Agent] Security: Rejected symlink plugin path: ${pluginPath}`)
+        return false
+      }
+      return stat.isDirectory()
+    } catch {
+      return false
+    }
+  }
+
+  // 1. App-level skills (lower priority)
+  // Located at ~/.halo/skills/ - dedicated skills directory shared across all spaces
+  try {
+    const haloDir = getHaloDir()
+    if (haloDir) {
+      const appSkillsPath = join(haloDir, 'skills')
+      if (isValidPluginPath(appSkillsPath)) {
+        plugins.push({ type: 'local', path: appSkillsPath })
+      }
+    }
+  } catch (e) {
+    console.warn('[Agent] Failed to check app-level skills:', e)
+  }
+
+  // 2. Space-level skills (higher priority, can override app-level)
+  // Located at {workDir}/.claude/ - entire .claude directory for Claude Code CLI compatibility
+  // Note: Uses .claude/ (not .claude/skills/) to match Claude Code CLI plugin convention
+  if (workDir) {
+    try {
+      const spaceSkillsPath = join(workDir, '.claude')
+      if (isValidPluginPath(spaceSkillsPath)) {
+        plugins.push({ type: 'local', path: spaceSkillsPath })
+      }
+    } catch (e) {
+      console.warn('[Agent] Failed to check space-level skills:', e)
+    }
+  }
+
+  // Single summary log instead of multiple debug logs
+  if (plugins.length > 0) {
+    console.log(`[Agent] Plugins loaded: ${plugins.map(p => p.path).join(', ')}`)
+  }
+
+  return plugins
 }
 
 // ============================================
@@ -1059,67 +1189,25 @@ export async function sendMessage(
     const electronPath = getHeadlessElectronPath()
     console.log(`[Agent] Using headless Electron as Node runtime: ${electronPath}`)
 
-    // Configure SDK options
-    // Note: These parameters require SDK patch to work in V2 Session
-    // Native SDK SDKSessionOptions only supports model, executable, executableArgs
-    // After patch supports full parameter pass-through, see notes at top of file
-    const sdkOptions: Record<string, any> = {
-      model: sdkModel,
-      cwd: workDir,
-      abortController: abortController,
-      env: {
-        ...process.env,
-        // Add embedded Python to PATH (prepend to ensure it's found first)
-        PATH: getPythonEnhancedPath(),
-        ELECTRON_RUN_AS_NODE: 1,
-        ELECTRON_NO_ATTACH_CONSOLE: 1,
-        ANTHROPIC_API_KEY: anthropicApiKey,
-        ANTHROPIC_BASE_URL: anthropicBaseUrl,
-        // Ensure localhost bypasses proxy
-        NO_PROXY: 'localhost,127.0.0.1',
-        no_proxy: 'localhost,127.0.0.1'
-      },
-      extraArgs: {
-        'dangerously-skip-permissions': null
-      },
-      stderr: (data: string) => {
-        console.error(`[Agent][${conversationId}] CLI stderr:`, data)
-        stderrBuffer += data  // Accumulate for error reporting
-      },
-      systemPrompt: {
-        type: 'preset' as const,
-        preset: 'claude_code' as const,
-        // Append AI Browser system prompt if enabled
-        append: buildSystemPromptAppend(workDir) + (aiBrowserEnabled ? AI_BROWSER_SYSTEM_PROMPT : '')
-      },
-      maxTurns: 50,
-      allowedTools: ['Read', 'Write', 'Edit', 'Grep', 'Glob', 'Bash'],
-      permissionMode: 'acceptEdits' as const,
-      canUseTool: createCanUseTool(workDir, spaceId, conversationId),
-      includePartialMessages: true,  // Requires SDK patch: enable token-level streaming (stream_event)
-      executable: electronPath,
-      executableArgs: ['--no-warnings'],
-      // Extended thinking: enable when user requests it (10240 tokens, same as Claude Code CLI Tab)
-      ...(thinkingEnabled ? { maxThinkingTokens: 10240 } : {}),
-      // MCP servers configuration
-      // - Pass through enabled user MCP servers
-      // - Add AI Browser MCP server if enabled
-      //
-      // NOTE: SDK patch adds proper handling of SDK-type MCP servers in SessionImpl,
-      // extracting 'instance' before serialization (mirrors query() behavior).
-      // See patches/@anthropic-ai+claude-agent-sdk+0.1.76.patch
-      ...((() => {
-        const enabledMcp = getEnabledMcpServers(config.mcpServers || {})
-        const mcpServers: Record<string, any> = enabledMcp ? { ...enabledMcp } : {}
+    // Build SDK options using shared function (ensures consistency with ensureSessionWarm)
+    const sdkOptions = buildSdkOptions({
+      spaceId,
+      conversationId,
+      workDir,
+      config,
+      abortController,
+      anthropicApiKey,
+      anthropicBaseUrl,
+      sdkModel,
+      electronPath,
+      aiBrowserEnabled,
+      thinkingEnabled
+    })
 
-        // Add AI Browser as SDK MCP server if enabled
-        if (aiBrowserEnabled) {
-          mcpServers['ai-browser'] = createAIBrowserMcpServer()
-          console.log(`[Agent][${conversationId}] AI Browser MCP server added`)
-        }
-
-        return Object.keys(mcpServers).length > 0 ? { mcpServers } : {}
-      })())
+    // Override stderr handler to accumulate buffer for error reporting
+    sdkOptions.stderr = (data: string) => {
+      console.error(`[Agent][${conversationId}] CLI stderr:`, data)
+      stderrBuffer += data  // Accumulate for error reporting
     }
 
     const t0 = Date.now()
@@ -1385,6 +1473,16 @@ export async function sendMessage(
         if (sessionId) {
           capturedSessionId = sessionId as string
           console.log(`[Agent][${conversationId}] Captured session ID:`, capturedSessionId)
+        }
+
+        // Log skills and plugins from system init message
+        const skills = msg.skills as string[] | undefined
+        const plugins = msg.plugins as Array<{ name: string; path: string }> | undefined
+        if (skills) {
+          console.log(`[Agent][${conversationId}] Loaded skills:`, skills)
+        }
+        if (plugins) {
+          console.log(`[Agent][${conversationId}] Loaded plugins:`, JSON.stringify(plugins))
         }
 
         // Handle compact_boundary - context compression notification

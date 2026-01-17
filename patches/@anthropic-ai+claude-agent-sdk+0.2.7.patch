@@ -1,5 +1,5 @@
 diff --git a/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs b/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs
-index 9d16f38..0417f20 100755
+index 9d16f38..005d562 100755
 --- a/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs
 +++ b/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs
 @@ -7763,7 +7763,8 @@ class ProcessTransport {
@@ -12,7 +12,7 @@ index 9d16f38..0417f20 100755
        }
        delete env.NODE_OPTIONS;
        if (env.DEBUG_CLAUDE_AGENT_SDK) {
-@@ -8576,38 +8577,53 @@ class SessionImpl {
+@@ -8576,38 +8577,55 @@ class SessionImpl {
        pathToClaudeCodeExecutable = join4(dirname2, "cli.js");
      }
      const processEnv = { ...options.env ?? process.env };
@@ -76,7 +76,9 @@ index 9d16f38..0417f20 100755
 +      hooks: options.hooks ?? false,
 +      includePartialMessages: options.includePartialMessages ?? true,
 +      forkSession: options.forkSession ?? false,
-+      resumeSessionAt: options.resumeSessionAt ?? undefined
++      resumeSessionAt: options.resumeSessionAt ?? undefined,
++      // [PATCHED] Add plugins support for V2 sessions
++      plugins: options.plugins ?? []
      });
 -    this.query = new Query(transport, false, options.canUseTool, options.hooks, this.abortController, new Map);
 +    // [PATCHED] Pass the extracted SDK MCP server instances to Query
@@ -84,7 +86,7 @@ index 9d16f38..0417f20 100755
      this.query.streamInput(this.inputStream);
    }
    async send(message) {
-@@ -8643,6 +8659,19 @@ class SessionImpl {
+@@ -8643,6 +8661,19 @@ class SessionImpl {
        }
      }
    }
@@ -104,7 +106,7 @@ index 9d16f38..0417f20 100755
    close() {
      if (this.closed) {
        return;
-@@ -21358,7 +21387,8 @@ function query({
+@@ -21358,7 +21389,8 @@ function query({
      processEnv = { ...process.env };
    }
    if (!processEnv.CLAUDE_CODE_ENTRYPOINT) {

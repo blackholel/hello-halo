@@ -37,7 +37,7 @@
     "i18n": "npm run i18n:extract && npm run i18n:translate"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.7",
+    "@anthropic-ai/claude-agent-sdk": "0.2.7",
     "@anthropic-ai/claude-code": "latest",
     "@anthropic-ai/sdk": "latest",
     "@electron-toolkit/preload": "^3.0.0",
