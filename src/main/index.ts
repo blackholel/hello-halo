@@ -22,7 +22,8 @@ process.on('uncaughtException', (error) => {
 // Executed after page load to avoid blocking startup
 import fixPath from 'fix-path'
 
-import { app, shell, BrowserWindow, Menu } from 'electron'
+import { app, shell, BrowserWindow, Menu, session } from 'electron'
+import { is } from '@electron-toolkit/utils'
 
 // GPU compatibility: Disable hardware acceleration on Windows to prevent blank window issues
 // Some Windows GPU configurations cause the GPU process to crash, resulting in a white/blank screen
@@ -30,6 +31,16 @@ import { app, shell, BrowserWindow, Menu } from 'electron'
 if (process.platform === 'win32') {
   app.disableHardwareAcceleration()
   app.commandLine.appendSwitch('disable-gpu')
+}
+
+// SSL certificate bypass for development/UAT environments
+// Only enable in development mode or when explicitly configured via environment variable
+// WARNING: This reduces security - never enable in production without explicit configuration
+const allowInsecureSSL = is.dev || process.env.ALLOW_INSECURE_SSL === 'true'
+if (allowInsecureSSL) {
+  console.warn('[SECURITY] SSL certificate verification is DISABLED - development/UAT mode')
+  app.commandLine.appendSwitch('ignore-certificate-errors')
+  app.commandLine.appendSwitch('allow-insecure-localhost')
 }
 
 // Single instance lock: Prevent multiple instances of the application
@@ -67,7 +78,7 @@ app.on('second-instance', () => {
 })
 
 import { join } from 'path'
-import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { electronApp, optimizer } from '@electron-toolkit/utils'
 import {
   initializeEssentialServices,
   initializeExtendedServices,
@@ -286,6 +297,16 @@ function createWindow(): void {
 app.whenReady().then(async () => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.halo.app')
+
+  // Configure certificate verification for browser session (only in dev/UAT mode)
+  // This must be done early, BEFORE any BrowserView is created
+  if (allowInsecureSSL) {
+    const browserSession = session.fromPartition('persist:browser')
+    browserSession.setCertificateVerifyProc((_request, callback) => {
+      callback(0) // Trust all certificates in dev/UAT mode
+    })
+    console.log('[Main] Browser session configured to trust all certificates (dev/UAT mode)')
+  }
 
   // Register custom protocols (halo-file://, etc.)
   registerProtocols()

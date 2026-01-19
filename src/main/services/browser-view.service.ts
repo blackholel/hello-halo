@@ -68,6 +68,9 @@ class BrowserViewManager {
   initialize(mainWindow: BrowserWindow) {
     this.mainWindow = mainWindow
 
+    // Note: SSL certificate handling is configured in index.ts (app.whenReady)
+    // to ensure it's set BEFORE any BrowserView is created
+
     // Clean up views when window is closed
     mainWindow.on('closed', () => {
       this.destroyAll()
@@ -531,6 +534,8 @@ class BrowserViewManager {
         event.preventDefault()
       }
     })
+
+    // Note: Certificate error handling is done at session level in index.ts
   }
 
   /**
