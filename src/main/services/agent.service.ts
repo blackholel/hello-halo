@@ -4,12 +4,16 @@
  */
 
 import { app, BrowserWindow } from 'electron'
-import { join, dirname } from 'path'
+import { join, dirname, normalize, resolve, sep } from 'path'
 import { getEmbeddedPythonDir, getPythonEnhancedPath } from './python.service'
-import { existsSync, mkdirSync, symlinkSync, unlinkSync, lstatSync, readlinkSync } from 'fs'
+import { existsSync, mkdirSync, symlinkSync, unlinkSync, lstatSync, readlinkSync, realpathSync, statSync } from 'fs'
 import { getConfig, getTempSpacePath, getHaloDir, onApiConfigChange } from './config.service'
 import { getConversation, saveSessionId, addMessage, updateLastMessage } from './conversation.service'
 import { getSpace } from './space.service'
+import { getSpaceConfig, getSpaceClaudeCodeConfig } from './space-config.service'
+import { getFormattedMemory } from './memory.service'
+import { getAgentDefinitions } from './agents.service'
+import { buildHooksFromConfig, mergeWithBuiltinHooks } from './hooks.service'
 import {
   query as claudeQuery,
   unstable_v2_createSession
@@ -641,6 +645,73 @@ function buildSdkOptions(params: {
     stderrSuffix = ''
   } = params
 
+  // Get Claude Code configuration
+  const claudeCodeConfig = config.claudeCode || {}
+  const spaceConfig = getSpaceClaudeCodeConfig(workDir)
+
+  // 1. Build settingSources based on compat settings
+  const settingSources: string[] = []
+  if (claudeCodeConfig.compat?.enableUserSettings) {
+    settingSources.push('user')
+  }
+  if (claudeCodeConfig.compat?.enableProjectSettings) {
+    settingSources.push('project')
+  }
+
+  // 2. Build plugins (configurable: system < global custom < app default < space custom < space default)
+  const plugins = buildPluginsConfigFromSettings(
+    workDir,
+    claudeCodeConfig.plugins,
+    spaceConfig.plugins,
+    claudeCodeConfig.compat?.enableSystemSkills
+  )
+
+  // 3. Build memory content for system prompt
+  const memoryContent = getFormattedMemory(workDir, {
+    enabled: claudeCodeConfig.memory?.enabled ?? true,
+    autoLoadClaudeMd: claudeCodeConfig.memory?.autoLoadClaudeMd ?? true,
+    globalMemory: claudeCodeConfig.memory?.globalMemory,
+    spaceMemory: spaceConfig.memory?.spaceMemory
+  })
+
+  // 4. Build agents (merge: builtin < global < space)
+  const agents = getAgentDefinitions(
+    claudeCodeConfig.agents || {},
+    spaceConfig.agents || {}
+  )
+
+  // 5. Build hooks (merge: builtin + global + space)
+  const userHooks = buildHooksFromConfig(
+    claudeCodeConfig.hooks || {},
+    spaceConfig.hooks || {}
+  )
+  const hooks = mergeWithBuiltinHooks(userHooks)
+
+  // 6. Build tools configuration (space overrides global)
+  const toolsConfig = spaceConfig.tools || claudeCodeConfig.tools || {}
+  const allowedTools = toolsConfig.allowed || ['Read', 'Write', 'Edit', 'Grep', 'Glob', 'Bash']
+  const disallowedTools = toolsConfig.disallowed
+
+  // 7. Build MCP servers (merge global + space)
+  const mcpServers: Record<string, any> = {}
+  // Global MCP servers
+  const enabledGlobalMcp = getEnabledMcpServers(config.mcpServers || {})
+  if (enabledGlobalMcp) {
+    Object.assign(mcpServers, enabledGlobalMcp)
+  }
+  // Space MCP servers (can override global)
+  if (spaceConfig.mcpServers) {
+    const enabledSpaceMcp = getEnabledMcpServers(spaceConfig.mcpServers)
+    if (enabledSpaceMcp) {
+      Object.assign(mcpServers, enabledSpaceMcp)
+    }
+  }
+  // Add AI Browser as SDK MCP server if enabled
+  if (aiBrowserEnabled) {
+    mcpServers['ai-browser'] = createAIBrowserMcpServer()
+    console.log(`[Agent][${conversationId}] AI Browser MCP server added`)
+  }
+
   const sdkOptions: Record<string, any> = {
     model: sdkModel,
     cwd: workDir,
@@ -666,90 +737,202 @@ function buildSdkOptions(params: {
     systemPrompt: {
       type: 'preset' as const,
       preset: 'claude_code' as const,
-      // Append AI Browser system prompt if enabled
-      append: buildSystemPromptAppend(workDir) + (aiBrowserEnabled ? AI_BROWSER_SYSTEM_PROMPT : '')
+      // Append: base system prompt + memory + AI Browser prompt (if enabled)
+      append: buildSystemPromptAppend(workDir) + memoryContent + (aiBrowserEnabled ? AI_BROWSER_SYSTEM_PROMPT : '')
     },
     maxTurns: 50,
-    allowedTools: ['Read', 'Write', 'Edit', 'Grep', 'Glob', 'Bash'],
+    allowedTools,
+    ...(disallowedTools && disallowedTools.length > 0 ? { disallowedTools } : {}),
     permissionMode: 'acceptEdits' as const,
     canUseTool: createCanUseTool(workDir, spaceId, conversationId),
     includePartialMessages: true,
     executable: electronPath,
     executableArgs: ['--no-warnings'],
-    // Disable filesystem settings loading - app controls all settings
-    settingSources: [],
-    // Load skills from app-level (~/.halo/skills/) and space-level ({workDir}/.claude/)
-    plugins: buildPluginsConfig(workDir),
+    // Settings sources (controlled by compat settings)
+    settingSources,
+    // Plugins (three-tier skills loading)
+    plugins,
+    // Custom agents
+    ...(Object.keys(agents).length > 0 ? { agents } : {}),
+    // Hooks
+    ...(hooks && Object.keys(hooks).length > 0 ? { hooks } : {}),
     // Extended thinking: enable when user requests it (10240 tokens, same as Claude Code CLI Tab)
     ...(thinkingEnabled ? { maxThinkingTokens: 10240 } : {}),
-    // MCP servers configuration
-    // - Pass through enabled user MCP servers
-    // - Add AI Browser MCP server if enabled
-    ...((() => {
-      const enabledMcp = getEnabledMcpServers(config.mcpServers || {})
-      const mcpServers: Record<string, any> = enabledMcp ? { ...enabledMcp } : {}
-
-      // Add AI Browser as SDK MCP server if enabled
-      if (aiBrowserEnabled) {
-        mcpServers['ai-browser'] = createAIBrowserMcpServer()
-        console.log(`[Agent][${conversationId}] AI Browser MCP server added`)
-      }
-
-      return Object.keys(mcpServers).length > 0 ? { mcpServers } : {}
-    })())
+    // MCP servers
+    ...(Object.keys(mcpServers).length > 0 ? { mcpServers } : {})
   }
+
+  // Log configuration summary
+  console.log(`[Agent][${conversationId}] SDK options built:`, {
+    settingSources: settingSources.length > 0 ? settingSources : 'none',
+    plugins: plugins.length,
+    memoryEnabled: claudeCodeConfig.memory?.enabled ?? true,
+    agents: Object.keys(agents).length,
+    hooks: hooks ? Object.keys(hooks).length : 0,
+    mcpServers: Object.keys(mcpServers).length
+  })
 
   return sdkOptions
 }
 
-// Build plugins configuration for skills loading
-// Supports two-tier skills: app-level (shared) and space-level (project-specific)
-function buildPluginsConfig(workDir: string): PluginConfig[] {
+// Build plugins configuration based on config settings
+// Supports configurable plugin paths with three-tier loading:
+// 1. System plugins (~/.claude/skills/) - optional, controlled by enableSystemSkills
+// 2. Global custom paths (config.claudeCode.plugins.globalPaths)
+// 3. App-level default (~/.halo/plugins/) - controlled by loadDefaultPaths
+// 4. Space custom paths (spaceConfig.plugins.paths)
+// 5. Space-level default ({workDir}/.claude/) - controlled by loadDefaultPath
+function buildPluginsConfigFromSettings(
+  workDir: string,
+  globalPluginsConfig: { enabled?: boolean; globalPaths?: string[]; loadDefaultPaths?: boolean } | undefined,
+  spacePluginsConfig: { paths?: string[]; disableGlobal?: boolean; loadDefaultPath?: boolean } | undefined,
+  enableSystemSkills?: boolean
+): PluginConfig[] {
   const plugins: PluginConfig[] = []
+  const { homedir } = require('os')
 
-  // Helper to validate plugin path (not a symlink, is a directory)
+  console.log('[Agent] buildPluginsConfigFromSettings called with:', {
+    workDir,
+    globalPluginsConfig,
+    spacePluginsConfig,
+    enableSystemSkills
+  })
+
+  // If plugins disabled globally, return empty
+  if (globalPluginsConfig?.enabled === false) {
+    console.log('[Agent] Plugins disabled globally')
+    return plugins
+  }
+
+  // Allowed base paths for plugins (security: prevent loading from arbitrary locations)
+  const allowedBasePaths = [
+    homedir(),  // User home directory
+    workDir     // Current workspace
+  ].filter(Boolean)
+
+  // Helper to validate plugin path with full symlink resolution
   const isValidPluginPath = (pluginPath: string): boolean => {
     try {
+      // First check if path exists
       const stat = lstatSync(pluginPath)
+
+      // If it's a symlink, resolve it and verify the real path
       if (stat.isSymbolicLink()) {
-        console.warn(`[Agent] Security: Rejected symlink plugin path: ${pluginPath}`)
-        return false
+        try {
+          const realPath = realpathSync(pluginPath)
+
+          // Verify the real path is within allowed directories
+          const isAllowed = allowedBasePaths.some(base => {
+            if (!base) return false
+            const normalizedBase = normalize(resolve(base))
+            const normalizedReal = normalize(resolve(realPath))
+            return normalizedReal.startsWith(normalizedBase + sep) || normalizedReal === normalizedBase
+          })
+
+          if (!isAllowed) {
+            console.warn(`[Agent] Security: Symlink points outside allowed directories: ${pluginPath} -> ${realPath}`)
+            return false
+          }
+
+          // Check if the resolved path is a directory
+          const realStat = statSync(realPath)
+          return realStat.isDirectory()
+        } catch (e) {
+          console.warn(`[Agent] Security: Failed to resolve symlink: ${pluginPath}`, e)
+          return false
+        }
       }
+
       return stat.isDirectory()
     } catch {
       return false
     }
   }
 
-  // 1. App-level skills (lower priority)
-  // Located at ~/.halo/skills/ - dedicated skills directory shared across all spaces
-  try {
-    const haloDir = getHaloDir()
-    if (haloDir) {
-      const appSkillsPath = join(haloDir, 'skills')
-      if (isValidPluginPath(appSkillsPath)) {
-        plugins.push({ type: 'local', path: appSkillsPath })
-      }
+  // Helper to add plugin if valid and not already added
+  const addPluginIfValid = (pluginPath: string): void => {
+    if (isValidPluginPath(pluginPath) && !plugins.some(p => p.path === pluginPath)) {
+      plugins.push({ type: 'local', path: pluginPath })
     }
-  } catch (e) {
-    console.warn('[Agent] Failed to check app-level skills:', e)
   }
 
-  // 2. Space-level skills (higher priority, can override app-level)
-  // Located at {workDir}/.claude/ - entire .claude directory for Claude Code CLI compatibility
-  // Note: Uses .claude/ (not .claude/skills/) to match Claude Code CLI plugin convention
-  if (workDir) {
+  // Helper to resolve path (supports ~ and relative paths)
+  const resolvePath = (inputPath: string, baseDir?: string): string => {
+    if (inputPath.startsWith('~')) {
+      return join(homedir(), inputPath.slice(1))
+    }
+    if (inputPath.startsWith('/') || inputPath.match(/^[A-Za-z]:/)) {
+      return inputPath
+    }
+    return baseDir ? join(baseDir, inputPath) : inputPath
+  }
+
+  const disableGlobal = spacePluginsConfig?.disableGlobal === true
+
+  // 1. System plugins (optional, controlled by compat setting)
+  if (enableSystemSkills && !disableGlobal) {
     try {
-      const spaceSkillsPath = join(workDir, '.claude')
-      if (isValidPluginPath(spaceSkillsPath)) {
-        plugins.push({ type: 'local', path: spaceSkillsPath })
+      const systemPluginsPath = join(homedir(), '.claude', 'skills')
+      addPluginIfValid(systemPluginsPath)
+    } catch (e) {
+      console.warn('[Agent] Failed to check system plugins:', e)
+    }
+  }
+
+  // 2. Global custom paths (from config.claudeCode.plugins.globalPaths)
+  if (!disableGlobal && globalPluginsConfig?.globalPaths) {
+    for (const path of globalPluginsConfig.globalPaths) {
+      try {
+        addPluginIfValid(resolvePath(path))
+      } catch (e) {
+        console.warn(`[Agent] Failed to add global plugin path: ${path}`, e)
+      }
+    }
+  }
+
+  // 3. App-level default (~/.halo/plugins/ and ~/.halo/skills/)
+  if (!disableGlobal && globalPluginsConfig?.loadDefaultPaths !== false) {
+    try {
+      const haloDir = getHaloDir()
+      if (haloDir) {
+        const pluginsPath = join(haloDir, 'plugins')
+        const skillsPath = join(haloDir, 'skills')
+
+        // Load both directories if they exist
+        if (isValidPluginPath(pluginsPath)) {
+          addPluginIfValid(pluginsPath)
+        }
+        if (isValidPluginPath(skillsPath)) {
+          addPluginIfValid(skillsPath)
+        }
       }
     } catch (e) {
-      console.warn('[Agent] Failed to check space-level skills:', e)
+      console.warn('[Agent] Failed to check app-level plugins:', e)
     }
   }
 
-  // Single summary log instead of multiple debug logs
+  // 4. Space custom paths (from spaceConfig.plugins.paths)
+  if (spacePluginsConfig?.paths) {
+    for (const path of spacePluginsConfig.paths) {
+      try {
+        addPluginIfValid(resolvePath(path, workDir))
+      } catch (e) {
+        console.warn(`[Agent] Failed to add space plugin path: ${path}`, e)
+      }
+    }
+  }
+
+  // 5. Space-level default ({workDir}/.claude/)
+  if (workDir && spacePluginsConfig?.loadDefaultPath !== false) {
+    try {
+      const spacePluginsPath = join(workDir, '.claude')
+      addPluginIfValid(spacePluginsPath)
+    } catch (e) {
+      console.warn('[Agent] Failed to check space-level plugins:', e)
+    }
+  }
+
+  // Summary log
   if (plugins.length > 0) {
     console.log(`[Agent] Plugins loaded: ${plugins.map(p => p.path).join(', ')}`)
   }

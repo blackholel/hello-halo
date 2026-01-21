@@ -11,6 +11,7 @@ import { AVAILABLE_MODELS, DEFAULT_MODEL } from '../types'
 import { CheckCircle2, XCircle, ArrowLeft, Eye, EyeOff, ChevronDown, ChevronRight, Package, Trash2, Loader2 } from '../components/icons/ToolIcons'
 import { Header } from '../components/layout/Header'
 import { McpServerList } from '../components/settings/McpServerList'
+import { ClaudeCodeCompatSettings } from '../components/settings/ClaudeCodeCompatSettings'
 import { useTranslation, setLanguage, getCurrentLanguage, SUPPORTED_LOCALES, type LocaleCode } from '../i18n'
 
 // Remote access status type
@@ -863,6 +864,14 @@ export function SettingsPage() {
               </div>
             </section>
           )}
+
+          {/* Claude Code Compatibility Section */}
+          <section className="bg-card rounded-xl border border-border p-6">
+            <ClaudeCodeCompatSettings
+              config={config}
+              onConfigChange={(newConfig) => setConfig({ ...config, ...newConfig } as HaloConfig)}
+            />
+          </section>
 
           {/* MCP Servers Section */}
           <section className="bg-card rounded-xl border border-border p-6">

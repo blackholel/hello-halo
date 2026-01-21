@@ -282,7 +282,41 @@ function createWindow(): void {
 
   // Load the renderer
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    const devServerUrl = process.env['ELECTRON_RENDERER_URL']
+
+    // Handle dev server not ready yet (race condition with Vite startup)
+    // Retry loading when connection fails
+    let retryCount = 0
+    const maxRetries = 10
+    const retryDelay = 500 // ms
+    let retryTimeoutId: NodeJS.Timeout | null = null
+
+    const loadDevServer = (): void => {
+      // Safety check: ensure window still exists before loading
+      if (!mainWindow || mainWindow.isDestroyed()) {
+        console.log('[Main] Window destroyed, stopping dev server retry')
+        if (retryTimeoutId) {
+          clearTimeout(retryTimeoutId)
+          retryTimeoutId = null
+        }
+        return
+      }
+
+      mainWindow.loadURL(devServerUrl).catch((err) => {
+        // ERR_SOCKET_NOT_CONNECTED or ERR_CONNECTION_REFUSED means Vite isn't ready
+        if (retryCount < maxRetries &&
+            (err.message?.includes('ERR_SOCKET_NOT_CONNECTED') ||
+             err.message?.includes('ERR_CONNECTION_REFUSED'))) {
+          retryCount++
+          console.log(`[Main] Dev server not ready, retrying (${retryCount}/${maxRetries})...`)
+          retryTimeoutId = setTimeout(loadDevServer, retryDelay)
+        } else {
+          console.error('[Main] Failed to load dev server:', err)
+        }
+      })
+    }
+
+    loadDevServer()
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }

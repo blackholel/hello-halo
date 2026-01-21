@@ -75,6 +75,8 @@ interface HaloConfig {
     path: string | null
     skipped: boolean
   }
+  // Claude Code feature configuration
+  claudeCode: ClaudeCodeConfig
 }
 
 // MCP server configuration types
@@ -101,6 +103,61 @@ interface McpSseServerConfig {
   url: string
   headers?: Record<string, string>
   disabled?: boolean  // Halo extension: temporarily disable this server
+}
+
+// Claude Code feature configuration types
+export interface ClaudeCodeConfig {
+  compat: {
+    enableUserSettings: boolean    // Load ~/.claude/settings.json
+    enableProjectSettings: boolean // Load {workDir}/.claude/settings.json
+    enableSystemSkills: boolean    // Load ~/.claude/skills/ (legacy, use plugins instead)
+  }
+  plugins?: {
+    enabled?: boolean           // Default: true
+    globalPaths?: string[]      // Additional global plugin paths
+    loadDefaultPaths?: boolean  // Default: true, auto-load ~/.halo/plugins/
+  }
+  memory: {
+    enabled: boolean
+    autoLoadClaudeMd: boolean      // Auto-load CLAUDE.md
+    globalMemory?: string          // Custom global memory
+  }
+  agents: Record<string, AgentConfig>
+  hooks: HooksConfig
+  tools: {
+    allowed?: string[]
+    disallowed?: string[]
+  }
+}
+
+export interface AgentConfig {
+  description: string
+  prompt: string
+  tools?: string[]
+  disallowedTools?: string[]
+  model?: 'sonnet' | 'opus' | 'haiku' | 'inherit'
+  mcpServers?: string[]
+}
+
+export interface HooksConfig {
+  PreToolUse?: HookMatcher[]
+  PostToolUse?: HookMatcher[]
+  PostToolUseFailure?: HookMatcher[]
+  Notification?: HookMatcher[]
+  UserPromptSubmit?: HookMatcher[]
+  SessionStart?: HookMatcher[]
+  SessionEnd?: HookMatcher[]
+  Stop?: HookMatcher[]
+  SubagentStart?: HookMatcher[]
+  SubagentStop?: HookMatcher[]
+  PreCompact?: HookMatcher[]
+  PermissionRequest?: HookMatcher[]
+}
+
+export interface HookMatcher {
+  matcher?: string
+  command?: string
+  timeout?: number
 }
 
 // Paths
@@ -154,7 +211,26 @@ const DEFAULT_CONFIG: HaloConfig = {
     completed: false
   },
   mcpServers: {},  // Empty by default
-  isFirstLaunch: true
+  isFirstLaunch: true,
+  claudeCode: {
+    compat: {
+      enableUserSettings: false,
+      enableProjectSettings: false,
+      enableSystemSkills: false
+    },
+    plugins: {
+      enabled: true,
+      globalPaths: [],
+      loadDefaultPaths: true
+    },
+    memory: {
+      enabled: true,
+      autoLoadClaudeMd: true
+    },
+    agents: {},
+    hooks: {},
+    tools: {}
+  }
 }
 
 // Initialize app directories
@@ -203,7 +279,23 @@ export function getConfig(): HaloConfig {
       // mcpServers is a flat map, just use parsed value or default
       mcpServers: parsed.mcpServers || DEFAULT_CONFIG.mcpServers,
       // analytics: keep as-is (managed by analytics.service.ts)
-      analytics: parsed.analytics
+      analytics: parsed.analytics,
+      // claudeCode: deep merge
+      claudeCode: {
+        ...DEFAULT_CONFIG.claudeCode,
+        ...parsed.claudeCode,
+        compat: { ...DEFAULT_CONFIG.claudeCode.compat, ...parsed.claudeCode?.compat },
+        // plugins: only extract expected fields to avoid loading stray config from ~/.claude
+        plugins: {
+          enabled: parsed.claudeCode?.plugins?.enabled ?? DEFAULT_CONFIG.claudeCode.plugins?.enabled,
+          globalPaths: parsed.claudeCode?.plugins?.globalPaths ?? DEFAULT_CONFIG.claudeCode.plugins?.globalPaths,
+          loadDefaultPaths: parsed.claudeCode?.plugins?.loadDefaultPaths ?? DEFAULT_CONFIG.claudeCode.plugins?.loadDefaultPaths
+        },
+        memory: { ...DEFAULT_CONFIG.claudeCode.memory, ...parsed.claudeCode?.memory },
+        agents: parsed.claudeCode?.agents || DEFAULT_CONFIG.claudeCode.agents,
+        hooks: parsed.claudeCode?.hooks || DEFAULT_CONFIG.claudeCode.hooks,
+        tools: parsed.claudeCode?.tools || DEFAULT_CONFIG.claudeCode.tools
+      }
     }
   } catch (error) {
     console.error('Failed to read config:', error)
@@ -243,6 +335,24 @@ export function saveConfig(config: Partial<HaloConfig>): HaloConfig {
   // gitBash: replace entirely when provided (Windows only)
   if ((config as any).gitBash !== undefined) {
     (newConfig as any).gitBash = (config as any).gitBash
+  }
+  // claudeCode: deep merge
+  if (config.claudeCode) {
+    newConfig.claudeCode = {
+      ...currentConfig.claudeCode,
+      ...config.claudeCode,
+      compat: { ...currentConfig.claudeCode.compat, ...config.claudeCode.compat },
+      // plugins: only extract expected fields to avoid saving stray config
+      plugins: {
+        enabled: config.claudeCode.plugins?.enabled ?? currentConfig.claudeCode.plugins?.enabled,
+        globalPaths: config.claudeCode.plugins?.globalPaths ?? currentConfig.claudeCode.plugins?.globalPaths,
+        loadDefaultPaths: config.claudeCode.plugins?.loadDefaultPaths ?? currentConfig.claudeCode.plugins?.loadDefaultPaths
+      },
+      memory: { ...currentConfig.claudeCode.memory, ...config.claudeCode.memory },
+      agents: config.claudeCode.agents !== undefined ? config.claudeCode.agents : currentConfig.claudeCode.agents,
+      hooks: config.claudeCode.hooks !== undefined ? config.claudeCode.hooks : currentConfig.claudeCode.hooks,
+      tools: config.claudeCode.tools !== undefined ? config.claudeCode.tools : currentConfig.claudeCode.tools
+    }
   }
 
   const configPath = getConfigPath()

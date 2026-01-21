@@ -79,6 +79,74 @@ export interface RemoteAccessConfig {
 }
 
 // ============================================
+// Claude Code Configuration Types
+// ============================================
+
+// Claude Code compatibility settings
+export interface ClaudeCodeCompatConfig {
+  enableUserSettings: boolean;    // Load ~/.claude/settings.json
+  enableProjectSettings: boolean; // Load {workDir}/.claude/settings.json
+  enableSystemSkills: boolean;    // Load ~/.claude/skills/ (legacy, use plugins instead)
+}
+
+// Claude Code plugins configuration
+export interface ClaudeCodePluginsConfig {
+  enabled?: boolean;           // Default: true
+  globalPaths?: string[];      // Additional global plugin paths
+  loadDefaultPaths?: boolean;  // Default: true, auto-load ~/.halo/plugins/
+}
+
+// Space-level plugins configuration
+export interface SpacePluginsConfig {
+  paths?: string[];            // Additional space-specific plugin paths
+  disableGlobal?: boolean;     // Default: false, whether to disable global plugins
+  loadDefaultPath?: boolean;   // Default: true, whether to load {workDir}/.claude/
+}
+
+// Claude Code memory settings
+export interface ClaudeCodeMemoryConfig {
+  enabled: boolean;
+  autoLoadClaudeMd: boolean;      // Auto-load CLAUDE.md files
+  globalMemory?: string;          // Custom global memory content
+}
+
+// Claude Code agent configuration
+export interface ClaudeCodeAgentConfig {
+  description: string;
+  prompt: string;
+  tools?: string[];
+  disallowedTools?: string[];
+  model?: 'sonnet' | 'opus' | 'haiku' | 'inherit';
+  mcpServers?: string[];
+}
+
+// Claude Code hook matcher configuration
+export interface ClaudeCodeHookMatcher {
+  matcher?: string;
+  command?: string;
+  timeout?: number;
+}
+
+// Claude Code hooks configuration
+export type ClaudeCodeHooksConfig = Partial<Record<string, ClaudeCodeHookMatcher[]>>;
+
+// Claude Code tools configuration
+export interface ClaudeCodeToolsConfig {
+  allowed?: string[];
+  disallowed?: string[];
+}
+
+// Main Claude Code configuration
+export interface ClaudeCodeConfig {
+  compat: ClaudeCodeCompatConfig;
+  memory: ClaudeCodeMemoryConfig;
+  plugins?: ClaudeCodePluginsConfig;  // Plugins configuration
+  agents: Record<string, ClaudeCodeAgentConfig>;
+  hooks: ClaudeCodeHooksConfig;
+  tools: ClaudeCodeToolsConfig;
+}
+
+// ============================================
 // MCP Server Configuration Types
 // Format compatible with Cursor / Claude Desktop
 // ============================================
@@ -135,6 +203,7 @@ export interface HaloConfig {
   system: SystemConfig;
   remoteAccess: RemoteAccessConfig;
   mcpServers: McpServersConfig;  // MCP servers configuration
+  claudeCode?: ClaudeCodeConfig;  // Claude Code compatibility configuration
   isFirstLaunch: boolean;
 }
 
