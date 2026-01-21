@@ -68,93 +68,59 @@ let headlessElectronPath: string | null = null
 /**
  * Get the path to the headless Electron binary.
  *
- * On macOS, when spawning Electron as a child process with ELECTRON_RUN_AS_NODE=1,
- * macOS still shows a Dock icon because it detects the .app bundle structure
- * before Electron checks the environment variable.
+ * On macOS, spawning Electron with ELECTRON_RUN_AS_NODE=1 still shows a Dock icon
+ * because macOS detects the .app bundle before checking the env var.
  *
- * Solution: Create a symlink to the Electron binary outside the .app bundle.
- * When the symlink is not inside a .app bundle, macOS doesn't register it
- * as a GUI application and no Dock icon appears.
- *
- * Why symlink instead of copy?
- * - The Electron binary depends on Electron Framework.framework via @rpath
- * - Copying just the binary breaks the framework loading
- * - Symlinks preserve the framework resolution because the real binary is still in .app
- *
- * This is a novel solution discovered while building Halo - most Electron apps
- * that spawn child processes suffer from this Dock icon flashing issue.
+ * Solution: Create a symlink outside .app bundle. Symlinks (not copies) preserve
+ * framework resolution since the real binary stays in .app.
  */
 function getHeadlessElectronPath(): string {
-  // Return cached path if already set up
   if (headlessElectronPath && existsSync(headlessElectronPath)) {
     return headlessElectronPath
   }
 
   const electronPath = process.execPath
 
-  // On non-macOS platforms or if not inside .app bundle, use original path
+  // Non-macOS or not in .app bundle: use original path
   if (process.platform !== 'darwin' || !electronPath.includes('.app/')) {
     headlessElectronPath = electronPath
-    console.log('[Agent] Using original Electron path (not macOS or not .app bundle):', headlessElectronPath)
+    console.log('[Agent] Using original Electron path:', headlessElectronPath)
     return headlessElectronPath
   }
 
-  // macOS: Create symlink to Electron binary outside .app bundle to prevent Dock icon
+  // macOS: Create symlink outside .app bundle
   try {
-    // Use app's userData path for the symlink (persistent across sessions)
-    const userDataPath = app.getPath('userData')
-    const headlessDir = join(userDataPath, 'headless-electron')
+    const headlessDir = join(app.getPath('userData'), 'headless-electron')
     const headlessSymlinkPath = join(headlessDir, 'electron-node')
 
-    // Create directory if needed
     if (!existsSync(headlessDir)) {
       mkdirSync(headlessDir, { recursive: true })
     }
 
-    // Check if symlink exists and points to correct target
+    // Check if symlink needs to be created or updated
     let needsSymlink = true
-
     if (existsSync(headlessSymlinkPath)) {
       try {
         const stat = lstatSync(headlessSymlinkPath)
-        if (stat.isSymbolicLink()) {
-          const currentTarget = readlinkSync(headlessSymlinkPath)
-          if (currentTarget === electronPath) {
-            needsSymlink = false
-          } else {
-            // Symlink exists but points to wrong target, remove it
-            console.log('[Agent] Symlink target changed, recreating...')
-            unlinkSync(headlessSymlinkPath)
-          }
+        if (stat.isSymbolicLink() && readlinkSync(headlessSymlinkPath) === electronPath) {
+          needsSymlink = false
         } else {
-          // Not a symlink (maybe old copy), remove it
-          console.log('[Agent] Removing old non-symlink file...')
           unlinkSync(headlessSymlinkPath)
         }
       } catch {
-        // If we can't read it, try to remove and recreate
-        try {
-          unlinkSync(headlessSymlinkPath)
-        } catch { /* ignore */ }
+        try { unlinkSync(headlessSymlinkPath) } catch { /* ignore */ }
       }
     }
 
     if (needsSymlink) {
-      console.log('[Agent] Creating symlink for headless Electron mode...')
-      console.log('[Agent] Target:', electronPath)
-      console.log('[Agent] Symlink:', headlessSymlinkPath)
-
+      console.log('[Agent] Creating headless Electron symlink:', headlessSymlinkPath)
       symlinkSync(electronPath, headlessSymlinkPath)
-
-      console.log('[Agent] Symlink created successfully')
     }
 
     headlessElectronPath = headlessSymlinkPath
-    console.log('[Agent] Using headless Electron symlink:', headlessElectronPath)
     return headlessElectronPath
   } catch (error) {
-    // Fallback to original path if symlink fails
-    console.error('[Agent] Failed to set up headless Electron symlink, falling back to original:', error)
+    console.error('[Agent] Failed to set up headless Electron symlink:', error)
     headlessElectronPath = electronPath
     return headlessElectronPath
   }
@@ -265,9 +231,40 @@ function inferOpenAIWireApi(apiUrl: string): 'responses' | 'chat_completions' {
     if (v.includes('response')) return 'responses'
     if (v.includes('chat')) return 'chat_completions'
   }
-  if (apiUrl && apiUrl.includes('/responses')) return 'responses'
-  // Default to responses (OpenAI new API format)
+  if (apiUrl?.includes('/responses')) return 'responses'
   return 'responses'
+}
+
+/**
+ * Resolve API credentials, handling OpenAI compatibility mode.
+ * When provider=openai, routes through local OpenAI-to-Anthropic proxy.
+ */
+async function resolveApiCredentials(config: ReturnType<typeof getConfig>, logPrefix = ''): Promise<{
+  anthropicApiKey: string
+  anthropicBaseUrl: string
+  sdkModel: string
+}> {
+  let anthropicBaseUrl = config.api.apiUrl
+  let anthropicApiKey = config.api.apiKey
+  let sdkModel = config.api.model || 'claude-opus-4-5-20251101'
+
+  if (config.api.provider === 'openai') {
+    const router = await ensureOpenAICompatRouter({ debug: false })
+    anthropicBaseUrl = router.baseUrl
+    const apiType = inferOpenAIWireApi(config.api.apiUrl)
+    anthropicApiKey = encodeBackendConfig({
+      url: config.api.apiUrl,
+      key: config.api.apiKey,
+      model: config.api.model,
+      ...(apiType ? { apiType } : {})
+    })
+    sdkModel = 'claude-sonnet-4-20250514'
+    if (logPrefix) {
+      console.log(`[Agent] OpenAI provider enabled${logPrefix}: routing via ${anthropicBaseUrl}`)
+    }
+  }
+
+  return { anthropicApiKey, anthropicBaseUrl, sdkModel }
 }
 
 /**
@@ -438,16 +435,7 @@ async function getOrCreateV2Session(
 
 /**
  * Warm up V2 Session (called when user switches conversations)
- *
  * Pre-initialize or reuse V2 Session to avoid delay when sending messages.
- * Frontend calls this when user clicks a conversation, no need to wait for completion.
- *
- * Flow:
- * 1. User clicks conversation A → frontend immediately calls ensureSessionWarm()
- * 2. V2 Session initializes in background (non-blocking UI)
- * 3. User finishes typing and sends → V2 Session ready, send directly (fast)
- *
- * Important: Parameters must be identical to sendMessage for session reliability
  */
 export async function ensureSessionWarm(
   spaceId: string,
@@ -458,35 +446,10 @@ export async function ensureSessionWarm(
   const conversation = getConversation(spaceId, conversationId)
   const sessionId = conversation?.sessionId
   const electronPath = getHeadlessElectronPath()
-
-  // Create abortController - consistent with sendMessage
   const abortController = new AbortController()
 
-  // OpenAI compatibility mode: enable local Router for protocol conversion only when provider=openai
-  // - config.api.apiUrl/apiKey still holds user's "real OpenAI-compatible backend" info
-  // - ANTHROPIC_* injected to Claude Code points to local Router
-  // - Pass a fake Claude model name to CC (CC may validate model must start with claude-*)
-  //   Real model is in encodeBackendConfig, Router uses it for requests
-  let anthropicBaseUrl = config.api.apiUrl
-  let anthropicApiKey = config.api.apiKey
-  let sdkModel = config.api.model || 'claude-opus-4-5-20251101'
-  if (config.api.provider === 'openai') {
+  const { anthropicApiKey, anthropicBaseUrl, sdkModel } = await resolveApiCredentials(config, ' (warm)')
 
-    const router = await ensureOpenAICompatRouter({ debug: false })
-    anthropicBaseUrl = router.baseUrl
-    const apiType = inferOpenAIWireApi(config.api.apiUrl)
-    anthropicApiKey = encodeBackendConfig({
-      url: config.api.apiUrl,
-      key: config.api.apiKey,
-      model: config.api.model,  // Real model passed to Router
-      ...(apiType ? { apiType } : {})
-    })
-    // Pass a fake Claude model to CC for normal request handling
-    sdkModel = 'claude-sonnet-4-20250514'
-    console.log(`[Agent] OpenAI provider enabled (warm): routing via ${anthropicBaseUrl}`)
-  }
-
-  // Build SDK options using shared function (ensures consistency with sendMessage)
   const sdkOptions = buildSdkOptions({
     spaceId,
     conversationId,
@@ -497,9 +460,9 @@ export async function ensureSessionWarm(
     anthropicBaseUrl,
     sdkModel,
     electronPath,
-    aiBrowserEnabled: false,  // Warm-up doesn't enable AI Browser
-    thinkingEnabled: false,   // Warm-up doesn't enable thinking
-    stderrSuffix: ' (warm)'   // Mark stderr logs as from warm-up
+    aiBrowserEnabled: false,
+    thinkingEnabled: false,
+    stderrSuffix: ' (warm)'
   })
 
   try {
@@ -508,7 +471,6 @@ export async function ensureSessionWarm(
     console.log(`[Agent] V2 session warmed up: ${conversationId}`)
   } catch (error) {
     console.error(`[Agent] Failed to warm up session ${conversationId}:`, error)
-    // Don't throw on warm-up failure, sendMessage() will reinitialize (just slower)
   }
 }
 
@@ -575,34 +537,27 @@ function invalidateAllSessions(): void {
 }
 
 // Register for API config change notifications
-// This is called once when the module loads
 onApiConfigChange(() => {
   invalidateAllSessions()
 })
+
 let currentMainWindow: BrowserWindow | null = null
 
-// Get working directory for a space
 function getWorkingDir(spaceId: string): string {
-  console.log(`[Agent] getWorkingDir called with spaceId: ${spaceId}`)
-  
   if (spaceId === 'halo-temp') {
     const artifactsDir = join(getTempSpacePath(), 'artifacts')
     if (!existsSync(artifactsDir)) {
       mkdirSync(artifactsDir, { recursive: true })
     }
-    console.log(`[Agent] Using temp space artifacts dir: ${artifactsDir}`)
     return artifactsDir
   }
 
   const space = getSpace(spaceId)
-  console.log(`[Agent] getSpace result:`, space ? { id: space.id, name: space.name, path: space.path } : null)
-  
   if (space) {
-    console.log(`[Agent] Using space path: ${space.path}`)
     return space.path
   }
 
-  console.log(`[Agent] WARNING: Space not found, falling back to temp path`)
+  console.log(`[Agent] WARNING: Space not found for ${spaceId}, falling back to temp path`)
   return getTempSpacePath()
 }
 
@@ -776,12 +731,7 @@ function buildSdkOptions(params: {
 }
 
 // Build plugins configuration based on config settings
-// Supports configurable plugin paths with three-tier loading:
-// 1. System plugins (~/.claude/skills/) - optional, controlled by enableSystemSkills
-// 2. Global custom paths (config.claudeCode.plugins.globalPaths)
-// 3. App-level default (~/.halo/plugins/) - controlled by loadDefaultPaths
-// 4. Space custom paths (spaceConfig.plugins.paths)
-// 5. Space-level default ({workDir}/.claude/) - controlled by loadDefaultPath
+// Loading order: system < global custom < app default < space custom < space default
 function buildPluginsConfigFromSettings(
   workDir: string,
   globalPluginsConfig: { enabled?: boolean; globalPaths?: string[]; loadDefaultPaths?: boolean } | undefined,
@@ -791,37 +741,20 @@ function buildPluginsConfigFromSettings(
   const plugins: PluginConfig[] = []
   const { homedir } = require('os')
 
-  console.log('[Agent] buildPluginsConfigFromSettings called with:', {
-    workDir,
-    globalPluginsConfig,
-    spacePluginsConfig,
-    enableSystemSkills
-  })
-
-  // If plugins disabled globally, return empty
   if (globalPluginsConfig?.enabled === false) {
-    console.log('[Agent] Plugins disabled globally')
     return plugins
   }
 
-  // Allowed base paths for plugins (security: prevent loading from arbitrary locations)
-  const allowedBasePaths = [
-    homedir(),  // User home directory
-    workDir     // Current workspace
-  ].filter(Boolean)
+  const allowedBasePaths = [homedir(), workDir].filter(Boolean)
 
-  // Helper to validate plugin path with full symlink resolution
+  // Validate plugin path with symlink resolution
   const isValidPluginPath = (pluginPath: string): boolean => {
     try {
-      // First check if path exists
       const stat = lstatSync(pluginPath)
 
-      // If it's a symlink, resolve it and verify the real path
       if (stat.isSymbolicLink()) {
         try {
           const realPath = realpathSync(pluginPath)
-
-          // Verify the real path is within allowed directories
           const isAllowed = allowedBasePaths.some(base => {
             if (!base) return false
             const normalizedBase = normalize(resolve(base))
@@ -830,15 +763,11 @@ function buildPluginsConfigFromSettings(
           })
 
           if (!isAllowed) {
-            console.warn(`[Agent] Security: Symlink points outside allowed directories: ${pluginPath} -> ${realPath}`)
+            console.warn(`[Agent] Security: Symlink outside allowed directories: ${pluginPath}`)
             return false
           }
-
-          // Check if the resolved path is a directory
-          const realStat = statSync(realPath)
-          return realStat.isDirectory()
-        } catch (e) {
-          console.warn(`[Agent] Security: Failed to resolve symlink: ${pluginPath}`, e)
+          return statSync(realPath).isDirectory()
+        } catch {
           return false
         }
       }
@@ -849,14 +778,12 @@ function buildPluginsConfigFromSettings(
     }
   }
 
-  // Helper to add plugin if valid and not already added
   const addPluginIfValid = (pluginPath: string): void => {
     if (isValidPluginPath(pluginPath) && !plugins.some(p => p.path === pluginPath)) {
       plugins.push({ type: 'local', path: pluginPath })
     }
   }
 
-  // Helper to resolve path (supports ~ and relative paths)
   const resolvePath = (inputPath: string, baseDir?: string): string => {
     if (inputPath.startsWith('~')) {
       return join(homedir(), inputPath.slice(1))
@@ -869,70 +796,39 @@ function buildPluginsConfigFromSettings(
 
   const disableGlobal = spacePluginsConfig?.disableGlobal === true
 
-  // 1. System plugins (optional, controlled by compat setting)
+  // 1. System plugins
   if (enableSystemSkills && !disableGlobal) {
-    try {
-      const systemPluginsPath = join(homedir(), '.claude', 'skills')
-      addPluginIfValid(systemPluginsPath)
-    } catch (e) {
-      console.warn('[Agent] Failed to check system plugins:', e)
-    }
+    addPluginIfValid(join(homedir(), '.claude', 'skills'))
   }
 
-  // 2. Global custom paths (from config.claudeCode.plugins.globalPaths)
+  // 2. Global custom paths
   if (!disableGlobal && globalPluginsConfig?.globalPaths) {
     for (const path of globalPluginsConfig.globalPaths) {
-      try {
-        addPluginIfValid(resolvePath(path))
-      } catch (e) {
-        console.warn(`[Agent] Failed to add global plugin path: ${path}`, e)
-      }
+      addPluginIfValid(resolvePath(path))
     }
   }
 
   // 3. App-level default (~/.halo/plugins/ and ~/.halo/skills/)
   if (!disableGlobal && globalPluginsConfig?.loadDefaultPaths !== false) {
-    try {
-      const haloDir = getHaloDir()
-      if (haloDir) {
-        const pluginsPath = join(haloDir, 'plugins')
-        const skillsPath = join(haloDir, 'skills')
-
-        // Load both directories if they exist
-        if (isValidPluginPath(pluginsPath)) {
-          addPluginIfValid(pluginsPath)
-        }
-        if (isValidPluginPath(skillsPath)) {
-          addPluginIfValid(skillsPath)
-        }
-      }
-    } catch (e) {
-      console.warn('[Agent] Failed to check app-level plugins:', e)
+    const haloDir = getHaloDir()
+    if (haloDir) {
+      addPluginIfValid(join(haloDir, 'plugins'))
+      addPluginIfValid(join(haloDir, 'skills'))
     }
   }
 
-  // 4. Space custom paths (from spaceConfig.plugins.paths)
+  // 4. Space custom paths
   if (spacePluginsConfig?.paths) {
     for (const path of spacePluginsConfig.paths) {
-      try {
-        addPluginIfValid(resolvePath(path, workDir))
-      } catch (e) {
-        console.warn(`[Agent] Failed to add space plugin path: ${path}`, e)
-      }
+      addPluginIfValid(resolvePath(path, workDir))
     }
   }
 
   // 5. Space-level default ({workDir}/.claude/)
   if (workDir && spacePluginsConfig?.loadDefaultPath !== false) {
-    try {
-      const spacePluginsPath = join(workDir, '.claude')
-      addPluginIfValid(spacePluginsPath)
-    } catch (e) {
-      console.warn('[Agent] Failed to check space-level plugins:', e)
-    }
+    addPluginIfValid(join(workDir, '.claude'))
   }
 
-  // Summary log
   if (plugins.length > 0) {
     console.log(`[Agent] Plugins loaded: ${plugins.map(p => p.path).join(', ')}`)
   }
@@ -994,7 +890,6 @@ function broadcastMcpStatus(mcpServers: Array<{ name: string; status: string }>)
 }
 
 // Test MCP connections manually
-// Starts a temporary SDK query just to get MCP status
 let mcpTestInProgress = false
 
 export async function testMcpConnections(mainWindow?: BrowserWindow | null): Promise<{ success: boolean; servers: McpServerStatusInfo[]; error?: string }> {
@@ -1002,7 +897,6 @@ export async function testMcpConnections(mainWindow?: BrowserWindow | null): Pro
     return { success: false, servers: cachedMcpStatus, error: 'Test already in progress' }
   }
 
-  // Set currentMainWindow if provided (for broadcasting status to renderer)
   if (mainWindow) {
     currentMainWindow = mainWindow
   }
@@ -1016,7 +910,6 @@ export async function testMcpConnections(mainWindow?: BrowserWindow | null): Pro
       return { success: false, servers: [], error: 'API key not configured' }
     }
 
-    // Get enabled MCP servers from config
     const enabledMcpServers = getEnabledMcpServers(config.mcpServers || {})
     if (!enabledMcpServers || Object.keys(enabledMcpServers).length === 0) {
       return { success: true, servers: [], error: 'No MCP servers configured' }
@@ -1024,38 +917,15 @@ export async function testMcpConnections(mainWindow?: BrowserWindow | null): Pro
 
     console.log('[Agent] MCP servers to test:', Object.keys(enabledMcpServers).join(', '))
 
-    // Use a temp space path for the query
     const cwd = getTempSpacePath()
-
-    // Use the same electron path as sendMessage (prevents Dock icon on macOS)
     const electronPath = getHeadlessElectronPath()
-
-    // Handle OpenAI compatible mode (same as sendMessage)
-    let anthropicBaseUrl = config.api.apiUrl
-    let anthropicApiKey = config.api.apiKey
-    let sdkModel = config.api.model || 'claude-sonnet-4-20250514'
-
-    if (config.api.provider === 'openai') {
-      const router = await ensureOpenAICompatRouter({ debug: false })
-      anthropicBaseUrl = router.baseUrl
-      const apiType = inferOpenAIWireApi(config.api.apiUrl)
-      anthropicApiKey = encodeBackendConfig({
-        url: config.api.apiUrl,
-        key: config.api.apiKey,
-        model: config.api.model,
-        ...(apiType ? { apiType } : {})
-      })
-      sdkModel = 'claude-sonnet-4-20250514'
-      console.log(`[Agent] MCP test: OpenAI provider enabled via ${anthropicBaseUrl}`)
-    }
+    const { anthropicApiKey, anthropicBaseUrl, sdkModel } = await resolveApiCredentials(config, ' (MCP test)')
 
     console.log('[Agent] MCP test config:', JSON.stringify(enabledMcpServers, null, 2))
 
-    // Create query with proper configuration (matching sendMessage)
-    // Use a simple prompt that will get a quick response
     const abortController = new AbortController()
     const queryIterator = claudeQuery({
-      prompt: 'hi', // Simple prompt to trigger MCP connection
+      prompt: 'hi',
       options: {
         apiKey: anthropicApiKey,
         model: sdkModel,
@@ -1075,17 +945,16 @@ export async function testMcpConnections(mainWindow?: BrowserWindow | null): Pro
         permissionMode: 'bypassPermissions',
         abortController,
         mcpServers: enabledMcpServers,
-        maxTurns: 1  // Only need one turn to get MCP status
+        maxTurns: 1
       } as any
     })
 
-    // Iterate through messages looking for system message with MCP status
     let foundStatus = false
     const timeoutPromise = new Promise<void>((_, reject) => {
       setTimeout(() => {
         abortController.abort()
         reject(new Error('MCP test timeout'))
-      }, 30000) // 30s timeout
+      }, 30000)
     })
 
     const iteratePromise = (async () => {
@@ -1171,27 +1040,21 @@ function createCanUseTool(workDir: string, spaceId: string, conversationId: stri
   const path = require('path')
   const absoluteWorkDir = path.resolve(workDir)
 
-  console.log(`[Agent] Creating canUseTool with workDir: ${absoluteWorkDir}`)
-
   return async (
     toolName: string,
     input: Record<string, unknown>,
     _options: { signal: AbortSignal }
   ) => {
-    console.log(`[Agent] canUseTool called - Tool: ${toolName}, Input:`, JSON.stringify(input).substring(0, 200))
-
     // Check file path tools - restrict to working directory
     const fileTools = ['Read', 'Write', 'Edit', 'Grep', 'Glob']
     if (fileTools.includes(toolName)) {
       const pathParam = (input.file_path || input.path) as string | undefined
-
       if (pathParam) {
         const absolutePath = path.resolve(pathParam)
         const isWithinWorkDir =
           absolutePath.startsWith(absoluteWorkDir + path.sep) || absolutePath === absoluteWorkDir
 
         if (!isWithinWorkDir) {
-          console.log(`[Agent] Security: Blocked access to: ${pathParam}`)
           return {
             behavior: 'deny' as const,
             message: `Can only access files within the current space: ${workDir}`
@@ -1205,14 +1068,10 @@ function createCanUseTool(workDir: string, spaceId: string, conversationId: stri
       const permission = config.permissions.commandExecution
 
       if (permission === 'deny') {
-        return {
-          behavior: 'deny' as const,
-          message: 'Command execution is disabled'
-        }
+        return { behavior: 'deny' as const, message: 'Command execution is disabled' }
       }
 
       if (permission === 'ask' && !config.permissions.trustMode) {
-        // Send permission request to renderer with session IDs
         const toolCall: ToolCall = {
           id: `tool-${Date.now()}`,
           name: toolName,
@@ -1224,7 +1083,6 @@ function createCanUseTool(workDir: string, spaceId: string, conversationId: stri
 
         sendToRenderer('agent:tool-call', spaceId, conversationId, toolCall as unknown as Record<string, unknown>)
 
-        // Wait for user response using session-specific resolver
         const session = activeSessions.get(conversationId)
         if (!session) {
           return { behavior: 'deny' as const, message: 'Session not found' }
@@ -1232,26 +1090,20 @@ function createCanUseTool(workDir: string, spaceId: string, conversationId: stri
 
         return new Promise((resolve) => {
           session.pendingPermissionResolve = (approved: boolean) => {
-            if (approved) {
-              resolve({ behavior: 'allow' as const })
-            } else {
-              resolve({
-                behavior: 'deny' as const,
-                message: 'User rejected command execution'
-              })
-            }
+            resolve(approved
+              ? { behavior: 'allow' as const }
+              : { behavior: 'deny' as const, message: 'User rejected command execution' }
+            )
           }
         })
       }
     }
 
-    // AI Browser tools are always allowed (they run in sandboxed browser context)
+    // AI Browser tools are always allowed (sandboxed browser context)
     if (isAIBrowserTool(toolName)) {
-      console.log(`[Agent] AI Browser tool allowed: ${toolName}`)
       return { behavior: 'allow' as const }
     }
 
-    // Default: allow
     return { behavior: 'allow' as const }
   }
 }
@@ -1267,23 +1119,16 @@ export function handleToolApproval(conversationId: string, approved: boolean): v
 
 // Build multi-modal message content for Claude API
 function buildMessageContent(text: string, images?: ImageAttachment[]): string | Array<{ type: string; [key: string]: unknown }> {
-  // If no images, just return plain text
-  if (!images || images.length === 0) {
+  if (!images?.length) {
     return text
   }
 
-  // Build content blocks array for multi-modal message
   const contentBlocks: Array<{ type: string; [key: string]: unknown }> = []
 
-  // Add text block first (if there's text)
   if (text.trim()) {
-    contentBlocks.push({
-      type: 'text',
-      text: text
-    })
+    contentBlocks.push({ type: 'text', text })
   }
 
-  // Add image blocks
   for (const image of images) {
     contentBlocks.push({
       type: 'image',
@@ -1306,38 +1151,15 @@ export async function sendMessage(
   currentMainWindow = mainWindow
 
   const { spaceId, conversationId, message, resumeSessionId, images, aiBrowserEnabled, thinkingEnabled, canvasContext } = request
-  console.log(`[Agent] sendMessage: conv=${conversationId}${images && images.length > 0 ? `, images=${images.length}` : ''}${aiBrowserEnabled ? ', AI Browser enabled' : ''}${thinkingEnabled ? ', thinking=ON' : ''}${canvasContext?.isOpen ? `, canvas tabs=${canvasContext.tabCount}` : ''}`)
+  console.log(`[Agent] sendMessage: conv=${conversationId}${images?.length ? `, images=${images.length}` : ''}${aiBrowserEnabled ? ', AI Browser enabled' : ''}${thinkingEnabled ? ', thinking=ON' : ''}${canvasContext?.isOpen ? `, canvas tabs=${canvasContext.tabCount}` : ''}`)
 
   const config = getConfig()
   const workDir = getWorkingDir(spaceId)
 
-  // OpenAI compatibility mode: enable local Router for protocol conversion only when provider=openai
-  // Same as ensureSessionWarm(), config storage values are not modified here
-  // Pass a fake Claude model name to CC (CC may validate model must start with claude-*)
-  // Real model is in encodeBackendConfig, Router uses it for requests
-  let anthropicBaseUrl = config.api.apiUrl
-  let anthropicApiKey = config.api.apiKey
-  let sdkModel = config.api.model || 'claude-opus-4-5-20251101'
-  if (config.api.provider === 'openai') {
-    const router = await ensureOpenAICompatRouter({ debug: false })
-    anthropicBaseUrl = router.baseUrl
-    const apiType = inferOpenAIWireApi(config.api.apiUrl)
-    anthropicApiKey = encodeBackendConfig({
-      url: config.api.apiUrl,
-      key: config.api.apiKey,
-      model: config.api.model,  // Real model passed to Router
-      ...(apiType ? { apiType } : {})
-    })
-    // Pass a fake Claude model to CC for normal request handling
-    sdkModel = 'claude-sonnet-4-20250514'
-    console.log(`[Agent] OpenAI provider enabled: routing via ${anthropicBaseUrl}`)
-  }
+  const { anthropicApiKey, anthropicBaseUrl, sdkModel } = await resolveApiCredentials(config, '')
 
-  // Get conversation for session resumption
   const conversation = getConversation(spaceId, conversationId)
   const sessionId = resumeSessionId || conversation?.sessionId
-
-  // Create abort controller for this session
   const abortController = new AbortController()
 
   // Accumulate stderr for detailed error messages
@@ -1349,7 +1171,7 @@ export async function sendMessage(
     spaceId,
     conversationId,
     pendingPermissionResolve: null,
-    thoughts: []  // Initialize thoughts array for this session
+    thoughts: []
   }
   activeSessions.set(conversationId, sessionState)
 
@@ -1357,7 +1179,7 @@ export async function sendMessage(
   addMessage(spaceId, conversationId, {
     role: 'user',
     content: message,
-    images: images  // Include images in the saved message
+    images
   })
 
   // Add placeholder for assistant response
@@ -1368,11 +1190,8 @@ export async function sendMessage(
   })
 
   try {
-    // Use headless Electron binary (outside .app bundle on macOS to prevent Dock icon)
     const electronPath = getHeadlessElectronPath()
-    console.log(`[Agent] Using headless Electron as Node runtime: ${electronPath}`)
 
-    // Build SDK options using shared function (ensures consistency with ensureSessionWarm)
     const sdkOptions = buildSdkOptions({
       spaceId,
       conversationId,
@@ -1912,34 +1731,20 @@ function parseSDKMessage(message: any): Thought | null {
   const timestamp = new Date().toISOString()
   const generateId = () => `thought-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 
-  // System initialization
   if (message.type === 'system') {
     if (message.subtype === 'init') {
-      return {
-        id: generateId(),
-        type: 'system',
-        content: `Connected | Model: ${message.model || 'claude'}`,
-        timestamp
-      }
+      return { id: generateId(), type: 'system', content: `Connected | Model: ${message.model || 'claude'}`, timestamp }
     }
     return null
   }
 
-  // Assistant messages (thinking, tool_use, text blocks)
   if (message.type === 'assistant') {
     const content = message.message?.content
     if (Array.isArray(content)) {
       for (const block of content) {
-        // Thinking blocks
         if (block.type === 'thinking') {
-          return {
-            id: generateId(),
-            type: 'thinking',
-            content: block.thinking || '',
-            timestamp
-          }
+          return { id: generateId(), type: 'thinking', content: block.thinking || '', timestamp }
         }
-        // Tool use blocks
         if (block.type === 'tool_use') {
           return {
             id: block.id || generateId(),
@@ -1950,51 +1755,35 @@ function parseSDKMessage(message: any): Thought | null {
             toolInput: block.input
           }
         }
-        // Text blocks
         if (block.type === 'text') {
-          return {
-            id: generateId(),
-            type: 'text',
-            content: block.text || '',
-            timestamp
-          }
+          return { id: generateId(), type: 'text', content: block.text || '', timestamp }
         }
       }
     }
     return null
   }
 
-  // User messages (tool results or command output)
   if (message.type === 'user') {
     const content = message.message?.content
 
-    // Handle slash command output: <local-command-stdout>...</local-command-stdout>
-    // These are returned as user messages with isReplay: true
+    // Handle slash command output
     if (typeof content === 'string') {
       const match = content.match(/<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/)
       if (match) {
-        return {
-          id: generateId(),
-          type: 'text',  // Render as text block (will show in assistant bubble)
-          content: match[1].trim(),
-          timestamp
-        }
+        return { id: generateId(), type: 'text', content: match[1].trim(), timestamp }
       }
     }
 
-    // Handle tool results (array content)
+    // Handle tool results
     if (Array.isArray(content)) {
       for (const block of content) {
         if (block.type === 'tool_result') {
           const isError = block.is_error || false
-          const resultContent = typeof block.content === 'string'
-            ? block.content
-            : JSON.stringify(block.content)
-
+          const resultContent = typeof block.content === 'string' ? block.content : JSON.stringify(block.content)
           return {
             id: block.tool_use_id || generateId(),
             type: 'tool_result',
-            content: isError ? `Tool execution failed` : `Tool execution succeeded`,
+            content: isError ? 'Tool execution failed' : 'Tool execution succeeded',
             timestamp,
             toolOutput: resultContent,
             isError
@@ -2005,7 +1794,6 @@ function parseSDKMessage(message: any): Thought | null {
     return null
   }
 
-  // Final result
   if (message.type === 'result') {
     return {
       id: generateId(),
@@ -2019,16 +1807,12 @@ function parseSDKMessage(message: any): Thought | null {
   return null
 }
 
-// Build system prompt append - minimal context, preserve Claude Code's native behavior
+// Build system prompt append
 function buildSystemPromptAppend(workDir: string): string {
-  // Get embedded Python path for system prompt
   const pythonDir = getEmbeddedPythonDir()
-  const pythonBinDir = process.platform === 'win32' ? pythonDir : join(pythonDir, 'bin')
   const pythonExecutable = process.platform === 'win32'
     ? join(pythonDir, 'python.exe')
-    : join(pythonBinDir, 'python3')
-
-  console.log(`[Agent] System prompt Python executable: ${pythonExecutable}`)
+    : join(pythonDir, 'bin', 'python3')
 
   return `
 You are Halo, an AI assistant that helps users accomplish real work.
@@ -2057,7 +1841,6 @@ function getEnabledMcpServers(mcpServers: Record<string, any>): Record<string, a
   const enabled: Record<string, any> = {}
   for (const [name, config] of Object.entries(mcpServers)) {
     if (!config.disabled) {
-      // Remove the 'disabled' field before passing to SDK (it's a Halo extension)
       const { disabled, ...sdkConfig } = config as any
       enabled[name] = sdkConfig
     }
