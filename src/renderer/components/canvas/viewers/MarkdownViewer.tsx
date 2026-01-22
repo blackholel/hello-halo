@@ -243,6 +243,7 @@ function SourceView({ content }: { content: string }) {
  * Copy button for code blocks
  */
 function CopyButton({ text }: { text: string }) {
+  const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
 
   const handleCopy = async () => {
