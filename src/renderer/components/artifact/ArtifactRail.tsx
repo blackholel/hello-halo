@@ -66,9 +66,10 @@ function useIsMobile() {
 
 // Load initial view mode from storage
 function getInitialViewMode(): ArtifactViewMode {
-  if (typeof window === 'undefined') return 'card'
+  if (typeof window === 'undefined') return 'tree'
   const stored = localStorage.getItem(VIEW_MODE_STORAGE_KEY)
-  return (stored === 'tree' || stored === 'card') ? stored : 'card'
+  // Default to tree view for better file browsing experience
+  return (stored === 'tree' || stored === 'card') ? stored : 'tree'
 }
 
 // Default browser home URL
