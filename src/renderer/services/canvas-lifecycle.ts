@@ -913,6 +913,47 @@ class CanvasLifecycle {
     }
   }
 
+  /**
+   * Save file content to disk
+   */
+  async saveFile(tabId: string): Promise<boolean> {
+    const tab = this.tabs.get(tabId)
+    if (!tab || !tab.path || tab.content === undefined) {
+      console.warn(`[CanvasLifecycle] Cannot save tab ${tabId}: missing path or content`)
+      return false
+    }
+
+    try {
+      console.log(`[CanvasLifecycle] Saving file: ${tab.path}`)
+      const response = await api.writeArtifactContent(tab.path, tab.content)
+
+      if (response.success) {
+        tab.isDirty = false
+        this.notifyTabsChange()
+        console.log(`[CanvasLifecycle] File saved successfully: ${tab.path}`)
+        return true
+      } else {
+        console.error(`[CanvasLifecycle] Failed to save file: ${response.error}`)
+        return false
+      }
+    } catch (error) {
+      console.error(`[CanvasLifecycle] Error saving file:`, error)
+      return false
+    }
+  }
+
+  /**
+   * Check if there are any unsaved changes across all tabs
+   */
+  hasUnsavedChanges(): boolean {
+    for (const [, tab] of this.tabs) {
+      if (tab.isDirty) {
+        return true
+      }
+    }
+    return false
+  }
+
   // ============================================
   // Layout Actions
   // ============================================

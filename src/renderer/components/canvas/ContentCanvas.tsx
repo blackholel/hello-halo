@@ -27,7 +27,7 @@ import { useCallback, useEffect } from 'react'
 import { X, ChevronLeft, Maximize2, Minimize2 } from 'lucide-react'
 import { useCanvasLifecycle, type TabState, type ContentType } from '../../hooks/useCanvasLifecycle'
 import { CanvasTabBar } from './CanvasTabs'
-import { CodeViewer } from './viewers/CodeViewer'
+import { CodeEditor } from './viewers/CodeEditor'
 import { MarkdownViewer } from './viewers/MarkdownViewer'
 import { ImageViewer } from './viewers/ImageViewer'
 import { HtmlViewer } from './viewers/HtmlViewer'
@@ -59,6 +59,8 @@ export function ContentCanvas({ className = '' }: ContentCanvasProps) {
     switchToPrevTab,
     switchToTabIndex,
     openUrl,
+    updateTabContent,
+    saveFile,
   } = useCanvasLifecycle()
 
   // Keyboard shortcuts
@@ -124,6 +126,20 @@ export function ContentCanvas({ className = '' }: ContentCanvasProps) {
     }
   }, [activeTabId, saveScrollPosition])
 
+  // Handle content changes from editor
+  const handleContentChange = useCallback((content: string) => {
+    if (activeTabId) {
+      updateTabContent(activeTabId, content)
+    }
+  }, [activeTabId, updateTabContent])
+
+  // Handle save from editor
+  const handleSave = useCallback(async () => {
+    if (activeTabId) {
+      await saveFile(activeTabId)
+    }
+  }, [activeTabId, saveFile])
+
   // Don't render if not open
   if (!isOpen) return null
 
@@ -138,6 +154,8 @@ export function ContentCanvas({ className = '' }: ContentCanvasProps) {
           <TabContent
             tab={activeTab}
             onScrollChange={handleScrollChange}
+            onContentChange={handleContentChange}
+            onSave={handleSave}
           />
         ) : (
           <EmptyState />
@@ -153,9 +171,11 @@ export function ContentCanvas({ className = '' }: ContentCanvasProps) {
 interface TabContentProps {
   tab: TabState
   onScrollChange?: (position: number) => void
+  onContentChange?: (content: string) => void
+  onSave?: () => void
 }
 
-function TabContent({ tab, onScrollChange }: TabContentProps) {
+function TabContent({ tab, onScrollChange, onContentChange, onSave }: TabContentProps) {
   const { t } = useTranslation()
   // Browser and PDF tabs use BrowserView (handle their own loading state)
   if (tab.type === 'browser' || tab.type === 'pdf') {
@@ -195,7 +215,7 @@ function TabContent({ tab, onScrollChange }: TabContentProps) {
   // Render appropriate viewer based on content type
   switch (tab.type) {
     case 'code':
-      return <CodeViewer tab={tab} onScrollChange={onScrollChange} />
+      return <CodeEditor tab={tab} onContentChange={onContentChange} onSave={onSave} />
 
     case 'markdown':
       return <MarkdownViewer tab={tab} onScrollChange={onScrollChange} />

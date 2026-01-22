@@ -108,6 +108,13 @@ export interface HaloAPI {
   openArtifact: (filePath: string) => Promise<IpcResponse>
   showArtifactInFolder: (filePath: string) => Promise<IpcResponse>
   readArtifactContent: (filePath: string) => Promise<IpcResponse>
+  writeArtifactContent: (filePath: string, content: string) => Promise<IpcResponse>
+  createFolder: (folderPath: string) => Promise<IpcResponse>
+  createFile: (filePath: string, content?: string) => Promise<IpcResponse>
+  renameArtifact: (oldPath: string, newName: string) => Promise<IpcResponse>
+  deleteArtifact: (filePath: string) => Promise<IpcResponse>
+  moveArtifact: (sourcePath: string, targetDir: string) => Promise<IpcResponse>
+  copyArtifact: (sourcePath: string, targetDir: string) => Promise<IpcResponse>
 
   // Onboarding
   writeOnboardingArtifact: (spaceId: string, filename: string, content: string) => Promise<IpcResponse>
@@ -403,6 +410,13 @@ const api: HaloAPI = {
   openArtifact: (filePath) => ipcRenderer.invoke('artifact:open', filePath),
   showArtifactInFolder: (filePath) => ipcRenderer.invoke('artifact:show-in-folder', filePath),
   readArtifactContent: (filePath) => ipcRenderer.invoke('artifact:read-content', filePath),
+  writeArtifactContent: (filePath, content) => ipcRenderer.invoke('artifact:write-content', filePath, content),
+  createFolder: (folderPath) => ipcRenderer.invoke('artifact:create-folder', folderPath),
+  createFile: (filePath, content) => ipcRenderer.invoke('artifact:create-file', filePath, content),
+  renameArtifact: (oldPath, newName) => ipcRenderer.invoke('artifact:rename', oldPath, newName),
+  deleteArtifact: (filePath) => ipcRenderer.invoke('artifact:delete', filePath),
+  moveArtifact: (sourcePath, targetDir) => ipcRenderer.invoke('artifact:move', sourcePath, targetDir),
+  copyArtifact: (sourcePath, targetDir) => ipcRenderer.invoke('artifact:copy', sourcePath, targetDir),
 
   // Onboarding
   writeOnboardingArtifact: (spaceId, filename, content) =>

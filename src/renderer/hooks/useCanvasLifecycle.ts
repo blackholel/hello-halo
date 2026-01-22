@@ -115,6 +115,11 @@ export function useCanvasLifecycle() {
     []
   )
 
+  const saveFile = useCallback(
+    (tabId: string) => canvasLifecycle.saveFile(tabId),
+    []
+  )
+
   const saveScrollPosition = useCallback(
     (tabId: string, position: number) => canvasLifecycle.saveScrollPosition(tabId, position),
     []
@@ -165,6 +170,7 @@ export function useCanvasLifecycle() {
     // Content Actions
     refreshTab,
     updateTabContent,
+    saveFile,
     saveScrollPosition,
 
     // Layout Actions

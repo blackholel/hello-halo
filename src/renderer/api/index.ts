@@ -420,6 +420,63 @@ export const api = {
     return httpRequest('GET', `/api/artifacts/content?path=${encodeURIComponent(filePath)}`)
   },
 
+  // Write artifact content for Content Canvas editing
+  writeArtifactContent: async (filePath: string, content: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.writeArtifactContent(filePath, content)
+    }
+    // In remote mode, write content via API
+    return httpRequest('POST', '/api/artifacts/content', { path: filePath, content })
+  },
+
+  // Create a new folder
+  createFolder: async (folderPath: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.createFolder(folderPath)
+    }
+    return httpRequest('POST', '/api/artifacts/folder', { path: folderPath })
+  },
+
+  // Create a new file
+  createFile: async (filePath: string, content?: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.createFile(filePath, content)
+    }
+    return httpRequest('POST', '/api/artifacts/file', { path: filePath, content })
+  },
+
+  // Rename a file or folder
+  renameArtifact: async (oldPath: string, newName: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.renameArtifact(oldPath, newName)
+    }
+    return httpRequest('POST', '/api/artifacts/rename', { oldPath, newName })
+  },
+
+  // Delete a file or folder
+  deleteArtifact: async (filePath: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.deleteArtifact(filePath)
+    }
+    return httpRequest('DELETE', `/api/artifacts?path=${encodeURIComponent(filePath)}`)
+  },
+
+  // Move a file or folder
+  moveArtifact: async (sourcePath: string, targetDir: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.moveArtifact(sourcePath, targetDir)
+    }
+    return httpRequest('POST', '/api/artifacts/move', { sourcePath, targetDir })
+  },
+
+  // Copy a file or folder
+  copyArtifact: async (sourcePath: string, targetDir: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.copyArtifact(sourcePath, targetDir)
+    }
+    return httpRequest('POST', '/api/artifacts/copy', { sourcePath, targetDir })
+  },
+
   // ===== Onboarding =====
   writeOnboardingArtifact: async (
     spaceId: string,

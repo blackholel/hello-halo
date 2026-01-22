@@ -3,10 +3,11 @@
  * Provides real-time artifact discovery and file information
  */
 
-import { readdirSync, statSync, existsSync, readFileSync } from 'fs'
-import { join, extname, basename } from 'path'
+import { readdirSync, statSync, existsSync, readFileSync, promises as fsPromises } from 'fs'
+import { join, extname, basename, dirname, normalize } from 'path'
+import fs from 'fs'
 import { getTempSpacePath } from './config.service'
-import { getSpace } from './space.service'
+import { getSpace, listSpaces } from './space.service'
 
 // File type icon IDs mapping (mapped to Lucide icon names in renderer)
 const FILE_ICON_IDS: Record<string, string> = {
@@ -496,5 +497,204 @@ export function getArtifactDownloadInfo(filePath: string): {
     }
   } catch {
     return null
+  }
+}
+
+/**
+ * Check if a file path is within allowed space directories
+ * Returns true if the path is within any space directory or the temp space
+ */
+function isPathInAllowedSpace(filePath: string): boolean {
+  const normalizedPath = normalize(filePath)
+
+  // Check temp space
+  const tempSpacePath = getTempSpacePath()
+  if (normalizedPath.startsWith(normalize(tempSpacePath))) {
+    return true
+  }
+
+  // Check all user spaces
+  const spaces = listSpaces()
+  for (const space of spaces) {
+    if (normalizedPath.startsWith(normalize(space.path))) {
+      return true
+    }
+  }
+
+  return false
+}
+
+/**
+ * Write content to a file (for Content Canvas editing)
+ * Validates that the file path is within allowed space directories
+ */
+export async function writeArtifactContent(
+  filePath: string,
+  content: string
+): Promise<{ success: boolean; error?: string }> {
+  console.log(`[Artifact] Writing content to: ${filePath}`)
+
+  // Validate file path is within allowed spaces
+  if (!isPathInAllowedSpace(filePath)) {
+    const error = `Access denied: File path is not within allowed space directories`
+    console.error(`[Artifact] ${error}`)
+    return { success: false, error }
+  }
+
+  try {
+    // Ensure parent directory exists
+    const parentDir = dirname(filePath)
+    if (!existsSync(parentDir)) {
+      await fsPromises.mkdir(parentDir, { recursive: true })
+    }
+
+    // Write the file
+    await fsPromises.writeFile(filePath, content, 'utf-8')
+    console.log(`[Artifact] Successfully wrote file: ${filePath}`)
+    return { success: true }
+  } catch (error) {
+    const errorMessage = `Failed to write file: ${(error as Error).message}`
+    console.error(`[Artifact] ${errorMessage}`)
+    return { success: false, error: errorMessage }
+  }
+}
+
+// ============================================
+// File Management Operations
+// ============================================
+
+/**
+ * Create a new folder
+ */
+export async function createFolder(folderPath: string): Promise<{ success: boolean; error?: string }> {
+  console.log(`[Artifact] Creating folder: ${folderPath}`)
+
+  try {
+    if (!isPathInAllowedSpace(folderPath)) {
+      return { success: false, error: 'Path not in allowed space' }
+    }
+    await fs.promises.mkdir(folderPath, { recursive: true })
+    console.log(`[Artifact] Successfully created folder: ${folderPath}`)
+    return { success: true }
+  } catch (error) {
+    const errorMessage = `Failed to create folder: ${(error as Error).message}`
+    console.error(`[Artifact] ${errorMessage}`)
+    return { success: false, error: errorMessage }
+  }
+}
+
+/**
+ * Create a new file with optional content
+ */
+export async function createFile(filePath: string, content: string = ''): Promise<{ success: boolean; error?: string }> {
+  console.log(`[Artifact] Creating file: ${filePath}`)
+
+  try {
+    if (!isPathInAllowedSpace(filePath)) {
+      return { success: false, error: 'Path not in allowed space' }
+    }
+    const dir = dirname(filePath)
+    await fs.promises.mkdir(dir, { recursive: true })
+    await fs.promises.writeFile(filePath, content, 'utf-8')
+    console.log(`[Artifact] Successfully created file: ${filePath}`)
+    return { success: true }
+  } catch (error) {
+    const errorMessage = `Failed to create file: ${(error as Error).message}`
+    console.error(`[Artifact] ${errorMessage}`)
+    return { success: false, error: errorMessage }
+  }
+}
+
+/**
+ * Rename a file or folder
+ */
+export async function renameArtifact(oldPath: string, newName: string): Promise<{ success: boolean; error?: string }> {
+  console.log(`[Artifact] Renaming: ${oldPath} to ${newName}`)
+
+  try {
+    if (!isPathInAllowedSpace(oldPath)) {
+      return { success: false, error: 'Path not in allowed space' }
+    }
+    const dir = dirname(oldPath)
+    const newPath = join(dir, newName)
+    if (!isPathInAllowedSpace(newPath)) {
+      return { success: false, error: 'Target path not in allowed space' }
+    }
+    await fs.promises.rename(oldPath, newPath)
+    console.log(`[Artifact] Successfully renamed to: ${newPath}`)
+    return { success: true }
+  } catch (error) {
+    const errorMessage = `Failed to rename: ${(error as Error).message}`
+    console.error(`[Artifact] ${errorMessage}`)
+    return { success: false, error: errorMessage }
+  }
+}
+
+/**
+ * Delete a file or folder
+ */
+export async function deleteArtifact(filePath: string): Promise<{ success: boolean; error?: string }> {
+  console.log(`[Artifact] Deleting: ${filePath}`)
+
+  try {
+    if (!isPathInAllowedSpace(filePath)) {
+      return { success: false, error: 'Path not in allowed space' }
+    }
+    const stat = await fs.promises.stat(filePath)
+    if (stat.isDirectory()) {
+      await fs.promises.rm(filePath, { recursive: true })
+    } else {
+      await fs.promises.unlink(filePath)
+    }
+    console.log(`[Artifact] Successfully deleted: ${filePath}`)
+    return { success: true }
+  } catch (error) {
+    const errorMessage = `Failed to delete: ${(error as Error).message}`
+    console.error(`[Artifact] ${errorMessage}`)
+    return { success: false, error: errorMessage }
+  }
+}
+
+/**
+ * Move a file or folder to a new directory
+ */
+export async function moveArtifact(sourcePath: string, targetDir: string): Promise<{ success: boolean; error?: string }> {
+  console.log(`[Artifact] Moving: ${sourcePath} to ${targetDir}`)
+
+  try {
+    if (!isPathInAllowedSpace(sourcePath) || !isPathInAllowedSpace(targetDir)) {
+      return { success: false, error: 'Path not in allowed space' }
+    }
+    const fileName = basename(sourcePath)
+    const targetPath = join(targetDir, fileName)
+    await fs.promises.rename(sourcePath, targetPath)
+    console.log(`[Artifact] Successfully moved to: ${targetPath}`)
+    return { success: true }
+  } catch (error) {
+    const errorMessage = `Failed to move: ${(error as Error).message}`
+    console.error(`[Artifact] ${errorMessage}`)
+    return { success: false, error: errorMessage }
+  }
+}
+
+/**
+ * Copy a file or folder to a new directory
+ */
+export async function copyArtifact(sourcePath: string, targetDir: string): Promise<{ success: boolean; error?: string }> {
+  console.log(`[Artifact] Copying: ${sourcePath} to ${targetDir}`)
+
+  try {
+    if (!isPathInAllowedSpace(sourcePath) || !isPathInAllowedSpace(targetDir)) {
+      return { success: false, error: 'Path not in allowed space' }
+    }
+    const fileName = basename(sourcePath)
+    const targetPath = join(targetDir, fileName)
+    await fs.promises.cp(sourcePath, targetPath, { recursive: true })
+    console.log(`[Artifact] Successfully copied to: ${targetPath}`)
+    return { success: true }
+  } catch (error) {
+    const errorMessage = `Failed to copy: ${(error as Error).message}`
+    console.error(`[Artifact] ${errorMessage}`)
+    return { success: false, error: errorMessage }
   }
 }
