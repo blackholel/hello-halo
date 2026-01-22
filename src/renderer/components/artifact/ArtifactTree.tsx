@@ -3,20 +3,40 @@
  * VSCode-style file explorer with keyboard navigation, virtual scrolling, and more
  */
 
-import { useState, useCallback, useEffect, useMemo, createContext, useContext } from 'react'
-import { Tree, NodeRendererProps } from 'react-arborist'
+import { useState, useCallback, useEffect, useMemo, createContext, useContext, useRef } from 'react'
+import { Tree, NodeRendererProps, NodeApi } from 'react-arborist'
 import { api } from '../../api'
 import { useCanvasStore } from '../../stores/canvas.store'
 import type { ArtifactTreeNode } from '../../types'
 import { FileIcon } from '../icons/ToolIcons'
-import { ChevronRight, ChevronDown, Download, Eye } from 'lucide-react'
+import {
+  ChevronRight,
+  ChevronDown,
+  Download,
+  Eye,
+  FilePlus,
+  FolderPlus,
+  RefreshCw,
+  Pencil,
+  Copy,
+  Trash2,
+  FolderOpen
+} from 'lucide-react'
 import { useIsGenerating } from '../../stores/chat.store'
 import { useTranslation } from '../../i18n'
+import { dirname, join } from 'path-browserify'
 
 // Context to pass openFile function to tree nodes without each node subscribing to store
 // This prevents massive re-renders when canvas state changes
 type OpenFileFn = (path: string, title?: string) => Promise<void>
 const OpenFileContext = createContext<OpenFileFn | null>(null)
+
+// Context for tree operations (context menu, drag, etc.)
+interface TreeOperationsContext {
+  onContextMenu: (e: React.MouseEvent, node: TreeNodeData) => void
+  spaceWorkingDir: string
+}
+const TreeOperationsContext = createContext<TreeOperationsContext | null>(null)
 
 const isWebMode = api.isRemoteMode()
 
@@ -41,8 +61,8 @@ interface ArtifactTreeProps {
 }
 
 // Fixed offsets for tree height calculation (in pixels)
-// App Header (44) + Rail Header (40) + Rail Footer (~60) + Tree Header (28) + buffer
-const TREE_HEIGHT_OFFSET = 180
+// App Header (44) + Rail Header (40) + Rail Footer (~60) + Tree Header (28) + Toolbar (32) + buffer
+const TREE_HEIGHT_OFFSET = 212
 
 // Simple hook using window height minus fixed offset
 // No complex measurement needed - window.innerHeight is always immediately available
@@ -82,12 +102,22 @@ function transformToArboristData(nodes: ArtifactTreeNode[]): TreeNodeData[] {
   }))
 }
 
+// Context menu state
+interface ContextMenuState {
+  x: number
+  y: number
+  node: TreeNodeData
+}
+
 export function ArtifactTree({ spaceId }: ArtifactTreeProps) {
   const { t } = useTranslation()
   const [treeData, setTreeData] = useState<TreeNodeData[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+  const [spaceWorkingDir, setSpaceWorkingDir] = useState<string>('')
   const isGenerating = useIsGenerating()
   const treeHeight = useTreeHeight()
+  const containerRef = useRef<HTMLDivElement>(null)
 
   // Subscribe to openFile once at parent level, pass down via context
   // This prevents each TreeNodeComponent from subscribing to the store
@@ -103,6 +133,18 @@ export function ArtifactTree({ spaceId }: ArtifactTreeProps) {
       if (response.success && response.data) {
         const transformed = transformToArboristData(response.data as ArtifactTreeNode[])
         setTreeData(transformed)
+
+        // Get working directory from first item's parent or space
+        if (transformed.length > 0) {
+          const firstPath = transformed[0].path
+          setSpaceWorkingDir(dirname(firstPath))
+        } else {
+          // Get space info to determine working dir
+          const spaceResponse = await api.getSpace(spaceId)
+          if (spaceResponse.success && spaceResponse.data) {
+            setSpaceWorkingDir((spaceResponse.data as { path: string }).path)
+          }
+        }
       }
     } catch (error) {
       console.error('[ArtifactTree] Failed to load tree:', error)
@@ -124,6 +166,17 @@ export function ArtifactTree({ spaceId }: ArtifactTreeProps) {
     }
   }, [isGenerating, loadTree])
 
+  // Close context menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (contextMenu) {
+        setContextMenu(null)
+      }
+    }
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [contextMenu])
+
   // Count total items
   const itemCount = useMemo(() => {
     const count = (nodes: TreeNodeData[]): number => {
@@ -133,6 +186,141 @@ export function ArtifactTree({ spaceId }: ArtifactTreeProps) {
     }
     return count(treeData)
   }, [treeData])
+
+  // File operations
+  const handleCreateFile = useCallback(async (parentPath?: string) => {
+    const fileName = prompt(t('Enter file name:'))
+    if (!fileName) return
+
+    const targetDir = parentPath || spaceWorkingDir
+    if (!targetDir) {
+      console.error('[ArtifactTree] No target directory')
+      return
+    }
+
+    const filePath = join(targetDir, fileName)
+    const result = await api.createFile(filePath)
+    if (result.success) {
+      loadTree()
+    } else {
+      alert(result.error || t('Failed to create file'))
+    }
+  }, [spaceWorkingDir, loadTree, t])
+
+  const handleCreateFolder = useCallback(async (parentPath?: string) => {
+    const folderName = prompt(t('Enter folder name:'))
+    if (!folderName) return
+
+    const targetDir = parentPath || spaceWorkingDir
+    if (!targetDir) {
+      console.error('[ArtifactTree] No target directory')
+      return
+    }
+
+    const folderPath = join(targetDir, folderName)
+    const result = await api.createFolder(folderPath)
+    if (result.success) {
+      loadTree()
+    } else {
+      alert(result.error || t('Failed to create folder'))
+    }
+  }, [spaceWorkingDir, loadTree, t])
+
+  const handleRename = useCallback(async (node: TreeNodeData) => {
+    const newName = prompt(t('Enter new name:'), node.name)
+    if (!newName || newName === node.name) return
+
+    const result = await api.renameArtifact(node.path, newName)
+    if (result.success) {
+      loadTree()
+    } else {
+      alert(result.error || t('Failed to rename'))
+    }
+  }, [loadTree, t])
+
+  const handleDelete = useCallback(async (node: TreeNodeData) => {
+    const confirmed = confirm(
+      node.isFolder
+        ? t('Delete folder "{name}" and all its contents?', { name: node.name })
+        : t('Delete file "{name}"?', { name: node.name })
+    )
+    if (!confirmed) return
+
+    const result = await api.deleteArtifact(node.path)
+    if (result.success) {
+      loadTree()
+    } else {
+      alert(result.error || t('Failed to delete'))
+    }
+  }, [loadTree, t])
+
+  const handleCopyPath = useCallback((node: TreeNodeData) => {
+    navigator.clipboard.writeText(node.path)
+  }, [])
+
+  const handleShowInFolder = useCallback(async (node: TreeNodeData) => {
+    if (!isWebMode) {
+      await api.showArtifactInFolder(node.path)
+    }
+  }, [])
+
+  // Context menu handler
+  const handleContextMenu = useCallback((e: React.MouseEvent, node: TreeNodeData) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      node
+    })
+  }, [])
+
+  // Handle tree move (drag & drop within tree)
+  const handleMove = useCallback(async (args: {
+    dragIds: string[]
+    parentId: string | null
+    index: number
+  }) => {
+    // Find the dragged node and target parent
+    const findNode = (nodes: TreeNodeData[], id: string): TreeNodeData | null => {
+      for (const node of nodes) {
+        if (node.id === id) return node
+        if (node.children) {
+          const found = findNode(node.children, id)
+          if (found) return found
+        }
+      }
+      return null
+    }
+
+    const draggedNode = findNode(treeData, args.dragIds[0])
+    if (!draggedNode) return
+
+    let targetDir: string
+    if (args.parentId) {
+      const parentNode = findNode(treeData, args.parentId)
+      if (parentNode && parentNode.isFolder) {
+        targetDir = parentNode.path
+      } else {
+        return // Can't drop on a file
+      }
+    } else {
+      targetDir = spaceWorkingDir
+    }
+
+    const result = await api.moveArtifact(draggedNode.path, targetDir)
+    if (result.success) {
+      loadTree()
+    } else {
+      console.error('[ArtifactTree] Move failed:', result.error)
+    }
+  }, [treeData, spaceWorkingDir, loadTree])
+
+  // Tree operations context value
+  const treeOperations = useMemo(() => ({
+    onContextMenu: handleContextMenu,
+    spaceWorkingDir
+  }), [handleContextMenu, spaceWorkingDir])
 
   if (isLoading) {
     return (
@@ -145,43 +333,179 @@ export function ArtifactTree({ spaceId }: ArtifactTreeProps) {
 
   if (treeData.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center px-2">
-        <div className="w-10 h-10 rounded-lg border border-dashed border-muted-foreground/30 flex items-center justify-center mb-2">
-          <ChevronRight className="w-5 h-5 text-muted-foreground/40" />
+      <div className="flex flex-col h-full">
+        {/* Toolbar */}
+        <div className="flex-shrink-0 flex items-center gap-1 px-2 py-1 border-b border-border/50 bg-card/95">
+          <button
+            onClick={() => handleCreateFile()}
+            className="p-1 rounded hover:bg-secondary/80 text-muted-foreground hover:text-foreground transition-colors"
+            title={t('New File')}
+          >
+            <FilePlus className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => handleCreateFolder()}
+            className="p-1 rounded hover:bg-secondary/80 text-muted-foreground hover:text-foreground transition-colors"
+            title={t('New Folder')}
+          >
+            <FolderPlus className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={loadTree}
+            className="p-1 rounded hover:bg-secondary/80 text-muted-foreground hover:text-foreground transition-colors"
+            title={t('Refresh')}
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
         </div>
-        <p className="text-xs text-muted-foreground">{t('No files')}</p>
+
+        <div className="flex flex-col items-center justify-center flex-1 text-center px-2">
+          <div className="w-10 h-10 rounded-lg border border-dashed border-muted-foreground/30 flex items-center justify-center mb-2">
+            <ChevronRight className="w-5 h-5 text-muted-foreground/40" />
+          </div>
+          <p className="text-xs text-muted-foreground">{t('No files')}</p>
+        </div>
       </div>
     )
   }
 
   return (
     <OpenFileContext.Provider value={openFile}>
-      <div className="flex flex-col h-full">
-        {/* Header with count */}
-        <div className="flex-shrink-0 bg-card/95 backdrop-blur-sm px-2 py-1.5 border-b border-border/50 text-[10px] text-muted-foreground uppercase tracking-wider">
-          {t('Files')} ({itemCount})
-        </div>
+      <TreeOperationsContext.Provider value={treeOperations}>
+        <div ref={containerRef} className="flex flex-col h-full relative">
+          {/* Toolbar */}
+          <div className="flex-shrink-0 flex items-center gap-1 px-2 py-1 border-b border-border/50 bg-card/95">
+            <button
+              onClick={() => handleCreateFile()}
+              className="p-1 rounded hover:bg-secondary/80 text-muted-foreground hover:text-foreground transition-colors"
+              title={t('New File')}
+            >
+              <FilePlus className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => handleCreateFolder()}
+              className="p-1 rounded hover:bg-secondary/80 text-muted-foreground hover:text-foreground transition-colors"
+              title={t('New Folder')}
+            >
+              <FolderPlus className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={loadTree}
+              className="p-1 rounded hover:bg-secondary/80 text-muted-foreground hover:text-foreground transition-colors"
+              title={t('Refresh')}
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+          </div>
 
-        {/* Tree - uses window height based calculation */}
-        <div className="flex-1 overflow-hidden">
-          <Tree
-            data={treeData}
-            openByDefault={false}
-            width="100%"
-            height={treeHeight}
-            indent={16}
-            rowHeight={26}
-            overscanCount={5}
-            paddingTop={4}
-            paddingBottom={4}
-            disableDrag
-            disableDrop
-            disableEdit
-          >
-            {TreeNodeComponent}
-          </Tree>
+          {/* Header with count */}
+          <div className="flex-shrink-0 bg-card/95 backdrop-blur-sm px-2 py-1.5 border-b border-border/50 text-[10px] text-muted-foreground uppercase tracking-wider">
+            {t('Files')} ({itemCount})
+          </div>
+
+          {/* Tree - uses window height based calculation */}
+          <div className="flex-1 overflow-hidden">
+            <Tree
+              data={treeData}
+              openByDefault={false}
+              width="100%"
+              height={treeHeight}
+              indent={16}
+              rowHeight={26}
+              overscanCount={5}
+              paddingTop={4}
+              paddingBottom={4}
+              disableDrag={false}
+              disableDrop={false}
+              disableEdit
+              onMove={handleMove}
+            >
+              {TreeNodeComponent}
+            </Tree>
+          </div>
+
+          {/* Context Menu */}
+          {contextMenu && (
+            <div
+              className="fixed z-50 min-w-[160px] bg-popover border border-border rounded-md shadow-lg py-1"
+              style={{
+                left: contextMenu.x,
+                top: contextMenu.y
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {contextMenu.node.isFolder && (
+                <>
+                  <button
+                    className="w-full px-3 py-1.5 text-sm text-left hover:bg-secondary/80 flex items-center gap-2"
+                    onClick={() => {
+                      handleCreateFile(contextMenu.node.path)
+                      setContextMenu(null)
+                    }}
+                  >
+                    <FilePlus className="w-4 h-4" />
+                    {t('New File')}
+                  </button>
+                  <button
+                    className="w-full px-3 py-1.5 text-sm text-left hover:bg-secondary/80 flex items-center gap-2"
+                    onClick={() => {
+                      handleCreateFolder(contextMenu.node.path)
+                      setContextMenu(null)
+                    }}
+                  >
+                    <FolderPlus className="w-4 h-4" />
+                    {t('New Folder')}
+                  </button>
+                  <div className="h-px bg-border my-1" />
+                </>
+              )}
+              <button
+                className="w-full px-3 py-1.5 text-sm text-left hover:bg-secondary/80 flex items-center gap-2"
+                onClick={() => {
+                  handleRename(contextMenu.node)
+                  setContextMenu(null)
+                }}
+              >
+                <Pencil className="w-4 h-4" />
+                {t('Rename')}
+              </button>
+              <button
+                className="w-full px-3 py-1.5 text-sm text-left hover:bg-secondary/80 flex items-center gap-2"
+                onClick={() => {
+                  handleCopyPath(contextMenu.node)
+                  setContextMenu(null)
+                }}
+              >
+                <Copy className="w-4 h-4" />
+                {t('Copy Path')}
+              </button>
+              {!isWebMode && (
+                <button
+                  className="w-full px-3 py-1.5 text-sm text-left hover:bg-secondary/80 flex items-center gap-2"
+                  onClick={() => {
+                    handleShowInFolder(contextMenu.node)
+                    setContextMenu(null)
+                  }}
+                >
+                  <FolderOpen className="w-4 h-4" />
+                  {t('Show in Folder')}
+                </button>
+              )}
+              <div className="h-px bg-border my-1" />
+              <button
+                className="w-full px-3 py-1.5 text-sm text-left hover:bg-secondary/80 flex items-center gap-2 text-destructive"
+                onClick={() => {
+                  handleDelete(contextMenu.node)
+                  setContextMenu(null)
+                }}
+              >
+                <Trash2 className="w-4 h-4" />
+                {t('Delete')}
+              </button>
+            </div>
+          )}
         </div>
-      </div>
+      </TreeOperationsContext.Provider>
     </OpenFileContext.Provider>
   )
 }
@@ -193,6 +517,7 @@ function TreeNodeComponent({ node, style, dragHandle }: NodeRendererProps<TreeNo
   const [isHovered, setIsHovered] = useState(false)
   // Get openFile from context (subscribed once at parent ArtifactTree level)
   const openFile = useContext(OpenFileContext)
+  const treeOps = useContext(TreeOperationsContext)
   const data = node.data
   const isFolder = data.isFolder
 
@@ -246,17 +571,26 @@ function TreeNodeComponent({ node, style, dragHandle }: NodeRendererProps<TreeNo
     }
   }
 
-  // Handle right-click - show in folder (desktop only)
-  const handleContextMenu = async (e: React.MouseEvent) => {
+  // Handle right-click - show context menu
+  const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    if (!isWebMode) {
-      try {
-        await api.showArtifactInFolder(data.path)
-      } catch (error) {
-        console.error('Failed to show in folder:', error)
-      }
+    if (treeOps) {
+      treeOps.onContextMenu(e, data)
     }
+  }
+
+  // Handle drag start for external drag (to canvas, etc.)
+  const handleDragStart = (e: React.DragEvent) => {
+    if (isFolder) return
+
+    // Set data for external drop targets (like Content Canvas)
+    e.dataTransfer.setData('application/x-halo-file', JSON.stringify({
+      path: data.path,
+      name: data.name,
+      extension: data.extension
+    }))
+    e.dataTransfer.effectAllowed = 'copyMove'
   }
 
   return (
@@ -266,8 +600,10 @@ function TreeNodeComponent({ node, style, dragHandle }: NodeRendererProps<TreeNo
       onClick={handleClick}
       onDoubleClick={handleDoubleClickFile}
       onContextMenu={handleContextMenu}
+      onDragStart={handleDragStart}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      draggable={!isFolder}
       className={`
         flex items-center h-full pr-2 cursor-pointer select-none
         transition-colors duration-75
