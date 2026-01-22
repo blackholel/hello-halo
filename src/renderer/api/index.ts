@@ -290,6 +290,13 @@ export const api = {
         isActive: boolean
       }>
     }
+    fileContexts?: Array<{  // File contexts for context injection
+      id: string
+      type: 'file-context'
+      path: string
+      name: string
+      extension: string
+    }>
   }): Promise<ApiResponse> => {
     // Subscribe to conversation events before sending
     if (!isElectron()) {

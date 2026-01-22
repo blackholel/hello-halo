@@ -231,6 +231,15 @@ export interface ImageAttachment {
   size?: number;  // File size in bytes
 }
 
+// File context attachment (for drag-drop files from file tree)
+export interface FileContextAttachment {
+  id: string;
+  type: 'file-context';
+  path: string;
+  name: string;
+  extension: string;
+}
+
 // Content block types for multi-modal messages (matches Claude API)
 export interface TextContentBlock {
   type: 'text';

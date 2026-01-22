@@ -21,7 +21,7 @@
 
 import { create } from 'zustand'
 import { api } from '../api'
-import type { Conversation, ConversationMeta, Message, ToolCall, Artifact, Thought, AgentEventBase, ImageAttachment, CompactInfo, CanvasContext } from '../types'
+import type { Conversation, ConversationMeta, Message, ToolCall, Artifact, Thought, AgentEventBase, ImageAttachment, CompactInfo, CanvasContext, FileContextAttachment } from '../types'
 import { canvasLifecycle } from '../services/canvas-lifecycle'
 
 // LRU cache size limit
@@ -115,7 +115,7 @@ interface ChatState {
   renameConversation: (spaceId: string, conversationId: string, newTitle: string) => Promise<boolean>
 
   // Messaging
-  sendMessage: (content: string, images?: ImageAttachment[], aiBrowserEnabled?: boolean, thinkingEnabled?: boolean) => Promise<void>
+  sendMessage: (content: string, images?: ImageAttachment[], aiBrowserEnabled?: boolean, thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[]) => Promise<void>
   stopGeneration: (conversationId?: string) => Promise<void>
 
   // Tool approval
@@ -477,8 +477,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  // Send message (with optional images for multi-modal, optional AI Browser and thinking mode)
-  sendMessage: async (content, images, aiBrowserEnabled, thinkingEnabled) => {
+  // Send message (with optional images for multi-modal, optional AI Browser and thinking mode, optional file contexts)
+  sendMessage: async (content, images, aiBrowserEnabled, thinkingEnabled, fileContexts) => {
     const conversation = get().getCurrentConversation()
     const conversationMeta = get().getCurrentConversationMeta()
     const { currentSpaceId } = get()
@@ -574,7 +574,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
       }
 
-      // Send to agent (with images, AI Browser state, thinking mode, and canvas context)
+      // Send to agent (with images, AI Browser state, thinking mode, canvas context, and file contexts)
       await api.sendMessage({
         spaceId: currentSpaceId,
         conversationId,
@@ -582,7 +582,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         images: images,  // Pass images to API
         aiBrowserEnabled,  // Pass AI Browser state to API
         thinkingEnabled,  // Pass thinking mode to API
-        canvasContext: buildCanvasContext()  // Pass canvas context for AI awareness
+        canvasContext: buildCanvasContext(),  // Pass canvas context for AI awareness
+        fileContexts: fileContexts  // Pass file contexts for context injection
       })
     } catch (error) {
       console.error('Failed to send message:', error)

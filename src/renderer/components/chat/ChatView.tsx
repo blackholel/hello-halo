@@ -26,7 +26,7 @@ import {
   getOnboardingPrompt,
 } from '../onboarding/onboardingData'
 import { api } from '../../api'
-import type { ImageAttachment } from '../../types'
+import type { ImageAttachment, FileContextAttachment } from '../../types'
 import { useTranslation } from '../../i18n'
 
 interface ChatViewProps {
@@ -221,19 +221,19 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
   // AI Browser state
   const { enabled: aiBrowserEnabled } = useAIBrowserStore()
 
-  // Handle send (with optional images for multi-modal messages, optional thinking mode)
-  const handleSend = async (content: string, images?: ImageAttachment[], thinkingEnabled?: boolean) => {
+  // Handle send (with optional images for multi-modal messages, optional thinking mode, optional file contexts)
+  const handleSend = async (content: string, images?: ImageAttachment[], thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[]) => {
     // In onboarding mode, intercept and play mock response
     if (isOnboarding && currentStep === 'send-message') {
       handleOnboardingSend()
       return
     }
 
-    // Can send if has text OR has images
-    if ((!content.trim() && (!images || images.length === 0)) || isGenerating) return
+    // Can send if has text OR has images OR has file contexts
+    if ((!content.trim() && (!images || images.length === 0) && (!fileContexts || fileContexts.length === 0)) || isGenerating) return
 
     // Pass both AI Browser and thinking state to sendMessage
-    await sendMessage(content, images, aiBrowserEnabled, thinkingEnabled)
+    await sendMessage(content, images, aiBrowserEnabled, thinkingEnabled, fileContexts)
   }
 
   // Handle stop - stops the current conversation's generation

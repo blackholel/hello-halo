@@ -25,12 +25,13 @@ import { useOnboardingStore } from '../../stores/onboarding.store'
 import { useAIBrowserStore } from '../../stores/ai-browser.store'
 import { getOnboardingPrompt } from '../onboarding/onboardingData'
 import { ImageAttachmentPreview } from './ImageAttachmentPreview'
+import { FileContextPreview } from './FileContextPreview'
 import { processImage, isValidImageType, formatFileSize } from '../../utils/imageProcessor'
-import type { ImageAttachment } from '../../types'
+import type { ImageAttachment, FileContextAttachment } from '../../types'
 import { useTranslation } from '../../i18n'
 
 interface InputAreaProps {
-  onSend: (content: string, images?: ImageAttachment[], thinkingEnabled?: boolean) => void
+  onSend: (content: string, images?: ImageAttachment[], thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[]) => void
   onStop: () => void
   isGenerating: boolean
   placeholder?: string
@@ -52,6 +53,7 @@ export function InputArea({ onSend, onStop, isGenerating, placeholder, isCompact
   const [content, setContent] = useState('')
   const [isFocused, setIsFocused] = useState(false)
   const [images, setImages] = useState<ImageAttachment[]>([])
+  const [fileContexts, setFileContexts] = useState<FileContextAttachment[]>([])
   const [isDragOver, setIsDragOver] = useState(false)
   const [isProcessingImages, setIsProcessingImages] = useState(false)
   const [imageError, setImageError] = useState<ImageError | null>(null)
@@ -159,6 +161,11 @@ export function InputArea({ onSend, onStop, isGenerating, placeholder, isCompact
     setImages(prev => prev.filter(img => img.id !== id))
   }
 
+  // Remove file context
+  const removeFileContext = (id: string) => {
+    setFileContexts(prev => prev.filter(f => f.id !== id))
+  }
+
   // Handle paste event
   const handlePaste = async (e: ClipboardEvent) => {
     const items = e.clipboardData?.items
@@ -196,6 +203,30 @@ export function InputArea({ onSend, onStop, isGenerating, placeholder, isCompact
     e.preventDefault()
     setIsDragOver(false)
 
+    // Check for file context from file tree drag
+    const haloFileData = e.dataTransfer.getData('application/x-halo-file')
+    if (haloFileData) {
+      try {
+        const fileData = JSON.parse(haloFileData) as { path: string; name: string; extension: string }
+        // Check if file already exists in fileContexts
+        const exists = fileContexts.some(f => f.path === fileData.path)
+        if (!exists) {
+          const newFileContext: FileContextAttachment = {
+            id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            type: 'file-context',
+            path: fileData.path,
+            name: fileData.name,
+            extension: fileData.extension
+          }
+          setFileContexts(prev => [...prev, newFileContext])
+        }
+        return
+      } catch (err) {
+        console.error('Failed to parse halo file data:', err)
+      }
+    }
+
+    // Handle image files
     const files = Array.from(e.dataTransfer.files).filter(file => isValidImageType(file))
 
     if (files.length > 0) {
@@ -240,14 +271,20 @@ export function InputArea({ onSend, onStop, isGenerating, placeholder, isCompact
   // Handle send
   const handleSend = () => {
     const textToSend = isOnboardingSendStep ? onboardingPrompt : content.trim()
-    const hasContent = textToSend || images.length > 0
+    const hasContent = textToSend || images.length > 0 || fileContexts.length > 0
 
     if (hasContent && !isGenerating) {
-      onSend(textToSend, images.length > 0 ? images : undefined, thinkingEnabled)
+      onSend(
+        textToSend,
+        images.length > 0 ? images : undefined,
+        thinkingEnabled,
+        fileContexts.length > 0 ? fileContexts : undefined
+      )
 
       if (!isOnboardingSendStep) {
         setContent('')
         setImages([])  // Clear images after send
+        setFileContexts([])  // Clear file contexts after send
         // Don't reset thinkingEnabled - user might want to keep it on
         // Reset height
         if (textareaRef.current) {
@@ -278,9 +315,10 @@ export function InputArea({ onSend, onStop, isGenerating, placeholder, isCompact
   }
 
   // In onboarding mode, can always send (prefilled content)
-  // Can send if has text OR has images (and not processing/generating)
-  const canSend = isOnboardingSendStep || ((content.trim().length > 0 || images.length > 0) && !isGenerating && !isProcessingImages)
+  // Can send if has text OR has images OR has file contexts (and not processing/generating)
+  const canSend = isOnboardingSendStep || ((content.trim().length > 0 || images.length > 0 || fileContexts.length > 0) && !isGenerating && !isProcessingImages)
   const hasImages = images.length > 0
+  const hasFileContexts = fileContexts.length > 0
 
   return (
     <div className={`
@@ -328,6 +366,14 @@ export function InputArea({ onSend, onStop, isGenerating, placeholder, isCompact
             <ImageAttachmentPreview
               images={images}
               onRemove={removeImage}
+            />
+          )}
+
+          {/* File context preview area */}
+          {hasFileContexts && (
+            <FileContextPreview
+              files={fileContexts}
+              onRemove={removeFileContext}
             />
           )}
 
