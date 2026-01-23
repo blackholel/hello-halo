@@ -191,7 +191,11 @@ export function InputArea({ onSend, onStop, isGenerating, placeholder, isCompact
   // Handle drag events
   const handleDragOver = (e: DragEvent) => {
     e.preventDefault()
-    if (!isDragOver) setIsDragOver(true)
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'copy'
+    if (!isDragOver) {
+      setIsDragOver(true)
+    }
   }
 
   const handleDragLeave = (e: DragEvent) => {
@@ -205,6 +209,7 @@ export function InputArea({ onSend, onStop, isGenerating, placeholder, isCompact
 
     // Check for file context from file tree drag
     const haloFileData = e.dataTransfer.getData('application/x-halo-file')
+
     if (haloFileData) {
       try {
         const fileData = JSON.parse(haloFileData) as { path: string; name: string; extension: string }

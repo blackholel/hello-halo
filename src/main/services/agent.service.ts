@@ -6,7 +6,7 @@
 import { app, BrowserWindow } from 'electron'
 import { join, dirname } from 'path'
 import { getEmbeddedPythonDir, getPythonEnhancedPath } from './python.service'
-import { existsSync, mkdirSync, symlinkSync, unlinkSync, lstatSync, readlinkSync } from 'fs'
+import { existsSync, mkdirSync, symlinkSync, unlinkSync, lstatSync, readlinkSync, promises as fsPromises } from 'fs'
 import { getConfig, getTempSpacePath, getHaloDir, onApiConfigChange } from './config.service'
 import { getConversation, saveSessionId, addMessage, updateLastMessage } from './conversation.service'
 import { getSpace } from './space.service'
@@ -200,6 +200,16 @@ interface AgentRequest {
   thinkingEnabled?: boolean  // Enable extended thinking mode (maxThinkingTokens: 10240)
   model?: string  // Model to use (for future model switching)
   canvasContext?: CanvasContext  // Current canvas state for AI awareness
+  fileContexts?: FileContextAttachment[]  // File contexts for context injection
+}
+
+// File context attachment type
+interface FileContextAttachment {
+  id: string
+  type: 'file-context'
+  path: string
+  name: string
+  extension: string
 }
 
 interface ToolCall {
@@ -1122,8 +1132,8 @@ export async function sendMessage(
 ): Promise<void> {
   currentMainWindow = mainWindow
 
-  const { spaceId, conversationId, message, resumeSessionId, images, aiBrowserEnabled, thinkingEnabled, canvasContext } = request
-  console.log(`[Agent] sendMessage: conv=${conversationId}${images && images.length > 0 ? `, images=${images.length}` : ''}${aiBrowserEnabled ? ', AI Browser enabled' : ''}${thinkingEnabled ? ', thinking=ON' : ''}${canvasContext?.isOpen ? `, canvas tabs=${canvasContext.tabCount}` : ''}`)
+  const { spaceId, conversationId, message, resumeSessionId, images, aiBrowserEnabled, thinkingEnabled, canvasContext, fileContexts } = request
+  console.log(`[Agent] sendMessage: conv=${conversationId}${images && images.length > 0 ? `, images=${images.length}` : ''}${aiBrowserEnabled ? ', AI Browser enabled' : ''}${thinkingEnabled ? ', thinking=ON' : ''}${canvasContext?.isOpen ? `, canvas tabs=${canvasContext.tabCount}` : ''}${fileContexts && fileContexts.length > 0 ? `, fileContexts=${fileContexts.length}` : ''}`)
 
   const config = getConfig()
   const workDir = getWorkingDir(spaceId)
@@ -1170,11 +1180,30 @@ export async function sendMessage(
   }
   activeSessions.set(conversationId, sessionState)
 
-  // Add user message to conversation (with images if provided)
+  // Build file context block for AI (if file contexts provided)
+  let fileContextBlock = ''
+  if (fileContexts && fileContexts.length > 0) {
+    const fileContentsPromises = fileContexts.map(async (fc) => {
+      try {
+        const content = await fsPromises.readFile(fc.path, 'utf-8')
+        return `<file path="${fc.path}" name="${fc.name}">\n${content}\n</file>`
+      } catch (err) {
+        console.error(`[Agent] Failed to read file context: ${fc.path}`, err)
+        return `<file path="${fc.path}" name="${fc.name}" error="Failed to read file" />`
+      }
+    })
+    const fileContents = await Promise.all(fileContentsPromises)
+    fileContextBlock = `<file-contexts>\n${fileContents.join('\n\n')}\n</file-contexts>\n\n`
+    console.log(`[Agent] Prepared ${fileContexts.length} file context(s) for AI`)
+  }
+
+  // Add user message to conversation (original message without file contents)
+  // File contexts are stored as metadata only, not embedded in content
   addMessage(spaceId, conversationId, {
     role: 'user',
-    content: message,
-    images: images  // Include images in the saved message
+    content: message,  // Original user input (no file contents)
+    images: images,
+    fileContexts: fileContexts  // Store metadata for reference
   })
 
   // Add placeholder for assistant response
@@ -1279,7 +1308,8 @@ export async function sendMessage(
     // Inject Canvas Context prefix if available
     // This provides AI awareness of what user is currently viewing
     const canvasPrefix = formatCanvasContext(canvasContext)
-    const messageWithContext = canvasPrefix + message
+    // Inject file contexts + canvas context + original message for AI
+    const messageWithContext = fileContextBlock + canvasPrefix + message
 
     // Build message content (text-only or multi-modal with images)
     const messageContent = buildMessageContent(messageWithContext, images)

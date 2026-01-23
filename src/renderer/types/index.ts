@@ -267,6 +267,7 @@ export interface Message {
   isStreaming?: boolean;
   images?: ImageAttachment[];  // Attached images
   tokenUsage?: TokenUsage;  // Token usage for this assistant message
+  fileContexts?: FileContextAttachment[];  // File contexts for context injection (metadata only)
 }
 
 // ============================================

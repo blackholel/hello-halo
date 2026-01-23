@@ -29,6 +29,20 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
           size?: number
         }>
         thinkingEnabled?: boolean  // Enable extended thinking mode
+        aiBrowserEnabled?: boolean  // Enable AI Browser tools
+        canvasContext?: {
+          isOpen: boolean
+          tabCount: number
+          activeTab: { type: string; title: string; url?: string; path?: string } | null
+          tabs: Array<{ type: string; title: string; url?: string; path?: string; isActive: boolean }>
+        }
+        fileContexts?: Array<{  // File contexts for context injection
+          id: string
+          type: 'file-context'
+          path: string
+          name: string
+          extension: string
+        }>
       }
     ) => {
       try {

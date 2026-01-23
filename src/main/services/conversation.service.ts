@@ -38,6 +38,15 @@ interface ImageAttachment {
   size?: number
 }
 
+// File context attachment for context injection (metadata only, content read at send time)
+interface FileContextAttachment {
+  id: string
+  type: 'file-context'
+  path: string
+  name: string
+  extension: string
+}
+
 // Token usage statistics stored with assistant messages (matches renderer TokenUsage shape)
 interface TokenUsage {
   inputTokens: number
@@ -57,6 +66,7 @@ interface Message {
   thoughts?: Thought[]  // Agent reasoning process for this message
   images?: ImageAttachment[]  // Attached images for multi-modal messages
   tokenUsage?: TokenUsage  // Optional token usage stats for assistant messages
+  fileContexts?: FileContextAttachment[]  // File contexts for context injection (metadata only)
 }
 
 interface ToolCall {
