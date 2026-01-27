@@ -6,6 +6,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { ConversationMeta } from '../../types'
 import { MessageSquare, Plus } from '../icons/ToolIcons'
+import { ExternalLink } from 'lucide-react'
+import { useCanvasLifecycle } from '../../hooks/useCanvasLifecycle'
 import { useTranslation } from '../../i18n'
 
 // Width constraints (in pixels)
@@ -16,6 +18,8 @@ const DEFAULT_WIDTH = 192 // w-48 = 12rem = 192px
 interface ConversationListProps {
   conversations: ConversationMeta[]
   currentConversationId?: string
+  spaceId?: string
+  layoutMode?: 'split' | 'tabs-only'
   onSelect: (id: string) => void
   onNew: () => void
   onDelete?: (id: string) => void
@@ -25,12 +29,15 @@ interface ConversationListProps {
 export function ConversationList({
   conversations,
   currentConversationId,
+  spaceId,
+  layoutMode = 'split',
   onSelect,
   onNew,
   onDelete,
   onRename
 }: ConversationListProps) {
   const { t } = useTranslation()
+  const { openChat } = useCanvasLifecycle()
   const [width, setWidth] = useState(DEFAULT_WIDTH)
   const [isDragging, setIsDragging] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -176,6 +183,19 @@ export function ConversationList({
                   </span>
                   {/* Action buttons (on hover) */}
                   <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0">
+                    {/* Open in tab button - hidden in tabs-only mode since clicking opens in tab */}
+                    {spaceId && layoutMode !== 'tabs-only' && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          openChat(spaceId, conversation.id, conversation.title)
+                        }}
+                        className="p-1 hover:bg-primary/20 text-muted-foreground hover:text-primary rounded transition-colors"
+                        title={t('Open in tab')}
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     {onRename && (
                       <button
                         onClick={(e) => handleStartEdit(e, conversation)}

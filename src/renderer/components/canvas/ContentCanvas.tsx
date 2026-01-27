@@ -24,7 +24,7 @@
  */
 
 import { useCallback, useEffect } from 'react'
-import { X, ChevronLeft, Maximize2, Minimize2 } from 'lucide-react'
+import { X, ChevronLeft } from 'lucide-react'
 import { useCanvasLifecycle, type TabState, type ContentType } from '../../hooks/useCanvasLifecycle'
 import { CanvasTabBar } from './CanvasTabs'
 import { CodeEditor } from './viewers/CodeEditor'
@@ -35,6 +35,7 @@ import { JsonViewer } from './viewers/JsonViewer'
 import { CsvViewer } from './viewers/CsvViewer'
 import { TextViewer } from './viewers/TextViewer'
 import { BrowserViewer, BrowserViewerFallback } from './viewers/BrowserViewer'
+import { ChatTabViewer } from './viewers/ChatTabViewer'
 import { api } from '../../api'
 import { useTranslation } from '../../i18n'
 
@@ -177,6 +178,11 @@ interface TabContentProps {
 
 function TabContent({ tab, onScrollChange, onContentChange, onSave }: TabContentProps) {
   const { t } = useTranslation()
+  // Chat tabs have their own component with full chat functionality
+  if (tab.type === 'chat') {
+    return <ChatTabViewer tab={tab} />
+  }
+
   // Browser and PDF tabs use BrowserView (handle their own loading state)
   if (tab.type === 'browser' || tab.type === 'pdf') {
     if (api.isRemoteMode()) {
@@ -255,6 +261,7 @@ function TabContent({ tab, onScrollChange, onContentChange, onSave }: TabContent
  * Empty State - Shown when no tabs are open
  */
 function EmptyState() {
+  const { t } = useTranslation()
   return (
     <div className="flex items-center justify-center h-full">
       <div className="text-center max-w-md px-4">

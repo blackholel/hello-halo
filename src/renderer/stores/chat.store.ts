@@ -126,6 +126,7 @@ interface ChatState {
 
   // Messaging
   sendMessage: (content: string, images?: ImageAttachment[], aiBrowserEnabled?: boolean, thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[]) => Promise<void>
+  sendMessageToConversation: (spaceId: string, conversationId: string, content: string, images?: ImageAttachment[], thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[]) => Promise<void>
   stopGeneration: (conversationId?: string) => Promise<void>
 
   // Tool approval
@@ -327,7 +328,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Load full conversation if not in cache
     if (!conversationCache.has(conversationId)) {
       set({ isLoadingConversation: true })
-      console.log(`[ChatStore] Loading full conversation: ${conversationId}`)
 
       try {
         const response = await api.getConversation(currentSpaceId, conversationId)
@@ -346,7 +346,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
             return { conversationCache: newCache, isLoadingConversation: false }
           })
-          console.log(`[ChatStore] Loaded conversation with ${fullConversation.messages?.length || 0} messages`)
         } else {
           set({ isLoadingConversation: false })
         }
@@ -363,8 +362,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const sessionState = response.data as { isActive: boolean; thoughts: Thought[]; spaceId?: string }
 
         if (sessionState.isActive && sessionState.thoughts.length > 0) {
-          console.log(`[ChatStore] Recovering ${sessionState.thoughts.length} thoughts for conversation ${conversationId}`)
-
           set((state) => {
             const newSessions = new Map(state.sessions)
             const existingSession = newSessions.get(conversationId) || createEmptySessionState()
@@ -608,6 +605,90 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
+  // Send message to a specific conversation (for Chat Tabs - avoids global context switching)
+  sendMessageToConversation: async (spaceId, conversationId, content, images, thinkingEnabled, fileContexts) => {
+    if (!spaceId || !conversationId) {
+      console.error('[ChatStore] spaceId and conversationId are required')
+      return
+    }
+
+    try {
+      // Initialize/reset session state for this conversation
+      set((state) => {
+        const newSessions = new Map(state.sessions)
+        newSessions.set(conversationId, {
+          ...createEmptySessionState(),
+          isGenerating: true,
+          isThinking: true
+        })
+        return { sessions: newSessions }
+      })
+
+      // Add user message to UI immediately
+      const userMessage: Message = {
+        id: `msg-${Date.now()}`,
+        role: 'user',
+        content,
+        timestamp: new Date().toISOString(),
+        images: images
+      }
+
+      set((state) => {
+        // Update cache if conversation is loaded
+        const newCache = new Map(state.conversationCache)
+        const cached = newCache.get(conversationId)
+        if (cached) {
+          newCache.set(conversationId, {
+            ...cached,
+            messages: [...cached.messages, userMessage],
+            updatedAt: new Date().toISOString()
+          })
+        }
+
+        // Update metadata (messageCount)
+        const newSpaceStates = new Map(state.spaceStates)
+        const spaceState = newSpaceStates.get(spaceId)
+        if (spaceState) {
+          newSpaceStates.set(spaceId, {
+            ...spaceState,
+            conversations: spaceState.conversations.map((c) =>
+              c.id === conversationId
+                ? { ...c, messageCount: c.messageCount + 1, updatedAt: new Date().toISOString() }
+                : c
+            )
+          })
+        }
+        return { spaceStates: newSpaceStates, conversationCache: newCache }
+      })
+
+      // Send to agent (without AI Browser for tab context, with thinking mode and file contexts)
+      await api.sendMessage({
+        spaceId,
+        conversationId,
+        message: content,
+        images: images,
+        aiBrowserEnabled: false, // AI Browser not available in tab context
+        thinkingEnabled,
+        canvasContext: undefined, // No canvas context for tab messages
+        fileContexts: fileContexts
+      })
+    } catch (error) {
+      console.error('Failed to send message to conversation:', error)
+      // Update session error state
+      set((state) => {
+        const newSessions = new Map(state.sessions)
+        const session = newSessions.get(conversationId) || createEmptySessionState()
+        newSessions.set(conversationId, {
+          ...session,
+          error: 'Failed to send message',
+          isGenerating: false,
+          isThinking: false
+        })
+        return { sessions: newSessions }
+      })
+    }
+  },
+
   // Stop generation for a specific conversation
   stopGeneration: async (conversationId?: string) => {
     const targetId = conversationId || get().getCurrentSpaceState().currentConversationId
@@ -694,14 +775,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ? (session.streamingContent || '') + delta
         : (content ?? session.streamingContent)
 
-      if (isNewTextBlock) {
-        console.log(`[ChatStore] 🆕 New text block signal [${conversationId}]: version ${newTextBlockVersion}`)
-      } else if (delta) {
-        console.log(`[ChatStore] handleAgentMessage [${conversationId}]: +${delta.length} chars (total: ${newContent.length})`)
-      } else {
-        console.log(`[ChatStore] handleAgentMessage [${conversationId}]:`, content?.substring(0, 100), `streaming: ${isStreaming}`)
-      }
-
       newSessions.set(conversationId, {
         ...session,
         streamingContent: newContent,
@@ -715,7 +788,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // Handle tool call for a specific conversation
   handleAgentToolCall: (data) => {
     const { conversationId, ...toolCall } = data
-    console.log(`[ChatStore] handleAgentToolCall [${conversationId}]:`, toolCall.name)
 
     if (toolCall.requiresApproval) {
       set((state) => {
@@ -732,15 +804,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   // Handle tool result for a specific conversation
   handleAgentToolResult: (data) => {
-    const { conversationId, toolId } = data
-    console.log(`[ChatStore] handleAgentToolResult [${conversationId}]:`, toolId)
     // Tool results are tracked in thoughts, no additional state needed
   },
 
   // Handle error for a specific conversation
   handleAgentError: (data) => {
     const { conversationId, error } = data
-    console.log(`[ChatStore] handleAgentError [${conversationId}]:`, error)
 
     // Add error thought to session
     const errorThought: Thought = {
@@ -769,7 +838,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // Key: Only set isGenerating=false AFTER backend data is loaded to prevent flash
   handleAgentComplete: async (data) => {
     const { spaceId, conversationId } = data
-    console.log(`[ChatStore] handleAgentComplete [${conversationId}]`)
 
     // First, just stop streaming indicator but keep isGenerating=true
     // This keeps the streaming bubble visible during backend load
@@ -844,7 +912,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
             conversationCache: newCache
           }
         })
-        console.log(`[ChatStore] Conversation reloaded from backend [${conversationId}]`)
       }
     } catch (error) {
       console.error('[ChatStore] Failed to reload conversation:', error)
@@ -868,7 +935,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // Handle thought for a specific conversation
   handleAgentThought: (data) => {
     const { conversationId, thought } = data
-    console.log(`[ChatStore] handleAgentThought [${conversationId}]:`, thought.type, thought.id)
 
     set((state) => {
       const newSessions = new Map(state.sessions)
@@ -877,7 +943,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Check if thought with same id already exists (avoid duplicates after recovery)
       const existingIds = new Set(session.thoughts.map(t => t.id))
       if (existingIds.has(thought.id)) {
-        console.log(`[ChatStore] Skipping duplicate thought: ${thought.id}`)
         return state // No change
       }
 
@@ -914,7 +979,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // Handle compact notification - context was compressed
   handleAgentCompact: (data) => {
     const { conversationId, trigger, preTokens } = data
-    console.log(`[ChatStore] handleAgentCompact [${conversationId}]: trigger=${trigger}, preTokens=${preTokens}`)
 
     set((state) => {
       const newSessions = new Map(state.sessions)

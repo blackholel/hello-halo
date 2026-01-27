@@ -44,6 +44,7 @@ export type ContentType =
   | 'csv'
   | 'browser'
   | 'terminal'
+  | 'chat'
 
 export interface BrowserState {
   isLoading: boolean
@@ -68,6 +69,9 @@ export interface TabState {
   scrollPosition?: number
   browserViewId?: string
   browserState?: BrowserState
+  // Chat tab specific fields
+  conversationId?: string
+  spaceId?: string
 }
 
 // Callback types
@@ -207,11 +211,9 @@ class CanvasLifecycle {
    */
   initialize(): void {
     if (this.initialized) {
-      console.log('[CanvasLifecycle] Already initialized, skipping...')
       return
     }
 
-    console.log('[CanvasLifecycle] Initializing...')
     this.initialized = true
 
     // Listen for browser state changes from main process
@@ -250,16 +252,12 @@ class CanvasLifecycle {
         }
       }
     })
-
-    console.log('[CanvasLifecycle] Initialized successfully')
   }
 
   /**
    * Cleanup resources
    */
   destroy(): void {
-    console.log('[CanvasLifecycle] Destroying...')
-
     if (this.browserStateUnsubscribe) {
       this.browserStateUnsubscribe()
       this.browserStateUnsubscribe = null
@@ -267,8 +265,6 @@ class CanvasLifecycle {
 
     // Destroy all browser views
     this.closeAll()
-
-    console.log('[CanvasLifecycle] Destroyed')
   }
 
   /**
@@ -530,13 +526,45 @@ class CanvasLifecycle {
   }
 
   /**
+   * Open a chat conversation in a tab
+   * Allows multiple conversations to be open simultaneously
+   */
+  async openChat(spaceId: string, conversationId: string, title: string): Promise<string> {
+    // Check if this conversation is already open
+    for (const [tabId, tab] of this.tabs) {
+      if (tab.type === 'chat' && tab.conversationId === conversationId) {
+        await this.switchTab(tabId)
+        return tabId
+      }
+    }
+
+    // Create new chat tab
+    const tabId = generateTabId()
+    const tab: TabState = {
+      id: tabId,
+      type: 'chat',
+      title,
+      conversationId,
+      spaceId,
+      isDirty: false,
+      isLoading: false,
+    }
+
+    this.tabs.set(tabId, tab)
+    this.setOpen(true)
+    this.notifyTabsChange()
+
+    await this.switchTab(tabId)
+
+    return tabId
+  }
+
+  /**
    * Close a tab
    */
   async closeTab(tabId: string): Promise<void> {
     const tab = this.tabs.get(tabId)
     if (!tab) return
-
-    console.log(`[CanvasLifecycle] Closing tab: ${tabId}`)
 
     // Destroy BrowserView if this is a browser/pdf tab
     const hasBrowserView = (tab.type === 'browser' || tab.type === 'pdf') && tab.browserViewId
@@ -566,8 +594,6 @@ class CanvasLifecycle {
    * Close all tabs
    */
   async closeAll(): Promise<void> {
-    console.log('[CanvasLifecycle] Closing all tabs')
-
     // Destroy all browser views (browser and pdf types)
     for (const [, tab] of this.tabs) {
       const hasBrowserView = (tab.type === 'browser' || tab.type === 'pdf') && tab.browserViewId
@@ -591,11 +617,8 @@ class CanvasLifecycle {
   async switchTab(tabId: string): Promise<void> {
     const tab = this.tabs.get(tabId)
     if (!tab) {
-      console.warn(`[CanvasLifecycle] Tab not found: ${tabId}`)
       return
     }
-
-    console.log(`[CanvasLifecycle] Switching to tab: ${tabId}`)
 
     const previousTabId = this.activeTabId
     const previousTab = previousTabId ? this.tabs.get(previousTabId) : null
@@ -603,7 +626,6 @@ class CanvasLifecycle {
     // 1. Hide previous BrowserView if it exists (browser or pdf types)
     const prevNeedsBrowserView = previousTab?.type === 'browser' || previousTab?.type === 'pdf'
     if (prevNeedsBrowserView && previousTab.browserViewId && previousTabId !== tabId) {
-      console.log(`[CanvasLifecycle] Hiding previous BrowserView: ${previousTab.browserViewId}`)
       await api.hideBrowserView(previousTab.browserViewId)
     }
 
@@ -615,14 +637,12 @@ class CanvasLifecycle {
     if (needsBrowserView) {
       if (tab.browserViewId) {
         // Existing view - just show it
-        console.log(`[CanvasLifecycle] Showing existing BrowserView: ${tab.browserViewId}`)
         await this.showBrowserView(tab.browserViewId)
       } else {
         // Need to create new view - don't await, let it load in background
         // UI switches immediately, loading state updates via IPC events
-        console.log(`[CanvasLifecycle] Creating new BrowserView for tab: ${tabId}`)
-        this.createBrowserView(tabId, tab.url || 'about:blank').catch(err => {
-          console.error(`[CanvasLifecycle] Failed to create BrowserView for tab ${tabId}:`, err)
+        this.createBrowserView(tabId, tab.url || 'about:blank').catch(() => {
+          // Error handled in createBrowserView
         })
       }
     }
@@ -691,14 +711,12 @@ class CanvasLifecycle {
     if (!tab) return
 
     const viewId = `browser-${tabId}`
-    console.log(`[CanvasLifecycle] Creating BrowserView: ${viewId} for URL: ${url}`)
 
     try {
       const result = await api.createBrowserView(viewId, url)
 
       // Tab might have been closed during async operation
       if (!this.tabs.has(tabId)) {
-        console.log(`[CanvasLifecycle] Tab closed during BrowserView creation, destroying view`)
         await api.destroyBrowserView(viewId)
         return
       }
@@ -710,13 +728,11 @@ class CanvasLifecycle {
         // Show the view
         await this.showBrowserView(viewId)
       } else {
-        console.error(`[CanvasLifecycle] Failed to create BrowserView: ${result.error}`)
         tab.error = result.error || 'Failed to create browser view'
         tab.isLoading = false
         this.notifyTabsChange()
       }
     } catch (error) {
-      console.error(`[CanvasLifecycle] Exception creating BrowserView:`, error)
       const tab = this.tabs.get(tabId)
       if (tab) {
         tab.error = (error as Error).message
@@ -731,23 +747,14 @@ class CanvasLifecycle {
    */
   private async showBrowserView(viewId: string): Promise<void> {
     if (!this.containerBoundsGetter) {
-      console.warn('[CanvasLifecycle] No container bounds getter set, deferring showBrowserView')
       // Will be called again when container is ready
       return
     }
 
     const bounds = this.containerBoundsGetter()
     if (!bounds) {
-      console.warn('[CanvasLifecycle] Container bounds not available')
       return
     }
-
-    console.log(`[CanvasLifecycle] Showing BrowserView: ${viewId} at`, {
-      x: Math.round(bounds.left),
-      y: Math.round(bounds.top),
-      width: Math.round(bounds.width),
-      height: Math.round(bounds.height),
-    })
 
     await api.showBrowserView(viewId, {
       x: Math.round(bounds.left),
@@ -761,7 +768,6 @@ class CanvasLifecycle {
    * Hide a BrowserView
    */
   private async hideBrowserView(viewId: string): Promise<void> {
-    console.log(`[CanvasLifecycle] Hiding BrowserView: ${viewId}`)
     await api.hideBrowserView(viewId)
   }
 
@@ -769,7 +775,6 @@ class CanvasLifecycle {
    * Destroy a BrowserView
    */
   private async destroyBrowserView(viewId: string): Promise<void> {
-    console.log(`[CanvasLifecycle] Destroying BrowserView: ${viewId}`)
     await api.hideBrowserView(viewId)
     await api.destroyBrowserView(viewId)
   }
@@ -780,7 +785,6 @@ class CanvasLifecycle {
    * expensive addBrowserView calls during animation
    */
   async updateActiveBounds(): Promise<void> {
-    console.log('[CanvasLifecycle] 🔵 updateActiveBounds called, time:', Date.now())
     if (!this.activeTabId) return
 
     const tab = this.tabs.get(this.activeTabId)
@@ -796,7 +800,6 @@ class CanvasLifecycle {
    * was ready, and showBrowserView() returned early due to missing bounds.
    */
   async ensureActiveBrowserViewShown(): Promise<void> {
-    console.log('[CanvasLifecycle] 🟢 ensureActiveBrowserViewShown called, time:', Date.now())
     if (!this.activeTabId) return
 
     const tab = this.tabs.get(this.activeTabId)
@@ -815,7 +818,6 @@ class CanvasLifecycle {
     if (!this.containerBoundsGetter) return
 
     const bounds = this.containerBoundsGetter()
-    console.log('[CanvasLifecycle] 🔵 resizeBrowserView bounds:', bounds, 'time:', Date.now())
     if (!bounds || bounds.width <= 0 || bounds.height <= 0) return
 
     await api.resizeBrowserView(viewId, {
@@ -919,25 +921,19 @@ class CanvasLifecycle {
   async saveFile(tabId: string): Promise<boolean> {
     const tab = this.tabs.get(tabId)
     if (!tab || !tab.path || tab.content === undefined) {
-      console.warn(`[CanvasLifecycle] Cannot save tab ${tabId}: missing path or content`)
       return false
     }
 
     try {
-      console.log(`[CanvasLifecycle] Saving file: ${tab.path}`)
       const response = await api.writeArtifactContent(tab.path, tab.content)
 
       if (response.success) {
         tab.isDirty = false
         this.notifyTabsChange()
-        console.log(`[CanvasLifecycle] File saved successfully: ${tab.path}`)
         return true
-      } else {
-        console.error(`[CanvasLifecycle] Failed to save file: ${response.error}`)
-        return false
       }
-    } catch (error) {
-      console.error(`[CanvasLifecycle] Error saving file:`, error)
+      return false
+    } catch {
       return false
     }
   }
@@ -966,8 +962,6 @@ class CanvasLifecycle {
 
     // Can't open if no tabs
     if (open && this.tabs.size === 0) return
-
-    console.log(`[CanvasLifecycle] Setting open: ${open}`)
 
     this.isOpen = open
     this.isTransitioning = true
@@ -1041,7 +1035,6 @@ class CanvasLifecycle {
 
     if (previousSpaceId && previousSpaceId !== spaceId && this.tabs.size > 0) {
       // Switching to different space with existing tabs - clear all
-      console.log(`[CanvasLifecycle] Space switch: clearing ${this.tabs.size} tabs`)
       this.closeAll()
       this.currentSpaceId = spaceId
       return true

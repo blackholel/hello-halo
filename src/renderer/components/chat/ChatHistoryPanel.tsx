@@ -6,11 +6,15 @@
 
 import { useState, useRef, useEffect } from 'react'
 import type { ConversationMeta } from '../../types'
+import { useCanvasLifecycle } from '../../hooks/useCanvasLifecycle'
 import { useTranslation, getCurrentLanguage } from '../../i18n'
+import { ExternalLink } from 'lucide-react'
 
 interface ChatHistoryPanelProps {
   conversations: ConversationMeta[]
   currentConversationId: string | undefined
+  spaceId?: string
+  layoutMode?: 'split' | 'tabs-only'
   onSelect: (id: string) => void
   onNew: () => void
   onDelete?: (id: string) => void
@@ -49,6 +53,8 @@ function getConversationPreview(conversation: ConversationMeta, t: (key: string,
 export function ChatHistoryPanel({
   conversations,
   currentConversationId,
+  spaceId,
+  layoutMode = 'split',
   onSelect,
   onNew,
   onDelete,
@@ -56,6 +62,7 @@ export function ChatHistoryPanel({
   spaceName
 }: ChatHistoryPanelProps) {
   const { t } = useTranslation()
+  const { openChat } = useCanvasLifecycle()
   const [isExpanded, setIsExpanded] = useState(false)
   const [isAnimatingOut, setIsAnimatingOut] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -330,6 +337,21 @@ export function ChatHistoryPanel({
                         {/* Action buttons (on hover) */}
                         {editingId !== conv.id && (
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                            {/* Open in tab button - hidden in tabs-only mode since clicking opens in tab */}
+                            {spaceId && layoutMode !== 'tabs-only' && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  openChat(spaceId, conv.id, conv.title)
+                                  handleClose()
+                                }}
+                                className="p-1.5 hover:bg-primary/10 text-muted-foreground hover:text-primary rounded transition-colors"
+                                title={t('Open in tab')}
+                              >
+                                <ExternalLink className="w-4 h-4" />
+                              </button>
+                            )}
+
                             {/* Edit button */}
                             {onRename && (
                               <button

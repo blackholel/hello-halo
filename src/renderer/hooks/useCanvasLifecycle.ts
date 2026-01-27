@@ -70,6 +70,12 @@ export function useCanvasLifecycle() {
     []
   )
 
+  const openChat = useCallback(
+    (spaceId: string, conversationId: string, title: string) =>
+      canvasLifecycle.openChat(spaceId, conversationId, title),
+    []
+  )
+
   const closeTab = useCallback(
     (tabId: string) => canvasLifecycle.closeTab(tabId),
     []
@@ -159,6 +165,7 @@ export function useCanvasLifecycle() {
     openUrl,
     attachAIBrowserView,
     openContent,
+    openChat,
     closeTab,
     closeAllTabs,
     switchTab,

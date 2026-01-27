@@ -200,6 +200,18 @@ export function MarkdownViewer({ tab, onScrollChange }: MarkdownViewerProps) {
                       className="max-w-full h-auto rounded-lg"
                     />
                   )
+                },
+                // Fix DOM nesting: <p> cannot contain block elements like <pre> or <div>
+                // When a paragraph contains only a code block, render as div instead
+                p({ children, node }) {
+                  // Check if children contains a code block (which renders as div>pre)
+                  const hasBlockElement = node?.children?.some(
+                    (child: any) => child.tagName === 'code' && child.properties?.className?.some?.((c: string) => c.startsWith('language-'))
+                  )
+                  if (hasBlockElement) {
+                    return <div className="my-4">{children}</div>
+                  }
+                  return <p>{children}</p>
                 }
               }}
             >

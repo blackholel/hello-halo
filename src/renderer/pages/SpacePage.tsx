@@ -31,7 +31,8 @@ import { GitBashWarningBanner } from '../components/setup/GitBashWarningBanner'
 import { api } from '../api'
 import { useLayoutPreferences, LAYOUT_DEFAULTS } from '../hooks/useLayoutPreferences'
 import { useWindowMaximize } from '../components/canvas/viewers/useWindowMaximize'
-import { PanelLeftClose, PanelLeft, X, MessageSquare } from 'lucide-react'
+import { useCanvasLifecycle } from '../hooks/useCanvasLifecycle'
+import { PanelLeftClose, PanelLeft, X, MessageSquare, Columns2, LayoutGrid } from 'lucide-react'
 import { SearchIcon } from '../components/search/SearchIcon'
 import { useSearchShortcuts } from '../hooks/useSearchShortcuts'
 import { useTranslation } from '../i18n'
@@ -83,6 +84,18 @@ export function SpacePage() {
   // Show conversation list for non-temp spaces
   const [showConversationList, setShowConversationList] = useState(false)
 
+  // Layout mode: 'split' = 分栏布局 (左侧固定 ChatView), 'tabs-only' = 纯标签页模式
+  const [layoutMode, setLayoutMode] = useState<'split' | 'tabs-only'>(() => {
+    // Restore from localStorage, default to 'tabs-only'
+    const saved = localStorage.getItem('halo-layout-mode')
+    return (saved === 'split') ? 'split' : 'tabs-only'
+  })
+
+  // Persist layout mode
+  useEffect(() => {
+    localStorage.setItem('halo-layout-mode', layoutMode)
+  }, [layoutMode])
+
   // Canvas state - use precise selectors to minimize re-renders
   const isCanvasOpen = useCanvasIsOpen()
   const isCanvasMaximized = useCanvasIsMaximized()
@@ -95,6 +108,9 @@ export function SpacePage() {
   // When browser tabs exist, disable CSS transitions to sync with native view resize
   // Use selector to compute this inside store subscription (avoids subscribing to full tabs array)
   const hasBrowserTab = useCanvasStore(state => state.tabs.some(tab => tab.type === 'browser'))
+
+  // Canvas lifecycle for opening chat tabs
+  const { openChat } = useCanvasLifecycle()
 
   // Mobile detection
   const isMobile = useIsMobile()
@@ -220,17 +236,61 @@ export function SpacePage() {
     initSpace()
   }, [currentSpace?.id]) // Only re-run when space ID changes
 
+  // In tabs-only mode, auto-open conversation in tab when entering space
+  useEffect(() => {
+    if (layoutMode !== 'tabs-only' || !currentSpace || isLoading) return
+
+    // Wait for conversations to be loaded
+    if (conversations.length === 0) return
+
+    // Check if any chat tab is already open for this space
+    const tabs = canvasLifecycle.getTabs()
+    const hasOpenChatTab = tabs.some(
+      tab => tab.type === 'chat' && tab.spaceId === currentSpace.id
+    )
+
+    // If no chat tab is open, open the current or first conversation
+    if (!hasOpenChatTab) {
+      const convToOpen = currentConversationId
+        ? conversations.find(c => c.id === currentConversationId)
+        : conversations[0]
+
+      if (convToOpen) {
+        openChat(currentSpace.id, convToOpen.id, convToOpen.title)
+      }
+    }
+  }, [layoutMode, currentSpace?.id, conversations.length, isLoading])
+
   // Handle back
   const handleBack = () => {
     setView('home')
   }
 
   // Handle new conversation
-  const handleNewConversation = async () => {
-    if (currentSpace) {
-      await createConversation(currentSpace.id)
+  const handleNewConversation = useCallback(async () => {
+    if (!currentSpace) return
+
+    const newConv = await createConversation(currentSpace.id)
+
+    // In tabs-only mode, open the new conversation in a tab
+    if (layoutMode === 'tabs-only' && newConv) {
+      openChat(currentSpace.id, newConv.id, newConv.title)
     }
-  }
+  }, [currentSpace, createConversation, layoutMode, openChat])
+
+  // Handle select conversation - smart behavior based on layout mode
+  const handleSelectConversation = useCallback((id: string) => {
+    if (layoutMode === 'tabs-only' && currentSpace) {
+      // In tabs-only mode, open conversation in a tab
+      const conv = conversations.find(c => c.id === id)
+      if (conv) {
+        openChat(currentSpace.id, id, conv.title)
+      }
+    } else {
+      // In split mode, update the main ChatView
+      selectConversation(id)
+    }
+  }, [layoutMode, currentSpace, conversations, openChat, selectConversation])
 
   // Handle open folder
   const handleOpenFolder = () => {
@@ -299,7 +359,6 @@ export function SpacePage() {
   // Listen for exit-maximized event from overlay
   useEffect(() => {
     const cleanup = api.onCanvasExitMaximized(() => {
-      console.log('[SpacePage] Received exit-maximized from overlay')
       setCanvasMaximized(false)
     })
     return cleanup
@@ -347,7 +406,9 @@ export function SpacePage() {
                 <ChatHistoryPanel
                   conversations={conversations}
                   currentConversationId={currentConversationId}
-                  onSelect={(id) => selectConversation(id)}
+                  spaceId={currentSpace.id}
+                  layoutMode={layoutMode}
+                  onSelect={handleSelectConversation}
                   onNew={handleNewConversation}
                   onDelete={handleDeleteConversation}
                   onRename={handleRenameConversation}
@@ -386,6 +447,21 @@ export function SpacePage() {
             {/* Search Icon */}
             <SearchIcon onClick={openSearch} isInSpace={true} />
 
+            {/* Layout mode toggle */}
+            <button
+              onClick={() => setLayoutMode(layoutMode === 'split' ? 'tabs-only' : 'split')}
+              className={`p-1.5 rounded-lg transition-colors ${
+                layoutMode === 'tabs-only' ? 'bg-primary/20 text-primary' : 'hover:bg-secondary'
+              }`}
+              title={layoutMode === 'split' ? t('Switch to tabs-only mode') : t('Switch to split mode')}
+            >
+              {layoutMode === 'split' ? (
+                <LayoutGrid className="w-5 h-5" />
+              ) : (
+                <Columns2 className="w-5 h-5" />
+              )}
+            </button>
+
             <button
               onClick={() => setView('settings')}
               className="p-1.5 hover:bg-secondary rounded-lg transition-colors"
@@ -416,7 +492,9 @@ export function SpacePage() {
           <ConversationList
             conversations={conversations}
             currentConversationId={currentConversationId}
-            onSelect={(id) => selectConversation(id)}
+            spaceId={currentSpace.id}
+            layoutMode={layoutMode}
+            onSelect={handleSelectConversation}
             onNew={handleNewConversation}
             onDelete={handleDeleteConversation}
             onRename={handleRenameConversation}
@@ -426,8 +504,8 @@ export function SpacePage() {
         {/* Desktop Layout */}
         {!isMobile && (
           <>
-            {/* Chat view - hidden when maximized, adjusts width based on canvas state */}
-            {!isCanvasMaximized && (
+            {/* Chat view - hidden when maximized or in tabs-only mode, adjusts width based on canvas state */}
+            {!isCanvasMaximized && layoutMode === 'split' && (
               <div
                 ref={chatContainerRef}
                 className={`
@@ -465,24 +543,24 @@ export function SpacePage() {
               </div>
             )}
 
-            {/* Content Canvas - main viewing area when open, full width when maximized */}
+            {/* Content Canvas - main viewing area, full width in tabs-only mode */}
             <div
               className={`
                 min-w-0 overflow-hidden
                 ${hasBrowserTab ? '' : 'transition-all duration-300 ease-out'}
-                ${isCanvasOpen || isCanvasMaximized
+                ${layoutMode === 'tabs-only' || isCanvasOpen || isCanvasMaximized
                   ? 'flex-1 opacity-100'
                   : 'w-0 flex-none opacity-0'}
                 ${isCanvasTransitioning ? 'pointer-events-none' : ''}
               `}
               style={{
                 willChange: isCanvasTransitioning ? 'width, opacity, transform' : 'auto',
-                transform: isCanvasOpen || isCanvasMaximized ? 'translateX(0) scale(1)' : 'translateX(20px) scale(0.98)',
+                transform: layoutMode === 'tabs-only' || isCanvasOpen || isCanvasMaximized ? 'translateX(0) scale(1)' : 'translateX(20px) scale(0.98)',
                 // Disable transition when browser tab exists (sync with native BrowserView)
                 transition: hasBrowserTab ? 'none' : undefined,
               }}
             >
-              {(isCanvasOpen || isCanvasMaximized || isCanvasTransitioning) && <ContentCanvas />}
+              {(layoutMode === 'tabs-only' || isCanvasOpen || isCanvasMaximized || isCanvasTransitioning) && <ContentCanvas />}
             </div>
           </>
         )}
