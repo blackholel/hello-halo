@@ -373,6 +373,33 @@ export interface ThinkingBlock {
 }
 
 // ============================================
+// Task Panel Types (Global task tracking)
+// ============================================
+
+// Task status (same as TodoWrite for compatibility)
+export type TaskStatus = 'pending' | 'in_progress' | 'completed';
+
+// Individual task item for global task panel
+export interface TaskItem {
+  id: string;
+  content: string;                    // Task description (imperative form)
+  status: TaskStatus;
+  activeForm?: string;                // Present continuous form for in_progress display
+  linkedAgentId?: string;             // Associated sub-agent ID (Task tool)
+  parentTaskId?: string;              // Support for task hierarchy
+  createdAt: string;
+  updatedAt: string;
+  sourceThoughtId?: string;           // The TodoWrite thought that created this task
+}
+
+// Global task state for task panel
+export interface TaskState {
+  tasks: TaskItem[];
+  activeTaskId: string | null;        // Currently executing task
+  lastUpdated: string | null;
+}
+
+// ============================================
 // Canvas Context Types (AI awareness of user's open tabs)
 // ============================================
 

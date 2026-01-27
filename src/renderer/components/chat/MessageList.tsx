@@ -20,6 +20,8 @@ import { CompactNotice } from './CompactNotice'
 import { MarkdownRenderer } from './MarkdownRenderer'
 import { BrowserTaskCard, isBrowserTool } from '../tool/BrowserTaskCard'
 import { SubAgentCard } from './SubAgentCard'
+import { TaskPanel } from '../task'
+import { useTaskStore } from '../../stores/task.store'
 import type { Message, Thought, CompactInfo, ParallelGroup } from '../../types'
 import { useTranslation } from '../../i18n'
 
@@ -98,7 +100,6 @@ function StreamingBubble({
    */
   useEffect(() => {
     if (textBlockVersion !== prevTextBlockVersionRef.current) {
-      console.log(`[StreamingBubble] 🆕 New text block detected: version ${prevTextBlockVersionRef.current} → ${textBlockVersion}`)
       // Reset all state for new text block
       setActiveSnapshotLen(0)
       setSegments([])
@@ -165,7 +166,6 @@ function StreamingBubble({
   useEffect(() => {
     if (!content && thoughts.length === 0) {
       // Full reset for new conversation
-      console.log(`[StreamingBubble] 🔄 Full reset (new conversation)`)
       setSegments([])
       setScrollOffset(0)
       setCurrentHeight(0)
@@ -223,10 +223,10 @@ function StreamingBubble({
   const containerHeight = currentHeight > 0 ? currentHeight : 'auto'
 
   return (
-    <div className="rounded-2xl px-4 py-3 message-assistant message-working w-full overflow-hidden">
+    <div className="rounded-xl px-3 py-2 message-assistant message-working w-full overflow-hidden">
       {/* Working indicator */}
-      <div className="flex items-center gap-1.5 mb-2 pb-2 border-b border-border/30 working-indicator-fade">
-        <span className="text-xs text-muted-foreground/70">{t('Halo is working')}</span>
+      <div className="flex items-center gap-1 mb-1.5 pb-1.5 border-b border-border/20 working-indicator-fade">
+        <span className="text-[11px] text-muted-foreground/60">{t('Halo is working')}</span>
       </div>
 
       {/* Viewport - height matches current content only */}
@@ -349,6 +349,17 @@ export function MessageList({
       }))
   }, [mainAgentThoughts, thoughts])
 
+  // Update global task store when thoughts change (for TaskPanel)
+  const updateTasksFromThoughts = useTaskStore(state => state.updateTasksFromThoughts)
+  useEffect(() => {
+    if (thoughts.length > 0) {
+      updateTasksFromThoughts(thoughts)
+    }
+  }, [thoughts, updateTasksFromThoughts])
+
+  // Check if there are tasks to display
+  const hasTasks = useTaskStore(state => state.tasks.length > 0)
+
   return (
     <div className={`
       space-y-4 transition-[max-width] duration-300 ease-out
@@ -380,7 +391,7 @@ export function MessageList({
         <div className="flex justify-start animate-fade-in">
           {/* Fixed width - same as completed messages */}
           <div className="w-[85%] relative">
-            {/* Real-time thought process at top (main agent only) */}
+            {/* 1. Real-time thought process at top (main agent only) */}
             {(mainAgentThoughts.length > 0 || isThinking) && (
               <ThoughtProcess
                 thoughts={mainAgentThoughts}
@@ -389,7 +400,7 @@ export function MessageList({
               />
             )}
 
-            {/* Sub-agent cards - rendered independently */}
+            {/* 2. Sub-agent cards - rendered independently */}
             {subAgents.map(agent => (
               <SubAgentCard
                 key={agent.id}
@@ -402,9 +413,9 @@ export function MessageList({
               />
             ))}
 
-            {/* Real-time browser task card - shows AI browser operations as they happen */}
+            {/* 3. Real-time browser task card - shows AI browser operations as they happen */}
             {streamingBrowserToolCalls.length > 0 && (
-              <div className="mb-4">
+              <div className="mb-2">
                 <BrowserTaskCard
                   browserToolCalls={streamingBrowserToolCalls}
                   isActive={isThinking}
@@ -412,13 +423,34 @@ export function MessageList({
               </div>
             )}
 
-            {/* Streaming bubble with accumulated content and auto-scroll */}
-            <StreamingBubble
-              content={streamingContent}
-              isStreaming={isStreaming}
-              thoughts={thoughts}
-              textBlockVersion={textBlockVersion}
-            />
+            {/* 4. Global Task Panel - shows all tasks from TodoWrite */}
+            {/* Positioned ABOVE StreamingBubble so user sees progress before text output */}
+            {hasTasks && (
+              <div className="mb-2">
+                <TaskPanel defaultExpanded={true} />
+              </div>
+            )}
+
+            {/* 5. Streaming bubble with accumulated content and auto-scroll */}
+            {/* Only show when there's content or actively streaming */}
+            {(streamingContent || isStreaming) && (
+              <StreamingBubble
+                content={streamingContent}
+                isStreaming={isStreaming}
+                thoughts={thoughts}
+                textBlockVersion={textBlockVersion}
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TaskPanel persists after generation completes */}
+      {/* Only reset when new TodoWrite is called (handled by task.store) */}
+      {!isGenerating && hasTasks && (
+        <div className="flex justify-start animate-fade-in">
+          <div className="w-[85%]">
+            <TaskPanel defaultExpanded={true} />
           </div>
         </div>
       )}
