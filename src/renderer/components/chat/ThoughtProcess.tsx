@@ -1,9 +1,9 @@
 /**
- * ThoughtProcess - Displays agent reasoning process in real-time
+ * ThoughtProcess - Displays main agent reasoning process in real-time
  * Shows thinking, tool usage, and intermediate results as they happen
  *
- * TodoWrite is rendered separately at the bottom (above "processing...")
- * to keep it always visible and avoid duplicate renders
+ * Note: Sub-agents (Task tools) are now rendered separately as SubAgentCard
+ * This component only handles main agent's thoughts (non-Task tools)
  */
 
 import { useState, useRef, useEffect, useMemo, memo } from 'react'
@@ -18,14 +18,23 @@ import {
   Zap,
   ChevronDown,
   Loader2,
+  GitBranch,
 } from 'lucide-react'
 import { getToolIcon } from '../icons/ToolIcons'
 import { TodoCard, parseTodoInput } from '../tool/TodoCard'
-import type { Thought } from '../../types'
+import type { Thought, ParallelGroup } from '../../types'
 import { useTranslation } from '../../i18n'
+import {
+  truncateText,
+  extractFileName,
+  extractCommand,
+  extractSearchTerm,
+  extractUrl
+} from '../../utils/thought-utils'
 
 interface ThoughtProcessProps {
   thoughts: Thought[]
+  parallelGroups?: Map<string, ParallelGroup>
   isThinking: boolean
 }
 
@@ -98,31 +107,27 @@ function getThoughtLabelKey(type: Thought['type']): string {
 }
 
 // Get human-friendly action summary for collapsed header (isThinking=true only)
-// Shows what the agent is currently doing with key details (filename, command, etc.)
-// Returns { key: translationKey, params: interpolation params }
 function getActionSummaryData(thoughts: Thought[]): { key: string; params?: Record<string, unknown> } {
-  // Search from end to find the most recent action
   for (let i = thoughts.length - 1; i >= 0; i--) {
     const t = thoughts[i]
     if (t.type === 'tool_use' && t.toolName) {
       const input = t.toolInput
       switch (t.toolName) {
-        case 'Read': return { key: 'Reading {{file}}...', params: { file: extractFileName(input?.file_path) } }
-        case 'Write': return { key: 'Writing {{file}}...', params: { file: extractFileName(input?.file_path) } }
-        case 'Edit': return { key: 'Editing {{file}}...', params: { file: extractFileName(input?.file_path) } }
-        case 'Grep': return { key: 'Searching {{pattern}}...', params: { pattern: extractSearchTerm(input?.pattern) } }
-        case 'Glob': return { key: 'Matching {{pattern}}...', params: { pattern: extractSearchTerm(input?.pattern) } }
-        case 'Bash': return { key: 'Executing {{command}}...', params: { command: extractCommand(input?.command) } }
-        case 'WebFetch': return { key: 'Fetching {{url}}...', params: { url: extractUrl(input?.url) } }
-        case 'WebSearch': return { key: 'Searching {{query}}...', params: { query: extractSearchTerm(input?.query) } }
+        case 'Read': return { key: 'Reading {{file}}...', params: { file: extractFileName(input?.file_path, 20) } }
+        case 'Write': return { key: 'Writing {{file}}...', params: { file: extractFileName(input?.file_path, 20) } }
+        case 'Edit': return { key: 'Editing {{file}}...', params: { file: extractFileName(input?.file_path, 20) } }
+        case 'Grep': return { key: 'Searching {{pattern}}...', params: { pattern: extractSearchTerm(input?.pattern, 15) } }
+        case 'Glob': return { key: 'Matching {{pattern}}...', params: { pattern: extractSearchTerm(input?.pattern, 15) } }
+        case 'Bash': return { key: 'Executing {{command}}...', params: { command: extractCommand(input?.command, 20) } }
+        case 'WebFetch': return { key: 'Fetching {{url}}...', params: { url: extractUrl(input?.url, 20) } }
+        case 'WebSearch': return { key: 'Searching {{query}}...', params: { query: extractSearchTerm(input?.query, 15) } }
         case 'TodoWrite': return { key: 'Updating tasks...' }
-        case 'Task': return { key: 'Executing {{task}}...', params: { task: extractSearchTerm(input?.description) } }
-        case 'NotebookEdit': return { key: 'Editing {{file}}...', params: { file: extractFileName(input?.notebook_path) } }
+        case 'Task': return { key: 'Executing {{task}}...', params: { task: extractSearchTerm(input?.description, 15) } }
+        case 'NotebookEdit': return { key: 'Editing {{file}}...', params: { file: extractFileName(input?.notebook_path, 20) } }
         case 'AskUserQuestion': return { key: 'Waiting for user response...' }
         default: return { key: 'Processing...' }
       }
     }
-    // If most recent is thinking, show thinking status
     if (t.type === 'thinking') {
       return { key: 'Thinking...' }
     }
@@ -130,45 +135,7 @@ function getActionSummaryData(thoughts: Thought[]): { key: string; params?: Reco
   return { key: 'Thinking...' }
 }
 
-// Extract filename from path (e.g., "/foo/bar/config.json" -> "config.json")
-function extractFileName(path: unknown): string {
-  if (typeof path !== 'string' || !path) return 'file'
-  const name = path.split('/').pop() || path.split('\\').pop() || path
-  return truncateText(name, 20)
-}
-
-// Extract command summary (e.g., "npm install lodash --save" -> "npm install...")
-function extractCommand(cmd: unknown): string {
-  if (typeof cmd !== 'string' || !cmd) return 'command'
-  // Get first part of command (before first space or first 20 chars)
-  const firstPart = cmd.split(' ').slice(0, 2).join(' ')
-  return truncateText(firstPart, 20)
-}
-
-// Extract search term or pattern
-function extractSearchTerm(term: unknown): string {
-  if (typeof term !== 'string' || !term) return '...'
-  return truncateText(term, 15)
-}
-
-// Extract domain from URL
-function extractUrl(url: unknown): string {
-  if (typeof url !== 'string' || !url) return 'page'
-  try {
-    const domain = new URL(url).hostname.replace('www.', '')
-    return truncateText(domain, 20)
-  } catch {
-    return truncateText(url, 20)
-  }
-}
-
-// Truncate text with ellipsis if too long
-function truncateText(text: string, maxLength: number): string {
-  if (text.length <= maxLength) return text
-  return text.substring(0, maxLength - 1) + '…'
-}
-
-// Timer display component to isolate re-renders
+// Timer display component
 function TimerDisplay({ startTime, isThinking }: { startTime: number | null; isThinking: boolean }) {
   const [elapsedTime, setElapsedTime] = useState(0)
   const requestRef = useRef<number>()
@@ -178,7 +145,6 @@ function TimerDisplay({ startTime, isThinking }: { startTime: number | null; isT
 
     const animate = () => {
       setElapsedTime((Date.now() - startTime) / 1000)
-      
       if (isThinking) {
         requestRef.current = requestAnimationFrame(animate)
       }
@@ -187,7 +153,6 @@ function TimerDisplay({ startTime, isThinking }: { startTime: number | null; isT
     if (isThinking) {
       requestRef.current = requestAnimationFrame(animate)
     } else {
-      // If not thinking, just update once to show ©∫final time
       setElapsedTime((Date.now() - startTime) / 1000)
     }
 
@@ -201,20 +166,32 @@ function TimerDisplay({ startTime, isThinking }: { startTime: number | null; isT
   return <span>{elapsedTime.toFixed(1)}s</span>
 }
 
-// Individual thought item (for non-special tools)
-const ThoughtItem = memo(function ThoughtItem({ thought, isLast }: { thought: Thought; isLast: boolean }) {
+// Individual thought item
+const ThoughtItem = memo(function ThoughtItem({
+  thought,
+  isLast
+}: {
+  thought: Thought
+  isLast: boolean
+}) {
   const [isExpanded, setIsExpanded] = useState(false)
   const { t } = useTranslation()
   const color = getThoughtColor(thought.type, thought.isError)
   const Icon = getThoughtIcon(thought.type, thought.toolName)
 
-  // Truncate content for display
   const maxPreviewLength = 150
-  const content = thought.type === 'tool_use'
-    ? `${thought.toolName}: ${JSON.stringify(thought.toolInput || {}).substring(0, 100)}`
-    : thought.type === 'tool_result'
-      ? (thought.toolOutput || '').substring(0, 200)
-      : thought.content
+
+  // Build content based on thought type
+  function buildContent(): string {
+    if (thought.type === 'tool_use') {
+      return `${thought.toolName}: ${JSON.stringify(thought.toolInput || {}).substring(0, 100)}`
+    }
+    if (thought.type === 'tool_result') {
+      return (thought.toolOutput || '').substring(0, 200)
+    }
+    return thought.content
+  }
+  const content = buildContent()
 
   const needsTruncate = content.length > maxPreviewLength
   const displayContent = isExpanded ? content : content.substring(0, maxPreviewLength)
@@ -253,6 +230,9 @@ const ThoughtItem = memo(function ThoughtItem({ thought, isLast }: { thought: Th
               ({(thought.duration / 1000).toFixed(1)}s)
             </span>
           )}
+          {thought.status === 'running' && (
+            <Loader2 size={12} className="animate-spin text-primary" />
+          )}
         </div>
 
         {/* Content */}
@@ -277,7 +257,7 @@ const ThoughtItem = memo(function ThoughtItem({ thought, isLast }: { thought: Th
           </button>
         )}
 
-        {/* Tool input details (expandable) */}
+        {/* Tool input details */}
         {thought.type === 'tool_use' && thought.toolInput && isExpanded && (
           <pre className="mt-2 p-2 rounded bg-muted/30 text-xs text-muted-foreground overflow-x-auto">
             {JSON.stringify(thought.toolInput, null, 2)}
@@ -288,14 +268,101 @@ const ThoughtItem = memo(function ThoughtItem({ thought, isLast }: { thought: Th
   )
 })
 
-export function ThoughtProcess({ thoughts, isThinking }: ThoughtProcessProps) {
-  // Default collapsed - like ChatGPT, less intrusive
+// Parallel group component (side-by-side display)
+const ParallelGroupView = memo(function ParallelGroupView({
+  group,
+  thoughts
+}: {
+  group: ParallelGroup
+  thoughts: Thought[]
+}) {
+  const { t } = useTranslation()
+  const toolUses = group.thoughts.filter(t => t.type === 'tool_use')
+
+  if (toolUses.length < 2) return null
+
+  return (
+    <div className="my-3">
+      {/* Parallel indicator */}
+      <div className="flex items-center gap-2 mb-2 text-xs text-muted-foreground">
+        <GitBranch size={12} />
+        <span>{t('{{count}} parallel operations', { count: toolUses.length })}</span>
+        {group.status === 'running' && (
+          <Loader2 size={12} className="animate-spin" />
+        )}
+        {group.status === 'completed' && (
+          <CheckCircle2 size={12} className="text-green-500" />
+        )}
+        {group.status === 'partial_error' && (
+          <XCircle size={12} className="text-destructive" />
+        )}
+      </div>
+
+      {/* Side-by-side cards */}
+      <div className="grid grid-cols-2 gap-2">
+        {toolUses.map(thought => {
+          const result = thoughts.find(
+            t => t.type === 'tool_result' && t.id === thought.id
+          )
+          const status = result
+            ? (result.isError ? 'error' : 'success')
+            : 'running'
+          const Icon = getToolIcon(thought.toolName || '')
+
+          return (
+            <div
+              key={thought.id}
+              className={`
+                p-2 rounded-lg border text-xs
+                ${status === 'running' ? 'border-primary/30 bg-primary/5' : ''}
+                ${status === 'success' ? 'border-green-500/30 bg-green-500/5' : ''}
+                ${status === 'error' ? 'border-destructive/30 bg-destructive/5' : ''}
+              `}
+            >
+              <div className="flex items-center gap-2">
+                <Icon size={14} />
+                <span className="font-medium truncate flex-1">{thought.toolName}</span>
+                {status === 'running' && (
+                  <Loader2 size={12} className="animate-spin" />
+                )}
+                {status === 'success' && (
+                  <CheckCircle2 size={12} className="text-green-500" />
+                )}
+                {status === 'error' && (
+                  <XCircle size={12} className="text-destructive" />
+                )}
+              </div>
+
+              {thought.toolInput && (
+                <div className="mt-1 text-muted-foreground/70 truncate">
+                  {thought.toolName === 'Read' && extractFileName(thought.toolInput.file_path, 20)}
+                  {thought.toolName === 'Bash' && extractCommand(thought.toolInput.command, 20)}
+                  {thought.toolName === 'Grep' && extractSearchTerm(thought.toolInput.pattern, 15)}
+                </div>
+              )}
+              {status === 'running' && (
+                <div className="mt-2 h-1 bg-secondary/50 rounded overflow-hidden">
+                  <div className="h-full w-1/3 bg-primary animate-pulse" />
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+})
+
+export function ThoughtProcess({
+  thoughts,
+  parallelGroups,
+  isThinking
+}: ThoughtProcessProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
   const { t } = useTranslation()
 
   // Calculate elapsed time from first thought's timestamp
-  // This is more reliable than tracking component mount time
   const startTime = useMemo(() => {
     if (thoughts.length > 0) {
       return new Date(thoughts[0].timestamp).getTime()
@@ -303,9 +370,8 @@ export function ThoughtProcess({ thoughts, isThinking }: ThoughtProcessProps) {
     return null
   }, [thoughts.length > 0 ? thoughts[0]?.timestamp : null])
 
-  // Get latest todo data (only render one TodoCard at bottom)
+  // Get latest todo data
   const latestTodos = useMemo(() => {
-    // Find all TodoWrite tool calls and get the latest one
     const todoThoughts = thoughts.filter(
       t => t.type === 'tool_use' && t.toolName === 'TodoWrite' && t.toolInput
     )
@@ -315,17 +381,33 @@ export function ThoughtProcess({ thoughts, isThinking }: ThoughtProcessProps) {
     return parseTodoInput(latest.toolInput!)
   }, [thoughts])
 
-  // Filter thoughts for display (exclude TodoWrite and its results)
+  // Filter thoughts: exclude TodoWrite and result types
   const displayThoughts = useMemo(() => {
-    return thoughts.filter(t => {
-      if (t.type === 'result') return false
-      // Exclude TodoWrite tool_use and tool_result (shown separately at bottom)
-      if (t.toolName === 'TodoWrite') return false
-      return true
-    })
+    return thoughts.filter(t => t.type !== 'result' && t.toolName !== 'TodoWrite')
   }, [thoughts])
 
-  // Auto-scroll to bottom when new thoughts arrive
+  // Get parallel groups that have multiple items
+  const displayParallelGroups = useMemo(() => {
+    if (!parallelGroups) return []
+    return Array.from(parallelGroups.values())
+      .filter(g => g.thoughts.filter(t => t.type === 'tool_use').length > 1)
+  }, [parallelGroups])
+
+  // Get IDs of thoughts in parallel groups
+  const parallelThoughtIds = useMemo(() => {
+    const ids = new Set<string>()
+    displayParallelGroups.forEach(g => {
+      g.thoughts.forEach(t => ids.add(t.id))
+    })
+    return ids
+  }, [displayParallelGroups])
+
+  // Filter to exclude thoughts in parallel groups
+  const nonParallelThoughts = useMemo(() => {
+    return displayThoughts.filter(t => !parallelThoughtIds.has(t.id))
+  }, [displayThoughts, parallelThoughtIds])
+
+  // Auto-scroll to bottom
   useEffect(() => {
     if (isExpanded && contentRef.current) {
       contentRef.current.scrollTop = contentRef.current.scrollHeight
@@ -337,12 +419,8 @@ export function ThoughtProcess({ thoughts, isThinking }: ThoughtProcessProps) {
     return null
   }
 
-  // Only count system-level errors (type: 'error'), not tool execution failures (tool_result with isError)
-  // Tool failures are normal during agent investigation and should not affect overall status
   const errorCount = thoughts.filter(t => t.type === 'error').length
-
-  // Check if there's content to show in the scrollable area
-  const hasDisplayContent = displayThoughts.length > 0
+  const hasDisplayContent = nonParallelThoughts.length > 0 || displayParallelGroups.length > 0
 
   return (
     <div className="animate-fade-in mb-4">
@@ -362,7 +440,6 @@ export function ThoughtProcess({ thoughts, isThinking }: ThoughtProcessProps) {
           onClick={() => setIsExpanded(!isExpanded)}
           className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/5 transition-colors"
         >
-          {/* Status indicator */}
           {isThinking ? (
             <Loader2 size={16} className="text-primary animate-spin" />
           ) : (
@@ -372,7 +449,6 @@ export function ThoughtProcess({ thoughts, isThinking }: ThoughtProcessProps) {
             />
           )}
 
-          {/* Title: action summary when thinking, "Thought process" when done */}
           <span className={`text-sm font-medium ${isThinking ? 'text-primary' : 'text-foreground'}`}>
             {isThinking ? (() => {
               const data = getActionSummaryData(thoughts)
@@ -380,17 +456,14 @@ export function ThoughtProcess({ thoughts, isThinking }: ThoughtProcessProps) {
             })() : t('Thought process')}
           </span>
 
-          {/* Stats: only show elapsed time when thinking is complete */}
           {!isThinking && (
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground/60">
               <TimerDisplay startTime={startTime} isThinking={isThinking} />
             </div>
           )}
 
-          {/* Spacer */}
           <div className="flex-1" />
 
-          {/* Expand icon */}
           <ChevronDown
             size={16}
             className={`text-muted-foreground transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
@@ -400,23 +473,28 @@ export function ThoughtProcess({ thoughts, isThinking }: ThoughtProcessProps) {
         {/* Content */}
         {isExpanded && (
           <div className="border-t border-border/30">
-            {/* Scrollable thought items */}
             {hasDisplayContent && (
               <div
                 ref={contentRef}
-                className="px-4 pt-3 max-h-[300px] overflow-y-auto"
+                className="px-4 pt-3 max-h-[400px] overflow-y-auto"
               >
-                {displayThoughts.map((thought, index) => (
+                {/* Parallel groups first */}
+                {displayParallelGroups.map(group => (
+                  <ParallelGroupView key={group.id} group={group} thoughts={thoughts} />
+                ))}
+
+                {/* Regular thoughts */}
+                {nonParallelThoughts.map((thought, index) => (
                   <ThoughtItem
                     key={thought.id}
                     thought={thought}
-                    isLast={index === displayThoughts.length - 1 && !latestTodos && !isThinking}
+                    isLast={index === nonParallelThoughts.length - 1 && !latestTodos && !isThinking}
                   />
                 ))}
               </div>
             )}
 
-            {/* TodoCard - fixed at bottom, only one instance */}
+            {/* TodoCard at bottom */}
             {latestTodos && latestTodos.length > 0 && (
               <div className={`px-4 ${hasDisplayContent ? 'pt-2' : 'pt-3'} pb-3`}>
                 <TodoCard todos={latestTodos} />

@@ -21,8 +21,9 @@
 
 import { create } from 'zustand'
 import { api } from '../api'
-import type { Conversation, ConversationMeta, Message, ToolCall, Artifact, Thought, AgentEventBase, ImageAttachment, CompactInfo, CanvasContext, FileContextAttachment } from '../types'
+import type { Conversation, ConversationMeta, Message, ToolCall, Artifact, Thought, AgentEventBase, ImageAttachment, CompactInfo, CanvasContext, FileContextAttachment, ParallelGroup } from '../types'
 import { canvasLifecycle } from '../services/canvas-lifecycle'
+import { buildParallelGroups } from '../utils/thought-utils'
 
 // LRU cache size limit
 const CONVERSATION_CACHE_SIZE = 10
@@ -46,6 +47,12 @@ interface SessionState {
   compactInfo: CompactInfo | null
   // Text block version - increments on each new text block (for StreamingBubble reset)
   textBlockVersion: number
+
+  // === Tree and parallel group support ===
+  // Parallel operation groups (for side-by-side display)
+  parallelGroups: Map<string, ParallelGroup>
+  // Currently active sub-agent IDs (Task tools that haven't completed)
+  activeAgentIds: string[]
 }
 
 // Create empty session state
@@ -59,7 +66,10 @@ function createEmptySessionState(): SessionState {
     pendingToolApproval: null,
     error: null,
     compactInfo: null,
-    textBlockVersion: 0
+    textBlockVersion: 0,
+    // New fields
+    parallelGroups: new Map(),
+    activeAgentIds: []
   }
 }
 
@@ -496,13 +506,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set((state) => {
         const newSessions = new Map(state.sessions)
         newSessions.set(conversationId, {
+          ...createEmptySessionState(),
           isGenerating: true,
-          streamingContent: '',
-          isStreaming: false,
-          thoughts: [],
-          isThinking: true,
-          pendingToolApproval: null,
-          error: null
+          isThinking: true
         })
         return { sessions: newSessions }
       })
@@ -875,9 +881,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
         return state // No change
       }
 
+      const newThoughts = [...session.thoughts, thought]
+
+      // Rebuild parallel groups
+      const parallelGroups = buildParallelGroups(newThoughts)
+
+      // Track active sub-agents (Task tools without corresponding tool_result)
+      const taskToolIds = new Set(
+        newThoughts
+          .filter(t => t.type === 'tool_use' && t.toolName === 'Task')
+          .map(t => t.id)
+      )
+      const completedTaskIds = new Set(
+        newThoughts
+          .filter(t => t.type === 'tool_result' && taskToolIds.has(t.id))
+          .map(t => t.id)
+      )
+      const activeAgentIds = Array.from(taskToolIds).filter(id => !completedTaskIds.has(id))
+
       newSessions.set(conversationId, {
         ...session,
-        thoughts: [...session.thoughts, thought],
+        thoughts: newThoughts,
+        parallelGroups,
+        activeAgentIds,
         isThinking: true,
         isGenerating: true // Ensure generating state is set
       })

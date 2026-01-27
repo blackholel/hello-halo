@@ -19,8 +19,19 @@ import { CollapsedThoughtProcess } from './CollapsedThoughtProcess'
 import { CompactNotice } from './CompactNotice'
 import { MarkdownRenderer } from './MarkdownRenderer'
 import { BrowserTaskCard, isBrowserTool } from '../tool/BrowserTaskCard'
-import type { Message, Thought, CompactInfo } from '../../types'
+import { SubAgentCard } from './SubAgentCard'
+import type { Message, Thought, CompactInfo, ParallelGroup } from '../../types'
 import { useTranslation } from '../../i18n'
+
+// Sub-agent info extracted from thoughts
+interface SubAgentInfo {
+  id: string
+  description: string
+  subagentType?: string
+  thoughts: Thought[]
+  isRunning: boolean
+  hasError: boolean
+}
 
 interface MessageListProps {
   messages: Message[]
@@ -28,6 +39,7 @@ interface MessageListProps {
   isGenerating: boolean
   isStreaming?: boolean  // True during token-level text streaming
   thoughts?: Thought[]
+  parallelGroups?: Map<string, ParallelGroup>  // Parallel operation groups
   isThinking?: boolean
   compactInfo?: CompactInfo | null
   error?: string | null  // Error message to display when generation fails
@@ -258,6 +270,7 @@ export function MessageList({
   isGenerating,
   isStreaming = false,
   thoughts = [],
+  parallelGroups,
   isThinking = false,
   compactInfo = null,
   error = null,
@@ -288,10 +301,41 @@ export function MessageList({
     return 0
   }
 
+  // Separate main agent thoughts from sub-agent thoughts
+  const { mainAgentThoughts, subAgents } = useMemo(() => {
+    // Main agent thoughts: parentToolUseId is null/undefined AND not a Task tool
+    const mainThoughts = thoughts.filter(t =>
+      (t.parentToolUseId === null || t.parentToolUseId === undefined) && t.toolName !== 'Task'
+    )
+
+    // Find all Task tool calls (these are sub-agents)
+    const taskTools = thoughts.filter(t =>
+      t.toolName === 'Task' && (t.parentToolUseId === null || t.parentToolUseId === undefined)
+    )
+
+    // For each Task tool, collect its child thoughts
+    const agents: SubAgentInfo[] = taskTools.map(task => {
+      const childThoughts = thoughts.filter(t => t.parentToolUseId === task.id)
+      const hasResult = thoughts.some(t => t.type === 'tool_result' && t.id === task.id)
+      const hasError = childThoughts.some(t => t.isError)
+
+      return {
+        id: task.id,
+        description: task.agentMeta?.description || (task.toolInput?.description as string) || 'Sub-agent',
+        subagentType: task.agentMeta?.subagentType || (task.toolInput?.subagent_type as string),
+        thoughts: childThoughts,
+        isRunning: !hasResult,
+        hasError
+      }
+    })
+
+    return { mainAgentThoughts: mainThoughts, subAgents: agents }
+  }, [thoughts])
+
   // Extract real-time browser tool calls from streaming thoughts
   // This enables BrowserTaskCard to show operations as they happen
   const streamingBrowserToolCalls = useMemo(() => {
-    return thoughts
+    return mainAgentThoughts
       .filter(t => t.type === 'tool_use' && t.toolName && isBrowserTool(t.toolName))
       .map(t => ({
         id: t.id,
@@ -303,7 +347,7 @@ export function MessageList({
         ) ? 'success' as const : 'running' as const,
         input: t.toolInput || {},
       }))
-  }, [thoughts])
+  }, [mainAgentThoughts, thoughts])
 
   return (
     <div className={`
@@ -336,10 +380,27 @@ export function MessageList({
         <div className="flex justify-start animate-fade-in">
           {/* Fixed width - same as completed messages */}
           <div className="w-[85%] relative">
-            {/* Real-time thought process at top */}
-            {(thoughts.length > 0 || isThinking) && (
-              <ThoughtProcess thoughts={thoughts} isThinking={isThinking} />
+            {/* Real-time thought process at top (main agent only) */}
+            {(mainAgentThoughts.length > 0 || isThinking) && (
+              <ThoughtProcess
+                thoughts={mainAgentThoughts}
+                parallelGroups={parallelGroups}
+                isThinking={isThinking && subAgents.every(a => !a.isRunning)}
+              />
             )}
+
+            {/* Sub-agent cards - rendered independently */}
+            {subAgents.map(agent => (
+              <SubAgentCard
+                key={agent.id}
+                agentId={agent.id}
+                description={agent.description}
+                subagentType={agent.subagentType}
+                thoughts={agent.thoughts}
+                isRunning={agent.isRunning}
+                hasError={agent.hasError}
+              />
+            ))}
 
             {/* Real-time browser task card - shows AI browser operations as they happen */}
             {streamingBrowserToolCalls.length > 0 && (

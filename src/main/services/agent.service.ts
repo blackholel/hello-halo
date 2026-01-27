@@ -1755,9 +1755,13 @@ export function getSessionState(conversationId: string): {
 }
 
 // Parse SDK message into a Thought object
+// Now extracts parent_tool_use_id for sub-agent nesting support
 function parseSDKMessage(message: any): Thought | null {
   const timestamp = new Date().toISOString()
   const generateId = () => `thought-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+
+  // Extract parent_tool_use_id for sub-agent nesting (all message types may have this)
+  const parentToolUseId = message.parent_tool_use_id ?? null
 
   // System initialization
   if (message.type === 'system') {
@@ -1766,7 +1770,8 @@ function parseSDKMessage(message: any): Thought | null {
         id: generateId(),
         type: 'system',
         content: `Connected | Model: ${message.model || 'claude'}`,
-        timestamp
+        timestamp,
+        parentToolUseId
       }
     }
     return null
@@ -1783,18 +1788,32 @@ function parseSDKMessage(message: any): Thought | null {
             id: generateId(),
             type: 'thinking',
             content: block.thinking || '',
-            timestamp
+            timestamp,
+            parentToolUseId
           }
         }
         // Tool use blocks
         if (block.type === 'tool_use') {
+          const isTaskTool = block.name === 'Task'
           return {
             id: block.id || generateId(),
             type: 'tool_use',
-            content: `Tool call: ${block.name}`,
+            content: isTaskTool 
+              ? `Sub-agent: ${block.input?.description || 'Task'}`
+              : `Tool call: ${block.name}`,
             timestamp,
             toolName: block.name,
-            toolInput: block.input
+            toolInput: block.input,
+            parentToolUseId,
+            status: 'running',
+            // Add agent metadata for Task tool
+            ...(isTaskTool && {
+              agentMeta: {
+                description: block.input?.description || '',
+                prompt: block.input?.prompt,
+                subagentType: block.input?.subagent_type
+              }
+            })
           }
         }
         // Text blocks
@@ -1803,7 +1822,8 @@ function parseSDKMessage(message: any): Thought | null {
             id: generateId(),
             type: 'text',
             content: block.text || '',
-            timestamp
+            timestamp,
+            parentToolUseId
           }
         }
       }
@@ -1824,7 +1844,8 @@ function parseSDKMessage(message: any): Thought | null {
           id: generateId(),
           type: 'text',  // Render as text block (will show in assistant bubble)
           content: match[1].trim(),
-          timestamp
+          timestamp,
+          parentToolUseId
         }
       }
     }
@@ -1844,7 +1865,9 @@ function parseSDKMessage(message: any): Thought | null {
             content: isError ? `Tool execution failed` : `Tool execution succeeded`,
             timestamp,
             toolOutput: resultContent,
-            isError
+            isError,
+            parentToolUseId,
+            status: isError ? 'error' : 'success'
           }
         }
       }
@@ -1859,7 +1882,8 @@ function parseSDKMessage(message: any): Thought | null {
       type: 'result',
       content: message.message?.result || message.result || '',
       timestamp,
-      duration: message.duration_ms
+      duration: message.duration_ms,
+      parentToolUseId
     }
   }
 

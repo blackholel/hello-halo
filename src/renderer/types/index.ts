@@ -312,6 +312,9 @@ export type ArtifactViewMode = 'card' | 'tree';
 
 export type ThoughtType = 'thinking' | 'text' | 'tool_use' | 'tool_result' | 'system' | 'result' | 'error';
 
+// Thought execution status
+export type ThoughtStatus = 'pending' | 'running' | 'success' | 'error';
+
 export interface Thought {
   id: string;
   type: ThoughtType;
@@ -324,6 +327,41 @@ export interface Thought {
   isError?: boolean;
   // For result thoughts
   duration?: number;
+
+  // === Sub-agent and parallel operation support ===
+
+  // Parent tool use ID - identifies which sub-agent this thought belongs to
+  // null = main agent, string = sub-agent (Task tool)
+  parentToolUseId?: string | null;
+
+  // Parallel group ID - thoughts with same ID are executed in parallel
+  parallelGroupId?: string;
+
+  // Execution status for real-time updates
+  status?: ThoughtStatus;
+
+  // Sub-agent metadata (only for Task tool calls)
+  agentMeta?: {
+    description: string;  // Task tool's description parameter
+    prompt?: string;      // Task tool's prompt parameter
+    subagentType?: string; // Task tool's subagent_type parameter
+  };
+}
+
+// Tree node for hierarchical thought display
+export interface ThoughtTreeNode {
+  thought: Thought;
+  children: ThoughtTreeNode[];  // Sub-agent's thoughts
+  isExpanded?: boolean;         // UI expansion state
+}
+
+// Parallel operation group
+export interface ParallelGroup {
+  id: string;
+  thoughts: Thought[];          // Tool calls executed in parallel
+  startTime: string;
+  endTime?: string;
+  status: 'running' | 'completed' | 'partial_error';
 }
 
 // Legacy alias for backwards compatibility
