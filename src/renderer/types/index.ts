@@ -3,7 +3,13 @@
 // ============================================
 
 // API Provider Configuration
-export type ApiProvider = 'anthropic' | 'openai';
+// - 'anthropic': Official Anthropic API (api.anthropic.com)
+// - 'anthropic-compat': Anthropic-compatible backends (OpenRouter, etc.) - direct connection, zero overhead
+// - 'openai': OpenAI-compatible backends (GPT, Ollama, vLLM) - requires protocol conversion
+// - 'zhipu': ZhipuAI (智谱) - Anthropic-compatible, direct connection
+// - 'minimax': MiniMax - Anthropic-compatible, direct connection
+// - 'custom': Legacy custom provider (treated as anthropic-compat)
+export type ApiProvider = 'anthropic' | 'anthropic-compat' | 'openai' | 'zhipu' | 'minimax' | 'custom';
 
 // Available Claude models
 export interface ModelOption {

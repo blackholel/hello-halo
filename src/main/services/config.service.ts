@@ -37,9 +37,16 @@ export function onApiConfigChange(handler: ApiConfigChangeHandler): () => void {
 }
 
 // Types (shared with renderer)
+// Provider types:
+// - 'anthropic': Official Anthropic API (api.anthropic.com)
+// - 'anthropic-compat': Anthropic-compatible backends (OpenRouter, etc.) - direct connection, no protocol conversion
+// - 'openai': OpenAI-compatible backends (GPT, Ollama, vLLM) - requires protocol conversion via Router
+// - 'zhipu': ZhipuAI (智谱) - Anthropic-compatible, direct connection
+// - 'minimax': MiniMax - Anthropic-compatible, direct connection
+// - 'custom': Legacy custom provider (treated as anthropic-compat)
 interface HaloConfig {
   api: {
-    provider: 'anthropic' | 'openai' | 'custom'
+    provider: 'anthropic' | 'anthropic-compat' | 'openai' | 'zhipu' | 'minimax' | 'custom'
     apiKey: string
     apiUrl: string
     model: string

@@ -468,16 +468,28 @@ export async function ensureSessionWarm(
   // Create abortController - consistent with sendMessage
   const abortController = new AbortController()
 
-  // OpenAI compatibility mode: enable local Router for protocol conversion only when provider=openai
-  // - config.api.apiUrl/apiKey still holds user's "real OpenAI-compatible backend" info
-  // - ANTHROPIC_* injected to Claude Code points to local Router
-  // - Pass a fake Claude model name to CC (CC may validate model must start with claude-*)
-  //   Real model is in encodeBackendConfig, Router uses it for requests
+  // Provider mode selection:
+  // - 'anthropic': Official Anthropic API - direct connection
+  // - 'anthropic-compat' / 'custom': Anthropic-compatible backends (OpenRouter, etc.) - direct connection, zero overhead
+  // - 'openai': OpenAI-compatible backends - requires protocol conversion via local Router
+  //
+  // Direct connection mode (anthropic-compat): Simply set ANTHROPIC_BASE_URL to user's backend
+  // This is the craft-agents-oss approach - leverages SDK's native ANTHROPIC_BASE_URL support
+  // Benefits: Zero latency overhead, full API feature support, minimal code
   let anthropicBaseUrl = config.api.apiUrl
   let anthropicApiKey = config.api.apiKey
   let sdkModel = config.api.model || 'claude-opus-4-5-20251101'
-  if (config.api.provider === 'openai') {
 
+  if (config.api.provider === 'anthropic-compat' || config.api.provider === 'custom' ||
+      config.api.provider === 'zhipu' || config.api.provider === 'minimax') {
+    // Direct connection mode: Just point SDK to user's Anthropic-compatible backend
+    // No Router needed - the backend speaks Anthropic protocol natively
+  } else if (config.api.provider === 'openai') {
+    // OpenAI compatibility mode: enable local Router for protocol conversion
+    // - config.api.apiUrl/apiKey still holds user's "real OpenAI-compatible backend" info
+    // - ANTHROPIC_* injected to Claude Code points to local Router
+    // - Pass a fake Claude model name to CC (CC may validate model must start with claude-*)
+    //   Real model is in encodeBackendConfig, Router uses it for requests
     const router = await ensureOpenAICompatRouter({ debug: false })
     anthropicBaseUrl = router.baseUrl
     const apiType = inferOpenAIWireApi(config.api.apiUrl)
@@ -489,7 +501,6 @@ export async function ensureSessionWarm(
     })
     // Pass a fake Claude model to CC for normal request handling
     sdkModel = 'claude-sonnet-4-20250514'
-    console.log(`[Agent] OpenAI provider enabled (warm): routing via ${anthropicBaseUrl}`)
   }
 
   // Build SDK options using shared function (ensures consistency with sendMessage)
@@ -857,12 +868,16 @@ export async function testMcpConnections(mainWindow?: BrowserWindow | null): Pro
     // Use the same electron path as sendMessage (prevents Dock icon on macOS)
     const electronPath = getHeadlessElectronPath()
 
-    // Handle OpenAI compatible mode (same as sendMessage)
+    // Handle provider modes (same as sendMessage)
+    // - 'anthropic-compat' / 'custom': Direct connection to Anthropic-compatible backend
+    // - 'openai': Protocol conversion via Router
     let anthropicBaseUrl = config.api.apiUrl
     let anthropicApiKey = config.api.apiKey
     let sdkModel = config.api.model || 'claude-sonnet-4-20250514'
 
-    if (config.api.provider === 'openai') {
+    if (config.api.provider === 'anthropic-compat' || config.api.provider === 'custom') {
+      // Direct connection mode - no additional setup needed
+    } else if (config.api.provider === 'openai') {
       const router = await ensureOpenAICompatRouter({ debug: false })
       anthropicBaseUrl = router.baseUrl
       const apiType = inferOpenAIWireApi(config.api.apiUrl)
@@ -873,10 +888,7 @@ export async function testMcpConnections(mainWindow?: BrowserWindow | null): Pro
         ...(apiType ? { apiType } : {})
       })
       sdkModel = 'claude-sonnet-4-20250514'
-      console.log(`[Agent] MCP test: OpenAI provider enabled via ${anthropicBaseUrl}`)
     }
-
-    console.log('[Agent] MCP test config:', JSON.stringify(enabledMcpServers, null, 2))
 
     // Create query with proper configuration (matching sendMessage)
     // Use a simple prompt that will get a quick response
@@ -1138,14 +1150,24 @@ export async function sendMessage(
   const config = getConfig()
   const workDir = getWorkingDir(spaceId)
 
-  // OpenAI compatibility mode: enable local Router for protocol conversion only when provider=openai
-  // Same as ensureSessionWarm(), config storage values are not modified here
-  // Pass a fake Claude model name to CC (CC may validate model must start with claude-*)
-  // Real model is in encodeBackendConfig, Router uses it for requests
+  // Provider mode selection:
+  // - 'anthropic': Official Anthropic API - direct connection
+  // - 'anthropic-compat' / 'custom': Anthropic-compatible backends (OpenRouter, etc.) - direct connection, zero overhead
+  // - 'openai': OpenAI-compatible backends - requires protocol conversion via local Router
+  //
+  // Direct connection mode (anthropic-compat): Simply set ANTHROPIC_BASE_URL to user's backend
+  // This is the craft-agents-oss approach - leverages SDK's native ANTHROPIC_BASE_URL support
+  // Benefits: Zero latency overhead, full API feature support, minimal code
   let anthropicBaseUrl = config.api.apiUrl
   let anthropicApiKey = config.api.apiKey
   let sdkModel = config.api.model || 'claude-opus-4-5-20251101'
-  if (config.api.provider === 'openai') {
+
+  if (config.api.provider === 'anthropic-compat' || config.api.provider === 'custom' ||
+      config.api.provider === 'zhipu' || config.api.provider === 'minimax') {
+    // Direct connection mode: Just point SDK to user's Anthropic-compatible backend
+    // No Router needed - the backend speaks Anthropic protocol natively
+  } else if (config.api.provider === 'openai') {
+    // OpenAI compatibility mode: enable local Router for protocol conversion
     const router = await ensureOpenAICompatRouter({ debug: false })
     anthropicBaseUrl = router.baseUrl
     const apiType = inferOpenAIWireApi(config.api.apiUrl)
@@ -1157,7 +1179,6 @@ export async function sendMessage(
     })
     // Pass a fake Claude model to CC for normal request handling
     sdkModel = 'claude-sonnet-4-20250514'
-    console.log(`[Agent] OpenAI provider enabled: routing via ${anthropicBaseUrl}`)
   }
 
   // Get conversation for session resumption

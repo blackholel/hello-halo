@@ -338,6 +338,12 @@ export function SettingsPage() {
                 <h2 className="text-lg font-medium">
                   {provider === 'anthropic'
                     ? t('Claude (Recommended)')
+                    : provider === 'anthropic-compat'
+                    ? t('OpenRouter')
+                    : provider === 'zhipu'
+                    ? t('ZhipuAI (智谱)')
+                    : provider === 'minimax'
+                    ? t('MiniMax')
                     : t('OpenAI Compatible')}
                 </h2>
                 <p className="text-xs text-muted-foreground">{t('AI Connection Configuration')}</p>
@@ -352,28 +358,63 @@ export function SettingsPage() {
                   value={provider}
                   onChange={(e) => {
                     const next = e.target.value as any
+                    const prev = provider
                     setProvider(next)
                     setValidationResult(null)
-                    // sensible defaults when switching
+
+                    // Clear API Key when switching between different provider categories
+                    // This prevents using wrong credentials for different platforms
+                    const isSameCategory = (a: string, b: string) => {
+                      // anthropic and anthropic-compat share keys
+                      if ((a === 'anthropic' || a === 'anthropic-compat') &&
+                          (b === 'anthropic' || b === 'anthropic-compat')) return true
+                      return a === b
+                    }
+                    if (!isSameCategory(prev, next)) {
+                      setApiKey('')
+                    }
+
+                    // Set sensible defaults when switching
                     if (next === 'anthropic') {
-                      if (!apiUrl || apiUrl.includes('openai')) setApiUrl('https://api.anthropic.com')
-                      if (!model || !model.startsWith('claude-')) {
-                        setModel(DEFAULT_MODEL)
-                        setUseCustomModel(false)
-                      }
+                      setApiUrl('https://api.anthropic.com')
+                      setModel(DEFAULT_MODEL)
+                      setUseCustomModel(false)
+                    } else if (next === 'anthropic-compat') {
+                      setApiUrl('https://openrouter.ai/api')
+                      // Keep model as-is for generic anthropic-compat
+                    } else if (next === 'zhipu') {
+                      // ZhipuAI (智谱): Anthropic-compatible
+                      setApiUrl('https://open.bigmodel.cn/api/anthropic')
+                      setModel('glm-4.7')
+                      setUseCustomModel(true)
+                    } else if (next === 'minimax') {
+                      // MiniMax: Anthropic-compatible
+                      setApiUrl('https://api.minimaxi.com/anthropic')
+                      setModel('MiniMax-M2.1')
+                      setUseCustomModel(true)
                     } else if (next === 'openai') {
-                      if (!apiUrl || apiUrl.includes('anthropic')) setApiUrl('https://api.openai.com')
-                      if (!model || model.startsWith('claude-')) setModel('gpt-4o-mini')
+                      setApiUrl('https://api.openai.com/v1/chat/completions')
+                      setModel('gpt-4o-mini')
+                      setUseCustomModel(true)
                     }
                   }}
                   className="w-full px-4 py-2 bg-input rounded-lg border border-border focus:border-primary focus:outline-none transition-colors"
                 >
                   <option value="anthropic">{t('Claude (Recommended)')}</option>
+                  <option value="zhipu">{t('ZhipuAI (智谱)')}</option>
+                  <option value="minimax">{t('MiniMax')}</option>
+                  <option value="anthropic-compat">{t('OpenRouter')}</option>
                   <option value="openai">{t('OpenAI Compatible')}</option>
                 </select>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {provider === 'openai'
                     ? t('Support OpenAI/compatible models via local protocol conversion')
+                    : provider === 'anthropic-compat'
+                    ? t('Direct connection to Anthropic-compatible backends (OpenRouter, etc.) - zero overhead')
+                    : provider === 'zhipu'
+                    ? t('ZhipuAI Anthropic-compatible API - direct connection')
+                    : provider === 'minimax'
+                    ? t('MiniMax Anthropic-compatible API - direct connection')
                     : t('Connect directly to Anthropic official or compatible proxy')}
                 </p>
               </div>
@@ -386,7 +427,7 @@ export function SettingsPage() {
                     type={showApiKey ? 'text' : 'password'}
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
-                    placeholder={provider === 'openai' ? 'sk-xxxxxxxxxxxxx' : 'sk-ant-xxxxxxxxxxxxx'}
+                    placeholder={provider === 'openai' ? 'sk-xxxxxxxxxxxxx' : provider === 'zhipu' ? 'xxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxx' : provider === 'minimax' ? 'eyJhbGciOiJSUzI1NiIs...' : 'sk-ant-xxxxxxxxxxxxx'}
                     className="w-full px-4 py-2 pr-12 bg-input rounded-lg border border-border focus:border-primary focus:outline-none transition-colors"
                   />
                   <button
@@ -411,7 +452,13 @@ export function SettingsPage() {
                   type="text"
                   value={apiUrl}
                   onChange={(e) => setApiUrl(e.target.value)}
-                  placeholder={provider === 'openai' ? 'BASE_URL/v1/chat/completions or BASE_URL/v1/responses' : 'https://api.anthropic.com'}
+                  placeholder={
+                    provider === 'openai'
+                      ? 'BASE_URL/v1/chat/completions or BASE_URL/v1/responses'
+                      : provider === 'anthropic-compat'
+                      ? 'https://openrouter.ai/api'
+                      : 'https://api.anthropic.com'
+                  }
                   className="w-full px-4 py-2 bg-input rounded-lg border border-border focus:border-primary focus:outline-none transition-colors"
                 />
                 {provider === 'openai' && apiUrl && !apiUrl.endsWith('/chat/completions') && !apiUrl.endsWith('responses') && (
@@ -424,7 +471,7 @@ export function SettingsPage() {
               {/* Model Selection */}
               <div>
                 <label className="block text-sm text-muted-foreground mb-2">{t('Model')}</label>
-                {provider === 'anthropic' ? (
+                {(provider === 'anthropic' || provider === 'anthropic-compat') ? (
                   <>
                     {useCustomModel ? (
                       <input
