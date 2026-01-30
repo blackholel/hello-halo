@@ -122,7 +122,7 @@ export type McpServerConfig = McpStdioServerConfig | McpHttpServerConfig | McpSs
 export type McpServersConfig = Record<string, McpServerConfig>;
 
 // MCP server status (from SDK)
-export type McpServerStatusType = 'connected' | 'failed' | 'needs-auth' | 'pending';
+export type McpServerStatusType = 'connected' | 'failed' | 'needs-auth' | 'pending' | 'disabled';
 
 export interface McpServerStatus {
   name: string;

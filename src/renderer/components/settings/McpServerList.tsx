@@ -75,6 +75,12 @@ function StatusIndicator({ status, t }: { status: McpServerStatus['status'] | nu
           <Clock className="w-3 h-3" />
         </span>
       )
+    case 'disabled':
+      return (
+        <span className="flex items-center gap-1 text-xs text-muted-foreground" title={t('Disabled')}>
+          <Circle className="w-3 h-3" />
+        </span>
+      )
     default:
       return null
   }

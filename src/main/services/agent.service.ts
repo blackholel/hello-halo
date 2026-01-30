@@ -16,39 +16,16 @@ import {
 } from '@anthropic-ai/claude-agent-sdk'
 
 /**
- * SDK Patch Notes (patches/@anthropic-ai+claude-agent-sdk+0.2.7.patch)
+ * SDK Version Notes (0.2.22)
  *
- * The @anthropic-ai/claude-agent-sdk unstable_v2_createSession API has limitations
- * that we've patched. These patches can be removed when officially supported.
+ * The @anthropic-ai/claude-agent-sdk V2 Session API now natively supports:
+ * - includePartialMessages: true - Enable token-level streaming
+ * - Full parameter pass-through: cwd, stderr, systemPrompt, maxThinkingTokens, maxTurns,
+ *   maxBudgetUsd, permissionMode, mcpServers, canUseTool, hooks, plugins, resume, resumeSessionAt
+ * - Dynamic runtime methods: interrupt(), setModel(), setMaxThinkingTokens(), setPermissionMode()
+ * - MCP server control: reconnectMcpServer(), toggleMcpServer()
  *
- * SDK Version: 0.2.7 (upgraded from 0.1.76)
- * Change: receive() method renamed to stream()
- *
- * Official 0.2.7 SDKSessionOptions only supports:
- *   - model, pathToClaudeCodeExecutable, executable, executableArgs, env
- *
- * Patch contents:
- * 1. includePartialMessages: true - Enable token-level streaming (stream_event)
- *    - Original SDK hardcodes false, resulting in block-level output only
- *
- * 2. Full parameter pass-through - V2 Session SDKSessionOptions only accepts limited params
- *    - After patch supports: cwd, stderr, systemPrompt.append, maxThinkingTokens, maxTurns,
- *      maxBudgetUsd, fallbackModel, permissionMode, allowDangerouslySkipPermissions,
- *      continueConversation, settingSources, allowedTools, disallowedTools,
- *      mcpServers, strictMcpConfig, canUseTool, hooks, forkSession,
- *      resumeSessionAt, extraArgs
- *
- * 3. interrupt() method - Interrupt current generation
- *    - Original SDK Session doesn't expose interrupt method
- *    - After patch: can call session.interrupt() to interrupt generation
- *
- * Patch file location: patches/@anthropic-ai+claude-agent-sdk+0.2.7.patch
- * Applied automatically via patch-package on npm install
- *
- * Tracking issue: Remove when officially supported
- * - V2 Session full parameter support
- * - V2 Session interrupt method
- * - includePartialMessages configuration
+ * No patches required for SDK 0.2.22+
  */
 import { broadcastToAll, broadcastToWebSocket } from '../http/websocket'
 import { ensureOpenAICompatRouter, encodeBackendConfig } from '../openai-compat-router'
@@ -251,17 +228,20 @@ interface SessionState {
 const activeSessions = new Map<string, SessionState>()
 
 // V2 Session management: Map of conversationId -> persistent V2 session
-// Note: SDK types are unstable after patching (return values may not be Promise<...>),
-// using minimal interface for type safety and maintainability, avoiding inference to never.
+// SDK 0.2.22+ natively supports all required methods
 type V2SDKSession = {
+  readonly sessionId?: string
   send: (message: any) => void
   stream: () => AsyncIterable<any>
   close: () => void
   interrupt?: () => Promise<void> | void
-  // Dynamic runtime methods (exposed via patch)
+  // Dynamic runtime methods
   setModel?: (model: string | undefined) => Promise<void>
   setMaxThinkingTokens?: (maxThinkingTokens: number | null) => Promise<void>
-  setPermissionMode?: (mode: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan') => Promise<void>
+  setPermissionMode?: (mode: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'dontAsk') => Promise<void>
+  // MCP server control methods (new in 0.2.22)
+  reconnectMcpServer?: (serverName: string) => Promise<void>
+  toggleMcpServer?: (serverName: string, enabled: boolean) => Promise<void>
 }
 
 function inferOpenAIWireApi(apiUrl: string): 'responses' | 'chat_completions' {
@@ -1784,7 +1764,7 @@ function parseSDKMessage(message: any): Thought | null {
   // Extract parent_tool_use_id for sub-agent nesting (all message types may have this)
   const parentToolUseId = message.parent_tool_use_id ?? null
 
-  // System initialization
+  // System initialization and new message types (SDK 0.2.22+)
   if (message.type === 'system') {
     if (message.subtype === 'init') {
       return {
@@ -1795,7 +1775,59 @@ function parseSDKMessage(message: any): Thought | null {
         parentToolUseId
       }
     }
+    // Hook started (new in 0.2.22)
+    if (message.subtype === 'hook_started') {
+      return {
+        id: message.hook_id || generateId(),
+        type: 'system',
+        content: `Hook started: ${message.hook_name} (${message.hook_event})`,
+        timestamp,
+        parentToolUseId
+      }
+    }
+    // Hook progress (new in 0.2.22)
+    if (message.subtype === 'hook_progress') {
+      return {
+        id: message.hook_id || generateId(),
+        type: 'system',
+        content: message.output || message.stdout || `Hook progress: ${message.hook_name}`,
+        timestamp,
+        parentToolUseId
+      }
+    }
+    // Hook response (new in 0.2.22, includes outcome field)
+    if (message.subtype === 'hook_response') {
+      const outcome = message.outcome || 'success'
+      return {
+        id: message.hook_id || generateId(),
+        type: 'system',
+        content: `Hook ${outcome}: ${message.hook_name}${message.output ? ` - ${message.output}` : ''}`,
+        timestamp,
+        parentToolUseId
+      }
+    }
+    // Task notification (new in 0.2.22) - background task status
+    if (message.subtype === 'task_notification') {
+      return {
+        id: message.task_id || generateId(),
+        type: 'system',
+        content: `Task ${message.status}: ${message.summary || message.task_id}`,
+        timestamp,
+        parentToolUseId
+      }
+    }
     return null
+  }
+
+  // Tool use summary (new in 0.2.22)
+  if (message.type === 'tool_use_summary') {
+    return {
+      id: generateId(),
+      type: 'system',
+      content: message.summary || 'Tool execution summary',
+      timestamp,
+      parentToolUseId
+    }
   }
 
   // Assistant messages (thinking, tool_use, text blocks)
