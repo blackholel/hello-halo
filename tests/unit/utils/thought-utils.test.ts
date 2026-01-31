@@ -12,7 +12,8 @@ import {
   extractCommand,
   extractSearchTerm,
   extractUrl,
-  buildParallelGroups
+  buildParallelGroups,
+  getThoughtKey
 } from '../../../src/renderer/utils/thought-utils'
 import type { Thought, ParallelGroup } from '../../../src/renderer/types'
 
@@ -176,6 +177,32 @@ describe('Thought Utils', () => {
       const longDomain = 'https://very-long-subdomain.example-domain.com'
       const result = extractUrl(longDomain)
       expect(result.length).toBeLessThanOrEqual(20)
+    })
+  })
+
+  describe('getThoughtKey', () => {
+    it('should generate unique key combining type and id', () => {
+      const thought = { id: 'abc123', type: 'tool_use' } as Thought
+      expect(getThoughtKey(thought)).toBe('tool_use:abc123')
+    })
+
+    it('should generate different keys for tool_use and tool_result with same id', () => {
+      const toolUse = { id: 'tooluse_xyz', type: 'tool_use' } as Thought
+      const toolResult = { id: 'tooluse_xyz', type: 'tool_result' } as Thought
+
+      const useKey = getThoughtKey(toolUse)
+      const resultKey = getThoughtKey(toolResult)
+
+      expect(useKey).not.toBe(resultKey)
+      expect(useKey).toBe('tool_use:tooluse_xyz')
+      expect(resultKey).toBe('tool_result:tooluse_xyz')
+    })
+
+    it('should generate same key for identical thoughts', () => {
+      const thought1 = { id: 'same-id', type: 'tool_use' } as Thought
+      const thought2 = { id: 'same-id', type: 'tool_use' } as Thought
+
+      expect(getThoughtKey(thought1)).toBe(getThoughtKey(thought2))
     })
   })
 

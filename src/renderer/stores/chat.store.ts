@@ -23,7 +23,7 @@ import { create } from 'zustand'
 import { api } from '../api'
 import type { Conversation, ConversationMeta, Message, ToolCall, Artifact, Thought, AgentEventBase, ImageAttachment, CompactInfo, CanvasContext, FileContextAttachment, ParallelGroup } from '../types'
 import { canvasLifecycle } from '../services/canvas-lifecycle'
-import { buildParallelGroups } from '../utils/thought-utils'
+import { buildParallelGroups, getThoughtKey } from '../utils/thought-utils'
 
 // LRU cache size limit
 const CONVERSATION_CACHE_SIZE = 10
@@ -940,9 +940,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const newSessions = new Map(state.sessions)
       const session = newSessions.get(conversationId) || createEmptySessionState()
 
-      // Check if thought with same id already exists (avoid duplicates after recovery)
-      const existingIds = new Set(session.thoughts.map(t => t.id))
-      if (existingIds.has(thought.id)) {
+      // Check if thought with same type+id already exists (avoid duplicates after recovery)
+      // Use composite key to allow tool_use and tool_result with same id
+      const existingKeys = new Set(session.thoughts.map(t => getThoughtKey(t)))
+      const thoughtKey = getThoughtKey(thought)
+      if (existingKeys.has(thoughtKey)) {
         return state // No change
       }
 

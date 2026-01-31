@@ -58,6 +58,73 @@ function getThoughtBrief(thought: Thought): string {
   }
 }
 
+// Collapsed summary component for sub-agent card
+function CollapsedSummary({
+  toolUseThoughts,
+  allThoughts,
+  hasError,
+  t
+}: {
+  toolUseThoughts: Thought[]
+  allThoughts: Thought[]
+  hasError: boolean
+  t: (key: string, params?: Record<string, unknown>) => string
+}) {
+  // Find the last running tool (no result yet)
+  const runningTool = [...toolUseThoughts].reverse().find(tool => {
+    const hasResult = allThoughts.some(th => th.type === 'tool_result' && th.id === tool.id)
+    return !hasResult
+  })
+
+  if (runningTool) {
+    const Icon = runningTool.toolName ? getToolIcon(runningTool.toolName) : Bot
+    const brief = getThoughtBrief(runningTool)
+    return (
+      <div className="px-3 pb-2 flex items-center gap-2 text-xs text-muted-foreground">
+        <Icon size={12} className="flex-shrink-0" />
+        <span className="truncate">
+          <span className="text-foreground/70">{runningTool.toolName}</span>
+          {brief && <span className="ml-1">{brief}</span>}
+          ...
+        </span>
+      </div>
+    )
+  }
+
+  // Find error tool if hasError
+  if (hasError) {
+    const errorTool = [...toolUseThoughts].reverse().find(tool => {
+      const result = allThoughts.find(th => th.type === 'tool_result' && th.id === tool.id)
+      return result?.isError
+    })
+    if (errorTool) {
+      return (
+        <div className="px-3 pb-2 flex items-center gap-2 text-xs text-muted-foreground">
+          <XCircle size={12} className="text-destructive flex-shrink-0" />
+          <span className="text-destructive truncate">
+            {t('Error in {{tool}}', { tool: errorTool.toolName })}
+          </span>
+        </div>
+      )
+    }
+  }
+
+  // All completed - show last operation
+  const lastTool = toolUseThoughts[toolUseThoughts.length - 1]
+  const LastIcon = lastTool?.toolName ? getToolIcon(lastTool.toolName) : CheckCircle2
+  const lastBrief = lastTool ? getThoughtBrief(lastTool) : ''
+
+  return (
+    <div className="px-3 pb-2 flex items-center gap-2 text-xs text-muted-foreground">
+      <LastIcon size={12} className="text-green-500 flex-shrink-0" />
+      <span className="truncate">
+        {lastTool?.toolName && <span className="text-foreground/70">{lastTool.toolName}</span>}
+        {lastBrief && <span className="ml-1">{lastBrief}</span>}
+      </span>
+    </div>
+  )
+}
+
 // Compact thought item for sub-agent card
 const CompactThoughtItem = memo(function CompactThoughtItem({
   thought,
@@ -108,7 +175,7 @@ export const SubAgentCard = memo(function SubAgentCard({
   isRunning,
   hasError
 }: SubAgentCardProps) {
-  const [isExpanded, setIsExpanded] = useState(true)
+  const [isExpanded, setIsExpanded] = useState(false)
   const { t } = useTranslation()
 
   // Filter to only show tool_use thoughts (not results, not thinking)
@@ -183,6 +250,16 @@ export const SubAgentCard = memo(function SubAgentCard({
               <XCircle size={14} className="text-destructive flex-shrink-0" />
             )}
           </button>
+
+          {/* Collapsed summary - single line text */}
+          {!isExpanded && toolUseThoughts.length > 0 && (
+            <CollapsedSummary
+              toolUseThoughts={toolUseThoughts}
+              allThoughts={thoughts}
+              hasError={hasError}
+              t={t}
+            />
+          )}
 
           {/* Expanded content */}
           {isExpanded && (

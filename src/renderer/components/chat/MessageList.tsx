@@ -15,7 +15,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { MessageItem } from './MessageItem'
 import { ThoughtProcess } from './ThoughtProcess'
-import { CollapsedThoughtProcess } from './CollapsedThoughtProcess'
 import { CompactNotice } from './CompactNotice'
 import { MarkdownRenderer } from './MarkdownRenderer'
 import { BrowserTaskCard, isBrowserTool } from '../tool/BrowserTaskCard'
@@ -374,8 +373,13 @@ export function MessageList({
             <div key={message.id} className="flex justify-start">
               {/* Fixed width container - prevents width jumping when content changes */}
               <div className="w-[85%]">
-                {/* Collapsed thought process above the message */}
-                <CollapsedThoughtProcess thoughts={message.thoughts} />
+                {/* Thought process above the message (completed mode = collapsed by default) */}
+                <ThoughtProcess
+                  thoughts={message.thoughts}
+                  isThinking={false}
+                  mode="completed"
+                  defaultExpanded={false}
+                />
                 {/* Then the message itself (without embedded thoughts) */}
                 <MessageItem message={message} previousCost={previousCost} hideThoughts isInContainer />
               </div>
@@ -397,6 +401,7 @@ export function MessageList({
                 thoughts={mainAgentThoughts}
                 parallelGroups={parallelGroups}
                 isThinking={isThinking && subAgents.every(a => !a.isRunning)}
+                mode="realtime"
               />
             )}
 

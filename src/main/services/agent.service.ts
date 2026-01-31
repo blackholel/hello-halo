@@ -1422,9 +1422,9 @@ export async function sendMessage(
       console.error(`[Agent][${conversationId}] Failed to set dynamic params:`, e)
     }
     console.log(`[Agent][${conversationId}] ⏱️ V2 session ready: ${Date.now() - t0}ms`)
-    // Only keep track of the LAST text block as the final reply
-    // Intermediate text blocks are shown in thought process, not accumulated into message bubble
-    let lastTextContent = ''
+    // Accumulate ALL text blocks for the final reply
+    // Multi-step tasks may produce multiple text blocks that should all be preserved
+    let accumulatedTextContent = ''
     let capturedSessionId: string | undefined
 
     // Token usage tracking
@@ -1551,8 +1551,8 @@ export async function sendMessage(
             isComplete: false,
             isStreaming: false
           })
-          // Update lastTextContent for final result
-          lastTextContent = currentStreamingText
+          // Update accumulatedTextContent - append new text block
+          accumulatedTextContent += (accumulatedTextContent ? '\n\n' : '') + currentStreamingText
           console.log(`[Agent][${conversationId}] Text block completed, length: ${currentStreamingText.length}`)
         }
 
@@ -1601,15 +1601,13 @@ export async function sendMessage(
 
         // Handle specific thought types
         if (thought.type === 'text') {
-          // Keep only the latest text block (overwritten by each new text block)
-          // This becomes the final reply when generation completes
-          // Intermediate texts stay in the thought process area only
-          lastTextContent = thought.content
+          // Accumulate text blocks - multi-step tasks may produce multiple text blocks
+          accumulatedTextContent += (accumulatedTextContent ? '\n\n' : '') + thought.content
 
           // Send streaming update - frontend shows this during generation
           sendToRenderer('agent:message', spaceId, conversationId, {
             type: 'message',
-            content: lastTextContent,
+            content: accumulatedTextContent,
             isComplete: false
           })
         } else if (thought.type === 'tool_use') {
@@ -1630,16 +1628,16 @@ export async function sendMessage(
             isError: thought.isError || false
           })
         } else if (thought.type === 'result') {
-          // Final result - use the last text block as the final reply
-          const finalContent = lastTextContent || thought.content
+          // Final result - use accumulated text as the final reply
+          const finalContent = accumulatedTextContent || thought.content
           sendToRenderer('agent:message', spaceId, conversationId, {
             type: 'message',
             content: finalContent,
             isComplete: true
           })
           // Fallback: if no text block was received, use result content for persistence
-          if (!lastTextContent && thought.content) {
-            lastTextContent = thought.content
+          if (!accumulatedTextContent && thought.content) {
+            accumulatedTextContent = thought.content
           }
           // Note: updateLastMessage is called after loop to include tokenUsage
           console.log(`[Agent][${conversationId}] Result thought received, ${sessionState.thoughts.length} thoughts accumulated`)
@@ -1748,11 +1746,11 @@ export async function sendMessage(
     }
 
     // Ensure complete event is sent even if no result message was received
-    if (lastTextContent) {
-      console.log(`[Agent][${conversationId}] Sending final complete event with last text`)
+    if (accumulatedTextContent) {
+      console.log(`[Agent][${conversationId}] Sending final complete event with accumulated text`)
       // Backend saves complete message with thoughts and tokenUsage (Single Source of Truth)
       updateLastMessage(spaceId, conversationId, {
-        content: lastTextContent,
+        content: accumulatedTextContent,
         thoughts: sessionState.thoughts.length > 0 ? [...sessionState.thoughts] : undefined,
         tokenUsage: tokenUsage || undefined  // Include token usage if available
       })
@@ -1929,7 +1927,7 @@ function parseSDKMessage(message: any): Thought | null {
     // Hook started (new in 0.2.22)
     if (message.subtype === 'hook_started') {
       return {
-        id: message.hook_id || generateId(),
+        id: `${message.hook_id || generateId()}-started`,
         type: 'system',
         content: `Hook started: ${message.hook_name} (${message.hook_event})`,
         timestamp,
@@ -1939,7 +1937,7 @@ function parseSDKMessage(message: any): Thought | null {
     // Hook progress (new in 0.2.22)
     if (message.subtype === 'hook_progress') {
       return {
-        id: message.hook_id || generateId(),
+        id: `${message.hook_id || generateId()}-progress`,
         type: 'system',
         content: message.output || message.stdout || `Hook progress: ${message.hook_name}`,
         timestamp,
@@ -1950,7 +1948,7 @@ function parseSDKMessage(message: any): Thought | null {
     if (message.subtype === 'hook_response') {
       const outcome = message.outcome || 'success'
       return {
-        id: message.hook_id || generateId(),
+        id: `${message.hook_id || generateId()}-response`,
         type: 'system',
         content: `Hook ${outcome}: ${message.hook_name}${message.output ? ` - ${message.output}` : ''}`,
         timestamp,
@@ -1960,7 +1958,7 @@ function parseSDKMessage(message: any): Thought | null {
     // Task notification (new in 0.2.22) - background task status
     if (message.subtype === 'task_notification') {
       return {
-        id: message.task_id || generateId(),
+        id: `${message.task_id || generateId()}-${message.status}`,
         type: 'system',
         content: `Task ${message.status}: ${message.summary || message.task_id}`,
         timestamp,
@@ -1999,8 +1997,9 @@ function parseSDKMessage(message: any): Thought | null {
         // Tool use blocks
         if (block.type === 'tool_use') {
           const isTaskTool = block.name === 'Task'
+          const toolUseId = block.id || generateId()
           return {
-            id: block.id || generateId(),
+            id: toolUseId,
             type: 'tool_use',
             content: isTaskTool 
               ? `Sub-agent: ${block.input?.description || 'Task'}`
@@ -2062,9 +2061,9 @@ function parseSDKMessage(message: any): Thought | null {
           const resultContent = typeof block.content === 'string'
             ? block.content
             : JSON.stringify(block.content)
-
+          const toolResultId = block.tool_use_id || generateId()
           return {
-            id: block.tool_use_id || generateId(),
+            id: toolResultId,
             type: 'tool_result',
             content: isError ? `Tool execution failed` : `Tool execution succeeded`,
             timestamp,

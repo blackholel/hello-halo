@@ -25,6 +25,7 @@ import { TodoCard, parseTodoInput } from '../tool/TodoCard'
 import type { Thought, ParallelGroup } from '../../types'
 import { useTranslation } from '../../i18n'
 import {
+  getThoughtKey,
   truncateText,
   extractFileName,
   extractCommand,
@@ -36,6 +37,14 @@ interface ThoughtProcessProps {
   thoughts: Thought[]
   parallelGroups?: Map<string, ParallelGroup>
   isThinking: boolean
+  /**
+   * Display mode:
+   * - 'realtime': Real-time mode during generation, default expanded, supports streaming updates
+   * - 'completed': Completed mode after generation, default collapsed, static display
+   */
+  mode?: 'realtime' | 'completed'
+  /** Default expanded state (only used in completed mode) */
+  defaultExpanded?: boolean
 }
 
 // Get icon component for thought type
@@ -356,9 +365,13 @@ const ParallelGroupView = memo(function ParallelGroupView({
 export function ThoughtProcess({
   thoughts,
   parallelGroups,
-  isThinking
+  isThinking,
+  mode = 'realtime',
+  defaultExpanded
 }: ThoughtProcessProps) {
-  const [isExpanded, setIsExpanded] = useState(false)
+  // In realtime mode, expand when thinking; in completed mode, use defaultExpanded (default false)
+  const initialExpanded = mode === 'realtime' ? false : (defaultExpanded ?? false)
+  const [isExpanded, setIsExpanded] = useState(initialExpanded)
   const contentRef = useRef<HTMLDivElement>(null)
   const { t } = useTranslation()
 
@@ -421,6 +434,93 @@ export function ThoughtProcess({
 
   const errorCount = thoughts.filter(t => t.type === 'error').length
   const hasDisplayContent = nonParallelThoughts.length > 0 || displayParallelGroups.length > 0
+
+  // Calculate duration for completed mode
+  const duration = useMemo(() => {
+    if (thoughts.length < 1) return 0
+    const first = new Date(thoughts[0].timestamp).getTime()
+    const last = new Date(thoughts[thoughts.length - 1].timestamp).getTime()
+    return (last - first) / 1000
+  }, [thoughts])
+
+  // Completed mode: compact collapsed style (similar to CollapsedThoughtProcess)
+  if (mode === 'completed') {
+    // Check if there's anything to show
+    const hasContent = displayThoughts.length > 0 || (latestTodos && latestTodos.length > 0)
+    if (!hasContent) return null
+
+    return (
+      <div className="mb-2">
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className={`
+            flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs
+            transition-all duration-200 w-full
+            ${isExpanded
+              ? 'bg-primary/10 border border-primary/30'
+              : 'bg-muted/30 hover:bg-muted/50 border border-transparent'
+            }
+          `}
+        >
+          {/* Expand icon */}
+          <ChevronDown
+            size={12}
+            className={`text-muted-foreground transition-transform duration-200 ${isExpanded ? 'rotate-180' : '-rotate-90'}`}
+          />
+
+          {/* Icon */}
+          {errorCount > 0 ? (
+            <XCircle size={14} className="text-destructive" />
+          ) : (
+            <Lightbulb size={14} className="text-primary" />
+          )}
+
+          {/* Label */}
+          <span className="text-muted-foreground">{t('Thought process')}</span>
+
+          {/* Stats: time only */}
+          <div className="flex items-center gap-1.5 text-muted-foreground/60">
+            <span>{duration.toFixed(1)}s</span>
+          </div>
+        </button>
+
+        {/* Expanded content */}
+        {isExpanded && (
+          <div className="mt-1 px-3 py-2 bg-muted/20 rounded-lg border border-border/30 animate-slide-down">
+            {hasDisplayContent && (
+              <div
+                ref={contentRef}
+                className="max-h-[300px] overflow-y-auto"
+              >
+                {/* Parallel groups first */}
+                {displayParallelGroups.map(group => (
+                  <ParallelGroupView key={group.id} group={group} thoughts={thoughts} />
+                ))}
+
+                {/* Regular thoughts */}
+                {nonParallelThoughts.map((thought, index) => (
+                  <ThoughtItem
+                    key={getThoughtKey(thought)}
+                    thought={thought}
+                    isLast={index === nonParallelThoughts.length - 1 && !latestTodos}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* TodoCard at bottom */}
+            {latestTodos && latestTodos.length > 0 && (
+              <div className={hasDisplayContent ? 'mt-2 pt-2 border-t border-border/20' : ''}>
+                <TodoCard todos={latestTodos} />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Realtime mode: full card style with streaming support
 
   return (
     <div className="animate-fade-in mb-4">
@@ -486,7 +586,7 @@ export function ThoughtProcess({
                 {/* Regular thoughts */}
                 {nonParallelThoughts.map((thought, index) => (
                   <ThoughtItem
-                    key={thought.id}
+                    key={getThoughtKey(thought)}
                     thought={thought}
                     isLast={index === nonParallelThoughts.length - 1 && !latestTodos && !isThinking}
                   />

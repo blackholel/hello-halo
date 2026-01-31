@@ -20,6 +20,7 @@ import { getToolIcon } from '../icons/ToolIcons'
 import { TodoCard, parseTodoInput } from '../tool/TodoCard'
 import type { Thought } from '../../types'
 import { getCurrentLanguage, useTranslation } from '../../i18n'
+import { getThoughtKey } from '../../utils/thought-utils'
 
 interface CollapsedThoughtProcessProps {
   thoughts: Thought[]
@@ -212,7 +213,7 @@ export function CollapsedThoughtProcess({ thoughts }: CollapsedThoughtProcessPro
           {displayThoughts.length > 0 && (
             <div className="max-h-[300px] overflow-y-auto">
               {displayThoughts.map((thought) => (
-                <ThoughtItem key={thought.id} thought={thought} />
+                <ThoughtItem key={getThoughtKey(thought)} thought={thought} />
               ))}
             </div>
           )}

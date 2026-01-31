@@ -8,6 +8,14 @@
 import type { Thought, ParallelGroup } from '../types'
 
 /**
+ * Generate a unique key for thought deduplication
+ * Combines type and id to allow tool_use and tool_result with same id
+ */
+export function getThoughtKey(thought: Thought): string {
+  return `${thought.type}:${thought.id}`
+}
+
+/**
  * Truncate text with ellipsis if longer than maxLength
  */
 export function truncateText(text: string, maxLength: number): string {
