@@ -6,6 +6,7 @@
 import { Tray, Menu, nativeImage, app, BrowserWindow, NativeImage } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
+import { getInstanceId, isCustomInstance } from '../utils/instance'
 
 let tray: Tray | null = null
 let isQuitting = false
@@ -76,7 +77,11 @@ export function createTray(mainWindow: BrowserWindow | null): Tray | null {
     }
 
     tray = new Tray(icon)
-    tray.setToolTip('Halo - AI Assistant')
+    // Set tooltip with instance identifier for custom instances
+    const tooltip = isCustomInstance()
+      ? `Halo [${getInstanceId()}] - AI Assistant`
+      : 'Halo - AI Assistant'
+    tray.setToolTip(tooltip)
 
     // Update context menu
     updateTrayMenu(mainWindow)

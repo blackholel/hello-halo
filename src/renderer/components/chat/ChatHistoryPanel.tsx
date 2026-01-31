@@ -265,8 +265,9 @@ export function ChatHistoryPanel({
                         ${conv.id === currentConversationId ? 'bg-primary/10' : ''}
                       `}
                       style={{
-                        animationDelay: `${index * 30}ms`,
-                        animation: !isAnimatingOut ? 'fade-in 0.2s ease-out forwards' : undefined
+                        animation: !isAnimatingOut
+                          ? `fade-in 0.2s ease-out ${index * 30}ms forwards`
+                          : undefined
                       }}
                     >
                       {/* Selection indicator */}

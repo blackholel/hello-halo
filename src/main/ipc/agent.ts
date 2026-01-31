@@ -3,7 +3,7 @@
  */
 
 import { ipcMain, BrowserWindow } from 'electron'
-import { sendMessage, stopGeneration, handleToolApproval, getSessionState, ensureSessionWarm, testMcpConnections } from '../services/agent.service'
+import { sendMessage, stopGeneration, handleToolApproval, getSessionState, ensureSessionWarm, testMcpConnections, reconnectMcpServer, toggleMcpServer } from '../services/agent.service'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -121,6 +121,28 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
     } catch (error: unknown) {
       const err = error as Error
       return { success: false, servers: [], error: err.message }
+    }
+  })
+
+  // Reconnect a failed MCP server
+  ipcMain.handle('agent:reconnect-mcp', async (_event, conversationId: string, serverName: string) => {
+    try {
+      const result = await reconnectMcpServer(conversationId, serverName)
+      return result
+    } catch (error: unknown) {
+      const err = error as Error
+      return { success: false, error: err.message }
+    }
+  })
+
+  // Toggle (enable/disable) an MCP server
+  ipcMain.handle('agent:toggle-mcp', async (_event, conversationId: string, serverName: string, enabled: boolean) => {
+    try {
+      const result = await toggleMcpServer(conversationId, serverName, enabled)
+      return result
+    } catch (error: unknown) {
+      const err = error as Error
+      return { success: false, error: err.message }
     }
   })
 }

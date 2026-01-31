@@ -4,8 +4,8 @@
 
 import { app } from 'electron'
 import { join } from 'path'
-import { homedir } from 'os'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { getConfigDir } from '../utils/instance'
 
 // Import analytics config type
 import type { AnalyticsConfig } from './analytics/types'
@@ -67,6 +67,7 @@ interface HaloConfig {
   remoteAccess: {
     enabled: boolean
     port: number
+    trustedOrigins?: string[]  // Allowed CORS origins (in addition to localhost)
   }
   onboarding: {
     completed: boolean
@@ -82,6 +83,8 @@ interface HaloConfig {
     path: string | null
     skipped: boolean
   }
+  // Claude Code configuration (plugins, hooks, agents)
+  claudeCode?: ClaudeCodeConfig
 }
 
 // MCP server configuration types
@@ -110,11 +113,27 @@ interface McpSseServerConfig {
   disabled?: boolean  // Halo extension: temporarily disable this server
 }
 
+// ============================================
+// Claude Code Configuration Types
+// ============================================
+
+// Re-export shared types for backward compatibility
+export type {
+  HooksConfig,
+  HookDefinition,
+  HookCommand,
+  PluginsConfig,
+  AgentsConfig,
+  ClaudeCodeConfig
+} from '../../shared/types/claude-code'
+
+import type { ClaudeCodeConfig } from '../../shared/types/claude-code'
+
 // Paths
-// Use os.homedir() instead of app.getPath('home') to respect HOME environment variable
-// This is essential for E2E tests to run in isolated test directories
+// Use getConfigDir() from instance utils to support HALO_CONFIG_DIR environment variable
+// This enables running multiple Halo instances in parallel (e.g., different git worktrees)
 export function getHaloDir(): string {
-  return join(homedir(), '.halo')
+  return getConfigDir()
 }
 
 export function getConfigPath(): string {

@@ -6,8 +6,13 @@
 import { app, BrowserWindow } from 'electron'
 import { join, dirname } from 'path'
 import { getEmbeddedPythonDir, getPythonEnhancedPath } from './python.service'
-import { existsSync, mkdirSync, symlinkSync, unlinkSync, lstatSync, readlinkSync, promises as fsPromises } from 'fs'
+import { existsSync, mkdirSync, symlinkSync, unlinkSync, readlinkSync, promises as fsPromises } from 'fs'
+import { homedir } from 'os'
 import { getConfig, getTempSpacePath, getHaloDir, onApiConfigChange } from './config.service'
+import { getSpaceConfig } from './space-config.service'
+import { buildHooksConfig } from './hooks.service'
+import { getInstalledPluginPaths } from './plugins.service'
+import { isValidDirectoryPath } from '../utils/path-validation'
 import { getConversation, saveSessionId, addMessage, updateLastMessage } from './conversation.service'
 import { getSpace } from './space.service'
 import {
@@ -523,6 +528,74 @@ export function closeV2Session(conversationId: string): void {
   }
 }
 
+/**
+ * Reconnect a failed MCP server for a specific conversation
+ *
+ * @param conversationId - The conversation ID with an active V2 session
+ * @param serverName - The name of the MCP server to reconnect
+ * @returns Result indicating success or failure
+ */
+export async function reconnectMcpServer(
+  conversationId: string,
+  serverName: string
+): Promise<{ success: boolean; error?: string }> {
+  const sessionInfo = v2Sessions.get(conversationId)
+  if (!sessionInfo) {
+    return { success: false, error: 'No active session for this conversation' }
+  }
+
+  const session = sessionInfo.session
+  if (!session.reconnectMcpServer) {
+    return { success: false, error: 'SDK does not support MCP reconnection' }
+  }
+
+  try {
+    console.log(`[Agent][${conversationId}] Reconnecting MCP server: ${serverName}`)
+    await session.reconnectMcpServer(serverName)
+    console.log(`[Agent][${conversationId}] MCP server reconnected: ${serverName}`)
+    return { success: true }
+  } catch (error) {
+    const err = error as Error
+    console.error(`[Agent][${conversationId}] Failed to reconnect MCP server ${serverName}:`, err)
+    return { success: false, error: err.message }
+  }
+}
+
+/**
+ * Toggle (enable/disable) an MCP server for a specific conversation
+ *
+ * @param conversationId - The conversation ID with an active V2 session
+ * @param serverName - The name of the MCP server to toggle
+ * @param enabled - Whether to enable or disable the server
+ * @returns Result indicating success or failure
+ */
+export async function toggleMcpServer(
+  conversationId: string,
+  serverName: string,
+  enabled: boolean
+): Promise<{ success: boolean; error?: string }> {
+  const sessionInfo = v2Sessions.get(conversationId)
+  if (!sessionInfo) {
+    return { success: false, error: 'No active session for this conversation' }
+  }
+
+  const session = sessionInfo.session
+  if (!session.toggleMcpServer) {
+    return { success: false, error: 'SDK does not support MCP toggle' }
+  }
+
+  try {
+    console.log(`[Agent][${conversationId}] Toggling MCP server ${serverName}: ${enabled ? 'enable' : 'disable'}`)
+    await session.toggleMcpServer(serverName, enabled)
+    console.log(`[Agent][${conversationId}] MCP server ${serverName} ${enabled ? 'enabled' : 'disabled'}`)
+    return { success: true }
+  } catch (error) {
+    const err = error as Error
+    console.error(`[Agent][${conversationId}] Failed to toggle MCP server ${serverName}:`, err)
+    return { success: false, error: err.message }
+  }
+}
+
 // Close all V2 sessions (for app shutdown)
 export function closeAllV2Sessions(): void {
   console.log(`[Agent] Closing all ${v2Sessions.size} V2 sessions`)
@@ -648,6 +721,9 @@ function buildSdkOptions(params: {
     abortController,
     env: {
       ...process.env,
+      // Set CLAUDE_CONFIG_DIR to ~/.halo/ so SDK loads config from there instead of ~/.claude/
+      // This provides complete isolation from system Claude Code configuration
+      CLAUDE_CONFIG_DIR: getHaloDir(),
       // Add embedded Python to PATH (prepend to ensure it's found first)
       PATH: getPythonEnhancedPath(),
       ELECTRON_RUN_AS_NODE: 1,
@@ -677,17 +753,23 @@ function buildSdkOptions(params: {
     includePartialMessages: true,
     executable: electronPath,
     executableArgs: ['--no-warnings'],
-    // Disable filesystem settings loading - app controls all settings
-    settingSources: [],
-    // Load skills from app-level (~/.halo/skills/) and space-level ({workDir}/.claude/)
+    // Configure filesystem settings loading
+    // With CLAUDE_CONFIG_DIR=~/.halo/, the SDK loads from:
+    // - 'user': ~/.halo/ (skills, commands, agents, settings)
+    // - 'project': {workDir}/.claude/ (project-level config)
+    // Both are enabled by default for full functionality
+    settingSources: buildSettingSources(workDir),
+    // Load plugins from multi-tier sources (system, global, app, space)
     plugins: buildPluginsConfig(workDir),
+    // Load hooks from settings.json, global config, and space config
+    hooks: buildHooksConfig(workDir),
     // Extended thinking: enable when user requests it (10240 tokens, same as Claude Code CLI Tab)
     ...(thinkingEnabled ? { maxThinkingTokens: 10240 } : {}),
     // MCP servers configuration
-    // - Pass through enabled user MCP servers
+    // - Pass through enabled user MCP servers (merged with space-level config)
     // - Add AI Browser MCP server if enabled
     ...((() => {
-      const enabledMcp = getEnabledMcpServers(config.mcpServers || {})
+      const enabledMcp = getEnabledMcpServers(config.mcpServers || {}, workDir)
       const mcpServers: Record<string, any> = enabledMcp ? { ...enabledMcp } : {}
 
       // Add AI Browser as SDK MCP server if enabled
@@ -704,58 +786,127 @@ function buildSdkOptions(params: {
 }
 
 // Build plugins configuration for skills loading
-// Supports two-tier skills: app-level (shared) and space-level (project-specific)
+// Supports multi-tier plugins: installed plugins, system, global, app-level, space-level
+// Loading priority (low to high):
+// 0. Installed plugins from ~/.halo/plugins/installed_plugins.json (or ~/.claude/plugins/)
+// 1. ~/.claude/ - system config directory (only when enableSystemSkills: true)
+// 2. globalPaths - user-configured global paths
+// 3. ~/.halo/ - app config directory (loads skills/, commands/, hooks/, agents/)
+// 4. Space paths - space-specific custom paths
+// 5. {workDir}/.claude/ - default space-level path (Claude Code compatible)
 function buildPluginsConfig(workDir: string): PluginConfig[] {
   const plugins: PluginConfig[] = []
+  const config = getConfig()
+  const spaceConfig = getSpaceConfig(workDir)
+  const claudeCodeConfig = config.claudeCode
 
-  // Helper to validate plugin path (not a symlink, is a directory)
-  const isValidPluginPath = (pluginPath: string): boolean => {
-    try {
-      const stat = lstatSync(pluginPath)
-      if (stat.isSymbolicLink()) {
-        console.warn(`[Agent] Security: Rejected symlink plugin path: ${pluginPath}`)
-        return false
-      }
-      return stat.isDirectory()
-    } catch {
-      return false
+  // Helper to add plugin if valid and not already added
+  const addedPaths = new Set<string>()
+  const addIfValid = (pluginPath: string): void => {
+    if (addedPaths.has(pluginPath)) return
+    if (isValidDirectoryPath(pluginPath, 'Agent')) {
+      plugins.push({ type: 'local', path: pluginPath })
+      addedPaths.add(pluginPath)
     }
   }
 
-  // 1. App-level skills (lower priority)
-  // Located at ~/.halo/skills/ - dedicated skills directory shared across all spaces
-  try {
-    const haloDir = getHaloDir()
-    if (haloDir) {
-      const appSkillsPath = join(haloDir, 'skills')
-      if (isValidPluginPath(appSkillsPath)) {
-        plugins.push({ type: 'local', path: appSkillsPath })
-      }
-    }
-  } catch (e) {
-    console.warn('[Agent] Failed to check app-level skills:', e)
+  // Check if plugins are enabled (default: true)
+  if (claudeCodeConfig?.plugins?.enabled === false) {
+    console.log('[Agent] Plugins disabled by configuration')
+    return plugins
   }
 
-  // 2. Space-level skills (higher priority, can override app-level)
-  // Located at {workDir}/.claude/ - entire .claude directory for Claude Code CLI compatibility
-  // Note: Uses .claude/ (not .claude/skills/) to match Claude Code CLI plugin convention
-  if (workDir) {
-    try {
-      const spaceSkillsPath = join(workDir, '.claude')
-      if (isValidPluginPath(spaceSkillsPath)) {
-        plugins.push({ type: 'local', path: spaceSkillsPath })
+  // 0. Load installed plugins from registry (highest priority for marketplace plugins)
+  // These are plugins installed via `claude plugins install` command
+  const installedPluginPaths = getInstalledPluginPaths()
+  for (const pluginPath of installedPluginPaths) {
+    addIfValid(pluginPath)
+  }
+
+  // Check if space disables global plugins
+  const disableGlobal = spaceConfig?.claudeCode?.plugins?.disableGlobal === true
+
+  if (!disableGlobal) {
+    // 1. System config directory (optional, default: false)
+    // Load ~/.claude/ which contains skills/, commands/, hooks/, agents/
+    if (claudeCodeConfig?.enableSystemSkills) {
+      const systemConfigPath = join(homedir(), '.claude')
+      addIfValid(systemConfigPath)
+    }
+
+    // 2. Global custom paths from config.claudeCode.plugins.globalPaths
+    const globalPaths = claudeCodeConfig?.plugins?.globalPaths || []
+    for (const globalPath of globalPaths) {
+      // Resolve relative paths from home directory
+      const resolvedPath = globalPath.startsWith('/')
+        ? globalPath
+        : join(homedir(), globalPath)
+      addIfValid(resolvedPath)
+    }
+
+    // 3. App config directory (default: ~/.halo/)
+    // This loads skills/, commands/, hooks/, agents/ from ~/.halo/
+    if (claudeCodeConfig?.plugins?.loadDefaultPaths !== false) {
+      const haloDir = getHaloDir()
+      if (haloDir) {
+        // Load ~/.halo/ as a plugin directory (SDK will scan skills/, commands/, etc.)
+        addIfValid(haloDir)
       }
-    } catch (e) {
-      console.warn('[Agent] Failed to check space-level skills:', e)
     }
   }
 
-  // Single summary log instead of multiple debug logs
+  // 5. Space custom paths from space-config.json
+  const spacePaths = spaceConfig?.claudeCode?.plugins?.paths || []
+  for (const spacePath of spacePaths) {
+    // Resolve relative paths from workDir
+    const resolvedPath = spacePath.startsWith('/')
+      ? spacePath
+      : join(workDir, spacePath)
+    addIfValid(resolvedPath)
+  }
+
+  // 6. Default space-level path (unless disabled)
+  // {workDir}/.claude/ - Claude Code CLI compatible
+  if (spaceConfig?.claudeCode?.plugins?.loadDefaultPath !== false) {
+    if (workDir) {
+      addIfValid(join(workDir, '.claude'))
+    }
+  }
+
+  // Single summary log
   if (plugins.length > 0) {
     console.log(`[Agent] Plugins loaded: ${plugins.map(p => p.path).join(', ')}`)
   }
 
   return plugins
+}
+
+// Build settingSources configuration
+// Controls which filesystem settings SDK will load (skills, commands, agents, etc.)
+// With CLAUDE_CONFIG_DIR=~/.halo/, the sources map to:
+// - 'user': ~/.halo/ (skills, commands, agents, settings) - via CLAUDE_CONFIG_DIR
+// - 'project': {workDir}/.claude/ (project-level config)
+// - 'local': .claude/settings.local.json
+type SettingSource = 'user' | 'project' | 'local'
+
+function buildSettingSources(workDir: string): SettingSource[] {
+  const spaceConfig = getSpaceConfig(workDir)
+
+  // Default: enable both 'user' and 'project' sources
+  // 'user' now points to ~/.halo/ (via CLAUDE_CONFIG_DIR env var)
+  // 'project' points to {workDir}/.claude/ for project-level config
+  const sources: SettingSource[] = ['user', 'project']
+
+  // Space-level override: can disable project settings for specific spaces
+  if (spaceConfig?.claudeCode?.enableProjectSettings === false) {
+    const idx = sources.indexOf('project')
+    if (idx !== -1) {
+      sources.splice(idx, 1)
+    }
+  }
+
+  console.log(`[Agent] Setting sources enabled: ${sources.join(', ')}`)
+  return sources
 }
 
 // ============================================
@@ -1243,8 +1394,8 @@ export async function sendMessage(
     const t0 = Date.now()
     console.log(`[Agent][${conversationId}] Getting or creating V2 session...`)
 
-    // Log MCP servers if configured (only enabled ones)
-    const enabledMcpServers = getEnabledMcpServers(config.mcpServers || {})
+    // Log MCP servers if configured (only enabled ones, merged with space config)
+    const enabledMcpServers = getEnabledMcpServers(config.mcpServers || {}, workDir)
     const mcpServerNames = enabledMcpServers ? Object.keys(enabledMcpServers) : []
     if (mcpServerNames.length > 0) {
       console.log(`[Agent][${conversationId}] MCP servers configured: ${mcpServerNames.join(', ')}`)
@@ -1973,13 +2124,27 @@ DO NOT use \`python\`, \`python3\`, or any other Python command without the full
 }
 
 // Filter out disabled MCP servers before passing to SDK
-function getEnabledMcpServers(mcpServers: Record<string, any>): Record<string, any> | null {
-  if (!mcpServers || Object.keys(mcpServers).length === 0) {
+// Merges global MCP servers with space-level MCP servers (space takes precedence)
+function getEnabledMcpServers(
+  globalMcpServers: Record<string, any>,
+  workDir?: string
+): Record<string, any> | null {
+  // Get space-level MCP servers
+  const spaceConfig = workDir ? getSpaceConfig(workDir) : null
+  const spaceMcpServers = spaceConfig?.claudeCode?.mcpServers || {}
+
+  // Merge: space servers override global servers with the same name
+  const mergedServers = {
+    ...globalMcpServers,
+    ...spaceMcpServers
+  }
+
+  if (!mergedServers || Object.keys(mergedServers).length === 0) {
     return null
   }
 
   const enabled: Record<string, any> = {}
-  for (const [name, config] of Object.entries(mcpServers)) {
+  for (const [name, config] of Object.entries(mergedServers)) {
     if (!config.disabled) {
       // Remove the 'disabled' field before passing to SDK (it's a Halo extension)
       const { disabled, ...sdkConfig } = config as any
@@ -1988,4 +2153,31 @@ function getEnabledMcpServers(mcpServers: Record<string, any>): Record<string, a
   }
 
   return Object.keys(enabled).length > 0 ? enabled : null
+}
+
+// ============================================
+// Test Helpers (exported for unit testing)
+// ============================================
+
+/**
+ * Test helper: Get the env object that would be passed to SDK
+ * Used to verify CLAUDE_CONFIG_DIR is set correctly
+ */
+export function _testBuildSdkOptionsEnv(): Record<string, any> {
+  return {
+    CLAUDE_CONFIG_DIR: getHaloDir(),
+    PATH: getPythonEnhancedPath(),
+    ELECTRON_RUN_AS_NODE: 1,
+    ELECTRON_NO_ATTACH_CONSOLE: 1,
+    NO_PROXY: 'localhost,127.0.0.1',
+    no_proxy: 'localhost,127.0.0.1'
+  }
+}
+
+/**
+ * Test helper: Get the settingSources that would be passed to SDK
+ * Used to verify default sources are ['user', 'project']
+ */
+export function _testBuildSettingSources(workDir: string): SettingSource[] {
+  return buildSettingSources(workDir)
 }

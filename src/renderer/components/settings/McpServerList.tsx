@@ -127,7 +127,8 @@ function ServerItem({
   onToggleExpand,
   onToggleDisabled,
   onDelete,
-  onSave
+  onSave,
+  onReconnect
 }: {
   name: string
   config: McpServerConfig
@@ -137,6 +138,7 @@ function ServerItem({
   onToggleDisabled: () => void
   onDelete: () => void
   onSave: (newName: string, newConfig: McpServerConfig) => Promise<void>
+  onReconnect: () => void
 }) {
   const { t } = useTranslation()
   const [editMode, setEditMode] = useState<EditMode>('visual')
@@ -308,6 +310,16 @@ function ServerItem({
 
         {/* Action buttons */}
         <div className="flex items-center gap-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
+          {/* Reconnect button - show for failed status */}
+          {status === 'failed' && !isDisabled && (
+            <button
+              onClick={onReconnect}
+              className="p-1.5 text-amber-500 hover:text-amber-600 hover:bg-amber-500/10 rounded transition-colors"
+              title={t('Reconnect')}
+            >
+              <RefreshCw className="w-4 h-4" />
+            </button>
+          )}
           <button
             onClick={onToggleDisabled}
             className={`p-1.5 rounded transition-colors ${
@@ -1024,6 +1036,7 @@ export function McpServerList({ servers, onSave }: McpServerListProps) {
               onToggleDisabled={() => handleToggleDisabled(name)}
               onDelete={() => handleDelete(name)}
               onSave={(newName, config) => handleSaveServer(name, newName, config)}
+              onReconnect={handleTestConnections}
             />
           ))}
 

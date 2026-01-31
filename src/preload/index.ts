@@ -90,6 +90,8 @@ export interface HaloAPI {
   getSessionState: (conversationId: string) => Promise<IpcResponse>
   ensureSessionWarm: (spaceId: string, conversationId: string) => Promise<IpcResponse>
   testMcpConnections: () => Promise<{ success: boolean; servers: unknown[]; error?: string }>
+  reconnectMcpServer: (conversationId: string, serverName: string) => Promise<{ success: boolean; error?: string }>
+  toggleMcpServer: (conversationId: string, serverName: string, enabled: boolean) => Promise<{ success: boolean; error?: string }>
 
   // Event listeners
   onAgentMessage: (callback: (data: unknown) => void) => () => void
@@ -392,6 +394,8 @@ const api: HaloAPI = {
   getSessionState: (conversationId) => ipcRenderer.invoke('agent:get-session-state', conversationId),
   ensureSessionWarm: (spaceId, conversationId) => ipcRenderer.invoke('agent:ensure-session-warm', spaceId, conversationId),
   testMcpConnections: () => ipcRenderer.invoke('agent:test-mcp'),
+  reconnectMcpServer: (conversationId, serverName) => ipcRenderer.invoke('agent:reconnect-mcp', conversationId, serverName),
+  toggleMcpServer: (conversationId, serverName, enabled) => ipcRenderer.invoke('agent:toggle-mcp', conversationId, serverName, enabled),
 
   // Event listeners
   onAgentMessage: (callback) => createEventListener('agent:message', callback),

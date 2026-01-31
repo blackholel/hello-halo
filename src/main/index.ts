@@ -3,6 +3,20 @@
  * The main entry point for the Electron application
  */
 
+// CRITICAL: Import app and set userData BEFORE any other Electron operations
+// This must happen before requestSingleInstanceLock() because Electron uses
+// userData path to determine instance uniqueness
+import { app, shell, BrowserWindow, Menu } from 'electron'
+import { getInstanceId, isCustomInstance, getUserDataDir } from './utils/instance'
+
+// Set custom userData path for multi-instance support
+// Must be called before requestSingleInstanceLock()
+const customUserData = getUserDataDir()
+if (customUserData) {
+  app.setPath('userData', customUserData)
+  console.log(`[Main] Custom userData for instance "${getInstanceId()}": ${customUserData}`)
+}
+
 // Handle EPIPE errors gracefully
 // These occur when SDK child processes are terminated during app shutdown
 // Especially common in E2E tests when app is forcefully closed
@@ -22,8 +36,6 @@ process.on('uncaughtException', (error) => {
 // Executed after page load to avoid blocking startup
 import fixPath from 'fix-path'
 
-import { app, shell, BrowserWindow, Menu } from 'electron'
-
 // GPU compatibility: Disable hardware acceleration on Windows to prevent blank window issues
 // Some Windows GPU configurations cause the GPU process to crash, resulting in a white/blank screen
 // Using both disableHardwareAcceleration() and disable-gpu switch for maximum compatibility
@@ -34,6 +46,7 @@ if (process.platform === 'win32') {
 
 // Single instance lock: Prevent multiple instances of the application
 // Must be called before app.whenReady()
+// Now works correctly because different instances have different userData paths
 const gotTheLock = app.requestSingleInstanceLock()
 
 if (!gotTheLock) {
@@ -231,6 +244,10 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
+    // Set window title with instance identifier for custom instances
+    if (isCustomInstance()) {
+      mainWindow?.setTitle(`Halo [${getInstanceId()}]`)
+    }
   })
 
   // Fix PATH after page loads (avoid blocking startup)

@@ -17,6 +17,12 @@ out
 tests/e2e/results/
 .claude/
 
+# Test files
+tests/
+
+# Chat logs
+.chat/
+
 # Local docs (not for public)
 local_docs/
 

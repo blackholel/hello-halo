@@ -11,13 +11,17 @@ import { is } from '@electron-toolkit/utils'
 import { createConnection } from 'net'
 
 import { authMiddleware, generateAccessToken, getAccessToken, clearAccessToken, validateToken } from './auth'
+import { corsMiddleware } from './cors'
+import { validateLoginToken } from './validators'
 import { initWebSocket, shutdownWebSocket, getClientCount } from './websocket'
 import { registerApiRoutes } from './routes'
+import { getVitePort } from '../utils/instance'
 
-// Vite dev server URL
-const VITE_DEV_SERVER = 'http://localhost:5173'
+// Vite dev server URL (port from environment variable for multi-instance support)
+function getViteDevServer(): string {
+  return `http://localhost:${getVitePort()}`
+}
 const VITE_DEV_HOST = 'localhost'
-const VITE_DEV_PORT = 5173
 
 // Server state
 let httpServer: Server | null = null
@@ -45,22 +49,23 @@ export async function startHttpServer(
   expressApp.use(express.json())
   expressApp.use(express.urlencoded({ extended: true }))
 
-  // CORS for remote access
-  expressApp.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*')
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-
-    if (req.method === 'OPTIONS') {
-      return res.sendStatus(200)
-    }
-    next()
-  })
+  // CORS for remote access (secure - only trusted origins)
+  expressApp.use(corsMiddleware)
 
   // Login endpoint (before auth middleware)
   expressApp.post('/api/remote/login', (req: Request, res: Response) => {
-    const { token } = req.body
+    // Validate input
+    const validation = validateLoginToken(req.body)
+    if (!validation.success) {
+      res.status(400).json({
+        success: false,
+        error: 'Invalid token format',
+        details: validation.error.issues.map(i => i.message)
+      })
+      return
+    }
 
+    const { token } = validation.data
     if (validateToken(token)) {
       res.json({ success: true })
     } else {
@@ -106,13 +111,14 @@ export async function startHttpServer(
       }
 
       // Proxy to Vite dev server
-      const viteUrl = new URL(req.originalUrl, VITE_DEV_SERVER)
+      const viteDevServer = getViteDevServer()
+      const viteUrl = new URL(req.originalUrl, viteDevServer)
 
       const proxyReq = httpRequest(viteUrl, {
         method: req.method,
         headers: {
           ...req.headers,
-          host: new URL(VITE_DEV_SERVER).host
+          host: new URL(viteDevServer).host
         }
       }, (proxyRes) => {
         res.writeHead(proxyRes.statusCode || 200, proxyRes.headers)
@@ -196,11 +202,12 @@ export async function startHttpServer(
       // Proxy other WebSocket connections to Vite dev server
       console.log(`[HTTP] Proxying WebSocket upgrade: ${url.pathname}`)
 
-      const viteSocket = createConnection(VITE_DEV_PORT, VITE_DEV_HOST, () => {
+      const vitePort = getVitePort()
+      const viteSocket = createConnection(vitePort, VITE_DEV_HOST, () => {
         // Forward the upgrade request to Vite
         const upgradeRequest = [
           `GET ${req.url} HTTP/1.1`,
-          `Host: ${VITE_DEV_HOST}:${VITE_DEV_PORT}`,
+          `Host: ${VITE_DEV_HOST}:${vitePort}`,
           'Upgrade: websocket',
           'Connection: Upgrade',
           `Sec-WebSocket-Key: ${req.headers['sec-websocket-key']}`,

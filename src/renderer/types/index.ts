@@ -82,6 +82,7 @@ export interface SystemConfig {
 export interface RemoteAccessConfig {
   enabled: boolean;
   port: number;
+  trustedOrigins?: string[];  // Allowed CORS origins (in addition to localhost)
 }
 
 // ============================================
@@ -134,6 +135,20 @@ export interface McpServerStatus {
   error?: string;
 }
 
+// ============================================
+// Claude Code Configuration Types
+// ============================================
+
+// Re-export shared types
+export type {
+  HooksConfig,
+  HookDefinition,
+  HookCommand,
+  PluginsConfig,
+  AgentsConfig,
+  ClaudeCodeConfig
+} from '../../shared/types/claude-code';
+
 export interface HaloConfig {
   api: ApiConfig;
   permissions: PermissionConfig;
@@ -142,6 +157,7 @@ export interface HaloConfig {
   remoteAccess: RemoteAccessConfig;
   mcpServers: McpServersConfig;  // MCP servers configuration
   isFirstLaunch: boolean;
+  claudeCode?: ClaudeCodeConfig;  // Claude Code configuration (plugins, hooks, agents)
 }
 
 // ============================================

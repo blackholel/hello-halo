@@ -47,6 +47,21 @@ const analyticsDefine = {
   '__HALO_BAIDU_SITE_ID__': JSON.stringify(envLocal.HALO_BAIDU_SITE_ID || ''),
 }
 
+/**
+ * Get Vite dev server port from environment variable
+ * Allows running multiple instances in parallel (e.g., different git worktrees)
+ */
+function getVitePort(): number {
+  const envPort = process.env.VITE_PORT
+  if (envPort) {
+    const parsed = parseInt(envPort, 10)
+    if (!isNaN(parsed) && parsed > 0 && parsed < 65536) {
+      return parsed
+    }
+  }
+  return 5173
+}
+
 export default defineConfig({
   main: {
     plugins: [
@@ -81,6 +96,9 @@ export default defineConfig({
   },
   renderer: {
     root: resolve(__dirname, 'src/renderer'),
+    server: {
+      port: getVitePort()
+    },
     build: {
       rollupOptions: {
         input: {
