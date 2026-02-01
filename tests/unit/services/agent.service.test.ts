@@ -105,11 +105,11 @@ vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
 import { getConfig } from '../../../src/main/services/config.service'
 import { getSpaceConfig } from '../../../src/main/services/space-config.service'
 
-// Import the exported test helpers (we'll add these to agent.service.ts)
+// Import the exported test helpers
 import {
   _testBuildSettingSources,
   _testBuildSdkOptionsEnv
-} from '../../../src/main/services/agent.service'
+} from '../../../src/main/services/agent'
 
 describe('Agent Service - CLAUDE_CONFIG_DIR', () => {
   beforeEach(() => {

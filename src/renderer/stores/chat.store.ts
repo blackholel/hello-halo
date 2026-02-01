@@ -325,41 +325,49 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return { spaceStates: newSpaceStates }
     })
 
-    // Load full conversation if not in cache
-    if (!conversationCache.has(conversationId)) {
+    // Load full conversation and session state in parallel (async-parallel)
+    // These are independent operations that can run concurrently
+    const needsConversationLoad = !conversationCache.has(conversationId)
+
+    if (needsConversationLoad) {
       set({ isLoadingConversation: true })
-
-      try {
-        const response = await api.getConversation(currentSpaceId, conversationId)
-        if (response.success && response.data) {
-          const fullConversation = response.data as Conversation
-
-          set((state) => {
-            const newCache = new Map(state.conversationCache)
-            newCache.set(conversationId, fullConversation)
-
-            // LRU eviction
-            if (newCache.size > CONVERSATION_CACHE_SIZE) {
-              const firstKey = newCache.keys().next().value
-              if (firstKey) newCache.delete(firstKey)
-            }
-
-            return { conversationCache: newCache, isLoadingConversation: false }
-          })
-        } else {
-          set({ isLoadingConversation: false })
-        }
-      } catch (error) {
-        console.error('[ChatStore] Failed to load conversation:', error)
-        set({ isLoadingConversation: false })
-      }
     }
 
-    // Check if this conversation has an active session and recover thoughts
     try {
-      const response = await api.getSessionState(conversationId)
-      if (response.success && response.data) {
-        const sessionState = response.data as { isActive: boolean; thoughts: Thought[]; spaceId?: string }
+      // Start both requests in parallel
+      const conversationPromise = needsConversationLoad
+        ? api.getConversation(currentSpaceId, conversationId)
+        : Promise.resolve(null)
+      const sessionStatePromise = api.getSessionState(conversationId)
+
+      const [conversationResponse, sessionResponse] = await Promise.all([
+        conversationPromise,
+        sessionStatePromise
+      ])
+
+      // Handle conversation response
+      if (conversationResponse?.success && conversationResponse.data) {
+        const fullConversation = conversationResponse.data as Conversation
+
+        set((state) => {
+          const newCache = new Map(state.conversationCache)
+          newCache.set(conversationId, fullConversation)
+
+          // LRU eviction
+          if (newCache.size > CONVERSATION_CACHE_SIZE) {
+            const firstKey = newCache.keys().next().value
+            if (firstKey) newCache.delete(firstKey)
+          }
+
+          return { conversationCache: newCache, isLoadingConversation: false }
+        })
+      } else if (needsConversationLoad) {
+        set({ isLoadingConversation: false })
+      }
+
+      // Handle session state response
+      if (sessionResponse.success && sessionResponse.data) {
+        const sessionState = sessionResponse.data as { isActive: boolean; thoughts: Thought[]; spaceId?: string }
 
         if (sessionState.isActive && sessionState.thoughts.length > 0) {
           set((state) => {
@@ -378,7 +386,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
       }
     } catch (error) {
-      console.error('[ChatStore] Failed to recover session state:', error)
+      console.error('[ChatStore] Failed to load conversation or session state:', error)
+      if (needsConversationLoad) {
+        set({ isLoadingConversation: false })
+      }
     }
 
     // Warm up V2 Session in background - non-blocking
