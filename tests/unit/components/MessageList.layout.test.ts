@@ -261,3 +261,357 @@ describe('TaskPanel reset behavior', () => {
     expect(true).toBe(true) // Placeholder - actual logic in store tests
   })
 })
+
+/**
+ * Tests for streamingBrowserToolCalls optimization
+ *
+ * The function extracts browser tool calls from thoughts array for real-time display.
+ * It needs to:
+ * 1. Filter out sub-agent thoughts (parentToolUseId != null)
+ * 2. Filter out Task and Skill tools
+ * 3. Only include browser tools (tool names starting with 'mcp__' browser prefix or 'browser_')
+ * 4. Determine status: 'success' if matching tool_result exists, 'running' otherwise
+ */
+
+interface MockThought {
+  id: string
+  type: 'tool_use' | 'tool_result' | 'thinking' | 'text'
+  toolName?: string
+  toolInput?: Record<string, unknown>
+  parentToolUseId?: string | null
+}
+
+interface BrowserToolCall {
+  id: string
+  name: string
+  status: 'success' | 'running'
+  input: Record<string, unknown>
+}
+
+// Mock isBrowserTool function (matches actual implementation)
+function isBrowserTool(toolName: string): boolean {
+  return toolName.startsWith('mcp__plugin_playwright_playwright__') || toolName.startsWith('browser_')
+}
+
+/**
+ * Original implementation (inefficient - multiple array traversals)
+ */
+function extractBrowserToolCallsOriginal(thoughts: MockThought[]): BrowserToolCall[] {
+  const mainThoughts = thoughts.filter(t =>
+    (t.parentToolUseId === null || t.parentToolUseId === undefined) &&
+    t.toolName !== 'Task' && t.toolName !== 'Skill'
+  )
+  return mainThoughts
+    .filter(t => t.type === 'tool_use' && t.toolName && isBrowserTool(t.toolName))
+    .map(t => ({
+      id: t.id,
+      name: t.toolName!,
+      status: thoughts.some(
+        r => r.type === 'tool_result' && r.id.startsWith(t.id.replace('_use', '_result'))
+      ) ? 'success' as const : 'running' as const,
+      input: t.toolInput || {},
+    }))
+}
+
+/**
+ * Optimized implementation (single pass with O(1) lookups)
+ */
+function extractBrowserToolCallsOptimized(thoughts: MockThought[]): BrowserToolCall[] {
+  // Pre-build result ID Set for O(1) lookup
+  const resultIds = new Set<string>()
+  for (const t of thoughts) {
+    if (t.type === 'tool_result') {
+      resultIds.add(t.id.replace('_result', '_use'))
+    }
+  }
+
+  const calls: BrowserToolCall[] = []
+  for (const t of thoughts) {
+    // Skip sub-agent thoughts
+    if (t.parentToolUseId != null) continue
+    // Skip Task and Skill
+    if (t.toolName === 'Task' || t.toolName === 'Skill') continue
+    // Only process browser tool_use
+    if (t.type !== 'tool_use' || !t.toolName || !isBrowserTool(t.toolName)) continue
+
+    calls.push({
+      id: t.id,
+      name: t.toolName,
+      status: resultIds.has(t.id) ? 'success' : 'running',
+      input: t.toolInput || {},
+    })
+  }
+  return calls
+}
+
+describe('streamingBrowserToolCalls extraction', () => {
+  describe('basic functionality', () => {
+    it('should return empty array when no thoughts', () => {
+      const thoughts: MockThought[] = []
+      expect(extractBrowserToolCallsOptimized(thoughts)).toEqual([])
+    })
+
+    it('should extract browser tool calls with running status', () => {
+      const thoughts: MockThought[] = [
+        {
+          id: 'tool_use_1',
+          type: 'tool_use',
+          toolName: 'mcp__plugin_playwright_playwright__browser_click',
+          toolInput: { selector: '#button' }
+        }
+      ]
+
+      const result = extractBrowserToolCallsOptimized(thoughts)
+      expect(result).toHaveLength(1)
+      expect(result[0]).toEqual({
+        id: 'tool_use_1',
+        name: 'mcp__plugin_playwright_playwright__browser_click',
+        status: 'running',
+        input: { selector: '#button' }
+      })
+    })
+
+    it('should mark tool as success when matching result exists', () => {
+      const thoughts: MockThought[] = [
+        {
+          id: 'tool_use_1',
+          type: 'tool_use',
+          toolName: 'mcp__plugin_playwright_playwright__browser_click',
+          toolInput: { selector: '#button' }
+        },
+        {
+          id: 'tool_result_1',
+          type: 'tool_result',
+          toolName: 'mcp__plugin_playwright_playwright__browser_click'
+        }
+      ]
+
+      const result = extractBrowserToolCallsOptimized(thoughts)
+      expect(result).toHaveLength(1)
+      expect(result[0].status).toBe('success')
+    })
+
+    it('should handle browser_ prefix tools', () => {
+      const thoughts: MockThought[] = [
+        {
+          id: 'tool_use_1',
+          type: 'tool_use',
+          toolName: 'browser_navigate',
+          toolInput: { url: 'https://example.com' }
+        }
+      ]
+
+      const result = extractBrowserToolCallsOptimized(thoughts)
+      expect(result).toHaveLength(1)
+      expect(result[0].name).toBe('browser_navigate')
+    })
+  })
+
+  describe('filtering behavior', () => {
+    it('should filter out sub-agent thoughts (parentToolUseId is set)', () => {
+      const thoughts: MockThought[] = [
+        {
+          id: 'tool_use_1',
+          type: 'tool_use',
+          toolName: 'mcp__plugin_playwright_playwright__browser_click',
+          toolInput: {},
+          parentToolUseId: 'parent_task_1'  // Sub-agent thought
+        }
+      ]
+
+      const result = extractBrowserToolCallsOptimized(thoughts)
+      expect(result).toHaveLength(0)
+    })
+
+    it('should include thoughts with null parentToolUseId (main agent)', () => {
+      const thoughts: MockThought[] = [
+        {
+          id: 'tool_use_1',
+          type: 'tool_use',
+          toolName: 'mcp__plugin_playwright_playwright__browser_click',
+          toolInput: {},
+          parentToolUseId: null  // Main agent
+        }
+      ]
+
+      const result = extractBrowserToolCallsOptimized(thoughts)
+      expect(result).toHaveLength(1)
+    })
+
+    it('should filter out Task tool calls', () => {
+      const thoughts: MockThought[] = [
+        {
+          id: 'tool_use_1',
+          type: 'tool_use',
+          toolName: 'Task',
+          toolInput: { description: 'Do something' }
+        }
+      ]
+
+      const result = extractBrowserToolCallsOptimized(thoughts)
+      expect(result).toHaveLength(0)
+    })
+
+    it('should filter out Skill tool calls', () => {
+      const thoughts: MockThought[] = [
+        {
+          id: 'tool_use_1',
+          type: 'tool_use',
+          toolName: 'Skill',
+          toolInput: { skill: 'commit' }
+        }
+      ]
+
+      const result = extractBrowserToolCallsOptimized(thoughts)
+      expect(result).toHaveLength(0)
+    })
+
+    it('should filter out non-browser tools', () => {
+      const thoughts: MockThought[] = [
+        {
+          id: 'tool_use_1',
+          type: 'tool_use',
+          toolName: 'Read',
+          toolInput: { file_path: '/some/file.ts' }
+        },
+        {
+          id: 'tool_use_2',
+          type: 'tool_use',
+          toolName: 'Write',
+          toolInput: { file_path: '/some/file.ts', content: 'test' }
+        }
+      ]
+
+      const result = extractBrowserToolCallsOptimized(thoughts)
+      expect(result).toHaveLength(0)
+    })
+
+    it('should filter out non-tool_use thoughts', () => {
+      const thoughts: MockThought[] = [
+        {
+          id: 'thinking_1',
+          type: 'thinking'
+        },
+        {
+          id: 'text_1',
+          type: 'text'
+        }
+      ]
+
+      const result = extractBrowserToolCallsOptimized(thoughts)
+      expect(result).toHaveLength(0)
+    })
+  })
+
+  describe('complex scenarios', () => {
+    it('should handle mixed thoughts with multiple browser tools', () => {
+      const thoughts: MockThought[] = [
+        { id: 'thinking_1', type: 'thinking' },
+        {
+          id: 'tool_use_1',
+          type: 'tool_use',
+          toolName: 'mcp__plugin_playwright_playwright__browser_navigate',
+          toolInput: { url: 'https://example.com' }
+        },
+        { id: 'tool_result_1', type: 'tool_result' },
+        {
+          id: 'tool_use_2',
+          type: 'tool_use',
+          toolName: 'Read',
+          toolInput: { file_path: '/file.ts' }
+        },
+        {
+          id: 'tool_use_3',
+          type: 'tool_use',
+          toolName: 'mcp__plugin_playwright_playwright__browser_click',
+          toolInput: { selector: '#btn' }
+        },
+        {
+          id: 'tool_use_4',
+          type: 'tool_use',
+          toolName: 'mcp__plugin_playwright_playwright__browser_type',
+          toolInput: { text: 'hello' },
+          parentToolUseId: 'sub_agent_1'  // Sub-agent - should be filtered
+        }
+      ]
+
+      const result = extractBrowserToolCallsOptimized(thoughts)
+      expect(result).toHaveLength(2)
+      expect(result[0].id).toBe('tool_use_1')
+      expect(result[0].status).toBe('success')
+      expect(result[1].id).toBe('tool_use_3')
+      expect(result[1].status).toBe('running')
+    })
+
+    it('should preserve order of browser tool calls', () => {
+      const thoughts: MockThought[] = [
+        {
+          id: 'tool_use_1',
+          type: 'tool_use',
+          toolName: 'mcp__plugin_playwright_playwright__browser_navigate',
+          toolInput: {}
+        },
+        {
+          id: 'tool_use_2',
+          type: 'tool_use',
+          toolName: 'mcp__plugin_playwright_playwright__browser_click',
+          toolInput: {}
+        },
+        {
+          id: 'tool_use_3',
+          type: 'tool_use',
+          toolName: 'mcp__plugin_playwright_playwright__browser_type',
+          toolInput: {}
+        }
+      ]
+
+      const result = extractBrowserToolCallsOptimized(thoughts)
+      expect(result.map(r => r.id)).toEqual(['tool_use_1', 'tool_use_2', 'tool_use_3'])
+    })
+  })
+
+  describe('equivalence with original implementation', () => {
+    it('should produce same results as original implementation', () => {
+      const thoughts: MockThought[] = [
+        { id: 'thinking_1', type: 'thinking' },
+        {
+          id: 'tool_use_1',
+          type: 'tool_use',
+          toolName: 'mcp__plugin_playwright_playwright__browser_navigate',
+          toolInput: { url: 'https://example.com' }
+        },
+        { id: 'tool_result_1', type: 'tool_result' },
+        {
+          id: 'tool_use_2',
+          type: 'tool_use',
+          toolName: 'Task',
+          toolInput: { description: 'task' }
+        },
+        {
+          id: 'tool_use_3',
+          type: 'tool_use',
+          toolName: 'mcp__plugin_playwright_playwright__browser_click',
+          toolInput: { selector: '#btn' }
+        },
+        {
+          id: 'tool_use_4',
+          type: 'tool_use',
+          toolName: 'browser_type',
+          toolInput: { text: 'hello' },
+          parentToolUseId: 'sub_1'
+        },
+        {
+          id: 'tool_use_5',
+          type: 'tool_use',
+          toolName: 'Skill',
+          toolInput: { skill: 'commit' }
+        }
+      ]
+
+      const original = extractBrowserToolCallsOriginal(thoughts)
+      const optimized = extractBrowserToolCallsOptimized(thoughts)
+
+      expect(optimized).toEqual(original)
+    })
+  })
+})

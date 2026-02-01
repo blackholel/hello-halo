@@ -19,20 +19,12 @@ import { CompactNotice } from './CompactNotice'
 import { MarkdownRenderer } from './MarkdownRenderer'
 import { BrowserTaskCard, isBrowserTool } from '../tool/BrowserTaskCard'
 import { SubAgentCard } from './SubAgentCard'
+import { SkillCard } from './SkillCard'
 import { TaskPanel } from '../task'
 import { useTaskStore } from '../../stores/task.store'
 import type { Message, Thought, CompactInfo, ParallelGroup } from '../../types'
 import { useTranslation } from '../../i18n'
-
-// Sub-agent info extracted from thoughts
-interface SubAgentInfo {
-  id: string
-  description: string
-  subagentType?: string
-  thoughts: Thought[]
-  isRunning: boolean
-  hasError: boolean
-}
+import { buildTimelineSegments, type TimelineSegment } from '../../utils/thought-utils'
 
 interface MessageListProps {
   messages: Message[]
@@ -300,53 +292,46 @@ export function MessageList({
     return 0
   }
 
-  // Separate main agent thoughts from sub-agent thoughts
-  const { mainAgentThoughts, subAgents } = useMemo(() => {
-    // Main agent thoughts: parentToolUseId is null/undefined AND not a Task tool
-    const mainThoughts = thoughts.filter(t =>
-      (t.parentToolUseId === null || t.parentToolUseId === undefined) && t.toolName !== 'Task'
-    )
-
-    // Find all Task tool calls (these are sub-agents)
-    const taskTools = thoughts.filter(t =>
-      t.toolName === 'Task' && (t.parentToolUseId === null || t.parentToolUseId === undefined)
-    )
-
-    // For each Task tool, collect its child thoughts
-    const agents: SubAgentInfo[] = taskTools.map(task => {
-      const childThoughts = thoughts.filter(t => t.parentToolUseId === task.id)
-      const hasResult = thoughts.some(t => t.type === 'tool_result' && t.id === task.id)
-      const hasError = childThoughts.some(t => t.isError)
-
-      return {
-        id: task.id,
-        description: task.agentMeta?.description || (task.toolInput?.description as string) || 'Sub-agent',
-        subagentType: task.agentMeta?.subagentType || (task.toolInput?.subagent_type as string),
-        thoughts: childThoughts,
-        isRunning: !hasResult,
-        hasError
-      }
-    })
-
-    return { mainAgentThoughts: mainThoughts, subAgents: agents }
+  // Build timeline segments from thoughts - preserves original order of Skill and SubAgent calls
+  const timelineSegments = useMemo(() => {
+    return buildTimelineSegments(thoughts)
   }, [thoughts])
+
+  // Check if any sub-agent is currently running (for isThinking state)
+  const hasRunningSubAgent = useMemo(() => {
+    return timelineSegments.some(seg => seg.type === 'subagent' && seg.isRunning)
+  }, [timelineSegments])
 
   // Extract real-time browser tool calls from streaming thoughts
   // This enables BrowserTaskCard to show operations as they happen
+  // Optimized: Single pass with O(1) result lookups instead of multiple filter/map/some
   const streamingBrowserToolCalls = useMemo(() => {
-    return mainAgentThoughts
-      .filter(t => t.type === 'tool_use' && t.toolName && isBrowserTool(t.toolName))
-      .map(t => ({
+    // Pre-build result ID Set for O(1) lookup
+    const resultIds = new Set<string>()
+    for (const t of thoughts) {
+      if (t.type === 'tool_result') {
+        resultIds.add(t.id.replace('_result', '_use'))
+      }
+    }
+
+    const calls: Array<{id: string; name: string; status: 'success' | 'running'; input: Record<string, unknown>}> = []
+    for (const t of thoughts) {
+      // Skip sub-agent thoughts
+      if (t.parentToolUseId != null) continue
+      // Skip Task and Skill
+      if (t.toolName === 'Task' || t.toolName === 'Skill') continue
+      // Only process browser tool_use
+      if (t.type !== 'tool_use' || !t.toolName || !isBrowserTool(t.toolName)) continue
+
+      calls.push({
         id: t.id,
-        name: t.toolName!,
-        // Determine status: if there's a subsequent tool_result for this tool, it's complete
-        // Otherwise it's still running
-        status: thoughts.some(
-          r => r.type === 'tool_result' && r.id.startsWith(t.id.replace('_use', '_result'))
-        ) ? 'success' as const : 'running' as const,
+        name: t.toolName,
+        status: resultIds.has(t.id) ? 'success' : 'running',
         input: t.toolInput || {},
-      }))
-  }, [mainAgentThoughts, thoughts])
+      })
+    }
+    return calls
+  }, [thoughts])
 
   // Update global task store when thoughts change (for TaskPanel)
   const updateTasksFromThoughts = useTaskStore(state => state.updateTasksFromThoughts)
@@ -389,36 +374,75 @@ export function MessageList({
         return <MessageItem key={message.id} message={message} previousCost={previousCost} />
       })}
 
-      {/* Current generation block: Thoughts above + Streaming content below */}
+      {/* Current generation block: Timeline segments + Streaming content below */}
       {/* Use fixed width container to prevent jumping when content changes */}
       {isGenerating && (
         <div className="flex justify-start animate-fade-in">
           {/* Fixed width - same as completed messages */}
           <div className="w-[85%] relative">
-            {/* 1. Real-time thought process at top (main agent only) */}
-            {(mainAgentThoughts.length > 0 || isThinking) && (
+            {/* Render timeline segments in order (thoughts, skills, sub-agents interleaved) */}
+            {timelineSegments.map((segment, index) => {
+              const isLastSegment = index === timelineSegments.length - 1
+
+              switch (segment.type) {
+                case 'thoughts':
+                  // Only show isThinking indicator on the last thoughts segment
+                  const showThinking = isLastSegment && isThinking && !hasRunningSubAgent
+                  if (segment.thoughts.length === 0 && !showThinking) {
+                    return null
+                  }
+                  return (
+                    <ThoughtProcess
+                      key={segment.id}
+                      thoughts={segment.thoughts}
+                      parallelGroups={parallelGroups}
+                      isThinking={showThinking}
+                      mode="realtime"
+                    />
+                  )
+
+                case 'skill':
+                  return (
+                    <SkillCard
+                      key={segment.id}
+                      skillId={segment.skillId}
+                      skillName={segment.skillName}
+                      skillArgs={segment.skillArgs}
+                      isRunning={segment.isRunning}
+                      hasError={segment.hasError}
+                      result={segment.result}
+                    />
+                  )
+
+                case 'subagent':
+                  return (
+                    <SubAgentCard
+                      key={segment.id}
+                      agentId={segment.agentId}
+                      description={segment.description}
+                      subagentType={segment.subagentType}
+                      thoughts={segment.thoughts}
+                      isRunning={segment.isRunning}
+                      hasError={segment.hasError}
+                    />
+                  )
+
+                default:
+                  return null
+              }
+            })}
+
+            {/* Show initial thinking indicator when no segments yet */}
+            {timelineSegments.length === 0 && isThinking && (
               <ThoughtProcess
-                thoughts={mainAgentThoughts}
+                thoughts={[]}
                 parallelGroups={parallelGroups}
-                isThinking={isThinking && subAgents.every(a => !a.isRunning)}
+                isThinking={true}
                 mode="realtime"
               />
             )}
 
-            {/* 2. Sub-agent cards - rendered independently */}
-            {subAgents.map(agent => (
-              <SubAgentCard
-                key={agent.id}
-                agentId={agent.id}
-                description={agent.description}
-                subagentType={agent.subagentType}
-                thoughts={agent.thoughts}
-                isRunning={agent.isRunning}
-                hasError={agent.hasError}
-              />
-            ))}
-
-            {/* 3. Real-time browser task card - shows AI browser operations as they happen */}
+            {/* Real-time browser task card - shows AI browser operations as they happen */}
             {streamingBrowserToolCalls.length > 0 && (
               <div className="mb-2">
                 <BrowserTaskCard
@@ -428,7 +452,7 @@ export function MessageList({
               </div>
             )}
 
-            {/* 4. Global Task Panel - shows all tasks from TodoWrite */}
+            {/* Global Task Panel - shows all tasks from TodoWrite */}
             {/* Positioned ABOVE StreamingBubble so user sees progress before text output */}
             {hasTasks && (
               <div className="mb-2">
@@ -436,7 +460,7 @@ export function MessageList({
               </div>
             )}
 
-            {/* 5. Streaming bubble with accumulated content and auto-scroll */}
+            {/* Streaming bubble with accumulated content and auto-scroll */}
             {/* Only show when there's content or actively streaming */}
             {(streamingContent || isStreaming) && (
               <StreamingBubble

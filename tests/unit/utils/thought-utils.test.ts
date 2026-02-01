@@ -13,7 +13,13 @@ import {
   extractSearchTerm,
   extractUrl,
   buildParallelGroups,
-  getThoughtKey
+  getThoughtKey,
+  buildTimelineSegments,
+  stripErrorTags,
+  type TimelineSegment,
+  type ThoughtsSegment,
+  type SkillSegment,
+  type SubAgentSegment
 } from '../../../src/renderer/utils/thought-utils'
 import type { Thought, ParallelGroup } from '../../../src/renderer/types'
 
@@ -303,6 +309,230 @@ describe('Thought Utils', () => {
       const result = buildParallelGroups(thoughts)
 
       expect(result.get('group-1')!.startTime).toBe(earlyTime)
+    })
+  })
+
+  describe('stripErrorTags', () => {
+    it('should extract content from tool_use_error tags', () => {
+      const input = '<tool_use_error>Skill not found: superpowers:brainstorm</tool_use_error>'
+      expect(stripErrorTags(input)).toBe('Skill not found: superpowers:brainstorm')
+    })
+
+    it('should handle multiline content inside tags', () => {
+      const input = '<tool_use_error>Error on line 1\nError on line 2\nDetails here</tool_use_error>'
+      expect(stripErrorTags(input)).toBe('Error on line 1\nError on line 2\nDetails here')
+    })
+
+    it('should return original content if no tags present', () => {
+      const input = 'Regular error message without XML tags'
+      expect(stripErrorTags(input)).toBe('Regular error message without XML tags')
+    })
+
+    it('should handle empty string', () => {
+      expect(stripErrorTags('')).toBe('')
+    })
+
+    it('should handle content with only whitespace inside tags', () => {
+      const input = '<tool_use_error>   </tool_use_error>'
+      expect(stripErrorTags(input)).toBe('')
+    })
+
+    it('should handle partial/malformed tags gracefully', () => {
+      const input = '<tool_use_error>Unclosed tag'
+      expect(stripErrorTags(input)).toBe('<tool_use_error>Unclosed tag')
+    })
+
+    it('should extract content when tags have surrounding text', () => {
+      const input = 'Prefix <tool_use_error>Actual error</tool_use_error> Suffix'
+      expect(stripErrorTags(input)).toBe('Actual error')
+    })
+  })
+
+  describe('buildTimelineSegments', () => {
+    const createThought = (overrides: Partial<Thought> = {}): Thought => ({
+      id: `thought-${Math.random().toString(36).slice(2)}`,
+      type: 'tool_use',
+      content: 'test content',
+      timestamp: new Date().toISOString(),
+      ...overrides
+    })
+
+    it('should return empty array for empty thoughts', () => {
+      const result = buildTimelineSegments([])
+      expect(result).toEqual([])
+    })
+
+    it('should create single thoughts segment for regular thoughts', () => {
+      const thoughts = [
+        createThought({ id: '1', toolName: 'Read' }),
+        createThought({ id: '2', toolName: 'Edit' })
+      ]
+      const result = buildTimelineSegments(thoughts)
+
+      expect(result.length).toBe(1)
+      expect(result[0].type).toBe('thoughts')
+      expect((result[0] as ThoughtsSegment).thoughts.length).toBe(2)
+    })
+
+    it('should create SkillSegment for Skill tool calls', () => {
+      const thoughts: Thought[] = [
+        createThought({ id: 'skill-1', toolName: 'Skill', type: 'tool_use', toolInput: { skill: 'tdd-workflow', args: '--verbose' } }),
+        createThought({ id: 'skill-1', type: 'tool_result', content: 'Skill completed successfully' })
+      ]
+      const result = buildTimelineSegments(thoughts)
+
+      expect(result.length).toBe(1)
+      expect(result[0].type).toBe('skill')
+      const skillSegment = result[0] as SkillSegment
+      expect(skillSegment.skillName).toBe('tdd-workflow')
+      expect(skillSegment.skillArgs).toBe('--verbose')
+      expect(skillSegment.isRunning).toBe(false)
+      expect(skillSegment.result).toBe('Skill completed successfully')
+    })
+
+    it('should create SubAgentSegment for Task tool calls', () => {
+      const thoughts: Thought[] = [
+        createThought({
+          id: 'task-1',
+          toolName: 'Task',
+          type: 'tool_use',
+          toolInput: { description: 'Code review' },
+          agentMeta: { description: 'Code review', subagentType: 'code-reviewer' }
+        }),
+        createThought({ id: 'child-1', toolName: 'Read', parentToolUseId: 'task-1' }),
+        createThought({ id: 'task-1', type: 'tool_result', content: 'Review complete' })
+      ]
+      const result = buildTimelineSegments(thoughts)
+
+      expect(result.length).toBe(1)
+      expect(result[0].type).toBe('subagent')
+      const subagentSegment = result[0] as SubAgentSegment
+      expect(subagentSegment.description).toBe('Code review')
+      expect(subagentSegment.subagentType).toBe('code-reviewer')
+      expect(subagentSegment.thoughts.length).toBe(1)
+      expect(subagentSegment.isRunning).toBe(false)
+    })
+
+    it('should preserve order: thoughts -> skill -> thoughts -> subagent', () => {
+      const thoughts: Thought[] = [
+        // First batch of thoughts
+        createThought({ id: '1', toolName: 'Read' }),
+        createThought({ id: '2', toolName: 'Grep' }),
+        // Skill call
+        createThought({ id: 'skill-1', toolName: 'Skill', type: 'tool_use', toolInput: { skill: 'commit' } }),
+        createThought({ id: 'skill-1', type: 'tool_result', content: 'Committed' }),
+        // Second batch of thoughts
+        createThought({ id: '3', toolName: 'Edit' }),
+        // SubAgent call
+        createThought({ id: 'task-1', toolName: 'Task', type: 'tool_use', toolInput: { description: 'Review' } }),
+        createThought({ id: 'task-1', type: 'tool_result', content: 'Done' }),
+        // Third batch of thoughts
+        createThought({ id: '4', toolName: 'Bash' })
+      ]
+      const result = buildTimelineSegments(thoughts)
+
+      expect(result.length).toBe(5)
+      expect(result[0].type).toBe('thoughts')
+      expect(result[1].type).toBe('skill')
+      expect(result[2].type).toBe('thoughts')
+      expect(result[3].type).toBe('subagent')
+      expect(result[4].type).toBe('thoughts')
+
+      expect((result[0] as ThoughtsSegment).thoughts.length).toBe(2)
+      expect((result[2] as ThoughtsSegment).thoughts.length).toBe(1)
+      expect((result[4] as ThoughtsSegment).thoughts.length).toBe(1)
+    })
+
+    it('should mark running skill when no result yet', () => {
+      const thoughts: Thought[] = [
+        createThought({ id: 'skill-1', toolName: 'Skill', type: 'tool_use', toolInput: { skill: 'test' } })
+        // No tool_result yet
+      ]
+      const result = buildTimelineSegments(thoughts)
+
+      expect(result.length).toBe(1)
+      expect(result[0].type).toBe('skill')
+      expect((result[0] as SkillSegment).isRunning).toBe(true)
+    })
+
+    it('should mark running subagent when no result yet', () => {
+      const thoughts: Thought[] = [
+        createThought({ id: 'task-1', toolName: 'Task', type: 'tool_use', toolInput: { description: 'Test' } })
+        // No tool_result yet
+      ]
+      const result = buildTimelineSegments(thoughts)
+
+      expect(result.length).toBe(1)
+      expect(result[0].type).toBe('subagent')
+      expect((result[0] as SubAgentSegment).isRunning).toBe(true)
+    })
+
+    it('should mark hasError when skill result has error', () => {
+      const thoughts: Thought[] = [
+        createThought({ id: 'skill-1', toolName: 'Skill', type: 'tool_use', toolInput: { skill: 'test' } }),
+        createThought({ id: 'skill-1', type: 'tool_result', content: 'Error occurred', isError: true })
+      ]
+      const result = buildTimelineSegments(thoughts)
+
+      expect((result[0] as SkillSegment).hasError).toBe(true)
+    })
+
+    it('should mark hasError when subagent child has error', () => {
+      const thoughts: Thought[] = [
+        createThought({ id: 'task-1', toolName: 'Task', type: 'tool_use', toolInput: { description: 'Test' } }),
+        createThought({ id: 'child-1', toolName: 'Bash', parentToolUseId: 'task-1', isError: true }),
+        createThought({ id: 'task-1', type: 'tool_result', content: 'Done' })
+      ]
+      const result = buildTimelineSegments(thoughts)
+
+      expect((result[0] as SubAgentSegment).hasError).toBe(true)
+    })
+
+    it('should filter out empty thoughts segments', () => {
+      const thoughts: Thought[] = [
+        // Skill immediately at start (no preceding thoughts)
+        createThought({ id: 'skill-1', toolName: 'Skill', type: 'tool_use', toolInput: { skill: 'test' } }),
+        createThought({ id: 'skill-1', type: 'tool_result', content: 'Done' })
+        // No thoughts after either
+      ]
+      const result = buildTimelineSegments(thoughts)
+
+      // Should only have the skill segment, no empty thoughts segments
+      expect(result.length).toBe(1)
+      expect(result[0].type).toBe('skill')
+    })
+
+    it('should handle consecutive skill calls', () => {
+      const thoughts: Thought[] = [
+        createThought({ id: 'skill-1', toolName: 'Skill', type: 'tool_use', toolInput: { skill: 'first' } }),
+        createThought({ id: 'skill-1', type: 'tool_result', content: 'First done' }),
+        createThought({ id: 'skill-2', toolName: 'Skill', type: 'tool_use', toolInput: { skill: 'second' } }),
+        createThought({ id: 'skill-2', type: 'tool_result', content: 'Second done' })
+      ]
+      const result = buildTimelineSegments(thoughts)
+
+      expect(result.length).toBe(2)
+      expect(result[0].type).toBe('skill')
+      expect(result[1].type).toBe('skill')
+      expect((result[0] as SkillSegment).skillName).toBe('first')
+      expect((result[1] as SkillSegment).skillName).toBe('second')
+    })
+
+    it('should handle skill and subagent interleaved', () => {
+      const thoughts: Thought[] = [
+        createThought({ id: 'skill-1', toolName: 'Skill', type: 'tool_use', toolInput: { skill: 'plan' } }),
+        createThought({ id: 'skill-1', type: 'tool_result', content: 'Plan created' }),
+        createThought({ id: 'task-1', toolName: 'Task', type: 'tool_use', toolInput: { description: 'Implement' } }),
+        createThought({ id: 'task-1', type: 'tool_result', content: 'Implemented' }),
+        createThought({ id: 'skill-2', toolName: 'Skill', type: 'tool_use', toolInput: { skill: 'commit' } }),
+        createThought({ id: 'skill-2', type: 'tool_result', content: 'Committed' })
+      ]
+      const result = buildTimelineSegments(thoughts)
+
+      expect(result.length).toBe(3)
+      expect(result[0].type).toBe('skill')
+      expect(result[1].type).toBe('subagent')
+      expect(result[2].type).toBe('skill')
     })
   })
 })
