@@ -57,10 +57,11 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     try {
       set({ isLoading: true, error: null })
 
-      // Load both Halo space and user spaces
-      await get().loadHaloSpace()
-
-      const response = await api.listSpaces()
+      // Load both Halo space and user spaces in parallel (async-parallel)
+      const [, response] = await Promise.all([
+        get().loadHaloSpace(),
+        api.listSpaces()
+      ])
 
       if (response.success && response.data) {
         set({ spaces: response.data as Space[] })

@@ -168,6 +168,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       set({ isLoading: true, error: null })
 
+      // Start config loading early (async-defer-await)
+      // Config load can run in parallel with Git Bash check on Windows
+      const configPromise = api.getConfig()
+
       // Windows: Check Git Bash availability first
       if (window.platform?.isWindows) {
         const gitBashStatus = await api.getGitBashStatus()
@@ -191,8 +195,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }
 
-      // Load config from main process
-      const response = await api.getConfig()
+      // Await config (already started earlier, minimal wait time)
+      const response = await configPromise
 
       if (response.success && response.data) {
         const config = response.data as HaloConfig
