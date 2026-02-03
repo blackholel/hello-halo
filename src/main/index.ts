@@ -293,10 +293,10 @@ function createWindow(): void {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
-  // Open DevTools in development
-  if (is.dev) {
-    mainWindow.webContents.openDevTools()
-  }
+  // DevTools: Use Cmd+Option+I (Mac) or F12 (Windows/Linux) to open manually
+  // if (is.dev) {
+  //   mainWindow.webContents.openDevTools()
+  // }
 }
 
 // Initialize application

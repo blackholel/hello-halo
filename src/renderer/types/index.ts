@@ -175,9 +175,24 @@ export interface SpaceLayoutPreferences {
   chatWidth?: number;              // Custom chat panel width when canvas is open
 }
 
+// Skills preferences for a space
+export interface SpaceSkillsPreferences {
+  favorites?: string[];  // Favorited skill names
+  enabled?: string[];    // Enabled skill names for this space
+  showOnlyEnabled?: boolean; // Whether to show only enabled skills
+}
+
+// Agents preferences for a space
+export interface SpaceAgentsPreferences {
+  enabled?: string[];    // Enabled agent names for this space
+  showOnlyEnabled?: boolean; // Whether to show only enabled agents
+}
+
 // All space preferences (extensible for future features)
 export interface SpacePreferences {
   layout?: SpaceLayoutPreferences;
+  skills?: SpaceSkillsPreferences;
+  agents?: SpaceAgentsPreferences;
 }
 
 export interface Space {
@@ -219,6 +234,46 @@ export interface ConversationMeta {
 export interface Conversation extends ConversationMeta {
   messages: Message[];
   sessionId?: string;
+}
+
+// ============================================
+// Workflow Types
+// ============================================
+
+export interface WorkflowStep {
+  id: string;
+  type: 'skill' | 'agent' | 'message';
+  name?: string;
+  input?: string;
+  args?: string;
+  summarizeAfter?: boolean;
+}
+
+export interface Workflow {
+  id: string;
+  spaceId: string;
+  name: string;
+  description?: string;
+  steps: WorkflowStep[];
+  settings?: {
+    thinkingEnabled?: boolean;
+    aiBrowserEnabled?: boolean;
+  };
+  createdAt: string;
+  updatedAt: string;
+  lastRunAt?: string;
+  lastConversationId?: string;
+}
+
+export interface WorkflowMeta {
+  id: string;
+  spaceId: string;
+  name: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+  lastRunAt?: string;
+  lastConversationId?: string;
 }
 
 // ============================================

@@ -10,10 +10,11 @@
  */
 
 import { join } from 'path'
-import { readdirSync, readFileSync, statSync } from 'fs'
+import { readdirSync, readFileSync, statSync, existsSync, mkdirSync, writeFileSync, rmSync, copyFileSync } from 'fs'
 import { getConfig, getHaloDir } from './config.service'
 import { getSpaceConfig } from './space-config.service'
-import { isValidDirectoryPath } from '../utils/path-validation'
+import { getAllSpacePaths } from './space.service'
+import { isPathWithinBasePaths, isValidDirectoryPath } from '../utils/path-validation'
 
 // ============================================
 // Agent Types
@@ -35,6 +36,10 @@ const CACHE_TTL_MS = 5000  // 5 seconds cache
  */
 function isValidAgentDir(dirPath: string): boolean {
   return isValidDirectoryPath(dirPath, 'Agents')
+}
+
+function getAllowedAgentBaseDirs(): string[] {
+  return getAllSpacePaths().map((spacePath) => join(spacePath, '.claude', 'agents'))
 }
 
 /**
@@ -202,4 +207,126 @@ export function getAgent(name: string, workDir?: string): AgentDefinition | null
  */
 export function clearAgentsCache(): void {
   agentsCache = null
+}
+
+// ============================================
+// Agent CRUD (space-level)
+// ============================================
+
+/**
+ * Create a new agent in the space directory
+ *
+ * @param workDir - Workspace directory
+ * @param name - Agent name (filename without .md)
+ * @param content - Agent markdown content
+ */
+export function createAgent(workDir: string, name: string, content: string): AgentDefinition {
+  if (!name || name.includes('/') || name.includes('\\') || name.includes('..') || name.startsWith('.')) {
+    throw new Error(`Invalid agent name: ${name}`)
+  }
+
+  const agentDir = join(workDir, '.claude', 'agents')
+  const agentPath = join(agentDir, `${name}.md`)
+
+  mkdirSync(agentDir, { recursive: true })
+  writeFileSync(agentPath, content, 'utf-8')
+
+  clearAgentsCache()
+
+  const description = content.split('\n')[0]?.trim()
+  return {
+    name,
+    path: agentPath,
+    source: 'space',
+    description: description?.startsWith('# ') ? description.slice(2).trim().slice(0, 100) : description?.slice(0, 100)
+  }
+}
+
+/**
+ * Update an existing agent's content
+ *
+ * @param agentPath - Full path to the agent file
+ * @param content - New markdown content
+ */
+export function updateAgent(agentPath: string, content: string): boolean {
+  try {
+    const allowedBases = getAllowedAgentBaseDirs()
+    if (!isPathWithinBasePaths(agentPath, allowedBases)) {
+      console.warn(`[Agents] Cannot update agent outside of space agents directory: ${agentPath}`)
+      return false
+    }
+
+    if (!existsSync(agentPath)) {
+      console.warn(`[Agents] Agent file not found: ${agentPath}`)
+      return false
+    }
+    writeFileSync(agentPath, content, 'utf-8')
+    clearAgentsCache()
+    return true
+  } catch (error) {
+    console.error('[Agents] Failed to update agent:', error)
+    return false
+  }
+}
+
+/**
+ * Delete an agent
+ *
+ * @param agentPath - Full path to the agent file
+ */
+export function deleteAgent(agentPath: string): boolean {
+  try {
+    const normalizedPath = agentPath.replace(/\\/g, '/')
+    if (!normalizedPath.includes('/agents/') && !normalizedPath.includes('/.claude/agents/')) {
+      console.warn(`[Agents] Cannot delete agent outside of agents directory: ${agentPath}`)
+      return false
+    }
+    if (!existsSync(agentPath)) {
+      console.warn(`[Agents] Agent file not found: ${agentPath}`)
+      return false
+    }
+    rmSync(agentPath, { force: true })
+    clearAgentsCache()
+    return true
+  } catch (error) {
+    console.error('[Agents] Failed to delete agent:', error)
+    return false
+  }
+}
+
+/**
+ * Copy an agent to the space directory
+ *
+ * @param agentName - Agent name (without .md)
+ * @param workDir - Target workspace directory
+ */
+export function copyAgentToSpace(agentName: string, workDir: string): AgentDefinition | null {
+  const agents = listAgents(workDir)
+  const sourceAgent = agents.find(a => a.name === agentName)
+
+  if (!sourceAgent) {
+    console.warn(`[Agents] Source agent not found: ${agentName}`)
+    return null
+  }
+
+  if (sourceAgent.source === 'space') {
+    console.warn(`[Agents] Agent already in space: ${agentName}`)
+    return sourceAgent
+  }
+
+  try {
+    const targetDir = join(workDir, '.claude', 'agents')
+    const targetPath = join(targetDir, `${agentName}.md`)
+    mkdirSync(targetDir, { recursive: true })
+    copyFileSync(sourceAgent.path, targetPath)
+    clearAgentsCache()
+    return {
+      ...sourceAgent,
+      path: targetPath,
+      source: 'space'
+    }
+  } catch (error) {
+    console.error('[Agents] Failed to copy agent to space:', error)
+    return null
+  }
 }

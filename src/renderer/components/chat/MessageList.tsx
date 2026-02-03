@@ -38,6 +38,7 @@ interface MessageListProps {
   error?: string | null  // Error message to display when generation fails
   isCompact?: boolean  // Compact mode when Canvas is open
   textBlockVersion?: number  // Increments on each new text block (for StreamingBubble reset)
+  workDir?: string  // For skill suggestion card creation
 }
 
 /**
@@ -61,12 +62,14 @@ function StreamingBubble({
   content,
   isStreaming,
   thoughts,
-  textBlockVersion = 0
+  textBlockVersion = 0,
+  workDir
 }: {
   content: string
   isStreaming: boolean
   thoughts: Thought[]
   textBlockVersion?: number
+  workDir?: string
 }) {
   // DOM refs for measuring heights
   const historyRef = useRef<HTMLDivElement>(null)  // Contains all past segments
@@ -234,14 +237,14 @@ function StreamingBubble({
           <div ref={historyRef}>
             {segments.map((seg, i) => (
               <div key={i} className="pb-4 break-words leading-relaxed">
-                <MarkdownRenderer content={seg} />
+                <MarkdownRenderer content={seg} workDir={workDir} />
               </div>
             ))}
           </div>
 
           {/* Current content - always visible, shows only NEW part after snapshots */}
           <div ref={currentRef} className="break-words leading-relaxed">
-            <MarkdownRenderer content={displayContent} />
+            <MarkdownRenderer content={displayContent} workDir={workDir} />
             {isStreaming && (
               <span className="inline-block w-0.5 h-5 ml-0.5 bg-primary streaming-cursor align-middle" />
             )}
@@ -266,7 +269,8 @@ export function MessageList({
   compactInfo = null,
   error = null,
   isCompact = false,
-  textBlockVersion = 0
+  textBlockVersion = 0,
+  workDir
 }: MessageListProps) {
   const { t } = useTranslation()
 
@@ -366,12 +370,12 @@ export function MessageList({
                   defaultExpanded={false}
                 />
                 {/* Then the message itself (without embedded thoughts) */}
-                <MessageItem message={message} previousCost={previousCost} hideThoughts isInContainer />
+                <MessageItem message={message} previousCost={previousCost} hideThoughts isInContainer workDir={workDir} />
               </div>
             </div>
           )
         }
-        return <MessageItem key={message.id} message={message} previousCost={previousCost} />
+        return <MessageItem key={message.id} message={message} previousCost={previousCost} workDir={workDir} />
       })}
 
       {/* Current generation block: Timeline segments + Streaming content below */}
@@ -468,6 +472,7 @@ export function MessageList({
                 isStreaming={isStreaming}
                 thoughts={thoughts}
                 textBlockVersion={textBlockVersion}
+                workDir={workDir}
               />
             )}
           </div>

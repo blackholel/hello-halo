@@ -119,14 +119,14 @@ interface ChatState {
 
   // Conversation actions
   loadConversations: (spaceId: string) => Promise<void>
-  createConversation: (spaceId: string) => Promise<Conversation | null>
+  createConversation: (spaceId: string, title?: string) => Promise<Conversation | null>
   selectConversation: (conversationId: string) => void
   deleteConversation: (spaceId: string, conversationId: string) => Promise<boolean>
   renameConversation: (spaceId: string, conversationId: string, newTitle: string) => Promise<boolean>
 
   // Messaging
   sendMessage: (content: string, images?: ImageAttachment[], aiBrowserEnabled?: boolean, thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[]) => Promise<void>
-  sendMessageToConversation: (spaceId: string, conversationId: string, content: string, images?: ImageAttachment[], thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[]) => Promise<void>
+  sendMessageToConversation: (spaceId: string, conversationId: string, content: string, images?: ImageAttachment[], thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[], aiBrowserEnabled?: boolean) => Promise<void>
   stopGeneration: (conversationId?: string) => Promise<void>
 
   // Tool approval
@@ -251,9 +251,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   // Create new conversation
-  createConversation: async (spaceId) => {
+  createConversation: async (spaceId, title) => {
     try {
-      const response = await api.createConversation(spaceId)
+      const response = await api.createConversation(spaceId, title)
 
       if (response.success && response.data) {
         const newConversation = response.data as Conversation
@@ -617,7 +617,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   // Send message to a specific conversation (for Chat Tabs - avoids global context switching)
-  sendMessageToConversation: async (spaceId, conversationId, content, images, thinkingEnabled, fileContexts) => {
+  sendMessageToConversation: async (spaceId, conversationId, content, images, thinkingEnabled, fileContexts, aiBrowserEnabled) => {
     if (!spaceId || !conversationId) {
       console.error('[ChatStore] spaceId and conversationId are required')
       return
@@ -678,7 +678,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         conversationId,
         message: content,
         images: images,
-        aiBrowserEnabled: false, // AI Browser not available in tab context
+        aiBrowserEnabled: aiBrowserEnabled ?? false,
         thinkingEnabled,
         canvasContext: undefined, // No canvas context for tab messages
         fileContexts: fileContexts

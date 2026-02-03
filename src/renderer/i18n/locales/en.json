@@ -483,5 +483,13 @@
   "Zoom in": "Zoom in",
   "Zoom in (+)": "Zoom in (+)",
   "Zoom out": "Zoom out",
-  "Zoom out (-)": "Zoom out (-)"
+  "Zoom out (-)": "Zoom out (-)",
+  "Summarize and start a new session after this step": "Summarize and start a new session after this step",
+  "Applies before the next step runs": "Applies before the next step runs",
+  "New workflow": "New workflow",
+  "{{count}} workflows available": "{{count}} workflows available",
+  "No workflows available": "No workflows available",
+  "Create a new workflow to get started": "Create a new workflow to get started",
+  "Select a skill": "Select a skill",
+  "Select an agent": "Select an agent"
 }

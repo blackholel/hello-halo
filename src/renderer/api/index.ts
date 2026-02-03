@@ -158,6 +158,15 @@ export const api = {
         artifactRailExpanded?: boolean
         chatWidth?: number
       }
+      skills?: {
+        favorites?: string[]
+        enabled?: string[]
+        showOnlyEnabled?: boolean
+      }
+      agents?: {
+        enabled?: string[]
+        showOnlyEnabled?: boolean
+      }
     }
   ): Promise<ApiResponse> => {
     if (isElectron()) {
@@ -507,6 +516,146 @@ export const api = {
     return httpRequest('POST', `/api/spaces/${spaceId}/onboarding/conversation`, { userMessage, aiResponse })
   },
 
+  // ===== Skills =====
+  listSkills: async (workDir?: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.listSkills(workDir)
+    }
+    return httpRequest('GET', `/api/skills${workDir ? `?workDir=${encodeURIComponent(workDir)}` : ''}`)
+  },
+
+  getSkillContent: async (name: string, workDir?: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.getSkillContent(name, workDir)
+    }
+    const params = new URLSearchParams({ name })
+    if (workDir) params.append('workDir', workDir)
+    return httpRequest('GET', `/api/skills/content?${params.toString()}`)
+  },
+
+  createSkill: async (workDir: string, name: string, content: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.createSkill(workDir, name, content)
+    }
+    return httpRequest('POST', '/api/skills', { workDir, name, content })
+  },
+
+  updateSkill: async (skillPath: string, content: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.updateSkill(skillPath, content)
+    }
+    return httpRequest('PUT', '/api/skills', { skillPath, content })
+  },
+
+  deleteSkill: async (skillPath: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.deleteSkill(skillPath)
+    }
+    return httpRequest('DELETE', `/api/skills?path=${encodeURIComponent(skillPath)}`)
+  },
+
+  copySkillToSpace: async (skillName: string, workDir: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.copySkillToSpace(skillName, workDir)
+    }
+    return httpRequest('POST', '/api/skills/copy', { skillName, workDir })
+  },
+
+  clearSkillsCache: async (): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.clearSkillsCache()
+    }
+    return httpRequest('POST', '/api/skills/clear-cache')
+  },
+
+  // ===== Agents =====
+  listAgents: async (workDir?: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.listAgents(workDir)
+    }
+    return httpRequest('GET', `/api/agents${workDir ? `?workDir=${encodeURIComponent(workDir)}` : ''}`)
+  },
+
+  getAgentContent: async (name: string, workDir?: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.getAgentContent(name, workDir)
+    }
+    const params = new URLSearchParams({ name })
+    if (workDir) params.append('workDir', workDir)
+    return httpRequest('GET', `/api/agents/content?${params.toString()}`)
+  },
+
+  createAgent: async (workDir: string, name: string, content: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.createAgent(workDir, name, content)
+    }
+    return httpRequest('POST', '/api/agents', { workDir, name, content })
+  },
+
+  updateAgent: async (agentPath: string, content: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.updateAgent(agentPath, content)
+    }
+    return httpRequest('PUT', '/api/agents', { agentPath, content })
+  },
+
+  deleteAgent: async (agentPath: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.deleteAgent(agentPath)
+    }
+    return httpRequest('DELETE', `/api/agents?path=${encodeURIComponent(agentPath)}`)
+  },
+
+  copyAgentToSpace: async (agentName: string, workDir: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.copyAgentToSpace(agentName, workDir)
+    }
+    return httpRequest('POST', '/api/agents/copy', { agentName, workDir })
+  },
+
+  clearAgentsCache: async (): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.clearAgentsCache()
+    }
+    return httpRequest('POST', '/api/agents/clear-cache')
+  },
+
+  // ===== Workflows =====
+  listWorkflows: async (spaceId: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.listWorkflows(spaceId)
+    }
+    return httpRequest('GET', `/api/workflows?spaceId=${encodeURIComponent(spaceId)}`)
+  },
+
+  getWorkflow: async (spaceId: string, workflowId: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.getWorkflow(spaceId, workflowId)
+    }
+    return httpRequest('GET', `/api/workflows/${encodeURIComponent(workflowId)}?spaceId=${encodeURIComponent(spaceId)}`)
+  },
+
+  createWorkflow: async (spaceId: string, input: Record<string, unknown>): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.createWorkflow(spaceId, input)
+    }
+    return httpRequest('POST', '/api/workflows', { spaceId, input })
+  },
+
+  updateWorkflow: async (spaceId: string, workflowId: string, updates: Record<string, unknown>): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.updateWorkflow(spaceId, workflowId, updates)
+    }
+    return httpRequest('PUT', `/api/workflows/${encodeURIComponent(workflowId)}`, { spaceId, updates })
+  },
+
+  deleteWorkflow: async (spaceId: string, workflowId: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.deleteWorkflow(spaceId, workflowId)
+    }
+    return httpRequest('DELETE', `/api/workflows/${encodeURIComponent(workflowId)}?spaceId=${encodeURIComponent(spaceId)}`)
+  },
+
   // ===== Remote Access (Electron only) =====
   enableRemoteAccess: async (port?: number): Promise<ApiResponse> => {
     if (!isElectron()) {
@@ -642,6 +791,10 @@ export const api = {
     onEvent('agent:mcp-status', callback),
   onAgentCompact: (callback: (data: unknown) => void) =>
     onEvent('agent:compact', callback),
+  onSkillsChanged: (callback: (data: unknown) => void) =>
+    onEvent('skills:changed', callback),
+  onAgentsChanged: (callback: (data: unknown) => void) =>
+    onEvent('agents:changed', callback),
   onRemoteStatusChange: (callback: (data: unknown) => void) =>
     onEvent('remote:status-change', callback),
 

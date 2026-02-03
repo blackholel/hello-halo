@@ -13,18 +13,26 @@ import rehypeHighlight from 'rehype-highlight'
 import { Check, Copy } from 'lucide-react'
 import { useTranslation } from '../../i18n'
 import { hljs } from '../../lib/highlight-loader'
+import { SkillSuggestionCard, parseSkillSuggestion } from '../skills/SkillSuggestionCard'
 
 interface MarkdownRendererProps {
   content: string
   className?: string
+  workDir?: string  // For skill suggestion card creation
 }
 
-// Code block with copy button
+// Code block with copy button and skill suggestion detection
+interface CodeBlockProps extends React.HTMLAttributes<HTMLElement> {
+  children?: React.ReactNode
+  workDir?: string
+}
+
 function CodeBlock({
   children,
   className,
+  workDir,
   ...props
-}: React.HTMLAttributes<HTMLElement> & { children?: React.ReactNode }) {
+}: CodeBlockProps) {
   const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
   const codeRef = useRef<HTMLElement>(null)
@@ -32,6 +40,27 @@ function CodeBlock({
   // Extract language from className (format: language-xxx)
   const match = /language-(\w+)/.exec(className || '')
   const language = match ? match[1] : ''
+
+  // Extract raw text content from children for skill suggestion detection
+  const rawContent = useMemo(() => {
+    const extractText = (node: React.ReactNode): string => {
+      if (typeof node === 'string') return node
+      if (Array.isArray(node)) return node.map(extractText).join('')
+      if (node && typeof node === 'object' && 'props' in node) {
+        return extractText((node as React.ReactElement).props.children)
+      }
+      return ''
+    }
+    return extractText(children)
+  }, [children])
+
+  // Check if this is a JSON code block with skill_suggestion
+  const skillSuggestion = useMemo(() => {
+    if (language === 'json' && workDir && rawContent) {
+      return parseSkillSuggestion(rawContent)
+    }
+    return null
+  }, [language, workDir, rawContent])
 
   const handleCopy = useCallback(async () => {
     // Read text from the actual rendered DOM element
@@ -52,6 +81,11 @@ function CodeBlock({
         {children}
       </code>
     )
+  }
+
+  // Render SkillSuggestionCard for skill_suggestion JSON
+  if (skillSuggestion && workDir) {
+    return <SkillSuggestionCard suggestion={skillSuggestion} workDir={workDir} />
   }
 
   // Code block
@@ -92,10 +126,11 @@ function CodeBlock({
   )
 }
 
-// Custom components for markdown elements
-const components = {
-  // Code blocks and inline code
-  code: CodeBlock,
+// Factory function to create components with workDir context
+function createComponents(workDir?: string) {
+  return {
+    // Code blocks and inline code - with workDir for skill suggestion detection
+    code: (props: CodeBlockProps) => <CodeBlock {...props} workDir={workDir} />,
 
   // Paragraphs
   p: ({ children }: { children?: React.ReactNode }) => (
@@ -185,15 +220,20 @@ const components = {
       {...props}
     />
   ),
+  }
 }
 
 export const MarkdownRenderer = memo(function MarkdownRenderer({
   content,
-  className = ''
+  className = '',
+  workDir
 }: MarkdownRendererProps) {
   // Configure rehype-highlight to use our lazy-loaded hljs instance
   // This ensures we use the same instance with pre-registered common languages
   const rehypeHighlightOptions = useMemo(() => [[rehypeHighlight, { hljs }]], [])
+
+  // Create components with workDir context - memoized to avoid recreation
+  const components = useMemo(() => createComponents(workDir), [workDir])
 
   if (!content) return null
 

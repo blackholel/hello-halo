@@ -30,6 +30,8 @@ import { initializeSearchHandlers, cleanupSearchHandlers } from '../ipc/search'
 import { registerPerfHandlers } from '../ipc/perf'
 import { registerGitBashHandlers, initializeGitBashOnStartup } from '../ipc/git-bash'
 import { registerPythonHandlers, cleanupPythonHandlers } from '../ipc/python'
+import { registerWorkflowHandlers } from '../ipc/workflow'
+import { initSkillAgentWatchers, cleanupSkillAgentWatchers } from '../services/skills-agents-watch.service'
 
 /**
  * Initialize extended services after window is visible
@@ -52,6 +54,9 @@ export function initializeExtendedServices(mainWindow: BrowserWindow): void {
 
   // Remote: Remote access feature, optional functionality
   registerRemoteHandlers(mainWindow)
+
+  // Workflows: Space-level workflow management
+  registerWorkflowHandlers()
 
   // Browser: Embedded BrowserView for Content Canvas
   // Note: BrowserView is created lazily when Canvas is opened
@@ -76,6 +81,9 @@ export function initializeExtendedServices(mainWindow: BrowserWindow): void {
 
   // Python: Embedded Python environment for code execution
   registerPythonHandlers(mainWindow)
+
+  // Skills/Agents: Watch for changes and notify renderer
+  initSkillAgentWatchers(mainWindow)
 
   // Windows-specific: Initialize Git Bash in background
   if (process.platform === 'win32') {
@@ -109,6 +117,9 @@ export function cleanupExtendedServices(): void {
 
   // Python: Cleanup handlers and kill active processes
   cleanupPythonHandlers()
+
+  // Skills/Agents: Cleanup watchers
+  cleanupSkillAgentWatchers()
 
   console.log('[Bootstrap] Extended services cleaned up')
 }

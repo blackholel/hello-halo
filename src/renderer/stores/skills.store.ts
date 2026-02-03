@@ -1,0 +1,300 @@
+/**
+ * Skills Store - Skills state management
+ *
+ * Manages the state of skills loaded from various sources:
+ * - App-level skills (~/.halo/skills/)
+ * - Global custom paths
+ * - Installed plugins
+ * - Space-level skills ({workDir}/.claude/skills/)
+ */
+
+import { create } from 'zustand'
+import { api } from '../api'
+
+// ============================================
+// Types
+// ============================================
+
+export interface SkillDefinition {
+  name: string
+  path: string
+  source: 'app' | 'global' | 'space' | 'installed'
+  description?: string
+  triggers?: string[]
+  category?: string
+}
+
+export interface SkillContent {
+  name: string
+  content: string
+  frontmatter?: Record<string, unknown>
+}
+
+interface SkillsState {
+  // Data
+  skills: SkillDefinition[]
+  loadedWorkDir: string | null
+  selectedSkill: SkillDefinition | null
+  skillContent: SkillContent | null
+
+  // UI State
+  isLoading: boolean
+  isLoadingContent: boolean
+  searchQuery: string
+  error: string | null
+
+  // Actions
+  loadSkills: (workDir?: string) => Promise<void>
+  selectSkill: (skill: SkillDefinition | null) => void
+  loadSkillContent: (name: string, workDir?: string) => Promise<SkillContent | null>
+  setSearchQuery: (query: string) => void
+  createSkill: (workDir: string, name: string, content: string) => Promise<SkillDefinition | null>
+  updateSkill: (skillPath: string, content: string) => Promise<boolean>
+  deleteSkill: (skillPath: string) => Promise<boolean>
+  copyToSpace: (skillName: string, workDir: string) => Promise<SkillDefinition | null>
+  clearCache: () => Promise<void>
+
+  // Selectors (computed values)
+  getFilteredSkills: () => SkillDefinition[]
+  getSkillsBySource: (source: SkillDefinition['source']) => SkillDefinition[]
+  getSkillByName: (name: string) => SkillDefinition | undefined
+}
+
+// ============================================
+// Store
+// ============================================
+
+export const useSkillsStore = create<SkillsState>((set, get) => ({
+  // Initial state
+  skills: [],
+  loadedWorkDir: null,
+  selectedSkill: null,
+  skillContent: null,
+  isLoading: false,
+  isLoadingContent: false,
+  searchQuery: '',
+  error: null,
+
+  // Load all skills from all sources
+  loadSkills: async (workDir?: string) => {
+    try {
+      set({ isLoading: true, error: null })
+
+      const response = await api.listSkills(workDir)
+
+      if (response.success && response.data) {
+        set({
+          skills: response.data as SkillDefinition[],
+          loadedWorkDir: workDir ?? null
+        })
+      } else {
+        set({ error: response.error || 'Failed to load skills' })
+      }
+    } catch (error) {
+      console.error('[SkillsStore] Failed to load skills:', error)
+      set({ error: 'Failed to load skills' })
+    } finally {
+      set({ isLoading: false })
+    }
+  },
+
+  // Select a skill for viewing/editing
+  selectSkill: (skill) => {
+    set({ selectedSkill: skill, skillContent: null })
+  },
+
+  // Load skill content (SKILL.md)
+  loadSkillContent: async (name, workDir) => {
+    try {
+      set({ isLoadingContent: true })
+
+      const response = await api.getSkillContent(name, workDir)
+
+      if (response.success && response.data) {
+        const content = response.data as SkillContent
+        set({ skillContent: content })
+        return content
+      } else {
+        set({ error: response.error || 'Failed to load skill content' })
+        return null
+      }
+    } catch (error) {
+      console.error('[SkillsStore] Failed to load skill content:', error)
+      set({ error: 'Failed to load skill content' })
+      return null
+    } finally {
+      set({ isLoadingContent: false })
+    }
+  },
+
+  // Set search query for filtering
+  setSearchQuery: (query) => {
+    set({ searchQuery: query })
+  },
+
+  // Create a new skill in space directory
+  createSkill: async (workDir, name, content) => {
+    try {
+      const response = await api.createSkill(workDir, name, content)
+
+      if (response.success && response.data) {
+        const newSkill = response.data as SkillDefinition
+
+        // Add to skills list
+        set((state) => ({
+          skills: [...state.skills, newSkill]
+        }))
+
+        return newSkill
+      } else {
+        set({ error: response.error || 'Failed to create skill' })
+        return null
+      }
+    } catch (error) {
+      console.error('[SkillsStore] Failed to create skill:', error)
+      set({ error: 'Failed to create skill' })
+      return null
+    }
+  },
+
+  // Update an existing skill
+  updateSkill: async (skillPath, content) => {
+    try {
+      const response = await api.updateSkill(skillPath, content)
+
+      if (response.success) {
+        // Reload skills to get updated data
+        const { skills, selectedSkill, loadedWorkDir, loadSkillContent } = get()
+        const skill = skills.find(s => s.path === skillPath)
+        // Reload the skill content if it's currently selected
+        if (skill && selectedSkill?.path === skillPath) {
+          await loadSkillContent(skill.name, loadedWorkDir ?? undefined)
+        }
+        return true
+      } else {
+        set({ error: response.error || 'Failed to update skill' })
+        return false
+      }
+    } catch (error) {
+      console.error('[SkillsStore] Failed to update skill:', error)
+      set({ error: 'Failed to update skill' })
+      return false
+    }
+  },
+
+  // Delete a skill
+  deleteSkill: async (skillPath) => {
+    try {
+      const response = await api.deleteSkill(skillPath)
+
+      if (response.success) {
+        // Remove from skills list
+        set((state) => ({
+          skills: state.skills.filter(s => s.path !== skillPath),
+          // Clear selection if deleted skill was selected
+          selectedSkill: state.selectedSkill?.path === skillPath ? null : state.selectedSkill,
+          skillContent: state.selectedSkill?.path === skillPath ? null : state.skillContent
+        }))
+        return true
+      } else {
+        set({ error: response.error || 'Failed to delete skill' })
+        return false
+      }
+    } catch (error) {
+      console.error('[SkillsStore] Failed to delete skill:', error)
+      set({ error: 'Failed to delete skill' })
+      return false
+    }
+  },
+
+  // Copy a skill to space directory
+  copyToSpace: async (skillName, workDir) => {
+    try {
+      const response = await api.copySkillToSpace(skillName, workDir)
+
+      if (response.success && response.data) {
+        const copiedSkill = response.data as SkillDefinition
+
+        // Update skills list - replace the original with the space copy
+        set((state) => ({
+          skills: state.skills.map(s =>
+            s.name === skillName ? copiedSkill : s
+          )
+        }))
+
+        return copiedSkill
+      } else {
+        set({ error: response.error || 'Failed to copy skill to space' })
+        return null
+      }
+    } catch (error) {
+      console.error('[SkillsStore] Failed to copy skill to space:', error)
+      set({ error: 'Failed to copy skill to space' })
+      return null
+    }
+  },
+
+  // Clear skills cache and reload
+  clearCache: async () => {
+    try {
+      await api.clearSkillsCache()
+    } catch (error) {
+      console.error('[SkillsStore] Failed to clear cache:', error)
+    }
+  },
+
+  // Get filtered skills based on search query
+  getFilteredSkills: () => {
+    const { skills, searchQuery } = get()
+
+    if (!searchQuery.trim()) {
+      return skills
+    }
+
+    const query = searchQuery.toLowerCase()
+    return skills.filter(skill =>
+      skill.name.toLowerCase().includes(query) ||
+      skill.description?.toLowerCase().includes(query) ||
+      skill.category?.toLowerCase().includes(query) ||
+      skill.triggers?.some(t => t.toLowerCase().includes(query))
+    )
+  },
+
+  // Get skills by source
+  getSkillsBySource: (source) => {
+    const { skills } = get()
+    return skills.filter(s => s.source === source)
+  },
+
+  // Get a skill by name
+  getSkillByName: (name) => {
+    const { skills } = get()
+    return skills.find(s => s.name === name)
+  }
+}))
+
+let skillsListenersInitialized = false
+
+export function initSkillsStoreListeners(): void {
+  if (skillsListenersInitialized) return
+  skillsListenersInitialized = true
+
+  api.onSkillsChanged((data) => {
+    const payload = data as { workDir?: string | null }
+    const { loadedWorkDir, loadSkills } = useSkillsStore.getState()
+    if (payload.workDir == null || payload.workDir === loadedWorkDir) {
+      loadSkills(loadedWorkDir ?? undefined)
+    }
+  })
+}
+
+// ============================================
+// Selectors (for use with shallow comparison)
+// ============================================
+
+export const selectSkills = (state: SkillsState) => state.skills
+export const selectSelectedSkill = (state: SkillsState) => state.selectedSkill
+export const selectSkillContent = (state: SkillsState) => state.skillContent
+export const selectIsLoading = (state: SkillsState) => state.isLoading
+export const selectSearchQuery = (state: SkillsState) => state.searchQuery
+export const selectError = (state: SkillsState) => state.error

@@ -480,5 +480,13 @@
   "{{count}} weeks ago_one": "{{count}}週間前",
   "{{count}} weeks ago_other": "{{count}}週間前",
   "← → to switch files": "← → でファイルを切り替え",
-  "🤖 AI Browser": "🤖 AIブラウザ"
+  "🤖 AI Browser": "🤖 AIブラウザ",
+  "Summarize and start a new session after this step": "このステップ後に要約して新しいセッションを開始",
+  "Applies before the next step runs": "次のステップの実行前に適用",
+  "New workflow": "新しいワークフロー",
+  "{{count}} workflows available": "{{count}}件のワークフローが利用可能",
+  "No workflows available": "利用可能なワークフローがありません",
+  "Create a new workflow to get started": "新しいワークフローを作成して開始",
+  "Select a skill": "スキルを選択",
+  "Select an agent": "エージェントを選択"
 }

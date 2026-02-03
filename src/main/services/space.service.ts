@@ -29,9 +29,24 @@ interface SpaceLayoutPreferences {
   chatWidth?: number
 }
 
+// Skills preferences for a space
+interface SpaceSkillsPreferences {
+  favorites?: string[]
+  enabled?: string[]
+  showOnlyEnabled?: boolean
+}
+
+// Agents preferences for a space
+interface SpaceAgentsPreferences {
+  enabled?: string[]
+  showOnlyEnabled?: boolean
+}
+
 // All space preferences
 interface SpacePreferences {
   layout?: SpaceLayoutPreferences
+  skills?: SpaceSkillsPreferences
+  agents?: SpaceAgentsPreferences
 }
 
 interface SpaceMeta {
@@ -451,6 +466,20 @@ export function updateSpacePreferences(
       meta.preferences.layout = {
         ...meta.preferences.layout,
         ...preferences.layout
+      }
+    }
+
+    if (preferences.skills) {
+      meta.preferences.skills = {
+        ...meta.preferences.skills,
+        ...preferences.skills
+      }
+    }
+
+    if (preferences.agents) {
+      meta.preferences.agents = {
+        ...meta.preferences.agents,
+        ...preferences.agents
       }
     }
 

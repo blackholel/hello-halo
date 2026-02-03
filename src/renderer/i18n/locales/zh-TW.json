@@ -480,5 +480,13 @@
   "{{count}} weeks ago_one": "{{count}} 週前",
   "{{count}} weeks ago_other": "{{count}} 週前",
   "← → to switch files": "← → 切換檔案",
-  "🤖 AI Browser": "🤖 AI 瀏覽器"
+  "🤖 AI Browser": "🤖 AI 瀏覽器",
+  "Summarize and start a new session after this step": "此步驟完成後摘要並開啟新會話",
+  "Applies before the next step runs": "於下一步執行前生效",
+  "New workflow": "新建工作流",
+  "{{count}} workflows available": "{{count}} 個工作流可用",
+  "No workflows available": "沒有工作流",
+  "Create a new workflow to get started": "建立新的工作流以開始使用",
+  "Select a skill": "選擇技能",
+  "Select an agent": "選擇代理"
 }

@@ -26,6 +26,8 @@ import { registerConversationHandlers } from '../ipc/conversation'
 import { registerAgentHandlers } from '../ipc/agent'
 import { registerArtifactHandlers } from '../ipc/artifact'
 import { registerSystemHandlers } from '../ipc/system'
+import { registerSkillsHandlers } from '../ipc/skills'
+import { registerAgentsHandlers } from '../ipc/agents'
 import { registerUpdaterHandlers, initAutoUpdater } from '../services/updater.service'
 
 /**
@@ -57,6 +59,12 @@ export function initializeEssentialServices(mainWindow: BrowserWindow): void {
 
   // Artifact: File list is displayed in the right sidebar
   registerArtifactHandlers()
+
+  // Skills: Skills management for sidebar and chat input
+  registerSkillsHandlers()
+
+  // Agents: Agents management for sidebar and chat input
+  registerAgentsHandlers()
 
   // System: Window controls (maximize, minimize, tray) are basic functionality
   registerSystemHandlers(mainWindow)
