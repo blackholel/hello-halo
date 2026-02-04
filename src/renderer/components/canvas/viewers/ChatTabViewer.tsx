@@ -18,6 +18,7 @@ import { MessageList } from '../../chat/MessageList'
 import { InputArea } from '../../chat/InputArea'
 import { ScrollToBottomButton } from '../../chat/ScrollToBottomButton'
 import { Sparkles } from '../../icons/ToolIcons'
+import { ChangeReviewBar } from '../../diff'
 import type { TabState } from '../../../services/canvas-lifecycle'
 import type { ImageAttachment, FileContextAttachment } from '../../../types'
 import { useTranslation } from '../../../i18n'
@@ -44,6 +45,10 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
   const stopGeneration = useChatStore(state => state.stopGeneration)
   const selectConversation = useChatStore(state => state.selectConversation)
   const getCachedConversation = useChatStore(state => state.getCachedConversation)
+  const changeSets = useChatStore(state => state.changeSets)
+  const loadChangeSets = useChatStore(state => state.loadChangeSets)
+  const acceptChangeSet = useChatStore(state => state.acceptChangeSet)
+  const rollbackChangeSet = useChatStore(state => state.rollbackChangeSet)
 
   // Load conversation if not in cache
   useEffect(() => {
@@ -51,6 +56,13 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
       selectConversation(conversationId)
     }
   }, [conversationId, getCachedConversation, selectConversation])
+
+  // Load change sets for this conversation (Canvas tab context)
+  useEffect(() => {
+    if (conversationId && spaceId) {
+      loadChangeSets(spaceId, conversationId)
+    }
+  }, [conversationId, spaceId, loadChangeSets])
 
   // Extract session state with defaults
   const {
@@ -64,6 +76,9 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
     error = null,
     textBlockVersion = 0
   } = session || {}
+
+  const currentChangeSets = conversationId ? (changeSets.get(conversationId) || []) : []
+  const activeChangeSet = currentChangeSets[0]
 
   // Smart auto-scroll
   const {
@@ -167,6 +182,29 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
       </div>
 
       {/* Input area */}
+      {activeChangeSet && (
+        <ChangeReviewBar
+          changeSet={activeChangeSet}
+          onAcceptAll={() => acceptChangeSet({
+            spaceId: activeChangeSet.spaceId,
+            conversationId: activeChangeSet.conversationId,
+            changeSetId: activeChangeSet.id
+          })}
+          onAcceptFile={(filePath) => acceptChangeSet({
+            spaceId: activeChangeSet.spaceId,
+            conversationId: activeChangeSet.conversationId,
+            changeSetId: activeChangeSet.id,
+            filePath
+          })}
+          onRollbackFile={(filePath, force) => rollbackChangeSet({
+            spaceId: activeChangeSet.spaceId,
+            conversationId: activeChangeSet.conversationId,
+            changeSetId: activeChangeSet.id,
+            filePath,
+            force
+          })}
+        />
+      )}
       <InputArea
         onSend={handleSend}
         onStop={handleStop}

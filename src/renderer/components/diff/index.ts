@@ -11,6 +11,7 @@ export { FileChangesFooter } from './FileChangesFooter'
 export { FileChangesList } from './FileChangesList'
 export { DiffModal } from './DiffModal'
 export { DiffContent } from './DiffContent'
+export { ChangeReviewBar } from './ChangeReviewBar'
 
 // Types
 export type { FileChange, FileChanges, FileChangeType, DiffModalState, EditChunk } from './types'

@@ -77,6 +77,7 @@ export function initializeExtendedServices(mainWindow: BrowserWindow): void {
   // Python: Embedded Python environment for code execution
   registerPythonHandlers(mainWindow)
 
+
   // Windows-specific: Initialize Git Bash in background
   if (process.platform === 'win32') {
     initializeGitBashOnStartup()

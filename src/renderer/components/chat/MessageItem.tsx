@@ -1,6 +1,6 @@
 /**
  * MessageItem - Single message display with enhanced streaming visualization
- * Includes collapsible thought process and file changes footer for assistant messages
+ * Includes collapsible thought process for assistant messages
  *
  * Working State Design:
  * - During generation: subtle breathing glow + "AI working" indicator
@@ -24,7 +24,6 @@ import {
 import { getToolIcon } from '../icons/ToolIcons'
 import { BrowserTaskCard, isBrowserTool } from '../tool/BrowserTaskCard'
 import { MarkdownRenderer } from './MarkdownRenderer'
-import { FileChangesFooter } from '../diff'
 import { MessageImages } from './ImageAttachmentPreview'
 import { TokenUsageIndicator } from './TokenUsageIndicator'
 import type { Message, Thought } from '../../types'
@@ -234,11 +233,6 @@ export function MessageItem({ message, previousCost = 0, hideThoughts = false, i
       {/* Thought history - only for assistant messages with thoughts (when not hidden) */}
       {!hideThoughts && !isUser && message.thoughts && message.thoughts.length > 0 && (
         <ThoughtHistory thoughts={message.thoughts} />
-      )}
-
-      {/* File changes footer - only for assistant messages with thoughts */}
-      {!isUser && message.thoughts && message.thoughts.length > 0 && (
-        <FileChangesFooter thoughts={message.thoughts} />
       )}
 
       {/* Token usage indicator + copy button - only for completed assistant messages with tokenUsage */}

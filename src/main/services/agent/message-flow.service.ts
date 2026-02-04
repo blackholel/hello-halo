@@ -28,6 +28,12 @@ import {
   getV2SessionInfo,
   getV2SessionsCount
 } from './session.manager'
+import {
+  beginChangeSet,
+  clearPendingChangeSet,
+  finalizeChangeSet,
+  trackChangeFile
+} from '../change-set.service'
 import type {
   AgentRequest,
   SessionState,
@@ -35,6 +41,16 @@ import type {
   ToolCall,
   Thought
 } from './types'
+
+function trackChangeFileFromToolUse(
+  conversationId: string,
+  toolName: string | undefined,
+  toolInput: { file_path?: string } | undefined
+): void {
+  if (toolName === 'Write' || toolName === 'Edit') {
+    trackChangeFile(conversationId, toolInput?.file_path)
+  }
+}
 
 /**
  * Send message to agent (supports multiple concurrent sessions)
@@ -62,6 +78,7 @@ export async function sendMessage(
 
   const config = getConfig()
   const workDir = getWorkingDir(spaceId)
+  beginChangeSet(spaceId, conversationId, workDir)
 
   // Resolve provider configuration
   const resolved = await resolveProvider(config.api)
@@ -212,6 +229,7 @@ export async function sendMessage(
     // Token-level streaming state
     let currentStreamingText = '' // Accumulates text_delta tokens
     let isStreamingTextBlock = false // True when inside a text content block
+    let hasStreamedTextBlocks = false // True once any text block was streamed via stream_event
 
     console.log(`[Agent][${conversationId}] Sending message to V2 session...`)
     const t1 = Date.now()
@@ -280,6 +298,7 @@ export async function sendMessage(
         // Text block started
         if (event.type === 'content_block_start' && event.content_block?.type === 'text') {
           isStreamingTextBlock = true
+          hasStreamedTextBlocks = true
           currentStreamingText = event.content_block.text || ''
 
           // 🔑 Send precise signal for new text block (fixes truncation bug)
@@ -372,6 +391,21 @@ export async function sendMessage(
       }
 
       // Parse SDK message into Thought and send to renderer
+      if (sdkMessage.type === 'assistant') {
+        const contentBlocks = (sdkMessage as any).message?.content
+        if (Array.isArray(contentBlocks)) {
+          for (const block of contentBlocks) {
+            if (block.type === 'tool_use') {
+              trackChangeFileFromToolUse(
+                conversationId,
+                block.name,
+                block.input as { file_path?: string } | undefined
+              )
+            }
+          }
+        }
+      }
+
       const thought = parseSDKMessage(sdkMessage)
 
       if (thought) {
@@ -384,16 +418,23 @@ export async function sendMessage(
 
         // Handle specific thought types
         if (thought.type === 'text') {
-          // Accumulate text blocks - multi-step tasks may produce multiple text blocks
-          accumulatedTextContent += (accumulatedTextContent ? '\n\n' : '') + thought.content
+          if (!hasStreamedTextBlocks) {
+            // Accumulate text blocks - multi-step tasks may produce multiple text blocks
+            accumulatedTextContent += (accumulatedTextContent ? '\n\n' : '') + thought.content
 
-          // Send streaming update - frontend shows this during generation
-          sendToRenderer('agent:message', spaceId, conversationId, {
-            type: 'message',
-            content: accumulatedTextContent,
-            isComplete: false
-          })
+            // Send streaming update - frontend shows this during generation
+            sendToRenderer('agent:message', spaceId, conversationId, {
+              type: 'message',
+              content: accumulatedTextContent,
+              isComplete: false
+            })
+          }
         } else if (thought.type === 'tool_use') {
+          trackChangeFileFromToolUse(
+            conversationId,
+            thought.toolName,
+            thought.toolInput as { file_path?: string } | undefined
+          )
           // Send tool call event
           const toolCall: ToolCall = {
             id: thought.id,
@@ -555,11 +596,12 @@ export async function sendMessage(
     if (accumulatedTextContent) {
       console.log(`[Agent][${conversationId}] Sending final complete event with accumulated text`)
       // Backend saves complete message with thoughts and tokenUsage (Single Source of Truth)
-      updateLastMessage(spaceId, conversationId, {
+      const latestMessage = updateLastMessage(spaceId, conversationId, {
         content: accumulatedTextContent,
         thoughts: sessionState.thoughts.length > 0 ? [...sessionState.thoughts] : undefined,
         tokenUsage: tokenUsage || undefined // Include token usage if available
       })
+      finalizeChangeSet(spaceId, conversationId, latestMessage?.id)
       console.log(
         `[Agent][${conversationId}] Saved ${sessionState.thoughts.length} thoughts${tokenUsage ? ' with tokenUsage' : ''} to backend`
       )
@@ -570,6 +612,7 @@ export async function sendMessage(
       })
     } else {
       console.log(`[Agent][${conversationId}] WARNING: No text content after SDK query completed`)
+      finalizeChangeSet(spaceId, conversationId)
     }
   } catch (error: unknown) {
     const err = error as Error
@@ -636,6 +679,7 @@ export async function sendMessage(
   } finally {
     // Clean up active session state (but keep V2 session for reuse)
     deleteActiveSession(conversationId)
+    clearPendingChangeSet(conversationId)
     console.log(
       `[Agent][${conversationId}] Active session state cleaned up. V2 sessions: ${getV2SessionsCount()}`
     )

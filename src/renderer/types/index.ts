@@ -293,6 +293,41 @@ export interface Message {
 }
 
 // ============================================
+// Change Set Types (File change review/rollback)
+// ============================================
+
+export type ChangeFileType = 'edit' | 'create' | 'delete';
+export type ChangeFileStatus = 'accepted' | 'rolled_back';
+export type ChangeSetStatus = 'applied' | 'partial_rollback' | 'rolled_back';
+
+export interface ChangeFile {
+  id: string;
+  path: string;
+  relativePath: string;
+  fileName: string;
+  type: ChangeFileType;
+  status: ChangeFileStatus;
+  beforeExists: boolean;
+  afterExists: boolean;
+  beforeContent?: string;
+  afterContent?: string;
+  beforeHash?: string;
+  afterHash?: string;
+  stats: { added: number; removed: number };
+}
+
+export interface ChangeSet {
+  id: string;
+  spaceId: string;
+  conversationId: string;
+  messageId?: string;
+  createdAt: string;
+  status: ChangeSetStatus;
+  summary: { totalFiles: number; totalAdded: number; totalRemoved: number };
+  files: ChangeFile[];
+}
+
+// ============================================
 // Artifact Types
 // ============================================
 

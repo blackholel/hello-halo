@@ -19,6 +19,7 @@ import { MessageList } from './MessageList'
 import { InputArea } from './InputArea'
 import { ScrollToBottomButton } from './ScrollToBottomButton'
 import { Sparkles } from '../icons/ToolIcons'
+import { ChangeReviewBar } from '../diff'
 import {
   ONBOARDING_ARTIFACT_NAME,
   getOnboardingAiResponse,
@@ -37,8 +38,14 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
   const { t } = useTranslation()
   const { currentSpace } = useSpaceStore()
   const {
+    currentSpaceId,
+    changeSets,
     getCurrentConversation,
+    getCurrentConversationId,
     getCurrentSession,
+    loadChangeSets,
+    acceptChangeSet,
+    rollbackChangeSet,
     sendMessage,
     stopGeneration,
     addMockMessage
@@ -260,6 +267,10 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
   const displayIsThinking = isMockThinking || isThinking
   const displayIsStreaming = isStreaming  // Only real streaming (not mock)
   const hasMessages = displayMessages.length > 0 || displayStreamingContent || displayIsThinking
+  const currentConversationId = getCurrentConversationId()
+  const currentConversationSpaceId = currentSpaceId
+  const currentChangeSets = currentConversationId ? (changeSets.get(currentConversationId) || []) : []
+  const activeChangeSet = currentChangeSets[0]
 
   // Track previous compact state for smooth transitions
   const prevCompactRef = useRef(isCompact)
@@ -268,6 +279,12 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
   useEffect(() => {
     prevCompactRef.current = isCompact
   }, [isCompact])
+
+  useEffect(() => {
+    if (currentConversationId && currentSpaceId) {
+      loadChangeSets(currentSpaceId, currentConversationId)
+    }
+  }, [currentConversationId, currentSpaceId, loadChangeSets])
 
   return (
     <div
@@ -321,6 +338,29 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
       </div>
 
       {/* Input area */}
+      {activeChangeSet && (
+        <ChangeReviewBar
+          changeSet={activeChangeSet}
+          onAcceptAll={() => acceptChangeSet({
+            spaceId: activeChangeSet.spaceId,
+            conversationId: activeChangeSet.conversationId,
+            changeSetId: activeChangeSet.id
+          })}
+          onAcceptFile={(filePath) => acceptChangeSet({
+            spaceId: activeChangeSet.spaceId,
+            conversationId: activeChangeSet.conversationId,
+            changeSetId: activeChangeSet.id,
+            filePath
+          })}
+          onRollbackFile={(filePath, force) => rollbackChangeSet({
+            spaceId: activeChangeSet.spaceId,
+            conversationId: activeChangeSet.conversationId,
+            changeSetId: activeChangeSet.id,
+            filePath,
+            force
+          })}
+        />
+      )}
       <InputArea
         onSend={handleSend}
         onStop={handleStop}

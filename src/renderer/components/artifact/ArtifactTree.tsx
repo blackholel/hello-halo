@@ -166,6 +166,18 @@ export function ArtifactTree({ spaceId }: ArtifactTreeProps) {
     }
   }, [isGenerating, loadTree])
 
+  // Refresh when external actions modify artifacts (e.g., change set rollback)
+  useEffect(() => {
+    const handleRefresh = (event: Event) => {
+      const detail = (event as CustomEvent<{ spaceId?: string }>).detail
+      if (detail?.spaceId && detail.spaceId !== spaceId) return
+      loadTree()
+    }
+
+    window.addEventListener('artifacts:refresh', handleRefresh)
+    return () => window.removeEventListener('artifacts:refresh', handleRefresh)
+  }, [spaceId, loadTree])
+
   // Close context menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {

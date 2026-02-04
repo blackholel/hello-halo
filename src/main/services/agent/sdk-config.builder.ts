@@ -292,6 +292,18 @@ export function buildSdkOptions(params: BuildSdkOptionsParams): Record<string, a
     canUseTool
   } = params
 
+  const hooksConfig = buildHooksConfig(workDir)
+  const enabledMcpServers = getEnabledMcpServers(config.mcpServers || {}, workDir)
+  const mcpServers: Record<string, any> = enabledMcpServers ? { ...enabledMcpServers } : {}
+
+  // Add AI Browser as SDK MCP server if enabled
+  if (aiBrowserEnabled) {
+    mcpServers['ai-browser'] = createAIBrowserMcpServer()
+    console.log(`[Agent][${conversationId}] AI Browser MCP server added`)
+  }
+
+  const mcpConfig = Object.keys(mcpServers).length > 0 ? { mcpServers } : {}
+
   const sdkOptions: Record<string, any> = {
     model: sdkModel,
     cwd: workDir,
@@ -338,24 +350,13 @@ export function buildSdkOptions(params: BuildSdkOptionsParams): Record<string, a
     // Load plugins from multi-tier sources (system, global, app, space)
     plugins: buildPluginsConfig(workDir),
     // Load hooks from settings.json, global config, and space config
-    hooks: buildHooksConfig(workDir),
+    hooks: hooksConfig,
     // Extended thinking: enable when user requests it (10240 tokens, same as Claude Code CLI Tab)
     ...(thinkingEnabled ? { maxThinkingTokens: 10240 } : {}),
     // MCP configuration
     // - Pass through enabled user MCP servers (merged with space-level config)
     // - Add AI Browser MCP server if enabled
-    ...(() => {
-      const enabledMcp = getEnabledMcpServers(config.mcpServers || {}, workDir)
-      const mcpServers: Record<string, any> = enabledMcp ? { ...enabledMcp } : {}
-
-      // Add AI Browser as SDK MCP server if enabled
-      if (aiBrowserEnabled) {
-        mcpServers['ai-browser'] = createAIBrowserMcpServer()
-        console.log(`[Agent][${conversationId}] AI Browser MCP server added`)
-      }
-
-      return Object.keys(mcpServers).length > 0 ? { mcpServers } : {}
-    })()
+    ...mcpConfig
   }
 
   // Add canUseTool handler if provided

@@ -14,6 +14,7 @@ import * as agentController from '../../controllers/agent.controller'
 import * as spaceController from '../../controllers/space.controller'
 import * as conversationController from '../../controllers/conversation.controller'
 import * as configController from '../../controllers/config.controller'
+import * as changeSetController from '../../controllers/change-set.controller'
 import { listArtifacts } from '../../services/artifact.service'
 import { getTempSpacePath } from '../../services/config.service'
 import { getSpace, getAllSpacePaths } from '../../services/space.service'
@@ -173,6 +174,41 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
       req.params.conversationId,
       req.body
     )
+    res.json(result)
+  })
+
+  // ===== Change Set Routes =====
+  app.get('/api/spaces/:spaceId/conversations/:conversationId/change-sets', async (req: Request, res: Response) => {
+    const { spaceId, conversationId } = req.params
+    const result = changeSetController.listChangeSetsForConversation(
+      spaceId,
+      conversationId
+    )
+    res.json(result)
+  })
+
+  app.post('/api/spaces/:spaceId/conversations/:conversationId/change-sets/accept', async (req: Request, res: Response) => {
+    const { spaceId, conversationId } = req.params
+    const { changeSetId, filePath } = req.body
+    const result = changeSetController.acceptChangeSetForConversation({
+      spaceId,
+      conversationId,
+      changeSetId,
+      filePath
+    })
+    res.json(result)
+  })
+
+  app.post('/api/spaces/:spaceId/conversations/:conversationId/change-sets/rollback', async (req: Request, res: Response) => {
+    const { spaceId, conversationId } = req.params
+    const { changeSetId, filePath, force } = req.body
+    const result = changeSetController.rollbackChangeSetForConversation({
+      spaceId,
+      conversationId,
+      changeSetId,
+      filePath,
+      force
+    })
     res.json(result)
   })
 

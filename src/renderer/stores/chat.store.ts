@@ -21,7 +21,7 @@
 
 import { create } from 'zustand'
 import { api } from '../api'
-import type { Conversation, ConversationMeta, Message, ToolCall, Artifact, Thought, AgentEventBase, ImageAttachment, CompactInfo, CanvasContext, FileContextAttachment, ParallelGroup } from '../types'
+import type { Conversation, ConversationMeta, Message, ToolCall, Artifact, Thought, AgentEventBase, ImageAttachment, CompactInfo, CanvasContext, FileContextAttachment, ParallelGroup, ChangeSet } from '../types'
 import { canvasLifecycle } from '../services/canvas-lifecycle'
 import { buildParallelGroups, getThoughtKey } from '../utils/thought-utils'
 
@@ -93,6 +93,9 @@ interface ChatState {
   // This persists across space switches - background tasks keep running
   sessions: Map<string, SessionState>
 
+  // Change sets per conversation (persisted on disk, loaded on demand)
+  changeSets: Map<string, ChangeSet[]>
+
   // Current space pointer
   currentSpaceId: string | null
 
@@ -110,6 +113,7 @@ interface ChatState {
   getCurrentConversationMeta: () => ConversationMeta | null
   getCurrentSession: () => SessionState
   getSession: (conversationId: string) => SessionState
+  getChangeSets: (conversationId: string) => ChangeSet[]
   getConversations: () => ConversationMeta[]
   getCurrentConversationId: () => string | null
   getCachedConversation: (conversationId: string) => Conversation | null
@@ -142,6 +146,11 @@ interface ChatState {
   handleAgentThought: (data: AgentEventBase & { thought: Thought }) => void
   handleAgentCompact: (data: AgentEventBase & { trigger: 'manual' | 'auto'; preTokens: number }) => void
 
+  // Change set actions
+  loadChangeSets: (spaceId: string, conversationId: string) => Promise<void>
+  acceptChangeSet: (params: { spaceId: string; conversationId: string; changeSetId: string; filePath?: string }) => Promise<ChangeSet | null>
+  rollbackChangeSet: (params: { spaceId: string; conversationId: string; changeSetId: string; filePath?: string; force?: boolean }) => Promise<{ changeSet: ChangeSet | null; conflicts: string[] }>
+
   // Cleanup
   reset: () => void
   resetSpace: (spaceId: string) => void
@@ -156,6 +165,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   spaceStates: new Map<string, SpaceState>(),
   conversationCache: new Map<string, Conversation>(),
   sessions: new Map<string, SessionState>(),
+  changeSets: new Map<string, ChangeSet[]>(),
   currentSpaceId: null,
   artifacts: [],
   isLoading: false,
@@ -213,6 +223,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // Get session state for any conversation
   getSession: (conversationId: string) => {
     return get().sessions.get(conversationId) || EMPTY_SESSION
+  },
+
+  getChangeSets: (conversationId: string) => {
+    return get().changeSets.get(conversationId) || []
   },
 
   // Set current space (called when entering a space)
@@ -325,7 +339,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return { spaceStates: newSpaceStates }
     })
 
-    // Load full conversation and session state in parallel (async-parallel)
+    // Load full conversation, session state, and change sets in parallel (async-parallel)
     // These are independent operations that can run concurrently
     const needsConversationLoad = !conversationCache.has(conversationId)
 
@@ -339,10 +353,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ? api.getConversation(currentSpaceId, conversationId)
         : Promise.resolve(null)
       const sessionStatePromise = api.getSessionState(conversationId)
+      const changeSetsPromise = api.listChangeSets(currentSpaceId, conversationId)
 
-      const [conversationResponse, sessionResponse] = await Promise.all([
+      const [conversationResponse, sessionResponse, changeSetsResponse] = await Promise.all([
         conversationPromise,
-        sessionStatePromise
+        sessionStatePromise,
+        changeSetsPromise
       ])
 
       // Handle conversation response
@@ -385,6 +401,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
           })
         }
       }
+
+      // Handle change set response
+      if (changeSetsResponse.success && changeSetsResponse.data) {
+        const changeSets = changeSetsResponse.data as ChangeSet[]
+        set((state) => {
+          const newChangeSets = new Map(state.changeSets)
+          newChangeSets.set(conversationId, changeSets)
+          return { changeSets: newChangeSets }
+        })
+      }
     } catch (error) {
       console.error('[ChatStore] Failed to load conversation or session state:', error)
       if (needsConversationLoad) {
@@ -417,6 +443,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
           const newCache = new Map(state.conversationCache)
           newCache.delete(conversationId)
 
+          // Clean up change sets
+          const newChangeSets = new Map(state.changeSets)
+          newChangeSets.delete(conversationId)
+
           // Update space state
           const newSpaceStates = new Map(state.spaceStates)
           const existingState = newSpaceStates.get(spaceId) || createEmptySpaceState()
@@ -433,7 +463,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           return {
             spaceStates: newSpaceStates,
             sessions: newSessions,
-            conversationCache: newCache
+            conversationCache: newCache,
+            changeSets: newChangeSets
           }
         })
 
@@ -869,9 +900,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Reload conversation from backend (Single Source of Truth)
     // Backend has already saved the complete message with thoughts
     try {
-      const response = await api.getConversation(spaceId, conversationId)
-      if (response.success && response.data) {
-        const updatedConversation = response.data as Conversation
+      const [conversationResponse, changeSetsResponse] = await Promise.all([
+        api.getConversation(spaceId, conversationId),
+        api.listChangeSets(spaceId, conversationId)
+      ])
+      if (conversationResponse.success && conversationResponse.data) {
+        const updatedConversation = conversationResponse.data as Conversation
 
         // Extract updated metadata
         const updatedMeta: ConversationMeta = {
@@ -924,6 +958,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }
         })
       }
+
+      if (changeSetsResponse.success && changeSetsResponse.data) {
+        const changeSets = changeSetsResponse.data as ChangeSet[]
+        set((state) => {
+          const newChangeSets = new Map(state.changeSets)
+          newChangeSets.set(conversationId, changeSets)
+          return { changeSets: newChangeSets }
+        })
+      }
     } catch (error) {
       console.error('[ChatStore] Failed to reload conversation:', error)
       // Even on error, must clear state to avoid stale content
@@ -941,6 +984,100 @@ export const useChatStore = create<ChatState>((set, get) => ({
         return { sessions: newSessions }
       })
     }
+  },
+
+  // Load change sets for a conversation
+  loadChangeSets: async (spaceId, conversationId) => {
+    try {
+      const response = await api.listChangeSets(spaceId, conversationId)
+      if (response.success && response.data) {
+        const changeSets = response.data as ChangeSet[]
+        set((state) => {
+          const newChangeSets = new Map(state.changeSets)
+          newChangeSets.set(conversationId, changeSets)
+          return { changeSets: newChangeSets }
+        })
+      }
+    } catch (error) {
+      console.error('[ChatStore] Failed to load change sets:', error)
+    }
+  },
+
+  // Accept change set (all or single file)
+  acceptChangeSet: async (params) => {
+    const refreshChangeSets = async () => {
+      try {
+        const response = await api.listChangeSets(params.spaceId, params.conversationId)
+        if (response.success && response.data) {
+          const changeSets = response.data as ChangeSet[]
+          set((state) => {
+            const newChangeSets = new Map(state.changeSets)
+            newChangeSets.set(params.conversationId, changeSets)
+            return { changeSets: newChangeSets }
+          })
+        }
+      } catch (error) {
+        console.error('[ChatStore] Failed to refresh change sets:', error)
+      }
+    }
+
+    try {
+      const response = await api.acceptChangeSet(params)
+      if (response.success && response.data) {
+        const updated = response.data as ChangeSet
+        set((state) => {
+          const newChangeSets = new Map(state.changeSets)
+          const existing = newChangeSets.get(params.conversationId) || []
+          const next = existing.map((cs) => (cs.id === updated.id ? updated : cs))
+          newChangeSets.set(params.conversationId, next)
+          return { changeSets: newChangeSets }
+        })
+        return updated
+      }
+    } catch (error) {
+      console.error('[ChatStore] Failed to accept change set:', error)
+    }
+    await refreshChangeSets()
+    return null
+  },
+
+  // Rollback change set (all or single file)
+  rollbackChangeSet: async (params) => {
+    try {
+      const response = await api.rollbackChangeSet(params)
+      if (response.success && response.data) {
+        const result = response.data as { changeSet: ChangeSet | null; conflicts: string[] }
+        if (result.changeSet) {
+          set((state) => {
+            const newChangeSets = new Map(state.changeSets)
+            const existing = newChangeSets.get(params.conversationId) || []
+            const next = existing.map((cs) => (cs.id === result.changeSet!.id ? result.changeSet! : cs))
+            newChangeSets.set(params.conversationId, next)
+            return { changeSets: newChangeSets }
+          })
+        }
+        if (result.changeSet && result.conflicts.length === 0) {
+          window.dispatchEvent(new CustomEvent('artifacts:refresh', { detail: { spaceId: params.spaceId } }))
+        }
+        return result
+      }
+    } catch (error) {
+      console.error('[ChatStore] Failed to rollback change set:', error)
+    }
+    // Refresh from server on failure
+    try {
+      const response = await api.listChangeSets(params.spaceId, params.conversationId)
+      if (response.success && response.data) {
+        set((state) => {
+          const newChangeSets = new Map(state.changeSets)
+          newChangeSets.set(params.conversationId, response.data as ChangeSet[])
+          return { changeSets: newChangeSets }
+        })
+      }
+    } catch (refreshError) {
+      console.error('[ChatStore] Failed to refresh change sets:', refreshError)
+    }
+    return { changeSet: null, conflicts: [] }
   },
 
   // Handle thought for a specific conversation
@@ -1011,6 +1148,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       spaceStates: new Map(),
       conversationCache: new Map(),
       sessions: new Map(),
+      changeSets: new Map(),
       currentSpaceId: null,
       artifacts: [],
       isLoadingConversation: false
@@ -1022,7 +1160,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((state) => {
       const newSpaceStates = new Map(state.spaceStates)
       newSpaceStates.delete(spaceId)
-      return { spaceStates: newSpaceStates }
+      const newChangeSets = new Map(state.changeSets)
+      for (const [conversationId, changeSets] of newChangeSets.entries()) {
+        if (changeSets.some(cs => cs.spaceId === spaceId)) {
+          newChangeSets.delete(conversationId)
+        }
+      }
+      return { spaceStates: newSpaceStates, changeSets: newChangeSets }
     })
   }
 }))

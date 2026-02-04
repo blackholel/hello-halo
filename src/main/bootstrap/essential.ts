@@ -27,6 +27,7 @@ import { registerAgentHandlers } from '../ipc/agent'
 import { registerArtifactHandlers } from '../ipc/artifact'
 import { registerSystemHandlers } from '../ipc/system'
 import { registerUpdaterHandlers, initAutoUpdater } from '../services/updater.service'
+import { registerChangeSetHandlers } from '../ipc/change-set'
 
 /**
  * Initialize essential services required for first screen render
@@ -57,6 +58,9 @@ export function initializeEssentialServices(mainWindow: BrowserWindow): void {
 
   // Artifact: File list is displayed in the right sidebar
   registerArtifactHandlers()
+
+  // Change Sets: File change review/rollback (used in core chat UI)
+  registerChangeSetHandlers()
 
   // System: Window controls (maximize, minimize, tray) are basic functionality
   registerSystemHandlers(mainWindow)

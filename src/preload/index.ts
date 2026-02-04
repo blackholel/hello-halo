@@ -50,6 +50,11 @@ export interface HaloAPI {
     updates: Record<string, unknown>
   ) => Promise<IpcResponse>
 
+  // Change Sets
+  listChangeSets: (spaceId: string, conversationId: string) => Promise<IpcResponse>
+  acceptChangeSet: (params: { spaceId: string; conversationId: string; changeSetId: string; filePath?: string }) => Promise<IpcResponse>
+  rollbackChangeSet: (params: { spaceId: string; conversationId: string; changeSetId: string; filePath?: string; force?: boolean }) => Promise<IpcResponse>
+
   // Agent
   sendMessage: (request: {
     spaceId: string
@@ -385,6 +390,12 @@ const api: HaloAPI = {
     ipcRenderer.invoke('conversation:add-message', spaceId, conversationId, message),
   updateLastMessage: (spaceId, conversationId, updates) =>
     ipcRenderer.invoke('conversation:update-last-message', spaceId, conversationId, updates),
+
+  // Change Sets
+  listChangeSets: (spaceId, conversationId) =>
+    ipcRenderer.invoke('change-set:list', spaceId, conversationId),
+  acceptChangeSet: (params) => ipcRenderer.invoke('change-set:accept', params),
+  rollbackChangeSet: (params) => ipcRenderer.invoke('change-set:rollback', params),
 
   // Agent
   sendMessage: (request) => ipcRenderer.invoke('agent:send-message', request),

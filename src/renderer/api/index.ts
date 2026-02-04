@@ -257,6 +257,47 @@ export const api = {
     )
   },
 
+  // ===== Change Sets =====
+  listChangeSets: async (spaceId: string, conversationId: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.listChangeSets(spaceId, conversationId)
+    }
+    return httpRequest('GET', `/api/spaces/${spaceId}/conversations/${conversationId}/change-sets`)
+  },
+
+  acceptChangeSet: async (params: {
+    spaceId: string
+    conversationId: string
+    changeSetId: string
+    filePath?: string
+  }): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.acceptChangeSet(params)
+    }
+    return httpRequest(
+      'POST',
+      `/api/spaces/${params.spaceId}/conversations/${params.conversationId}/change-sets/accept`,
+      { changeSetId: params.changeSetId, filePath: params.filePath }
+    )
+  },
+
+  rollbackChangeSet: async (params: {
+    spaceId: string
+    conversationId: string
+    changeSetId: string
+    filePath?: string
+    force?: boolean
+  }): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.rollbackChangeSet(params)
+    }
+    return httpRequest(
+      'POST',
+      `/api/spaces/${params.spaceId}/conversations/${params.conversationId}/change-sets/rollback`,
+      { changeSetId: params.changeSetId, filePath: params.filePath, force: params.force }
+    )
+  },
+
   // ===== Agent =====
   sendMessage: async (request: {
     spaceId: string
