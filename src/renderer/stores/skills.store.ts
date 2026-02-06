@@ -10,6 +10,7 @@
 
 import { create } from 'zustand'
 import { api } from '../api'
+import { getCacheKey, getAllCacheKeys, GLOBAL_CACHE_KEY } from './cache-keys'
 
 // ============================================
 // Types
@@ -22,6 +23,8 @@ export interface SkillDefinition {
   description?: string
   triggers?: string[]
   category?: string
+  pluginRoot?: string
+  namespace?: string
 }
 
 export interface SkillContent {
@@ -36,6 +39,8 @@ interface SkillsState {
   loadedWorkDir: string | null
   selectedSkill: SkillDefinition | null
   skillContent: SkillContent | null
+  skillsByWorkDir: Record<string | symbol, SkillDefinition[]>
+  dirtyWorkDirs: Set<string | symbol>
 
   // UI State
   isLoading: boolean
@@ -53,6 +58,8 @@ interface SkillsState {
   deleteSkill: (skillPath: string) => Promise<boolean>
   copyToSpace: (skillName: string, workDir: string) => Promise<SkillDefinition | null>
   clearCache: () => Promise<void>
+  markDirty: (workDir?: string | null) => void
+  markAllDirty: () => void
 
   // Selectors (computed values)
   getFilteredSkills: () => SkillDefinition[]
@@ -70,6 +77,8 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
   loadedWorkDir: null,
   selectedSkill: null,
   skillContent: null,
+  skillsByWorkDir: {},
+  dirtyWorkDirs: new Set<string | symbol>(),
   isLoading: false,
   isLoadingContent: false,
   searchQuery: '',
@@ -77,15 +86,36 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
 
   // Load all skills from all sources
   loadSkills: async (workDir?: string) => {
+    const cacheKey = getCacheKey(workDir)
+    const { skillsByWorkDir, dirtyWorkDirs } = get()
+    const cached = skillsByWorkDir[cacheKey]
+    if (cached && !dirtyWorkDirs.has(cacheKey)) {
+      set({
+        skills: cached,
+        loadedWorkDir: workDir ?? null,
+        error: null,
+        isLoading: false
+      })
+      return
+    }
+
     try {
       set({ isLoading: true, error: null })
 
       const response = await api.listSkills(workDir)
 
       if (response.success && response.data) {
+        const nextByWorkDir = {
+          ...get().skillsByWorkDir,
+          [cacheKey]: response.data as SkillDefinition[]
+        }
+        const nextDirty = new Set(get().dirtyWorkDirs)
+        nextDirty.delete(cacheKey)
         set({
           skills: response.data as SkillDefinition[],
-          loadedWorkDir: workDir ?? null
+          loadedWorkDir: workDir ?? null,
+          skillsByWorkDir: nextByWorkDir,
+          dirtyWorkDirs: nextDirty
         })
       } else {
         set({ error: response.error || 'Failed to load skills' })
@@ -139,10 +169,15 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
 
       if (response.success && response.data) {
         const newSkill = response.data as SkillDefinition
+        const cacheKey = getCacheKey(workDir)
 
         // Add to skills list
         set((state) => ({
-          skills: [...state.skills, newSkill]
+          skills: [...state.skills, newSkill],
+          skillsByWorkDir: {
+            ...state.skillsByWorkDir,
+            [cacheKey]: [...(state.skillsByWorkDir[cacheKey] || []), newSkill]
+          }
         }))
 
         return newSkill
@@ -189,12 +224,20 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
 
       if (response.success) {
         // Remove from skills list
-        set((state) => ({
-          skills: state.skills.filter(s => s.path !== skillPath),
-          // Clear selection if deleted skill was selected
-          selectedSkill: state.selectedSkill?.path === skillPath ? null : state.selectedSkill,
-          skillContent: state.selectedSkill?.path === skillPath ? null : state.skillContent
-        }))
+        set((state) => {
+          const cacheKey = getCacheKey(state.loadedWorkDir)
+          return {
+            skills: state.skills.filter(s => s.path !== skillPath),
+            skillsByWorkDir: {
+              ...state.skillsByWorkDir,
+              [cacheKey]: (state.skillsByWorkDir[cacheKey] || [])
+                .filter(s => s.path !== skillPath)
+            },
+            // Clear selection if deleted skill was selected
+            selectedSkill: state.selectedSkill?.path === skillPath ? null : state.selectedSkill,
+            skillContent: state.selectedSkill?.path === skillPath ? null : state.skillContent
+          }
+        })
         return true
       } else {
         set({ error: response.error || 'Failed to delete skill' })
@@ -214,12 +257,19 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
 
       if (response.success && response.data) {
         const copiedSkill = response.data as SkillDefinition
+        const cacheKey = getCacheKey(workDir)
 
         // Update skills list - replace the original with the space copy
         set((state) => ({
           skills: state.skills.map(s =>
             s.name === skillName ? copiedSkill : s
-          )
+          ),
+          skillsByWorkDir: {
+            ...state.skillsByWorkDir,
+            [cacheKey]: (state.skillsByWorkDir[cacheKey] || []).map(s =>
+              s.name === skillName ? copiedSkill : s
+            )
+          }
         }))
 
         return copiedSkill
@@ -238,9 +288,33 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
   clearCache: async () => {
     try {
       await api.clearSkillsCache()
+      set((state) => {
+        const allKeys = getAllCacheKeys(state.skillsByWorkDir)
+        const nextDirty = new Set(allKeys)
+        nextDirty.add(GLOBAL_CACHE_KEY)
+        return { dirtyWorkDirs: nextDirty }
+      })
     } catch (error) {
       console.error('[SkillsStore] Failed to clear cache:', error)
     }
+  },
+
+  markDirty: (workDir) => {
+    const cacheKey = getCacheKey(workDir)
+    set((state) => {
+      const nextDirty = new Set(state.dirtyWorkDirs)
+      nextDirty.add(cacheKey)
+      return { dirtyWorkDirs: nextDirty }
+    })
+  },
+
+  markAllDirty: () => {
+    set((state) => {
+      const allKeys = getAllCacheKeys(state.skillsByWorkDir)
+      const nextDirty = new Set(allKeys)
+      nextDirty.add(GLOBAL_CACHE_KEY)
+      return { dirtyWorkDirs: nextDirty }
+    })
   },
 
   // Get filtered skills based on search query
@@ -281,8 +355,14 @@ export function initSkillsStoreListeners(): void {
 
   api.onSkillsChanged((data) => {
     const payload = data as { workDir?: string | null }
-    const { loadedWorkDir, loadSkills } = useSkillsStore.getState()
-    if (payload.workDir == null || payload.workDir === loadedWorkDir) {
+    const { loadedWorkDir, loadSkills, markDirty, markAllDirty } = useSkillsStore.getState()
+    if (payload.workDir == null) {
+      markAllDirty()
+      loadSkills(loadedWorkDir ?? undefined)
+      return
+    }
+    markDirty(payload.workDir)
+    if (payload.workDir === loadedWorkDir) {
       loadSkills(loadedWorkDir ?? undefined)
     }
   })

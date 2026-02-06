@@ -12,6 +12,7 @@ import { existsSync, readFileSync } from 'fs'
 import { getConfig, getHaloDir, type HooksConfig } from './config.service'
 import { getSpaceConfig } from './space-config.service'
 import { FileCache } from '../utils/file-cache'
+import { listEnabledPlugins } from './plugins.service'
 
 // ============================================
 // Halo Settings Types (Claude Code compatible)
@@ -23,6 +24,22 @@ interface HaloSettings {
 
 // File cache for settings (mtime-based invalidation)
 const settingsCache = new FileCache<HaloSettings | null>()
+
+const HOOK_EVENT_TYPES: (keyof HooksConfig)[] = [
+  'PreToolUse',
+  'PostToolUse',
+  'PostToolUseFailure',
+  'Notification',
+  'UserPromptSubmit',
+  'SessionStart',
+  'SessionEnd',
+  'Stop',
+  'SubagentStart',
+  'SubagentStop',
+  'PreCompact',
+  'PermissionRequest',
+  'Setup'
+]
 
 /**
  * Get the path to Halo settings file
@@ -58,6 +75,67 @@ function loadHaloSettingsHooks(): HooksConfig | undefined {
   return settings?.hooks
 }
 
+interface PluginHooksFile {
+  hooks?: HooksConfig
+  description?: string
+}
+
+function replacePluginRootInHooks(hooks: HooksConfig, pluginRoot: string): HooksConfig {
+  const replaced: HooksConfig = {}
+  for (const eventType of HOOK_EVENT_TYPES) {
+    const defs = hooks[eventType]
+    if (!defs || defs.length === 0) continue
+    replaced[eventType] = defs.map(def => ({
+      ...def,
+      hooks: def.hooks.map(hook => {
+        if (hook.type !== 'command' || !hook.command) return hook
+        return {
+          ...hook,
+          command: hook.command.replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, pluginRoot)
+        }
+      })
+    }))
+  }
+  return replaced
+}
+
+function normalizePluginHooks(parsed: unknown): HooksConfig | undefined {
+  if (!parsed || typeof parsed !== 'object') return undefined
+  const obj = parsed as Record<string, unknown>
+  if (obj.hooks && typeof obj.hooks === 'object') {
+    return obj.hooks as HooksConfig
+  }
+
+  // Fallback: treat as direct HooksConfig if it includes known event keys
+  const hasKnownKey = HOOK_EVENT_TYPES.some((key) => key in obj)
+  if (hasKnownKey) {
+    return obj as HooksConfig
+  }
+  return undefined
+}
+
+function loadPluginHooks(): HooksConfig | undefined {
+  const enabledPlugins = listEnabledPlugins()
+  let merged: HooksConfig | undefined
+
+  for (const plugin of enabledPlugins) {
+    const hooksPath = join(plugin.installPath, 'hooks', 'hooks.json')
+    if (!existsSync(hooksPath)) continue
+    try {
+      const content = readFileSync(hooksPath, 'utf-8')
+      const parsed = JSON.parse(content) as PluginHooksFile
+      const hooks = normalizePluginHooks(parsed)
+      if (!hooks) continue
+      const replaced = replacePluginRootInHooks(hooks, plugin.installPath)
+      merged = mergeHooksConfigs(merged, replaced)
+    } catch (error) {
+      console.error(`[Hooks] Failed to read plugin hooks: ${hooksPath}:`, error)
+    }
+  }
+
+  return merged
+}
+
 /**
  * Clear settings cache
  */
@@ -71,14 +149,11 @@ export function clearSettingsCache(): void {
  */
 export function mergeHooksConfigs(...configs: (HooksConfig | undefined)[]): HooksConfig | undefined {
   const merged: HooksConfig = {}
-  const eventTypes: (keyof HooksConfig)[] = [
-    'PreToolUse', 'PostToolUse', 'Stop', 'Notification', 'UserPromptSubmit'
-  ]
 
   for (const config of configs) {
     if (!config) continue
 
-    for (const eventType of eventTypes) {
+    for (const eventType of HOOK_EVENT_TYPES) {
       const hooks = config[eventType]
       if (hooks && hooks.length > 0) {
         if (!merged[eventType]) {
@@ -97,13 +172,23 @@ export function mergeHooksConfigs(...configs: (HooksConfig | undefined)[]): Hook
  * Merges hooks from all sources in priority order
  */
 export function buildHooksConfig(workDir: string): HooksConfig | undefined {
-  const settingsHooks = loadHaloSettingsHooks()
   const config = getConfig()
-  const globalHooks = config.claudeCode?.hooks
   const spaceConfig = getSpaceConfig(workDir)
-  const spaceHooks = spaceConfig?.claudeCode?.hooks
+  const hooksDisabled =
+    config.claudeCode?.hooksEnabled === false ||
+    spaceConfig?.claudeCode?.hooksEnabled === false
 
-  const mergedHooks = mergeHooksConfigs(settingsHooks, globalHooks, spaceHooks)
+  if (hooksDisabled) {
+    console.log('[Hooks] Disabled by configuration')
+    return undefined
+  }
+
+  const settingsHooks = loadHaloSettingsHooks()
+  const globalHooks = config.claudeCode?.hooks
+  const spaceHooks = spaceConfig?.claudeCode?.hooks
+  const pluginHooks = loadPluginHooks()
+
+  const mergedHooks = mergeHooksConfigs(settingsHooks, globalHooks, spaceHooks, pluginHooks)
 
   if (mergedHooks) {
     const hookCounts = Object.entries(mergedHooks)
@@ -122,11 +207,8 @@ export function convertToSdkHooksFormat(hooks: HooksConfig | undefined): Record<
   if (!hooks) return undefined
 
   const sdkHooks: Record<string, unknown> = {}
-  const eventTypes: (keyof HooksConfig)[] = [
-    'PreToolUse', 'PostToolUse', 'Stop', 'Notification', 'UserPromptSubmit'
-  ]
 
-  for (const eventType of eventTypes) {
+  for (const eventType of HOOK_EVENT_TYPES) {
     const hookDefs = hooks[eventType]
     if (hookDefs && hookDefs.length > 0) {
       sdkHooks[eventType] = hookDefs.map(def => ({
@@ -156,7 +238,8 @@ export function getAllHooks(workDir?: string): {
   const config = getConfig()
   const globalHooks = config.claudeCode?.hooks
   const spaceHooks = workDir ? getSpaceConfig(workDir)?.claudeCode?.hooks : undefined
-  const merged = mergeHooksConfigs(settingsHooks, globalHooks, spaceHooks)
+  const pluginHooks = loadPluginHooks()
+  const merged = mergeHooksConfigs(settingsHooks, globalHooks, spaceHooks, pluginHooks)
 
   return {
     settings: settingsHooks,

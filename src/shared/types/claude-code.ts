@@ -15,9 +15,17 @@
 export interface HooksConfig {
   PreToolUse?: HookDefinition[]
   PostToolUse?: HookDefinition[]
+  PostToolUseFailure?: HookDefinition[]
   Stop?: HookDefinition[]
   Notification?: HookDefinition[]
   UserPromptSubmit?: HookDefinition[]
+  SessionStart?: HookDefinition[]
+  SessionEnd?: HookDefinition[]
+  SubagentStart?: HookDefinition[]
+  SubagentStop?: HookDefinition[]
+  PreCompact?: HookDefinition[]
+  PermissionRequest?: HookDefinition[]
+  Setup?: HookDefinition[]
 }
 
 export interface HookDefinition {
@@ -60,6 +68,12 @@ export interface ClaudeCodeConfig {
   plugins?: PluginsConfig
   hooks?: HooksConfig
   agents?: AgentsConfig
+  /** Global kill switch for Claude Code hooks (default: true) */
+  hooksEnabled?: boolean
+  /** Global kill switch for MCP servers (default: true) */
+  mcpEnabled?: boolean
+  /** Enable lazy skills loading (default: false) */
+  skillsLazyLoad?: boolean
   enableSystemSkills?: boolean    // Load ~/.claude/skills/ - Default: false
   /**
    * @deprecated No longer needed. CLAUDE_CONFIG_DIR=~/.halo/ provides isolation.

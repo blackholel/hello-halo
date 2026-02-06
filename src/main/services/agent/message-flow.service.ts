@@ -8,6 +8,7 @@
 import { BrowserWindow } from 'electron'
 import { promises as fsPromises } from 'fs'
 import { getConfig } from '../config.service'
+import { getSpaceConfig } from '../space-config.service'
 import { getConversation, saveSessionId, addMessage, updateLastMessage } from '../conversation.service'
 import { setMainWindow, sendToRenderer, createCanUseTool } from './renderer-comm'
 import { getHeadlessElectronPath } from './electron-path'
@@ -19,6 +20,15 @@ import {
 } from './sdk-config.builder'
 import { parseSDKMessage, formatCanvasContext, buildMessageContent } from './message-parser'
 import { broadcastMcpStatus } from './mcp-status.service'
+import { expandLazyDirectives } from './skill-expander'
+import { findEnabledPluginByInput } from '../plugins.service'
+import {
+  buildPluginMcpServers,
+  enablePluginMcp,
+  getEnabledPluginMcpHash,
+  getEnabledPluginMcpList,
+  pluginHasMcp
+} from '../plugin-mcp.service'
 import {
   getOrCreateV2Session,
   closeV2Session,
@@ -35,6 +45,54 @@ import type {
   ToolCall,
   Thought
 } from './types'
+
+interface McpDirectiveResult {
+  text: string
+  enabled: string[]
+  missing: string[]
+}
+
+function extractMcpDirectives(input: string, conversationId: string): McpDirectiveResult {
+  const lines = input.split(/\r?\n/)
+  const enabled: string[] = []
+  const missing: string[] = []
+  let inFence = false
+
+  const outLines = lines.map((line) => {
+    const trimmed = line.trim()
+    if (trimmed.startsWith('```')) {
+      inFence = !inFence
+      return line
+    }
+    if (inFence) return line
+
+    const match = trimmed.match(/^\/mcp(?:\s+(.+))?$/i)
+    if (!match) return line
+
+    const pluginInput = (match[1] || '').trim()
+    if (!pluginInput) {
+      missing.push('(empty)')
+      return '<!-- injected: mcp -->'
+    }
+
+    const plugin = findEnabledPluginByInput(pluginInput)
+    if (!plugin) {
+      missing.push(pluginInput)
+      return '<!-- injected: mcp -->'
+    }
+
+    if (!pluginHasMcp(plugin)) {
+      missing.push(pluginInput)
+      return '<!-- injected: mcp -->'
+    }
+
+    enablePluginMcp(conversationId, plugin.fullName)
+    enabled.push(plugin.fullName)
+    return '<!-- injected: mcp -->'
+  })
+
+  return { text: outLines.join('\n'), enabled, missing }
+}
 
 /**
  * Send message to agent (supports multiple concurrent sessions)
@@ -56,12 +114,50 @@ export async function sendMessage(
     canvasContext,
     fileContexts
   } = request
-  console.log(
-    `[Agent] sendMessage: conv=${conversationId}${images && images.length > 0 ? `, images=${images.length}` : ''}${aiBrowserEnabled ? ', AI Browser enabled' : ''}${thinkingEnabled ? ', thinking=ON' : ''}${canvasContext?.isOpen ? `, canvas tabs=${canvasContext.tabCount}` : ''}${fileContexts && fileContexts.length > 0 ? `, fileContexts=${fileContexts.length}` : ''}`
-  )
-
   const config = getConfig()
+  const provider = config.api.provider
+  const isMiniMax = provider === 'minimax'
+  // MiniMax Anthropic-compatible backends can be strict; keep it text-only for stability.
+  const effectiveAiBrowserEnabled = isMiniMax ? false : aiBrowserEnabled
+  const effectiveThinkingEnabled = isMiniMax ? false : thinkingEnabled
+  const effectiveImages = isMiniMax ? undefined : images
+  if (isMiniMax) {
+    if (aiBrowserEnabled) {
+      console.warn(`[Agent][${conversationId}] MiniMax: AI Browser disabled (text-only mode)`)
+    }
+    if (thinkingEnabled) {
+      console.warn(`[Agent][${conversationId}] MiniMax: Thinking disabled (compat mode)`)
+    }
+    if (images && images.length > 0) {
+      console.warn(
+        `[Agent][${conversationId}] MiniMax: Images dropped (${images.length}) (text-only mode)`
+      )
+    }
+  }
+  console.log(
+    `[Agent] sendMessage: conv=${conversationId}${effectiveImages && effectiveImages.length > 0 ? `, images=${effectiveImages.length}` : ''}${effectiveAiBrowserEnabled ? ', AI Browser enabled' : ''}${effectiveThinkingEnabled ? ', thinking=ON' : ''}${canvasContext?.isOpen ? `, canvas tabs=${canvasContext.tabCount}` : ''}${fileContexts && fileContexts.length > 0 ? `, fileContexts=${fileContexts.length}` : ''}`
+  )
   const workDir = getWorkingDir(spaceId)
+  const spaceConfig = getSpaceConfig(workDir)
+  const skillsLazyLoad =
+    config.claudeCode?.skillsLazyLoad === true ||
+    spaceConfig?.claudeCode?.skillsLazyLoad === true
+
+  const mcpDirectiveResult = skillsLazyLoad
+    ? extractMcpDirectives(message, conversationId)
+    : { text: message, enabled: [], missing: [] }
+  const messageForSend = mcpDirectiveResult.text
+
+  if (mcpDirectiveResult.enabled.length > 0) {
+    console.log(
+      `[Agent][${conversationId}] Enabled plugin MCP: ${mcpDirectiveResult.enabled.join(', ')}`
+    )
+  }
+  if (mcpDirectiveResult.missing.length > 0) {
+    console.warn(
+      `[Agent][${conversationId}] MCP plugin not found or missing MCP config: ${mcpDirectiveResult.missing.join(', ')}`
+    )
+  }
 
   // Resolve provider configuration
   const resolved = await resolveProvider(config.api)
@@ -108,7 +204,7 @@ export async function sendMessage(
   addMessage(spaceId, conversationId, {
     role: 'user',
     content: message, // Original user input (no file contents)
-    images: images,
+    images: effectiveImages,
     fileContexts: fileContexts // Store metadata for reference
   })
 
@@ -135,9 +231,10 @@ export async function sendMessage(
       anthropicBaseUrl: resolved.anthropicBaseUrl,
       sdkModel: resolved.sdkModel,
       electronPath,
-      aiBrowserEnabled,
-      thinkingEnabled,
-      canUseTool: createCanUseTool(workDir, spaceId, conversationId, getActiveSession)
+      aiBrowserEnabled: effectiveAiBrowserEnabled,
+      thinkingEnabled: effectiveThinkingEnabled,
+      canUseTool: createCanUseTool(workDir, spaceId, conversationId, getActiveSession),
+      enabledPluginMcps: getEnabledPluginMcpList(conversationId)
     })
 
     // Override stderr handler to accumulate buffer for error reporting
@@ -149,16 +246,33 @@ export async function sendMessage(
     const t0 = Date.now()
     console.log(`[Agent][${conversationId}] Getting or creating V2 session...`)
 
-    // Log MCP servers if configured (only enabled ones, merged with space config)
-    const enabledMcpServers = getEnabledMcpServers(config.mcpServers || {}, workDir)
-    const mcpServerNames = enabledMcpServers ? Object.keys(enabledMcpServers) : []
-    if (mcpServerNames.length > 0) {
-      console.log(`[Agent][${conversationId}] MCP servers configured: ${mcpServerNames.join(', ')}`)
+    // Log MCP servers if configured (only enabled ones, merged with space config + plugin MCP)
+    const mcpDisabled =
+      config.claudeCode?.mcpEnabled === false ||
+      spaceConfig?.claudeCode?.mcpEnabled === false
+
+    if (mcpDisabled) {
+      console.log(`[Agent][${conversationId}] MCP disabled by configuration (external only)`)
+    } else {
+      const enabledMcpServers = getEnabledMcpServers(config.mcpServers || {}, workDir)
+      const pluginMcpServers = buildPluginMcpServers(
+        getEnabledPluginMcpList(conversationId),
+        enabledMcpServers || {}
+      )
+      const mcpServerNames = [
+        ...(enabledMcpServers ? Object.keys(enabledMcpServers) : []),
+        ...Object.keys(pluginMcpServers)
+      ]
+      if (mcpServerNames.length > 0) {
+        console.log(`[Agent][${conversationId}] MCP servers configured: ${mcpServerNames.join(', ')}`)
+      }
     }
 
     // Session config for rebuild detection
     const sessionConfig: SessionConfig = {
-      aiBrowserEnabled: !!aiBrowserEnabled
+      aiBrowserEnabled: !!effectiveAiBrowserEnabled,
+      skillsLazyLoad,
+      enabledPluginMcpsHash: getEnabledPluginMcpHash(conversationId)
     }
 
     // Get or create persistent V2 session for this conversation
@@ -222,8 +336,48 @@ export async function sendMessage(
     // Inject Canvas Context prefix if available
     // This provides AI awareness of what user is currently viewing
     const canvasPrefix = formatCanvasContext(canvasContext)
+
+    const expandedMessage = skillsLazyLoad
+      ? expandLazyDirectives(messageForSend, workDir)
+      : {
+          text: messageForSend,
+          expanded: { skills: [], commands: [], agents: [] },
+          missing: { skills: [], commands: [], agents: [] }
+        }
+
+    if (expandedMessage.expanded.skills.length > 0) {
+      console.log(
+        `[Agent][${conversationId}] Expanded skills: ${expandedMessage.expanded.skills.join(', ')}`
+      )
+    }
+    if (expandedMessage.expanded.commands.length > 0) {
+      console.log(
+        `[Agent][${conversationId}] Expanded commands: ${expandedMessage.expanded.commands.join(', ')}`
+      )
+    }
+    if (expandedMessage.expanded.agents.length > 0) {
+      console.log(
+        `[Agent][${conversationId}] Expanded agents: ${expandedMessage.expanded.agents.join(', ')}`
+      )
+    }
+    if (expandedMessage.missing.skills.length > 0) {
+      console.warn(
+        `[Agent][${conversationId}] Skills not found: ${expandedMessage.missing.skills.join(', ')}`
+      )
+    }
+    if (expandedMessage.missing.commands.length > 0) {
+      console.warn(
+        `[Agent][${conversationId}] Commands not found: ${expandedMessage.missing.commands.join(', ')}`
+      )
+    }
+    if (expandedMessage.missing.agents.length > 0) {
+      console.warn(
+        `[Agent][${conversationId}] Agents not found: ${expandedMessage.missing.agents.join(', ')}`
+      )
+    }
+
     // Inject file contexts + canvas context + original message for AI
-    const messageWithContext = fileContextBlock + canvasPrefix + message
+    const messageWithContext = fileContextBlock + canvasPrefix + expandedMessage.text
 
     // Build message content (text-only or multi-modal with images)
     const messageContent = buildMessageContent(messageWithContext, images)

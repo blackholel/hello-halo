@@ -40,8 +40,8 @@ import { SkillDetailModal } from '../components/skills/SkillDetailModal'
 import { SkillEditorModal } from '../components/skills/SkillEditorModal'
 import { AgentDetailModal } from '../components/agents/AgentDetailModal'
 import { AgentEditorModal } from '../components/agents/AgentEditorModal'
-import type { SkillDefinition } from '../stores/skills.store'
-import type { AgentDefinition } from '../stores/agents.store'
+import { useSkillsStore, type SkillDefinition } from '../stores/skills.store'
+import { useAgentsStore, type AgentDefinition } from '../stores/agents.store'
 import { useComposerStore } from '../stores/composer.store'
 // Mobile breakpoint (matches Tailwind sm: 640px)
 const MOBILE_BREAKPOINT = 640
@@ -127,6 +127,17 @@ export function SpacePage() {
     setEditingAgent(agent)
     setIsAgentEditorOpen(true)
   }, [])
+
+  const { loadSkills } = useSkillsStore()
+  const { loadAgents } = useAgentsStore()
+
+  // Preload skills/agents when space changes
+  useEffect(() => {
+    if (currentSpace?.path) {
+      loadSkills(currentSpace.path)
+      loadAgents(currentSpace.path)
+    }
+  }, [currentSpace?.path, loadSkills, loadAgents])
 
   // Layout mode: 'split' = 分栏布局 (左侧固定 ChatView), 'tabs-only' = 纯标签页模式
   const [layoutMode, setLayoutMode] = useState<'split' | 'tabs-only'>(() => {

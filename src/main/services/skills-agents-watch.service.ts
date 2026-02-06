@@ -8,9 +8,9 @@ import type { BrowserWindow } from 'electron'
 import { watch, existsSync } from 'fs'
 import { join } from 'path'
 import { getConfig, getHaloDir, getSpacesDir } from './config.service'
-import { loadInstalledPlugins } from './plugins.service'
-import { clearSkillsCache } from './skills.service'
-import { clearAgentsCache } from './agents.service'
+import { listEnabledPlugins } from './plugins.service'
+import { invalidateSkillsCache } from './skills.service'
+import { invalidateAgentsCache } from './agents.service'
 import { getAllSpacePaths } from './space.service'
 
 type WatchKind = 'skills' | 'agents' | 'spaces-root'
@@ -45,10 +45,10 @@ function scheduleNotify(kind: 'skills' | 'agents', workDir?: string): void {
   debounceTimers.set(key, setTimeout(() => {
     debounceTimers.delete(key)
     if (kind === 'skills') {
-      clearSkillsCache()
+      invalidateSkillsCache(workDir || null)
       sendEvent('skills:changed', { workDir: workDir || null })
     } else {
-      clearAgentsCache()
+      invalidateAgentsCache(workDir || null)
       sendEvent('agents:changed', { workDir: workDir || null })
     }
   }, 200))
@@ -105,8 +105,8 @@ function getSkillDirs(): Array<{ path: string; workDir?: string }> {
     dirs.push({ path: skillsSubdir })
   }
 
-  const installedPlugins = loadInstalledPlugins()
-  for (const plugin of installedPlugins) {
+  const enabledPlugins = listEnabledPlugins()
+  for (const plugin of enabledPlugins) {
     dirs.push({ path: join(plugin.installPath, 'skills') })
   }
 
@@ -130,6 +130,11 @@ function getAgentDirs(): Array<{ path: string; workDir?: string }> {
   for (const globalPath of globalPaths) {
     const resolvedPath = resolveGlobalPath(globalPath)
     dirs.push({ path: resolvedPath })
+  }
+
+  const enabledPlugins = listEnabledPlugins()
+  for (const plugin of enabledPlugins) {
+    dirs.push({ path: join(plugin.installPath, 'agents') })
   }
 
   const spaces = getAllSpacePaths()

@@ -19,13 +19,15 @@ interface AgentsPanelProps {
 const SOURCE_LABELS: Record<AgentDefinition['source'], string> = {
   app: 'App',
   global: 'Global',
-  space: 'Space'
+  space: 'Space',
+  plugin: 'Plugin'
 }
 
 const SOURCE_COLORS: Record<AgentDefinition['source'], string> = {
   app: 'bg-blue-500/10 text-blue-500',
   global: 'bg-purple-500/10 text-purple-500',
-  space: 'bg-green-500/10 text-green-500'
+  space: 'bg-green-500/10 text-green-500',
+  plugin: 'bg-orange-500/10 text-orange-500'
 }
 
 export function AgentsPanel({
@@ -70,10 +72,14 @@ export function AgentsPanel({
     const groups: Record<AgentDefinition['source'], AgentDefinition[]> = {
       space: [],
       global: [],
-      app: []
+      app: [],
+      plugin: []
     }
     filteredAgents.forEach(agent => {
-      groups[agent.source].push(agent)
+      const bucket = groups[agent.source]
+      if (bucket) {
+        bucket.push(agent)
+      }
     })
     return groups
   }, [filteredAgents])
@@ -418,6 +424,7 @@ export function AgentsPanel({
               <div className="py-1">
                 {renderAgentGroup('space', groupedAgents.space)}
                 {renderAgentGroup('global', groupedAgents.global)}
+                {renderAgentGroup('plugin', groupedAgents.plugin)}
                 {renderAgentGroup('app', groupedAgents.app)}
               </div>
             )}

@@ -5,10 +5,12 @@
  * - App-level agents (~/.halo/agents/)
  * - Global custom paths
  * - Space-level agents ({workDir}/.claude/agents/)
+ * - Enabled plugin agents
  */
 
 import { create } from 'zustand'
 import { api } from '../api'
+import { getCacheKey, getAllCacheKeys, GLOBAL_CACHE_KEY } from './cache-keys'
 
 // ============================================
 // Types
@@ -17,8 +19,9 @@ import { api } from '../api'
 export interface AgentDefinition {
   name: string
   path: string
-  source: 'app' | 'global' | 'space'
+  source: 'app' | 'global' | 'space' | 'plugin'
   description?: string
+  namespace?: string
 }
 
 export interface AgentContent {
@@ -32,6 +35,8 @@ interface AgentsState {
   loadedWorkDir: string | null
   selectedAgent: AgentDefinition | null
   agentContent: AgentContent | null
+  agentsByWorkDir: Record<string | symbol, AgentDefinition[]>
+  dirtyWorkDirs: Set<string | symbol>
 
   // UI State
   isLoading: boolean
@@ -49,6 +54,8 @@ interface AgentsState {
   deleteAgent: (agentPath: string) => Promise<boolean>
   copyToSpace: (agentName: string, workDir: string) => Promise<AgentDefinition | null>
   clearCache: () => Promise<void>
+  markDirty: (workDir?: string | null) => void
+  markAllDirty: () => void
 
   // Selectors
   getFilteredAgents: () => AgentDefinition[]
@@ -66,6 +73,8 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
   loadedWorkDir: null,
   selectedAgent: null,
   agentContent: null,
+  agentsByWorkDir: {},
+  dirtyWorkDirs: new Set<string | symbol>(),
   isLoading: false,
   isLoadingContent: false,
   searchQuery: '',
@@ -73,15 +82,36 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
 
   // Load agents from all sources
   loadAgents: async (workDir?: string) => {
+    const cacheKey = getCacheKey(workDir)
+    const { agentsByWorkDir, dirtyWorkDirs } = get()
+    const cached = agentsByWorkDir[cacheKey]
+    if (cached && !dirtyWorkDirs.has(cacheKey)) {
+      set({
+        agents: cached,
+        loadedWorkDir: workDir ?? null,
+        error: null,
+        isLoading: false
+      })
+      return
+    }
+
     try {
       set({ isLoading: true, error: null })
 
       const response = await api.listAgents(workDir)
 
       if (response.success && response.data) {
+        const nextByWorkDir = {
+          ...get().agentsByWorkDir,
+          [cacheKey]: response.data as AgentDefinition[]
+        }
+        const nextDirty = new Set(get().dirtyWorkDirs)
+        nextDirty.delete(cacheKey)
         set({
           agents: response.data as AgentDefinition[],
-          loadedWorkDir: workDir ?? null
+          loadedWorkDir: workDir ?? null,
+          agentsByWorkDir: nextByWorkDir,
+          dirtyWorkDirs: nextDirty
         })
       } else {
         set({ error: response.error || 'Failed to load agents' })
@@ -136,8 +166,13 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
 
       if (response.success && response.data) {
         const newAgent = response.data as AgentDefinition
+        const cacheKey = getCacheKey(workDir)
         set((state) => ({
-          agents: [...state.agents, newAgent]
+          agents: [...state.agents, newAgent],
+          agentsByWorkDir: {
+            ...state.agentsByWorkDir,
+            [cacheKey]: [...(state.agentsByWorkDir[cacheKey] || []), newAgent]
+          }
         }))
         return newAgent
       }
@@ -177,11 +212,19 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
     try {
       const response = await api.deleteAgent(agentPath)
       if (response.success) {
-        set((state) => ({
-          agents: state.agents.filter(a => a.path !== agentPath),
-          selectedAgent: state.selectedAgent?.path === agentPath ? null : state.selectedAgent,
-          agentContent: state.selectedAgent?.path === agentPath ? null : state.agentContent
-        }))
+        set((state) => {
+          const cacheKey = getCacheKey(state.loadedWorkDir)
+          return {
+            agents: state.agents.filter(a => a.path !== agentPath),
+            agentsByWorkDir: {
+              ...state.agentsByWorkDir,
+              [cacheKey]: (state.agentsByWorkDir[cacheKey] || [])
+                .filter(a => a.path !== agentPath)
+            },
+            selectedAgent: state.selectedAgent?.path === agentPath ? null : state.selectedAgent,
+            agentContent: state.selectedAgent?.path === agentPath ? null : state.agentContent
+          }
+        })
         return true
       }
       set({ error: response.error || 'Failed to delete agent' })
@@ -199,8 +242,15 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
       const response = await api.copyAgentToSpace(agentName, workDir)
       if (response.success && response.data) {
         const copiedAgent = response.data as AgentDefinition
+        const cacheKey = getCacheKey(workDir)
         set((state) => ({
-          agents: state.agents.map(a => a.name === agentName ? copiedAgent : a)
+          agents: state.agents.map(a => a.name === agentName ? copiedAgent : a),
+          agentsByWorkDir: {
+            ...state.agentsByWorkDir,
+            [cacheKey]: (state.agentsByWorkDir[cacheKey] || []).map(a =>
+              a.name === agentName ? copiedAgent : a
+            )
+          }
         }))
         return copiedAgent
       }
@@ -217,9 +267,33 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
   clearCache: async () => {
     try {
       await api.clearAgentsCache()
+      set((state) => {
+        const allKeys = getAllCacheKeys(state.agentsByWorkDir)
+        const nextDirty = new Set(allKeys)
+        nextDirty.add(GLOBAL_CACHE_KEY)
+        return { dirtyWorkDirs: nextDirty }
+      })
     } catch (error) {
       console.error('[AgentsStore] Failed to clear cache:', error)
     }
+  },
+
+  markDirty: (workDir) => {
+    const cacheKey = getCacheKey(workDir)
+    set((state) => {
+      const nextDirty = new Set(state.dirtyWorkDirs)
+      nextDirty.add(cacheKey)
+      return { dirtyWorkDirs: nextDirty }
+    })
+  },
+
+  markAllDirty: () => {
+    set((state) => {
+      const allKeys = getAllCacheKeys(state.agentsByWorkDir)
+      const nextDirty = new Set(allKeys)
+      nextDirty.add(GLOBAL_CACHE_KEY)
+      return { dirtyWorkDirs: nextDirty }
+    })
   },
 
   // Get filtered agents
@@ -255,8 +329,14 @@ export function initAgentsStoreListeners(): void {
 
   api.onAgentsChanged((data) => {
     const payload = data as { workDir?: string | null }
-    const { loadedWorkDir, loadAgents } = useAgentsStore.getState()
-    if (payload.workDir == null || payload.workDir === loadedWorkDir) {
+    const { loadedWorkDir, loadAgents, markDirty, markAllDirty } = useAgentsStore.getState()
+    if (payload.workDir == null) {
+      markAllDirty()
+      loadAgents(loadedWorkDir ?? undefined)
+      return
+    }
+    markDirty(payload.workDir)
+    if (payload.workDir === loadedWorkDir) {
       loadAgents(loadedWorkDir ?? undefined)
     }
   })
