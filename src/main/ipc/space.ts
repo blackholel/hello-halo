@@ -22,8 +22,21 @@ interface SpaceLayoutPreferences {
   chatWidth?: number
 }
 
+interface SpaceSkillsPreferences {
+  favorites?: string[]
+  enabled?: string[]
+  showOnlyEnabled?: boolean
+}
+
+interface SpaceAgentsPreferences {
+  enabled?: string[]
+  showOnlyEnabled?: boolean
+}
+
 interface SpacePreferences {
   layout?: SpaceLayoutPreferences
+  skills?: SpaceSkillsPreferences
+  agents?: SpaceAgentsPreferences
 }
 
 export function registerSpaceHandlers(): void {

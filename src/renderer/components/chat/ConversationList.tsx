@@ -9,6 +9,11 @@ import { MessageSquare, Plus } from '../icons/ToolIcons'
 import { ExternalLink } from 'lucide-react'
 import { useCanvasLifecycle } from '../../hooks/useCanvasLifecycle'
 import { useTranslation } from '../../i18n'
+import { SkillsPanel } from '../skills/SkillsPanel'
+import { AgentsPanel } from '../agents/AgentsPanel'
+import { WorkflowsPanel } from '../workflows/WorkflowsPanel'
+import type { SkillDefinition } from '../../stores/skills.store'
+import type { AgentDefinition } from '../../stores/agents.store'
 
 // Width constraints (in pixels)
 const MIN_WIDTH = 140
@@ -24,6 +29,13 @@ interface ConversationListProps {
   onNew: () => void
   onDelete?: (id: string) => void
   onRename?: (id: string, newTitle: string) => void
+  workDir?: string
+  onSelectSkill?: (skill: SkillDefinition) => void
+  onInsertSkill?: (skillName: string) => void
+  onCreateSkill?: () => void
+  onSelectAgent?: (agent: AgentDefinition) => void
+  onInsertAgent?: (agentName: string) => void
+  onCreateAgent?: () => void
 }
 
 export function ConversationList({
@@ -34,7 +46,14 @@ export function ConversationList({
   onSelect,
   onNew,
   onDelete,
-  onRename
+  onRename,
+  workDir,
+  onSelectSkill,
+  onInsertSkill,
+  onCreateSkill,
+  onSelectAgent,
+  onInsertAgent,
+  onCreateAgent
 }: ConversationListProps) {
   const { t } = useTranslation()
   const { openChat } = useCanvasLifecycle()
@@ -230,6 +249,27 @@ export function ConversationList({
             )}
           </div>
         ))}
+      </div>
+
+      {/* Skills & Agents panel */}
+      <div className="p-2 border-t border-border/50 space-y-2">
+        <SkillsPanel
+          workDir={workDir}
+          onSelectSkill={onSelectSkill}
+          onInsertSkill={onInsertSkill}
+          onCreateSkill={onCreateSkill}
+          preferInsertOnClick
+        />
+        <AgentsPanel
+          workDir={workDir}
+          onSelectAgent={onSelectAgent}
+          onInsertAgent={onInsertAgent}
+          onCreateAgent={onCreateAgent}
+          preferInsertOnClick
+        />
+        {spaceId && (
+          <WorkflowsPanel spaceId={spaceId} />
+        )}
       </div>
 
       {/* New conversation button */}

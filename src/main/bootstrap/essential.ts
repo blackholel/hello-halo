@@ -15,6 +15,7 @@
  *   - Conversation: Chat history (core feature)
  *   - Agent: Message handling (core feature)
  *   - Artifact: File management (sidebar display)
+ *   - Change Sets: File change review/rollback
  *   - System: Window controls (basic functionality)
  *   - Updater: Auto-update checks (lightweight, needs early start)
  */
@@ -25,9 +26,11 @@ import { registerSpaceHandlers } from '../ipc/space'
 import { registerConversationHandlers } from '../ipc/conversation'
 import { registerAgentHandlers } from '../ipc/agent'
 import { registerArtifactHandlers } from '../ipc/artifact'
-import { registerSystemHandlers } from '../ipc/system'
-import { registerUpdaterHandlers, initAutoUpdater } from '../services/updater.service'
 import { registerChangeSetHandlers } from '../ipc/change-set'
+import { registerSystemHandlers } from '../ipc/system'
+import { registerSkillsHandlers } from '../ipc/skills'
+import { registerAgentsHandlers } from '../ipc/agents'
+import { registerUpdaterHandlers, initAutoUpdater } from '../services/updater.service'
 
 /**
  * Initialize essential services required for first screen render
@@ -61,6 +64,12 @@ export function initializeEssentialServices(mainWindow: BrowserWindow): void {
 
   // Change Sets: File change review/rollback (used in core chat UI)
   registerChangeSetHandlers()
+
+  // Skills: Skills management for sidebar and chat input
+  registerSkillsHandlers()
+
+  // Agents: Agents management for sidebar and chat input
+  registerAgentsHandlers()
 
   // System: Window controls (maximize, minimize, tray) are basic functionality
   registerSystemHandlers(mainWindow)

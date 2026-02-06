@@ -85,6 +85,10 @@ export async function testMcpConnections(
       return { success: false, servers: [], error: 'API key not configured' }
     }
 
+    if (config.claudeCode?.mcpEnabled === false) {
+      return { success: true, servers: [], error: 'MCP disabled by configuration' }
+    }
+
     // Get enabled MCP servers from config
     const enabledMcpServers = getEnabledMcpServers(config.mcpServers || {})
     if (!enabledMcpServers || Object.keys(enabledMcpServers).length === 0) {

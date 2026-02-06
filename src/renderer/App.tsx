@@ -8,6 +8,9 @@ import { useChatStore } from './stores/chat.store'
 import { useOnboardingStore } from './stores/onboarding.store'
 import { initAIBrowserStoreListeners } from './stores/ai-browser.store'
 import { initPerfStoreListeners } from './stores/perf.store'
+import { initSkillsStoreListeners } from './stores/skills.store'
+import { initAgentsStoreListeners } from './stores/agents.store'
+import { useWorkflowsStore } from './stores/workflows.store'
 import { useSpaceStore } from './stores/space.store'
 import { useSearchStore } from './stores/search.store'
 import { SplashScreen } from './components/splash/SplashScreen'
@@ -84,6 +87,7 @@ export default function App() {
     loadConversations,
     selectConversation
   } = useChatStore()
+  const { handleAgentComplete: handleWorkflowAgentComplete } = useWorkflowsStore()
   const { initialize: initializeOnboarding } = useOnboardingStore()
   const { isSearchOpen, closeSearch, isHighlightBarVisible, hideHighlightBar, goToPreviousResult, goToNextResult, openSearch } = useSearchStore()
 
@@ -130,6 +134,8 @@ export default function App() {
     console.log('[App] Initializing AI Browser store listeners')
     initPerfStoreListeners()
     const cleanup = initAIBrowserStoreListeners()
+    initSkillsStoreListeners()
+    initAgentsStoreListeners()
     return cleanup
   }, [])
 
@@ -167,6 +173,7 @@ export default function App() {
     const unsubComplete = api.onAgentComplete((data) => {
       console.log('[App] Received agent:complete event:', data)
       handleAgentComplete(data as AgentEventBase)
+      handleWorkflowAgentComplete(data as AgentEventBase)
     })
 
     const unsubCompact = api.onAgentCompact((data) => {
@@ -199,6 +206,7 @@ export default function App() {
     handleAgentToolResult,
     handleAgentError,
     handleAgentComplete,
+    handleWorkflowAgentComplete,
     handleAgentThought,
     handleAgentCompact,
     setMcpStatus

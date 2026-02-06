@@ -26,6 +26,15 @@ export interface HaloAPI {
       artifactRailExpanded?: boolean
       chatWidth?: number
     }
+    skills?: {
+      favorites?: string[]
+      enabled?: string[]
+      showOnlyEnabled?: boolean
+    }
+    agents?: {
+      enabled?: string[]
+      showOnlyEnabled?: boolean
+    }
   }) => Promise<IpcResponse>
   getSpacePreferences: (spaceId: string) => Promise<IpcResponse>
 
@@ -108,6 +117,8 @@ export interface HaloAPI {
   onAgentThought: (callback: (data: unknown) => void) => () => void
   onAgentMcpStatus: (callback: (data: unknown) => void) => () => void
   onAgentCompact: (callback: (data: unknown) => void) => () => void
+  onSkillsChanged: (callback: (data: unknown) => void) => () => void
+  onAgentsChanged: (callback: (data: unknown) => void) => () => void
 
   // Artifact
   listArtifacts: (spaceId: string) => Promise<IpcResponse>
@@ -126,6 +137,31 @@ export interface HaloAPI {
   // Onboarding
   writeOnboardingArtifact: (spaceId: string, filename: string, content: string) => Promise<IpcResponse>
   saveOnboardingConversation: (spaceId: string, userPrompt: string, aiResponse: string) => Promise<IpcResponse>
+
+  // Skills
+  listSkills: (workDir?: string) => Promise<IpcResponse>
+  getSkillContent: (name: string, workDir?: string) => Promise<IpcResponse>
+  createSkill: (workDir: string, name: string, content: string) => Promise<IpcResponse>
+  updateSkill: (skillPath: string, content: string) => Promise<IpcResponse>
+  deleteSkill: (skillPath: string) => Promise<IpcResponse>
+  copySkillToSpace: (skillName: string, workDir: string) => Promise<IpcResponse>
+  clearSkillsCache: () => Promise<IpcResponse>
+
+  // Agents
+  listAgents: (workDir?: string) => Promise<IpcResponse>
+  getAgentContent: (name: string, workDir?: string) => Promise<IpcResponse>
+  createAgent: (workDir: string, name: string, content: string) => Promise<IpcResponse>
+  updateAgent: (agentPath: string, content: string) => Promise<IpcResponse>
+  deleteAgent: (agentPath: string) => Promise<IpcResponse>
+  copyAgentToSpace: (agentName: string, workDir: string) => Promise<IpcResponse>
+  clearAgentsCache: () => Promise<IpcResponse>
+
+  // Workflows
+  listWorkflows: (spaceId: string) => Promise<IpcResponse>
+  getWorkflow: (spaceId: string, workflowId: string) => Promise<IpcResponse>
+  createWorkflow: (spaceId: string, input: Record<string, unknown>) => Promise<IpcResponse>
+  updateWorkflow: (spaceId: string, workflowId: string, updates: Record<string, unknown>) => Promise<IpcResponse>
+  deleteWorkflow: (spaceId: string, workflowId: string) => Promise<IpcResponse>
 
   // Remote Access
   enableRemoteAccess: (port?: number) => Promise<IpcResponse>
@@ -418,6 +454,8 @@ const api: HaloAPI = {
   onAgentThought: (callback) => createEventListener('agent:thought', callback),
   onAgentMcpStatus: (callback) => createEventListener('agent:mcp-status', callback),
   onAgentCompact: (callback) => createEventListener('agent:compact', callback),
+  onSkillsChanged: (callback) => createEventListener('skills:changed', callback),
+  onAgentsChanged: (callback) => createEventListener('agents:changed', callback),
 
   // Artifact
   listArtifacts: (spaceId) => ipcRenderer.invoke('artifact:list', spaceId),
@@ -438,6 +476,31 @@ const api: HaloAPI = {
     ipcRenderer.invoke('onboarding:write-artifact', spaceId, filename, content),
   saveOnboardingConversation: (spaceId, userPrompt, aiResponse) =>
     ipcRenderer.invoke('onboarding:save-conversation', spaceId, userPrompt, aiResponse),
+
+  // Skills
+  listSkills: (workDir) => ipcRenderer.invoke('skills:list', workDir),
+  getSkillContent: (name, workDir) => ipcRenderer.invoke('skills:get-content', name, workDir),
+  createSkill: (workDir, name, content) => ipcRenderer.invoke('skills:create', workDir, name, content),
+  updateSkill: (skillPath, content) => ipcRenderer.invoke('skills:update', skillPath, content),
+  deleteSkill: (skillPath) => ipcRenderer.invoke('skills:delete', skillPath),
+  copySkillToSpace: (skillName, workDir) => ipcRenderer.invoke('skills:copy-to-space', skillName, workDir),
+  clearSkillsCache: () => ipcRenderer.invoke('skills:clear-cache'),
+
+  // Agents
+  listAgents: (workDir) => ipcRenderer.invoke('agents:list', workDir),
+  getAgentContent: (name, workDir) => ipcRenderer.invoke('agents:get-content', name, workDir),
+  createAgent: (workDir, name, content) => ipcRenderer.invoke('agents:create', workDir, name, content),
+  updateAgent: (agentPath, content) => ipcRenderer.invoke('agents:update', agentPath, content),
+  deleteAgent: (agentPath) => ipcRenderer.invoke('agents:delete', agentPath),
+  copyAgentToSpace: (agentName, workDir) => ipcRenderer.invoke('agents:copy-to-space', agentName, workDir),
+  clearAgentsCache: () => ipcRenderer.invoke('agents:clear-cache'),
+
+  // Workflows
+  listWorkflows: (spaceId) => ipcRenderer.invoke('workflow:list', spaceId),
+  getWorkflow: (spaceId, workflowId) => ipcRenderer.invoke('workflow:get', spaceId, workflowId),
+  createWorkflow: (spaceId, input) => ipcRenderer.invoke('workflow:create', spaceId, input),
+  updateWorkflow: (spaceId, workflowId, updates) => ipcRenderer.invoke('workflow:update', spaceId, workflowId, updates),
+  deleteWorkflow: (spaceId, workflowId) => ipcRenderer.invoke('workflow:delete', spaceId, workflowId),
 
   // Remote Access
   enableRemoteAccess: (port) => ipcRenderer.invoke('remote:enable', port),

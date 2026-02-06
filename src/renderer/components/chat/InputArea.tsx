@@ -19,16 +19,18 @@
  * - Bottom toolbar for future extensibility
  */
 
-import { useState, useRef, useEffect, KeyboardEvent, ClipboardEvent, DragEvent } from 'react'
+import { useState, useRef, useEffect, useCallback, KeyboardEvent, ClipboardEvent, DragEvent } from 'react'
 import { Plus, ImagePlus, Loader2, AlertCircle, Atom, Globe } from 'lucide-react'
 import { useOnboardingStore } from '../../stores/onboarding.store'
 import { useAIBrowserStore } from '../../stores/ai-browser.store'
 import { getOnboardingPrompt } from '../onboarding/onboardingData'
 import { ImageAttachmentPreview } from './ImageAttachmentPreview'
 import { FileContextPreview } from './FileContextPreview'
+import { SkillsDropdown } from '../skills/SkillsDropdown'
 import { processImage, isValidImageType, formatFileSize } from '../../utils/imageProcessor'
 import type { ImageAttachment, FileContextAttachment } from '../../types'
 import { useTranslation } from '../../i18n'
+import { useComposerStore } from '../../stores/composer.store'
 
 interface InputAreaProps {
   onSend: (content: string, images?: ImageAttachment[], thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[]) => void
@@ -36,6 +38,7 @@ interface InputAreaProps {
   isGenerating: boolean
   placeholder?: string
   isCompact?: boolean
+  workDir?: string  // For skills dropdown
 }
 
 // Image constraints
@@ -48,7 +51,7 @@ interface ImageError {
   message: string
 }
 
-export function InputArea({ onSend, onStop, isGenerating, placeholder, isCompact = false }: InputAreaProps) {
+export function InputArea({ onSend, onStop, isGenerating, placeholder, isCompact = false, workDir }: InputAreaProps) {
   const { t } = useTranslation()
   const [content, setContent] = useState('')
   const [isFocused, setIsFocused] = useState(false)
@@ -62,6 +65,8 @@ export function InputArea({ onSend, onStop, isGenerating, placeholder, isCompact
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const attachMenuRef = useRef<HTMLDivElement>(null)
+  const insertQueue = useComposerStore(state => state.insertQueue)
+  const dequeueInsert = useComposerStore(state => state.dequeueInsert)
 
   // AI Browser state
   const { enabled: aiBrowserEnabled, setEnabled: setAIBrowserEnabled } = useAIBrowserStore()
@@ -319,6 +324,29 @@ export function InputArea({ onSend, onStop, isGenerating, placeholder, isCompact
     }
   }
 
+  const insertText = useCallback((text: string) => {
+    setContent(prev => {
+      if (!prev || prev.endsWith(' ') || prev.endsWith('\n')) {
+        return prev + text
+      }
+      return prev + ' ' + text
+    })
+    textareaRef.current?.focus()
+  }, [])
+
+  // Consume pending insert requests from sidebar panels
+  useEffect(() => {
+    if (insertQueue.length === 0) return
+    const next = insertQueue[0]
+    insertText(next.text)
+    dequeueInsert(next.id)
+  }, [insertQueue, dequeueInsert, insertText])
+
+  // Handle skill insertion from SkillsDropdown
+  const handleInsertSkill = (skillName: string) => {
+    insertText(`/${skillName} `)
+  }
+
   // In onboarding mode, can always send (prefilled content)
   // Can send if has text OR has images OR has file contexts (and not processing/generating)
   const canSend = isOnboardingSendStep || ((content.trim().length > 0 || images.length > 0 || fileContexts.length > 0) && !isGenerating && !isProcessingImages)
@@ -442,6 +470,8 @@ export function InputArea({ onSend, onStop, isGenerating, placeholder, isCompact
             canSend={canSend}
             onSend={handleSend}
             onStop={onStop}
+            workDir={workDir}
+            onInsertSkill={handleInsertSkill}
           />
         </div>
       </div>
@@ -453,7 +483,7 @@ export function InputArea({ onSend, onStop, isGenerating, placeholder, isCompact
  * Input Toolbar - Bottom action bar
  * Extracted as a separate component for maintainability and future extensibility
  *
- * Layout: [+attachment] ──────────────────── [⚛ thinking] [send]
+ * Layout: [+attachment] [skills] ──────────────────── [⚛ thinking] [send]
  */
 interface InputToolbarProps {
   isGenerating: boolean
@@ -472,6 +502,8 @@ interface InputToolbarProps {
   canSend: boolean
   onSend: () => void
   onStop: () => void
+  workDir?: string
+  onInsertSkill: (skillName: string) => void
 }
 
 function InputToolbar({
@@ -490,7 +522,9 @@ function InputToolbar({
   attachMenuRef,
   canSend,
   onSend,
-  onStop
+  onStop,
+  workDir,
+  onInsertSkill
 }: InputToolbarProps) {
   const { t } = useTranslation()
   return (
@@ -565,6 +599,14 @@ function InputToolbar({
               <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-primary rounded-full" />
             )}
           </button>
+        )}
+
+        {/* Skills dropdown */}
+        {!isGenerating && !isOnboarding && workDir && (
+          <SkillsDropdown
+            workDir={workDir}
+            onInsertSkill={onInsertSkill}
+          />
         )}
 
         {/* Thinking mode toggle - always show full label, no expansion */}

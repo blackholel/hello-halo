@@ -11,11 +11,13 @@ import { homedir } from 'os'
 import { getConfig, getTempSpacePath, getHaloDir } from '../config.service'
 import { getSpaceConfig } from '../space-config.service'
 import { buildHooksConfig } from '../hooks.service'
-import { getInstalledPluginPaths } from '../plugins.service'
+import { listEnabledPlugins } from '../plugins.service'
 import { getEmbeddedPythonDir, getPythonEnhancedPath } from '../python.service'
 import { isValidDirectoryPath } from '../../utils/path-validation'
 import { getSpace } from '../space.service'
 import { createAIBrowserMcpServer, AI_BROWSER_SYSTEM_PROMPT } from '../ai-browser'
+import { SKILLS_LAZY_SYSTEM_PROMPT } from '../skills-mcp-server'
+import { buildPluginMcpServers } from '../plugin-mcp.service'
 import type { PluginConfig, SettingSource, ToolCall } from './types'
 
 // Re-export types for convenience
@@ -52,22 +54,17 @@ export function getWorkingDir(spaceId: string): string {
 }
 
 /**
- * Build plugins configuration for skills loading
- * Supports multi-tier plugins: installed plugins, system, global, app-level, space-level
- *
- * Loading priority (low to high):
- * 0. Installed plugins from ~/.halo/plugins/installed_plugins.json (or ~/.claude/plugins/)
- * 1. ~/.claude/ - system config directory (only when enableSystemSkills: true)
- * 2. globalPaths - user-configured global paths
- * 3. ~/.halo/ - app config directory (loads skills/, commands/, hooks/, agents/)
- * 4. Space paths - space-specific custom paths
- * 5. {workDir}/.claude/ - default space-level path (Claude Code compatible)
+ * Build plugins configuration for skills loading.
+ * Loading priority: installed plugins → system → global → app → space → workDir/.claude/
  */
 export function buildPluginsConfig(workDir: string): PluginConfig[] {
   const plugins: PluginConfig[] = []
   const config = getConfig()
   const spaceConfig = getSpaceConfig(workDir)
   const claudeCodeConfig = config.claudeCode
+  const skillsLazyLoad =
+    claudeCodeConfig?.skillsLazyLoad === true ||
+    spaceConfig?.claudeCode?.skillsLazyLoad === true
 
   // Helper to add plugin if valid and not already added
   const addedPaths = new Set<string>()
@@ -85,11 +82,16 @@ export function buildPluginsConfig(workDir: string): PluginConfig[] {
     return plugins
   }
 
-  // 0. Load installed plugins from registry (highest priority for marketplace plugins)
+  if (skillsLazyLoad) {
+    console.log('[Agent] Skills lazy-load enabled: skipping plugin directories for Claude Code')
+    return plugins
+  }
+
+  // 0. Load enabled plugins from registry (highest priority for marketplace plugins)
   // These are plugins installed via `claude plugins install` command
-  const installedPluginPaths = getInstalledPluginPaths()
-  for (const pluginPath of installedPluginPaths) {
-    addIfValid(pluginPath)
+  const enabledPlugins = listEnabledPlugins()
+  for (const plugin of enabledPlugins) {
+    addIfValid(plugin.installPath)
   }
 
   // Check if space disables global plugins
@@ -147,23 +149,23 @@ export function buildPluginsConfig(workDir: string): PluginConfig[] {
 }
 
 /**
- * Build settingSources configuration
- * Controls which filesystem settings SDK will load (skills, commands, agents, etc.)
- *
- * With CLAUDE_CONFIG_DIR=~/.halo/, the sources map to:
- * - 'user': ~/.halo/ (skills, commands, agents, settings) - via CLAUDE_CONFIG_DIR
- * - 'project': {workDir}/.claude/ (project-level config)
- * - 'local': .claude/settings.local.json
+ * Build settingSources configuration.
+ * Controls which filesystem settings SDK will load.
  */
 export function buildSettingSources(workDir: string): SettingSource[] {
+  const config = getConfig()
   const spaceConfig = getSpaceConfig(workDir)
+  const skillsLazyLoad =
+    config.claudeCode?.skillsLazyLoad === true ||
+    spaceConfig?.claudeCode?.skillsLazyLoad === true
 
-  // Default: enable both 'user' and 'project' sources
-  // 'user' now points to ~/.halo/ (via CLAUDE_CONFIG_DIR env var)
-  // 'project' points to {workDir}/.claude/ for project-level config
+  if (skillsLazyLoad) {
+    console.log('[Agent] Skills lazy-load enabled: settingSources=local only')
+    return ['local']
+  }
+
   const sources: SettingSource[] = ['user', 'project']
 
-  // Space-level override: can disable project settings for specific spaces
   if (spaceConfig?.claudeCode?.enableProjectSettings === false) {
     const idx = sources.indexOf('project')
     if (idx !== -1) {
@@ -176,31 +178,24 @@ export function buildSettingSources(workDir: string): SettingSource[] {
 }
 
 /**
- * Filter out disabled MCP servers before passing to SDK
- * Merges global MCP servers with space-level MCP servers (space takes precedence)
+ * Filter out disabled MCP servers and merge global with space-level config.
  */
 export function getEnabledMcpServers(
   globalMcpServers: Record<string, any>,
   workDir?: string
 ): Record<string, any> | null {
-  // Get space-level MCP servers
   const spaceConfig = workDir ? getSpaceConfig(workDir) : null
   const spaceMcpServers = spaceConfig?.claudeCode?.mcpServers || {}
 
-  // Merge: space servers override global servers with the same name
-  const mergedServers = {
-    ...globalMcpServers,
-    ...spaceMcpServers
-  }
+  const mergedServers = { ...globalMcpServers, ...spaceMcpServers }
 
-  if (!mergedServers || Object.keys(mergedServers).length === 0) {
+  if (Object.keys(mergedServers).length === 0) {
     return null
   }
 
   const enabled: Record<string, any> = {}
   for (const [name, config] of Object.entries(mergedServers)) {
     if (!config.disabled) {
-      // Remove the 'disabled' field before passing to SDK (it's a Halo extension)
       const { disabled, ...sdkConfig } = config as any
       enabled[name] = sdkConfig
     }
@@ -210,10 +205,48 @@ export function getEnabledMcpServers(
 }
 
 /**
- * Build system prompt append - minimal context, preserve Claude Code's native behavior
+ * Build MCP servers configuration
+ */
+function buildMcpServersConfig(
+  config: ReturnType<typeof getConfig>,
+  spaceConfig: ReturnType<typeof getSpaceConfig>,
+  workDir: string,
+  conversationId: string,
+  aiBrowserEnabled?: boolean,
+  enabledPluginMcps?: string[]
+): { mcpServers?: Record<string, any> } {
+  const mcpDisabled =
+    config.claudeCode?.mcpEnabled === false ||
+    spaceConfig?.claudeCode?.mcpEnabled === false
+
+  const enabledMcp = getEnabledMcpServers(config.mcpServers || {}, workDir)
+  const mcpServers: Record<string, any> = enabledMcp ? { ...enabledMcp } : {}
+
+  if (!mcpDisabled && enabledPluginMcps && enabledPluginMcps.length > 0) {
+    const pluginServers = buildPluginMcpServers(enabledPluginMcps, mcpServers)
+    Object.assign(mcpServers, pluginServers)
+  }
+
+  if (aiBrowserEnabled) {
+    mcpServers['ai-browser'] = createAIBrowserMcpServer()
+    console.log(`[Agent][${conversationId}] AI Browser MCP server added`)
+  }
+
+  if (mcpDisabled) {
+    console.log(`[Agent][${conversationId}] MCP disabled by configuration (external only)`)
+    const internalOnly = Object.fromEntries(
+      Object.entries(mcpServers).filter(([name]) => name === 'ai-browser')
+    )
+    return Object.keys(internalOnly).length > 0 ? { mcpServers: internalOnly } : {}
+  }
+
+  return Object.keys(mcpServers).length > 0 ? { mcpServers } : {}
+}
+
+/**
+ * Build system prompt append with Python environment instructions
  */
 export function buildSystemPromptAppend(workDir: string): string {
-  // Get embedded Python path for system prompt
   const pythonDir = getEmbeddedPythonDir()
   const pythonBinDir = process.platform === 'win32' ? pythonDir : join(pythonDir, 'bin')
   const pythonExecutable =
@@ -225,17 +258,13 @@ export function buildSystemPromptAppend(workDir: string): string {
 You are Halo, an AI assistant that helps users accomplish real work.
 All created files will be saved in the user's workspace. Current workspace: ${workDir}.
 
-## Built-in Python Environment (IMPORTANT)
-This application has a built-in Python 3.11.9 environment. You MUST use the built-in Python for all Python operations:
+## Built-in Python Environment
+This application has a built-in Python 3.11.9 environment. Always use the full path: ${pythonExecutable}
 
-**Built-in Python path:** ${pythonExecutable}
-
-When executing Python commands, ALWAYS use the full path:
+Examples:
 - Check version: \`${pythonExecutable} --version\`
 - Run script: \`${pythonExecutable} script.py\`
 - Install package: \`${pythonExecutable} -m pip install package_name\`
-
-DO NOT use \`python\`, \`python3\`, or any other Python command without the full path, as they may point to different Python versions on the system.
 `
 }
 
@@ -269,11 +298,12 @@ export interface BuildSdkOptionsParams {
   thinkingEnabled?: boolean
   stderrSuffix?: string // Optional suffix for stderr logs (e.g., "(warm)")
   canUseTool?: CanUseToolHandler
+  enabledPluginMcps?: string[]
 }
 
 /**
- * Build SDK options for V2 Session creation
- * Centralizes configuration to ensure consistency between ensureSessionWarm and sendMessage()
+ * Build SDK options for V2 Session creation.
+ * Centralizes configuration for consistency between ensureSessionWarm and sendMessage.
  */
 export function buildSdkOptions(params: BuildSdkOptionsParams): Record<string, any> {
   const {
@@ -289,20 +319,25 @@ export function buildSdkOptions(params: BuildSdkOptionsParams): Record<string, a
     aiBrowserEnabled,
     thinkingEnabled,
     stderrSuffix = '',
-    canUseTool
+    canUseTool,
+    enabledPluginMcps
   } = params
 
-  const hooksConfig = buildHooksConfig(workDir)
-  const enabledMcpServers = getEnabledMcpServers(config.mcpServers || {}, workDir)
-  const mcpServers: Record<string, any> = enabledMcpServers ? { ...enabledMcpServers } : {}
+  const spaceConfig = getSpaceConfig(workDir)
+  const skillsLazyLoad =
+    config.claudeCode?.skillsLazyLoad === true ||
+    spaceConfig?.claudeCode?.skillsLazyLoad === true
 
-  // Add AI Browser as SDK MCP server if enabled
-  if (aiBrowserEnabled) {
-    mcpServers['ai-browser'] = createAIBrowserMcpServer()
-    console.log(`[Agent][${conversationId}] AI Browser MCP server added`)
-  }
-
-  const mcpConfig = Object.keys(mcpServers).length > 0 ? { mcpServers } : {}
+  const configDir = (() => {
+    if (skillsLazyLoad) {
+      const isolated = join(getTempSpacePath(), 'claude-config')
+      if (!existsSync(isolated)) {
+        mkdirSync(isolated, { recursive: true })
+      }
+      return isolated
+    }
+    return getHaloDir()
+  })()
 
   const sdkOptions: Record<string, any> = {
     model: sdkModel,
@@ -310,9 +345,9 @@ export function buildSdkOptions(params: BuildSdkOptionsParams): Record<string, a
     abortController,
     env: {
       ...process.env,
-      // Set CLAUDE_CONFIG_DIR to ~/.halo/ so SDK loads config from there instead of ~/.claude/
-      // This provides complete isolation from system Claude Code configuration
-      CLAUDE_CONFIG_DIR: getHaloDir(),
+      // Set CLAUDE_CONFIG_DIR to control which Claude Code config directory is used.
+      // In lazy skills mode, use an isolated empty config dir to avoid preloading skills/plugins/hooks.
+      CLAUDE_CONFIG_DIR: configDir,
       // Add embedded Python to PATH (prepend to ensure it's found first)
       PATH: getPythonEnhancedPath(),
       ELECTRON_RUN_AS_NODE: 1,
@@ -332,8 +367,11 @@ export function buildSdkOptions(params: BuildSdkOptionsParams): Record<string, a
     systemPrompt: {
       type: 'preset' as const,
       preset: 'claude_code' as const,
-      // Append AI Browser system prompt if enabled
-      append: buildSystemPromptAppend(workDir) + (aiBrowserEnabled ? AI_BROWSER_SYSTEM_PROMPT : '')
+      append: [
+        buildSystemPromptAppend(workDir),
+        aiBrowserEnabled ? AI_BROWSER_SYSTEM_PROMPT : '',
+        skillsLazyLoad ? SKILLS_LAZY_SYSTEM_PROMPT : ''
+      ].filter(Boolean).join('\n')
     },
     maxTurns: 50,
     allowedTools: ['Read', 'Write', 'Edit', 'Grep', 'Glob', 'Bash'],
@@ -341,22 +379,23 @@ export function buildSdkOptions(params: BuildSdkOptionsParams): Record<string, a
     includePartialMessages: true,
     executable: electronPath,
     executableArgs: ['--no-warnings'],
-    // Configure filesystem settings loading
-    // With CLAUDE_CONFIG_DIR=~/.halo/, the SDK loads from:
-    // - 'user': ~/.halo/ (skills, commands, agents, settings)
-    // - 'project': {workDir}/.claude/ (project-level config)
-    // Both are enabled by default for full functionality
     settingSources: buildSettingSources(workDir),
-    // Load plugins from multi-tier sources (system, global, app, space)
     plugins: buildPluginsConfig(workDir),
-    // Load hooks from settings.json, global config, and space config
-    hooks: hooksConfig,
-    // Extended thinking: enable when user requests it (10240 tokens, same as Claude Code CLI Tab)
-    ...(thinkingEnabled ? { maxThinkingTokens: 10240 } : {}),
-    // MCP configuration
-    // - Pass through enabled user MCP servers (merged with space-level config)
-    // - Add AI Browser MCP server if enabled
-    ...mcpConfig
+    hooks: buildHooksConfig(workDir),
+    ...(thinkingEnabled && { maxThinkingTokens: 10240 }),
+    ...buildMcpServersConfig(
+      config,
+      spaceConfig,
+      workDir,
+      conversationId,
+      aiBrowserEnabled,
+      enabledPluginMcps
+    )
+  }
+
+  // MiniMax Anthropic-compatible backends can reject tool schemas; disable tools to keep chat usable.
+  if (config.api.provider === 'minimax') {
+    sdkOptions.tools = []
   }
 
   // Add canUseTool handler if provided

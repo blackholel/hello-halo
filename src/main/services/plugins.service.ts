@@ -14,6 +14,7 @@ import { homedir } from 'os'
 import { existsSync, readFileSync, statSync } from 'fs'
 import { getHaloDir } from './config.service'
 import { isValidDirectoryPath } from '../utils/path-validation'
+import { FileCache } from '../utils/file-cache'
 
 // ============================================
 // Plugin Types
@@ -44,6 +45,44 @@ export interface PluginInfo {
 
 // Cache for installed plugins
 let pluginsCache: { plugins: PluginInfo[]; mtime: number } | null = null
+
+// Cache for enabled plugins settings
+const enabledPluginsCache = new FileCache<Record<string, boolean> | null>()
+
+interface EnabledPluginsSettings {
+  enabledPlugins?: Record<string, boolean>
+}
+
+function getSettingsPathInHalo(): string {
+  return join(getHaloDir(), 'settings.json')
+}
+
+function getSettingsPathInClaude(): string {
+  return join(homedir(), '.claude', 'settings.json')
+}
+
+function loadEnabledPluginsFromSettings(settingsPath: string): Record<string, boolean> | null {
+  return enabledPluginsCache.get(settingsPath, () => {
+    if (!existsSync(settingsPath)) return null
+    try {
+      const content = readFileSync(settingsPath, 'utf-8')
+      const parsed = JSON.parse(content) as EnabledPluginsSettings
+      if (!parsed.enabledPlugins) return null
+      return parsed.enabledPlugins
+    } catch (error) {
+      console.error(`[Plugins] Failed to read enabledPlugins from ${settingsPath}:`, error)
+      return null
+    }
+  })
+}
+
+function getMergedEnabledPlugins(): { map: Record<string, boolean>; hasConfig: boolean } {
+  const haloEnabled = loadEnabledPluginsFromSettings(getSettingsPathInHalo()) || {}
+  const claudeEnabled = loadEnabledPluginsFromSettings(getSettingsPathInClaude()) || {}
+  const merged = { ...claudeEnabled, ...haloEnabled }
+  const hasConfig = Object.keys(merged).length > 0
+  return { map: merged, hasConfig }
+}
 
 /**
  * Get all registry paths that exist
@@ -161,6 +200,78 @@ export function loadInstalledPlugins(): PluginInfo[] {
 }
 
 /**
+ * Get enabled plugin full names from settings.json (Halo + Claude)
+ * - Halo settings take precedence over Claude settings.
+ * - If no enabledPlugins configured, default to all installed plugins.
+ */
+export function getEnabledPluginFullNames(): Set<string> {
+  const { map, hasConfig } = getMergedEnabledPlugins()
+  const installed = loadInstalledPlugins()
+
+  if (!hasConfig) {
+    return new Set(installed.map(p => p.fullName))
+  }
+
+  const enabled = Object.entries(map)
+    .filter(([, value]) => value === true)
+    .map(([name]) => name)
+
+  return new Set(enabled)
+}
+
+/**
+ * List enabled plugins (filtered from installed plugins)
+ */
+export function listEnabledPlugins(): PluginInfo[] {
+  const installed = loadInstalledPlugins()
+  const enabledSet = getEnabledPluginFullNames()
+
+  if (enabledSet.size === 0) {
+    return []
+  }
+
+  const enabled = installed.filter((plugin) => enabledSet.has(plugin.fullName))
+
+  const missing = Array.from(enabledSet).filter(
+    (fullName) => !installed.some((plugin) => plugin.fullName === fullName)
+  )
+  if (missing.length > 0) {
+    console.warn(`[Plugins] Enabled plugins not installed: ${missing.join(', ')}`)
+  }
+
+  return enabled
+}
+
+/**
+ * Find an enabled plugin by input (fullName or short name)
+ */
+export function findEnabledPluginByInput(input: string): PluginInfo | null {
+  const name = input.trim()
+  if (!name) return null
+
+  const enabled = listEnabledPlugins()
+  const lower = name.toLowerCase()
+
+  if (lower.includes('@')) {
+    return enabled.find((p) => p.fullName.toLowerCase() === lower) || null
+  }
+
+  const matches = enabled.filter((p) => p.name.toLowerCase() === lower)
+  if (matches.length > 1) {
+    console.warn(`[Plugins] Multiple enabled plugins match "${name}", using "${matches[0].fullName}"`)
+  }
+  return matches[0] || null
+}
+
+/**
+ * Get an enabled plugin by full name
+ */
+export function getEnabledPluginByFullName(fullName: string): PluginInfo | null {
+  const enabled = listEnabledPlugins()
+  return enabled.find((p) => p.fullName === fullName) || null
+}
+
+/**
  * Get plugin paths for SDK configuration
  */
 export function getInstalledPluginPaths(): string[] {
@@ -186,4 +297,5 @@ export function getPluginsByMarketplace(marketplace: string): PluginInfo[] {
  */
 export function clearPluginsCache(): void {
   pluginsCache = null
+  enabledPluginsCache.clear()
 }

@@ -2,16 +2,17 @@
  * V2 Session Manager
  *
  * Manages V2 SDK Session lifecycle including creation, reuse, and cleanup.
- * V2 Sessions enable process reuse for faster subsequent messages.
  */
 
 import { unstable_v2_createSession } from '@anthropic-ai/claude-agent-sdk'
 import { getConfig, onApiConfigChange } from '../config.service'
+import { getSpaceConfig } from '../space-config.service'
 import { getConversation } from '../conversation.service'
 import { getHeadlessElectronPath } from './electron-path'
 import { resolveProvider } from './provider-resolver'
 import { buildSdkOptions, getWorkingDir } from './sdk-config.builder'
 import type { V2SDKSession, V2SessionInfo, SessionConfig, SessionState } from './types'
+import { getEnabledPluginMcpHash, getEnabledPluginMcpList } from '../plugin-mcp.service'
 
 // V2 Session management: Map of conversationId -> persistent V2 session
 const v2Sessions = new Map<string, V2SessionInfo>()
@@ -31,7 +32,6 @@ function startSessionCleanup(): void {
 
   cleanupIntervalId = setInterval(() => {
     const now = Date.now()
-    // Avoid TS downlevelIteration requirement (main process tsconfig doesn't force target=es2015)
     for (const [convId, info] of Array.from(v2Sessions.entries())) {
       if (now - info.lastUsedAt > SESSION_IDLE_TIMEOUT_MS) {
         console.log(`[Agent] Cleaning up idle V2 session: ${convId}`)
@@ -43,15 +43,19 @@ function startSessionCleanup(): void {
         v2Sessions.delete(convId)
       }
     }
-  }, 60 * 1000) // Check every minute
+  }, 60 * 1000)
 }
 
 /**
- * Check if session config requires rebuild
- * Only "process-level" params need rebuild; runtime params use setXxx() methods
+ * Check if session config requires rebuild.
+ * Only process-level params need rebuild; runtime params use setXxx() methods.
  */
 function needsSessionRebuild(existing: V2SessionInfo, newConfig: SessionConfig): boolean {
-  return existing.config.aiBrowserEnabled !== newConfig.aiBrowserEnabled
+  return (
+    existing.config.aiBrowserEnabled !== newConfig.aiBrowserEnabled ||
+    existing.config.skillsLazyLoad !== newConfig.skillsLazyLoad ||
+    (existing.config.enabledPluginMcpsHash || '') !== (newConfig.enabledPluginMcpsHash || '')
+  )
 }
 
 /**
@@ -71,12 +75,8 @@ function closeV2SessionForRebuild(conversationId: string): void {
 }
 
 /**
- * Get or create V2 Session
- *
- * V2 Session enables process reuse: subsequent messages in the same conversation
- * reuse the running CC process, avoiding process restart each time (cold start ~3-5s).
- *
- * @param config - Session configuration for rebuild detection
+ * Get or create V2 Session.
+ * Enables process reuse to avoid cold start delays.
  */
 export async function getOrCreateV2Session(
   spaceId: string,
@@ -85,16 +85,13 @@ export async function getOrCreateV2Session(
   sessionId?: string,
   config?: SessionConfig
 ): Promise<V2SDKSession> {
-  // Check if we have an existing session for this conversation
   const existing = v2Sessions.get(conversationId)
   if (existing) {
-    // Check if config changed and requires rebuild
     if (config && needsSessionRebuild(existing, config)) {
       console.log(
-        `[Agent][${conversationId}] Config changed (aiBrowser: ${existing.config.aiBrowserEnabled} → ${config.aiBrowserEnabled}), rebuilding session...`
+        `[Agent][${conversationId}] Config changed (aiBrowser: ${existing.config.aiBrowserEnabled} → ${config.aiBrowserEnabled}), rebuilding session`
       )
       closeV2SessionForRebuild(conversationId)
-      // Fall through to create new session
     } else {
       console.log(`[Agent][${conversationId}] Reusing existing V2 session`)
       existing.lastUsedAt = Date.now()
@@ -102,47 +99,32 @@ export async function getOrCreateV2Session(
     }
   }
 
-  // Create new session
-  // If sessionId exists, pass resume to let CC restore history from disk
-  // After first message, the process stays alive and maintains context in memory
-  console.log(`[Agent][${conversationId}] Creating new V2 session...`)
-  if (sessionId) {
-    console.log(`[Agent][${conversationId}] With resume: ${sessionId}`)
-  }
+  console.log(`[Agent][${conversationId}] Creating new V2 session${sessionId ? ` with resume: ${sessionId}` : ''}`)
   const startTime = Date.now()
 
-  // Requires SDK patch: resume parameter lets CC restore history from disk
-  // Native SDK V2 Session doesn't support resume parameter
   if (sessionId) {
     sdkOptions.resume = sessionId
   }
-  // Requires SDK patch: native SDK ignores most sdkOptions parameters
-  // Use 'as any' to bypass type check, actual params handled by patched SDK
-  const session = (await unstable_v2_createSession(sdkOptions as any)) as unknown as V2SDKSession
 
+  const session = (await unstable_v2_createSession(sdkOptions as any)) as unknown as V2SDKSession
   console.log(`[Agent][${conversationId}] V2 session created in ${Date.now() - startTime}ms`)
 
-  // Store session with config
   v2Sessions.set(conversationId, {
     session,
     spaceId,
     conversationId,
     createdAt: Date.now(),
     lastUsedAt: Date.now(),
-    config: config || { aiBrowserEnabled: false }
+    config: config || { aiBrowserEnabled: false, skillsLazyLoad: false, enabledPluginMcpsHash: '' }
   })
 
-  // Start cleanup if not already running
   startSessionCleanup()
-
   return session
 }
 
 /**
- * Warm up V2 Session (called when user switches conversations)
- *
- * Pre-initialize or reuse V2 Session to avoid delay when sending messages.
- * Frontend calls this when user clicks a conversation, no need to wait for completion.
+ * Warm up V2 Session for faster message sending.
+ * Called when user switches conversations.
  */
 export async function ensureSessionWarm(spaceId: string, conversationId: string): Promise<void> {
   const config = getConfig()
@@ -150,14 +132,14 @@ export async function ensureSessionWarm(spaceId: string, conversationId: string)
   const conversation = getConversation(spaceId, conversationId)
   const sessionId = conversation?.sessionId
   const electronPath = getHeadlessElectronPath()
+  const spaceConfig = getSpaceConfig(workDir)
+  const skillsLazyLoad =
+    config.claudeCode?.skillsLazyLoad === true ||
+    spaceConfig?.claudeCode?.skillsLazyLoad === true
 
-  // Create abortController - consistent with sendMessage
   const abortController = new AbortController()
-
-  // Resolve provider configuration
   const resolved = await resolveProvider(config.api)
 
-  // Build SDK options using shared function (ensures consistency with sendMessage)
   const sdkOptions = buildSdkOptions({
     spaceId,
     conversationId,
@@ -168,18 +150,24 @@ export async function ensureSessionWarm(spaceId: string, conversationId: string)
     anthropicBaseUrl: resolved.anthropicBaseUrl,
     sdkModel: resolved.sdkModel,
     electronPath,
-    aiBrowserEnabled: false, // Warm-up doesn't enable AI Browser
-    thinkingEnabled: false, // Warm-up doesn't enable thinking
-    stderrSuffix: ' (warm)' // Mark stderr logs as from warm-up
+    aiBrowserEnabled: false,
+    thinkingEnabled: false,
+    stderrSuffix: ' (warm)',
+    enabledPluginMcps: getEnabledPluginMcpList(conversationId)
   })
 
   try {
     console.log(`[Agent] Warming up V2 session: ${conversationId}`)
-    await getOrCreateV2Session(spaceId, conversationId, sdkOptions, sessionId)
+    await getOrCreateV2Session(
+      spaceId,
+      conversationId,
+      sdkOptions,
+      sessionId,
+      { aiBrowserEnabled: false, skillsLazyLoad, enabledPluginMcpsHash: getEnabledPluginMcpHash(conversationId) }
+    )
     console.log(`[Agent] V2 session warmed up: ${conversationId}`)
   } catch (error) {
     console.error(`[Agent] Failed to warm up session ${conversationId}:`, error)
-    // Don't throw on warm-up failure, sendMessage() will reinitialize (just slower)
   }
 }
 

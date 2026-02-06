@@ -507,5 +507,13 @@
   "{{count}} weeks ago_one": "il y a {{count}} semaine",
   "{{count}} weeks ago_other": "il y a {{count}} semaines",
   "← → to switch files": "← → pour changer de fichier",
-  "🤖 AI Browser": "🤖 Navigateur IA"
+  "🤖 AI Browser": "🤖 Navigateur IA",
+  "Summarize and start a new session after this step": "Résumer et démarrer une nouvelle session après cette étape",
+  "Applies before the next step runs": "S'applique avant l'exécution de l'étape suivante",
+  "New workflow": "Nouveau workflow",
+  "{{count}} workflows available": "{{count}} workflows disponibles",
+  "No workflows available": "Aucun workflow disponible",
+  "Create a new workflow to get started": "Créez un nouveau workflow pour commencer",
+  "Select a skill": "Sélectionnez une compétence",
+  "Select an agent": "Sélectionnez un agent"
 }

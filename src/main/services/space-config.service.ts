@@ -36,6 +36,9 @@ export interface SpaceClaudeCodeConfig {
   plugins?: SpacePluginsConfig
   hooks?: HooksConfig
   mcpServers?: Record<string, SpaceMcpServerConfig>
+  hooksEnabled?: boolean
+  mcpEnabled?: boolean
+  skillsLazyLoad?: boolean
   enableProjectSettings?: boolean
 }
 

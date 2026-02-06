@@ -36,6 +36,13 @@ import { PanelLeftClose, PanelLeft, X, MessageSquare, Columns2, LayoutGrid } fro
 import { SearchIcon } from '../components/search/SearchIcon'
 import { useSearchShortcuts } from '../hooks/useSearchShortcuts'
 import { useTranslation } from '../i18n'
+import { SkillDetailModal } from '../components/skills/SkillDetailModal'
+import { SkillEditorModal } from '../components/skills/SkillEditorModal'
+import { AgentDetailModal } from '../components/agents/AgentDetailModal'
+import { AgentEditorModal } from '../components/agents/AgentEditorModal'
+import { useSkillsStore, type SkillDefinition } from '../stores/skills.store'
+import { useAgentsStore, type AgentDefinition } from '../stores/agents.store'
+import { useComposerStore } from '../stores/composer.store'
 // Mobile breakpoint (matches Tailwind sm: 640px)
 const MOBILE_BREAKPOINT = 640
 
@@ -83,6 +90,54 @@ export function SpacePage() {
 
   // Show conversation list for non-temp spaces
   const [showConversationList, setShowConversationList] = useState(false)
+
+  // Skills panel state
+  const [selectedSkill, setSelectedSkill] = useState<SkillDefinition | null>(null)
+  const [editingSkill, setEditingSkill] = useState<SkillDefinition | null>(null)
+  const [isSkillEditorOpen, setIsSkillEditorOpen] = useState(false)
+  const [selectedAgent, setSelectedAgent] = useState<AgentDefinition | null>(null)
+  const [editingAgent, setEditingAgent] = useState<AgentDefinition | null>(null)
+  const [isAgentEditorOpen, setIsAgentEditorOpen] = useState(false)
+  const requestInsert = useComposerStore(state => state.requestInsert)
+
+  const handleInsertSkill = useCallback((skillName: string) => {
+    requestInsert(`/${skillName} `, 'skill')
+  }, [requestInsert])
+
+  const handleInsertAgent = useCallback((agentName: string) => {
+    requestInsert(`@${agentName} `, 'agent')
+  }, [requestInsert])
+
+  const handleCreateSkill = useCallback(() => {
+    setEditingSkill(null)
+    setIsSkillEditorOpen(true)
+  }, [])
+
+  const handleEditSkill = useCallback((skill: SkillDefinition) => {
+    setEditingSkill(skill)
+    setIsSkillEditorOpen(true)
+  }, [])
+
+  const handleCreateAgent = useCallback(() => {
+    setEditingAgent(null)
+    setIsAgentEditorOpen(true)
+  }, [])
+
+  const handleEditAgent = useCallback((agent: AgentDefinition) => {
+    setEditingAgent(agent)
+    setIsAgentEditorOpen(true)
+  }, [])
+
+  const { loadSkills } = useSkillsStore()
+  const { loadAgents } = useAgentsStore()
+
+  // Preload skills/agents when space changes
+  useEffect(() => {
+    if (currentSpace?.path) {
+      loadSkills(currentSpace.path)
+      loadAgents(currentSpace.path)
+    }
+  }, [currentSpace?.path, loadSkills, loadAgents])
 
   // Layout mode: 'split' = 分栏布局 (左侧固定 ChatView), 'tabs-only' = 纯标签页模式
   const [layoutMode, setLayoutMode] = useState<'split' | 'tabs-only'>(() => {
@@ -416,6 +471,7 @@ export function SpacePage() {
                 />
               </div>
             )}
+
           </>
         }
         right={
@@ -498,6 +554,13 @@ export function SpacePage() {
             onNew={handleNewConversation}
             onDelete={handleDeleteConversation}
             onRename={handleRenameConversation}
+            workDir={currentSpace.path}
+            onSelectSkill={setSelectedSkill}
+            onInsertSkill={handleInsertSkill}
+            onCreateSkill={handleCreateSkill}
+            onSelectAgent={setSelectedAgent}
+            onInsertAgent={handleInsertAgent}
+            onCreateAgent={handleCreateAgent}
           />
         )}
 
@@ -618,6 +681,49 @@ export function SpacePage() {
           spaceId={currentSpace.id}
           isTemp={currentSpace.isTemp}
           onOpenFolder={handleOpenFolder}
+        />
+      )}
+
+      {/* Skill Detail Modal */}
+      {selectedSkill && (
+        <SkillDetailModal
+          skill={selectedSkill}
+          workDir={currentSpace.path}
+          onClose={() => setSelectedSkill(null)}
+          onEdit={(skill) => {
+            setSelectedSkill(null)
+            handleEditSkill(skill)
+          }}
+        />
+      )}
+
+      {isSkillEditorOpen && currentSpace && (
+        <SkillEditorModal
+          skill={editingSkill || undefined}
+          workDir={currentSpace.path}
+          onClose={() => setIsSkillEditorOpen(false)}
+          onSaved={(skill) => setSelectedSkill(skill)}
+        />
+      )}
+
+      {selectedAgent && (
+        <AgentDetailModal
+          agent={selectedAgent}
+          workDir={currentSpace.path}
+          onClose={() => setSelectedAgent(null)}
+          onEdit={(agent) => {
+            setSelectedAgent(null)
+            handleEditAgent(agent)
+          }}
+        />
+      )}
+
+      {isAgentEditorOpen && currentSpace && (
+        <AgentEditorModal
+          agent={editingAgent || undefined}
+          workDir={currentSpace.path}
+          onClose={() => setIsAgentEditorOpen(false)}
+          onSaved={(agent) => setSelectedAgent(agent)}
         />
       )}
     </div>

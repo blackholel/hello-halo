@@ -1,0 +1,448 @@
+Claude Agent SDK 全面解析                                                                     
+                                                                                                
+  一、整体架构概览                                                                              
+                                                                                                
+  ┌─────────────────────────────────────────────────────────────────────────┐                   
+  │                         Claude Agent SDK                                 │                  
+  ├─────────────────────────────────────────────────────────────────────────┤                   
+  │                                                                          │                  
+  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐ │                   
+  │  │   Plugins    │  │    Skills    │  │    Hooks     │  │    Agents    │ │                   
+  │  │   加载器     │  │    系统      │  │   生命周期   │  │   子代理     │ │                   
+  │  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘ │                   
+  │         │                 │                 │                 │          │                  
+  │         └─────────────────┴────┬────────┴─────────────────┘          │                      
+  │                                    │                                     │                  
+  │                          ┌─────────▼─────────┐                           │                  
+  │                          │   Session 管理    │                           │                  
+  │                          │  (上下文 + 状态)  │                           │                  
+  │                          └─────────┬─────────┘                           │                  
+  │                                    │                                     │                  
+  │                          ┌─────────▼─────────┐                           │                  
+  │                          │    MCP Servers    │                           │                  
+  │                          │   (工具扩展层)    │                           │                  
+  │                          └───────────────────┘                           │                  
+  └─────────────────────────────────────────────────────────────────────────┘                   
+                                                                                                
+  ---                                                                                           
+  二、上下文管理机制                                                                            
+                                                                                                
+  SDK 的上下文管理分为多个层次：                                                                
+                                                                                                
+  2.1 配置来源控制 (settingSources)                                                             
+                                                                                                
+  // SDK 核心配置参数                                                                           
+  const options = {                                                                             
+    settingSources: ["user", "project"],  // 控制从哪里加载配置                                 
+    cwd: "/path/to/project"               // 工作目录                                           
+  }                                                                                             
+  ┌─────────┬─────────────────────────────────┬──────────────────────────────────┐              
+  │ Source  │              路径               │             加载内容             │              
+  ├─────────┼─────────────────────────────────┼──────────────────────────────────┤              
+  │ user    │ ~/.claude/ 或 CLAUDE_CONFIG_DIR │ 用户级 skills、settings、agents  │              
+  ├─────────┼─────────────────────────────────┼──────────────────────────────────┤              
+  │ project │ {cwd}/.claude/                  │ 项目级 CLAUDE.md、skills、agents │              
+  └─────────┴─────────────────────────────────┴──────────────────────────────────┘              
+  重要：如果不设置 settingSources，SDK 不会加载任何文件系统配置。                               
+                                                                                                
+  2.2 系统提示词注入                                                                            
+                                                                                                
+  const options = {                                                                             
+    systemPrompt: {                                                                             
+      type: 'preset',                                                                           
+      preset: 'claude_code',      // 使用内置的 Claude Code 系统提示词                          
+      append: '额外的上下文信息'   // 追加自定义内容                                            
+    }                                                                                           
+  }                                                                                             
+                                                                                                
+  2.3 Session 持久化与恢复                                                                      
+                                                                                                
+  // 创建新 Session                                                                             
+  const session = await unstable_v2_createSession(options)                                      
+  const sessionId = session.sessionId  // 保存此 ID                                             
+                                                                                                
+  // 恢复已有 Session（保留完整对话历史）                                                       
+  const resumedSession = await unstable_v2_createSession({                                      
+    ...options,                                                                                 
+    resume: sessionId,        // 恢复到指定 Session                                             
+    forkSession: false        // false=继续原 Session，true=分叉为新 Session                    
+  })                                                                                            
+                                                                                                
+  ---                                                                                           
+  三、Plugins 加载机制                                                                          
+                                                                                                
+  3.1 Plugin 结构                                                                               
+                                                                                                
+  一个 Plugin 目录可以包含：                                                                    
+                                                                                                
+  my-plugin/                                                                                    
+  ├── skills/           # 技能定义                                                              
+  │   └── my-skill.md                                                                           
+  ├── agents/           # 子代理定义                                                            
+  │   └── my-agent.md                                                                           
+  ├── commands/         # 自定义命令                                                            
+  │   └── my-command.ts                                                                         
+  ├── hooks/            # 钩子配置                                                              
+  │   └── hooks.json                                                                            
+  └── plugin.json       # 插件元数据（可选）                                                    
+                                                                                                
+  3.2 加载方式                                                                                  
+                                                                                                
+  // 方式一：通过 plugins 参数直接加载                                                          
+  const options = {                                                                             
+    plugins: [                                                                                  
+      { type: "local", path: "./my-plugin" },                                                   
+      { type: "local", path: "/absolute/path/to/plugin" }                                       
+    ]                                                                                           
+  }                                                                                             
+                                                                                                
+  // 方式二：通过 settingSources 自动发现                                                       
+  const options = {                                                                             
+    settingSources: ["user", "project"],  // 自动加载 ~/.claude/ 和 {cwd}/.claude/              
+    cwd: "/path/to/project"                                                                     
+  }                                                                                             
+                                                                                                
+  3.3 渐进式加载优先级（低 → 高）                                                               
+                                                                                                
+  优先级 0: 已安装的 plugins（从 installed_plugins.json 注册表）                                
+      ↓                                                                                         
+  优先级 1: ~/.claude/（仅当 settingSources 包含 "user"）                                       
+      ↓                                                                                         
+  优先级 2: globalPaths（用户配置的全局路径）                                                   
+      ↓                                                                                         
+  优先级 3: ~/.halo/plugins/ 和 ~/.halo/skills/（应用级默认路径）                               
+      ↓                                                                                         
+  优先级 4: Space 自定义 paths（space-config.json 中配置）                                      
+      ↓                                                                                         
+  优先级 5: {workDir}/.claude/（项目级，最高优先级）                                            
+                                                                                                
+  覆盖规则：同名资源，后加载的覆盖先加载的。                                                    
+                                                                                                
+  3.4 验证 Plugin 加载                                                                          
+                                                                                                
+  for await (const message of query({ prompt: "Hello", options })) {                            
+    if (message.type === "system" && message.subtype === "init") {                              
+      console.log("已加载 Plugins:", message.plugins)                                           
+      console.log("可用命令:", message.slash_commands)                                          
+    }                                                                                           
+  }                                                                                             
+                                                                                                
+  ---                                                                                           
+  四、Skills 系统                                                                               
+                                                                                                
+  4.1 Skill 定义格式                                                                            
+                                                                                                
+  <!-- ~/.claude/skills/my-skill.md -->                                                         
+  ---                                                                                           
+  name: my-skill                                                                                
+  description: 这个技能用于处理特定任务                                                         
+  ---                                                                                           
+                                                                                                
+  # 技能指令                                                                                    
+                                                                                                
+  当用户请求 XXX 时，按以下步骤执行：                                                           
+  1. 首先...                                                                                    
+  2. 然后...                                                                                    
+  3. 最后...                                                                                    
+                                                                                                
+  4.2 启用 Skills                                                                               
+                                                                                                
+  const options = {                                                                             
+    settingSources: ["user", "project"],  // 必须！否则 Skills 不会加载                         
+    allowedTools: ["Skill", "Read", "Write", "Bash"]  // 必须包含 "Skill"                       
+  }                                                                                             
+                                                                                                
+  4.3 Skills 加载路径                                                                           
+  ┌───────────┬───────────────────────┬───────────────────────────────┐                         
+  │   来源    │         路径          │             条件              │                         
+  ├───────────┼───────────────────────┼───────────────────────────────┤                         
+  │ 用户级    │ ~/.claude/skills/     │ settingSources 包含 "user"    │                         
+  ├───────────┼───────────────────────┼───────────────────────────────┤                         
+  │ 项目级    │ {cwd}/.claude/skills/ │ settingSources 包含 "project" │                         
+  ├───────────┼───────────────────────┼───────────────────────────────┤                         
+  │ Plugin 内 │ {plugin}/skills/      │ Plugin 被加载                 │                         
+  └───────────┴───────────────────────┴───────────────────────────────┘                         
+  ---                                                                                           
+  五、Hooks 生命周期                                                                            
+                                                                                                
+  5.1 Hook 类型                                                                                 
+  ┌──────────────────┬────────────────┬────────────────────────────────┐                        
+  │    Hook 类型     │    触发时机    │            典型用途            │                        
+  ├──────────────────┼────────────────┼────────────────────────────────┤                        
+  │ PreToolUse       │ 工具执行前     │ 参数验证、权限检查、参数修改   │                        
+  ├──────────────────┼────────────────┼────────────────────────────────┤                        
+  │ PostToolUse      │ 工具执行后     │ 自动格式化、日志记录、结果检查 │                        
+  ├──────────────────┼────────────────┼────────────────────────────────┤                        
+  │ Stop             │ Session 结束时 │ 最终验证、清理操作             │                        
+  ├──────────────────┼────────────────┼────────────────────────────────┤                        
+  │ Notification     │ 收到通知时     │ 自定义通知处理                 │                        
+  ├──────────────────┼────────────────┼────────────────────────────────┤                        
+  │ UserPromptSubmit │ 用户提交消息时 │ 输入预处理、上下文注入         │                        
+  └──────────────────┴────────────────┴────────────────────────────────┘                        
+  5.2 Hook 配置格式                                                                             
+                                                                                                
+  const hooks = {                                                                               
+    PreToolUse: [                                                                               
+      {                                                                                         
+        matcher: "Bash",  // 匹配工具名，支持通配符                                             
+        hooks: [                                                                                
+          {                                                                                     
+            type: "command",                                                                    
+            command: "echo 'About to run Bash'",                                                
+            timeout: 5000  // 毫秒                                                              
+          }                                                                                     
+        ]                                                                                       
+      }                                                                                         
+    ],                                                                                          
+    PostToolUse: [                                                                              
+      {                                                                                         
+        matcher: ["Edit", "Write"],  // 可以匹配多个工具                                        
+        hooks: [                                                                                
+          {                                                                                     
+            type: "command",                                                                    
+            command: "prettier --write $CLAUDE_FILE_PATH"                                       
+          }                                                                                     
+        ]                                                                                       
+      }                                                                                         
+    ]                                                                                           
+  }                                                                                             
+                                                                                                
+  5.3 Hook 合并策略                                                                             
+                                                                                                
+  // Hooks 是追加合并，不是覆盖！                                                               
+  function mergeHooksConfigs(...configs) {                                                      
+    const merged = {}                                                                           
+    for (const config of configs) {                                                             
+      for (const eventType of ['PreToolUse', 'PostToolUse', 'Stop', ...]) {                     
+        if (config[eventType]) {                                                                
+          merged[eventType] = merged[eventType] || []                                           
+          merged[eventType].push(...config[eventType])  // 追加                                 
+        }                                                                                       
+      }                                                                                         
+    }                                                                                           
+    return merged                                                                               
+  }                                                                                             
+                                                                                                
+  ---                                                                                           
+  六、Agents（子代理）配置                                                                      
+                                                                                                
+  6.1 Agent 定义                                                                                
+                                                                                                
+  <!-- ~/.claude/agents/planner.md -->                                                          
+  ---                                                                                           
+  name: planner                                                                                 
+  description: 实现规划专家                                                                     
+  ---                                                                                           
+                                                                                                
+  你是一个实现规划专家。当收到功能需求时：                                                      
+                                                                                                
+  1. 分析需求的复杂度                                                                           
+  2. 识别依赖和风险                                                                             
+  3. 制定分阶段实现计划                                                                         
+  4. 输出结构化的计划文档                                                                       
+                                                                                                
+  6.2 加载优先级（低 → 高）                                                                     
+                                                                                                
+  ~/.halo/agents/              (source: 'app')                                                  
+      ↓                                                                                         
+  config.claudeCode.agents.paths  (source: 'global')                                            
+      ↓                                                                                         
+  {workDir}/.claude/agents/    (source: 'space') ← 最高优先级                                   
+                                                                                                
+  6.3 编程式定义                                                                                
+                                                                                                
+  const options = {                                                                             
+    agents: {                                                                                   
+      "custom-agent": {                                                                         
+        name: "custom-agent",                                                                   
+        description: "自定义代理",                                                              
+        instructions: "你是一个专门处理 XXX 的代理..."                                          
+      }                                                                                         
+    }                                                                                           
+  }                                                                                             
+                                                                                                
+  ---                                                                                           
+  七、MCP Server 管理                                                                           
+                                                                                                
+  7.1 MCP Server 类型                                                                           
+                                                                                                
+  // stdio 类型（最常用）                                                                       
+  {                                                                                             
+    "my-server": {                                                                              
+      type: "stdio",                                                                            
+      command: "npx",                                                                           
+      args: ["-y", "@anthropic-ai/mcp-server-xxx"],                                             
+      env: { "API_KEY": "xxx" },                                                                
+      timeout: 30000                                                                            
+    }                                                                                           
+  }                                                                                             
+                                                                                                
+  // HTTP 类型                                                                                  
+  {                                                                                             
+    "http-server": {                                                                            
+      type: "http",                                                                             
+      url: "https://api.example.com/mcp",                                                       
+      headers: { "Authorization": "Bearer xxx" }                                                
+    }                                                                                           
+  }                                                                                             
+                                                                                                
+  // SSE 类型                                                                                   
+  {                                                                                             
+    "sse-server": {                                                                             
+      type: "sse",                                                                              
+      url: "https://api.example.com/mcp/sse"                                                    
+    }                                                                                           
+  }                                                                                             
+                                                                                                
+  7.2 MCP 配置合并                                                                              
+                                                                                                
+  // 全局配置 + Space 配置合并                                                                  
+  function getEnabledMcpServers(globalServers, spaceServers) {                                  
+    const merged = {                                                                            
+      ...globalServers,                                                                         
+      ...spaceServers  // Space 配置覆盖同名全局配置                                            
+    }                                                                                           
+                                                                                                
+    // 过滤掉 disabled 的服务器                                                                 
+    return Object.fromEntries(                                                                  
+      Object.entries(merged).filter(([_, config]) => !config.disabled)                          
+    )                                                                                           
+  }                                                                                             
+                                                                                                
+  7.3 SDK 内置 MCP Server                                                                       
+                                                                                                
+  import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk"                     
+                                                                                                
+  // 创建自定义 MCP Server                                                                      
+  const myMcpServer = createSdkMcpServer({                                                      
+    name: "my-tools",                                                                           
+    version: "1.0.0",                                                                           
+    tools: [                                                                                    
+      tool({                                                                                    
+        name: "my_tool",                                                                        
+        description: "我的自定义工具",                                                          
+        parameters: z.object({ input: z.string() }),                                            
+        execute: async ({ input }) => {                                                         
+          return { result: `处理: ${input}` }                                                   
+        }                                                                                       
+      })                                                                                        
+    ]                                                                                           
+  })                                                                                            
+                                                                                                
+  // 注入到 SDK                                                                                 
+  const options = {                                                                             
+    mcpServers: {                                                                               
+      "my-tools": myMcpServer                                                                   
+    }                                                                                           
+  }                                                                                             
+                                                                                                
+  ---                                                                                           
+  八、多子代理渐进式配置加载                                                                    
+                                                                                                
+  当启动多个子代理时，配置按以下流程加载：                                                      
+                                                                                                
+  ┌─────────────────────────────────────────────────────────────────────┐                       
+  │                        主 Session 启动                               │                      
+  ├─────────────────────────────────────┤                                                       
+  │  1. 加载全局配置 (~/.halo/config.json)                              │                       
+  │  2. 加载 Space 配置 ({workDir}/.halo/space-config.json)             │                       
+  │  3. 合并 Plugins 路径（按优先级）                                    │                      
+  │  4. 合并 Hooks（追加模式）                                          │                       
+  │  5. 合并 MCP Servers（覆盖模式）                                    │                       
+  │  6. 构建 SDK Options                                                │                       
+  └─────────────────────────────────────────────────────────────────────┘                       
+                                │                                                               
+                                ▼                                                               
+  ┌─────────────────────────────────────────────────────────────────────┐                       
+  │                      子代理 (Task Tool) 启动                         │                      
+  ├─────────────────────────────────────────────────────────────────────┤                       
+  │  子代理继承主 Session 的：                                          │                       
+  │  • 工作目录 (cwd)                                                   │                       
+  │  • MCP Servers 配置                                                 │                       
+  │  • Plugins 配置                                                     │                       
+  │  • Hooks 配置                                                       │                       
+  │                                                                      │                      
+  │  子代理可以有独立的：                                                │                      
+  │  • allowedTools（工具白名单）                                       │                       
+  │  • model（使用不同模型）                                            │                       
+  │  • maxTurns（最大轮次限制）                                         │                       
+  └─────────────────────────────────────────────────────────────────────┘                       
+                                                                                                
+  8.1 配置继承示例                                                                              
+                                                                                                
+  // 主 Session                                                                                 
+  const mainOptions = {                                                                         
+    cwd: "/project",                                                                            
+    settingSources: ["user", "project"],                                                        
+    plugins: [{ type: "local", path: "./plugins" }],                                            
+    mcpServers: { "browser": browserMcpServer },                                                
+    hooks: { PreToolUse: [...] }                                                                
+  }                                                                                             
+                                                                                                
+  // 子代理自动继承上述配置，但可以限制工具                                                     
+  const subAgentOptions = {                                                                     
+    ...mainOptions,                                                                             
+    allowedTools: ["Read", "Grep", "Glob"],  // 限制可用工具                                    
+    model: "haiku"  // 使用更快的模型                                                           
+  }                                                                                             
+                                                                                                
+  ---                                                                                           
+  九、配置隔离机制（Halo 实现）                                                                 
+                                                                                                
+  Halo 通过环境变量实现与系统 Claude Code 的配置隔离：                                          
+                                                                                                
+  // sdk-config.builder.ts                                                                      
+  const sdkOptions = {                                                                          
+    env: {                                                                                      
+      CLAUDE_CONFIG_DIR: getHaloDir(),  // ~/.halo/ 而非 ~/.claude/                             
+      // ...                                                                                    
+    }                                                                                           
+  }                                                                                             
+                                                                                                
+  这样 SDK 会从 ~/.halo/ 读取配置，而不是系统的 ~/.claude/。                                    
+                                                                                                
+  ---                                                                                           
+  十、总结：配置加载全景图                                                                      
+                                                                                                
+  ┌─────────────────────────────────────────────────────────────────────────┐                   
+  │                           配置来源层次                                   │                  
+  ├─────────────────────────────────────────┤                                                   
+  │                                                                          │                  
+  │   系统级 (可选)          应用级              Space级                     │                  
+  │   ~/.claude/            ~/.halo/            {workDir}/.halo/            │                   
+  │        │                    │                    │                       │                  
+  │        ▼                    ▼                    ▼                       │                  
+  │   ┌─────────┐          ┌─────────┐          ┌─────────┐                 │                   
+  │   │ skills  │          │ plugins │          │ plugins │                 │                   
+  │   │ agents  │          │ skills  │          │ hooks   │                 │                   
+  │   │ hooks   │          │ agents  │          │ mcpServers│               │                   
+  │   │ settings│          │ hooks   │          │ agents  │                 │                   
+  │   └────┬────┘          │mcpServers│         └────┬────┘                 │                   
+  │        │               └────┬────┘               │                       │                  
+  │        │                    │                    │                       │                  
+  │        └────────────────┼────────────────────┘                       │                      
+  │                             │                                            │                  
+  │                             ▼                                            │                  
+  │                    ┌────────────────┐                                    │                  
+  │                    │  合并策略      │                                    │                  
+  │                    ├────────────────┤                                    │                  
+  │                    │ Plugins: 追加  │                                    │                  
+  │                    │ Skills: 覆盖   │                                    │                  
+  │                    │ Agents: 覆盖   │                                    │                  
+  │                    │ Hooks: 追加    │                                    │                  
+  │                    │ MCP: 覆盖      │                                    │                  
+  │                    └────────┬───────┘                                    │                  
+  │                             │                                            │                  
+  │                             ▼                                            │                  
+  │                    ┌────────────────┐                                    │                  
+  │                    │  SDK Options   │                                    │                  
+  │                    │  (最终配置)    │                                    │                  
+  │                    └────────────────┘                                    │                  
+  └─────────────────────────────────────────────────────────────────────────┘                   
+                                                                                                
+  关键要点：                                                                                    
+  1. Plugins/Skills/Agents：后加载的覆盖先加载的（同名资源）                                    
+  2. Hooks：所有来源的 hooks 都会被追加合并                                                     
+  3. MCP Servers：Space 级配置覆盖全局配置                                                      
+  4. settingSources：必须显式设置才会加载文件系统配置                                           
+  5. 子代理：继承主 Session 配置，但可以限制工具和模型             

@@ -324,6 +324,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
                 error={error}
                 isCompact={isCompact}
                 textBlockVersion={textBlockVersion}
+                workDir={currentSpace?.path}
               />
               <div ref={bottomRef} />
             </>
@@ -367,6 +368,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
         isGenerating={isGenerating}
         placeholder={isCompact ? t('Continue conversation...') : (currentSpace?.isTemp ? t('Say something to Halo...') : t('Continue conversation...'))}
         isCompact={isCompact}
+        workDir={currentSpace?.path}
       />
     </div>
   )
