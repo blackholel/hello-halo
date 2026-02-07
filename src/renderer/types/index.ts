@@ -745,3 +745,24 @@ export const FILE_ICON_IDS: Record<string, string> = {
 export function getFileIconId(extension: string): string {
   return FILE_ICON_IDS[extension.toLowerCase()] || FILE_ICON_IDS.default;
 }
+
+// ============================================
+// Toolkit Types (mirrored from main process)
+// ============================================
+
+export type DirectiveType = 'skill' | 'command' | 'agent'
+
+export interface DirectiveRef {
+  id: string
+  type: DirectiveType
+  name: string
+  namespace?: string
+  source?: string
+  args?: string
+}
+
+export interface SpaceToolkit {
+  skills: DirectiveRef[]
+  commands: DirectiveRef[]
+  agents: DirectiveRef[]
+}

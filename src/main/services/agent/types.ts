@@ -187,3 +187,18 @@ export interface McpServerStatusInfo {
 export type PluginConfig = { type: 'local'; path: string }
 
 export type SettingSource = 'user' | 'project' | 'local'
+
+// ============================================
+// Directive Types (used by toolkit, skills, commands, agents)
+// ============================================
+
+export type DirectiveType = 'skill' | 'command' | 'agent'
+
+export interface DirectiveRef {
+  id: string
+  type: DirectiveType
+  name: string
+  namespace?: string
+  source?: string
+  args?: string
+}

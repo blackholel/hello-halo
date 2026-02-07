@@ -13,31 +13,30 @@ import { join, dirname } from 'path'
 import { readdirSync, readFileSync, statSync, existsSync, mkdirSync, writeFileSync, rmSync, copyFileSync } from 'fs'
 import { getConfig, getHaloDir } from './config.service'
 import { getAllSpacePaths } from './space.service'
-import { isPathWithinBasePaths, isValidDirectoryPath } from '../utils/path-validation'
+import { isPathWithinBasePaths, isValidDirectoryPath, isFileNotFoundError } from '../utils/path-validation'
 import { listEnabledPlugins } from './plugins.service'
+import { FileCache } from '../utils/file-cache'
 
 // ============================================
 // Agent Types
 // ============================================
 
 export interface AgentDefinition {
-  name: string           // Agent name (filename without .md)
-  path: string           // Full path to agent file
-  source: 'app' | 'global' | 'space' | 'plugin'  // Where the agent was loaded from
-  description?: string   // First line of agent content (if available)
-  pluginRoot?: string    // Plugin root path (for plugin agents)
-  namespace?: string     // Plugin namespace
+  name: string
+  path: string
+  source: 'app' | 'global' | 'space' | 'plugin'
+  description?: string
+  pluginRoot?: string
+  namespace?: string
 }
 
 // Cache for agents list (in-memory only)
 let globalAgentsCache: AgentDefinition[] | null = null
 const spaceAgentsCache = new Map<string, AgentDefinition[]>()
+const contentCache = new FileCache<string>({ maxSize: 200 })
 
-/**
- * Validate agent path (not a symlink, is a directory)
- */
-function isValidAgentDir(dirPath: string): boolean {
-  return isValidDirectoryPath(dirPath, 'Agents')
+function agentKey(agent: AgentDefinition): string {
+  return agent.namespace ? `${agent.namespace}:${agent.name}` : agent.name
 }
 
 function getAllowedAgentBaseDirs(): string[] {
@@ -50,8 +49,7 @@ function normalizePath(path: string): string {
 
 function resolveWorkDirForAgentPath(agentPath: string): string | null {
   const normalizedPath = normalizePath(agentPath)
-  const allowedBases = getAllowedAgentBaseDirs().map(normalizePath)
-  for (const base of allowedBases) {
+  for (const base of getAllowedAgentBaseDirs().map(normalizePath)) {
     if (normalizedPath.startsWith(base)) {
       return dirname(dirname(base))
     }
@@ -59,54 +57,40 @@ function resolveWorkDirForAgentPath(agentPath: string): string | null {
   return null
 }
 
-/**
- * Scan a directory for agent files (.md)
- */
+function extractDescription(filePath: string): string | undefined {
+  try {
+    const firstLine = readFileSync(filePath, 'utf-8').split('\n')[0]?.trim()
+    if (!firstLine) return undefined
+    if (firstLine.startsWith('# ')) return firstLine.slice(2).trim().slice(0, 100)
+    if (!firstLine.startsWith('#')) return firstLine.slice(0, 100)
+  } catch {
+    // Ignore read errors
+  }
+  return undefined
+}
+
 function scanAgentDir(
   dirPath: string,
   source: AgentDefinition['source'],
   pluginRoot?: string,
   namespace?: string
 ): AgentDefinition[] {
+  if (!isValidDirectoryPath(dirPath, 'Agents')) return []
+
   const agents: AgentDefinition[] = []
-
-  if (!isValidAgentDir(dirPath)) {
-    return agents
-  }
-
   try {
-    const files = readdirSync(dirPath)
-    for (const file of files) {
+    for (const file of readdirSync(dirPath)) {
       if (!file.endsWith('.md')) continue
-
       const filePath = join(dirPath, file)
       try {
-        const stat = statSync(filePath)
-        if (!stat.isFile()) continue
-
-        const name = file.slice(0, -3)  // Remove .md extension
-
-        // Try to read first line for description
-        let description: string | undefined
-        try {
-          const content = readFileSync(filePath, 'utf-8')
-          const firstLine = content.split('\n')[0]?.trim()
-          if (firstLine && !firstLine.startsWith('#')) {
-            description = firstLine.slice(0, 100)  // Limit description length
-          } else if (firstLine?.startsWith('# ')) {
-            description = firstLine.slice(2).trim().slice(0, 100)
-          }
-        } catch {
-          // Ignore read errors for description
-        }
-
+        if (!statSync(filePath).isFile()) continue
         agents.push({
-          name,
+          name: file.slice(0, -3),
           path: filePath,
           source,
-          description,
-          ...(pluginRoot ? { pluginRoot } : {}),
-          ...(namespace ? { namespace } : {})
+          description: extractDescription(filePath),
+          ...(pluginRoot && { pluginRoot }),
+          ...(namespace && { namespace })
         })
       } catch {
         // Skip files that can't be stat'd
@@ -115,36 +99,26 @@ function scanAgentDir(
   } catch (error) {
     console.warn(`[Agents] Failed to scan directory ${dirPath}:`, error)
   }
-
   return agents
 }
 
 function mergeAgents(globalAgents: AgentDefinition[], spaceAgents: AgentDefinition[]): AgentDefinition[] {
   const merged = new Map<string, AgentDefinition>()
-  const agentKey = (agent: AgentDefinition) =>
-    agent.namespace ? `${agent.namespace}:${agent.name}` : agent.name
-  for (const agent of globalAgents) {
-    merged.set(agentKey(agent), agent)
-  }
-  for (const agent of spaceAgents) {
-    merged.set(agentKey(agent), agent)
-  }
+  for (const agent of globalAgents) merged.set(agentKey(agent), agent)
+  for (const agent of spaceAgents) merged.set(agentKey(agent), agent)
   return Array.from(merged.values())
 }
 
 function buildGlobalAgents(): AgentDefinition[] {
   const agents: AgentDefinition[] = []
   const seenNames = new Set<string>()
-  const config = getConfig()
 
-  const addAgents = (newAgents: AgentDefinition[]) => {
+  const addAgents = (newAgents: AgentDefinition[]): void => {
     for (const agent of newAgents) {
-      const key = agent.namespace ? `${agent.namespace}:${agent.name}` : agent.name
+      const key = agentKey(agent)
       if (seenNames.has(key)) {
-        const idx = agents.findIndex(a => (a.namespace ? `${a.namespace}:${a.name}` : a.name) === key)
-        if (idx >= 0) {
-          agents.splice(idx, 1)
-        }
+        const idx = agents.findIndex(a => agentKey(a) === key)
+        if (idx >= 0) agents.splice(idx, 1)
       }
       agents.push(agent)
       seenNames.add(key)
@@ -152,21 +126,18 @@ function buildGlobalAgents(): AgentDefinition[] {
   }
 
   // 0. Enabled plugin agents (lowest priority)
-  const enabledPlugins = listEnabledPlugins()
-  for (const plugin of enabledPlugins) {
-    const pluginAgentsPath = join(plugin.installPath, 'agents')
-    addAgents(scanAgentDir(pluginAgentsPath, 'plugin', plugin.installPath, plugin.name))
+  for (const plugin of listEnabledPlugins()) {
+    addAgents(scanAgentDir(join(plugin.installPath, 'agents'), 'plugin', plugin.installPath, plugin.name))
   }
 
   // 1. App-level agents (~/.halo/agents/)
   const haloDir = getHaloDir()
   if (haloDir) {
-    const appAgentsPath = join(haloDir, 'agents')
-    addAgents(scanAgentDir(appAgentsPath, 'app'))
+    addAgents(scanAgentDir(join(haloDir, 'agents'), 'app'))
   }
 
   // 2. Global custom paths from config.claudeCode.agents.paths
-  const globalPaths = config.claudeCode?.agents?.paths || []
+  const globalPaths = getConfig().claudeCode?.agents?.paths || []
   for (const globalPath of globalPaths) {
     const resolvedPath = globalPath.startsWith('/')
       ? globalPath
@@ -178,31 +149,35 @@ function buildGlobalAgents(): AgentDefinition[] {
 }
 
 function buildSpaceAgents(workDir: string): AgentDefinition[] {
-  const spaceAgentsPath = join(workDir, '.claude', 'agents')
-  return scanAgentDir(spaceAgentsPath, 'space')
+  return scanAgentDir(join(workDir, '.claude', 'agents'), 'space')
+}
+
+function findAgent(agents: AgentDefinition[], name: string): AgentDefinition | undefined {
+  if (name.includes(':')) {
+    const [namespace, agentName] = name.split(':', 2)
+    return agents.find(a => a.name === agentName && a.namespace === namespace)
+  }
+  return agents.find(a => a.name === name && !a.namespace)
+    ?? agents.find(a => a.name === name)
+}
+
+function logFound(label: string, items: AgentDefinition[]): void {
+  if (items.length > 0) {
+    console.log(`[Agents] Found ${items.length} ${label}: ${items.map(agentKey).join(', ')}`)
+  }
 }
 
 /**
  * List all available agents from all sources
- *
- * @param workDir - Optional workspace directory for space-level agents
- * @returns Array of agent definitions
  */
 export function listAgents(workDir?: string): AgentDefinition[] {
-  const globalAgents = globalAgentsCache ?? buildGlobalAgents()
   if (!globalAgentsCache) {
-    globalAgentsCache = globalAgents
+    globalAgentsCache = buildGlobalAgents()
   }
 
   if (!workDir) {
-    if (globalAgents.length > 0) {
-      console.log(
-        `[Agents] Found ${globalAgents.length} agents: ${globalAgents
-          .map(a => (a.namespace ? `${a.namespace}:${a.name}` : a.name))
-          .join(', ')}`
-      )
-    }
-    return globalAgents
+    logFound('agents', globalAgentsCache)
+    return globalAgentsCache
   }
 
   let spaceAgents = spaceAgentsCache.get(workDir)
@@ -211,70 +186,43 @@ export function listAgents(workDir?: string): AgentDefinition[] {
     spaceAgentsCache.set(workDir, spaceAgents)
   }
 
-  const agents = mergeAgents(globalAgents, spaceAgents)
-  if (agents.length > 0) {
-    console.log(
-      `[Agents] Found ${agents.length} agents: ${agents
-        .map(a => (a.namespace ? `${a.namespace}:${a.name}` : a.name))
-        .join(', ')}`
-    )
-  }
-
+  const agents = mergeAgents(globalAgentsCache, spaceAgents)
+  logFound('agents', agents)
   return agents
 }
 
 /**
  * Get agent content by name
- *
- * @param name - Agent name (without .md extension)
- * @param workDir - Optional workspace directory for space-level agents
- * @returns Agent content or null if not found
  */
 export function getAgentContent(name: string, workDir?: string): string | null {
-  const agents = listAgents(workDir)
-  let agent: AgentDefinition | undefined
-
-  if (name.includes(':')) {
-    const [namespace, agentName] = name.split(':', 2)
-    agent = agents.find(a => a.name === agentName && a.namespace === namespace)
-  } else {
-    agent = agents.find(a => a.name === name && !a.namespace)
-    if (!agent) {
-      agent = agents.find(a => a.name === name)
-    }
-  }
-
+  const agent = findAgent(listAgents(workDir), name)
   if (!agent) {
     console.warn(`[Agents] Agent not found: ${name}`)
     return null
   }
 
   try {
-    let content = readFileSync(agent.path, 'utf-8')
+    let content = contentCache.get(agent.path, () => readFileSync(agent.path, 'utf-8'))
     if (agent.pluginRoot) {
       content = content.replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, agent.pluginRoot)
     }
     return content
   } catch (error) {
-    console.error(`[Agents] Failed to read agent ${name}:`, error)
+    contentCache.clear(agent.path)
+    if (isFileNotFoundError(error)) {
+      console.debug(`[Agents] Agent file not found: ${name}`)
+    } else {
+      console.warn(`[Agents] Failed to read agent ${name}:`, error)
+    }
     return null
   }
 }
 
 /**
  * Get agent definition by name
- *
- * @param name - Agent name (without .md extension)
- * @param workDir - Optional workspace directory for space-level agents
- * @returns Agent definition or null if not found
  */
 export function getAgent(name: string, workDir?: string): AgentDefinition | null {
-  const agents = listAgents(workDir)
-  if (name.includes(':')) {
-    const [namespace, agentName] = name.split(':', 2)
-    return agents.find(a => a.name === agentName && a.namespace === namespace) || null
-  }
-  return agents.find(a => a.name === name && !a.namespace) || agents.find(a => a.name === name) || null
+  return findAgent(listAgents(workDir), name) ?? null
 }
 
 /**
@@ -284,6 +232,7 @@ export function getAgent(name: string, workDir?: string): AgentDefinition | null
 export function clearAgentsCache(): void {
   globalAgentsCache = null
   spaceAgentsCache.clear()
+  contentCache.clear()
 }
 
 /**
@@ -292,9 +241,11 @@ export function clearAgentsCache(): void {
 export function invalidateAgentsCache(workDir?: string | null): void {
   if (!workDir) {
     globalAgentsCache = null
+    contentCache.clear()
     return
   }
   spaceAgentsCache.delete(workDir)
+  contentCache.clearForDir(workDir)
 }
 
 // ============================================
@@ -318,16 +269,14 @@ export function createAgent(workDir: string, name: string, content: string): Age
 
   mkdirSync(agentDir, { recursive: true })
   writeFileSync(agentPath, content, 'utf-8')
-
   invalidateAgentsCache(workDir)
 
-  const description = content.split('\n')[0]?.trim()
-  return {
-    name,
-    path: agentPath,
-    source: 'space',
-    description: description?.startsWith('# ') ? description.slice(2).trim().slice(0, 100) : description?.slice(0, 100)
-  }
+  const firstLine = content.split('\n')[0]?.trim()
+  const description = firstLine?.startsWith('# ')
+    ? firstLine.slice(2).trim().slice(0, 100)
+    : firstLine?.slice(0, 100)
+
+  return { name, path: agentPath, source: 'space', description }
 }
 
 /**

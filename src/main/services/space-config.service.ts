@@ -6,7 +6,7 @@
  */
 
 import { join } from 'path'
-import { existsSync, readFileSync } from 'fs'
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import type { HooksConfig, ClaudeCodeConfig } from './config.service'
 import { mergeHooksConfigs } from './hooks.service'
 import { FileCache } from '../utils/file-cache'
@@ -42,8 +42,15 @@ export interface SpaceClaudeCodeConfig {
   enableProjectSettings?: boolean
 }
 
+export interface SpaceToolkit {
+  skills: import('./agent/types').DirectiveRef[]
+  commands: import('./agent/types').DirectiveRef[]
+  agents: import('./agent/types').DirectiveRef[]
+}
+
 export interface SpaceConfig {
   claudeCode?: SpaceClaudeCodeConfig
+  toolkit?: SpaceToolkit
 }
 
 // File cache for space configs (mtime-based invalidation)
@@ -147,5 +154,37 @@ export function mergeMcpServers(
   return {
     ...global,
     ...space
+  }
+}
+
+/**
+ * Update space configuration atomically.
+ * The updater receives the current config and returns the new config.
+ * Returns the updated config, or null on failure.
+ */
+export function updateSpaceConfig(
+  workDir: string,
+  updater: (config: SpaceConfig) => SpaceConfig
+): SpaceConfig | null {
+  if (!workDir) return null
+
+  const configDir = join(workDir, '.halo')
+  const configPath = join(configDir, 'space-config.json')
+
+  try {
+    const current = getSpaceConfig(workDir) ?? {}
+    const updated = updater(current)
+
+    mkdirSync(configDir, { recursive: true })
+    writeFileSync(configPath, JSON.stringify(updated, null, 2), 'utf-8')
+
+    // Invalidate cache so next read picks up the new value
+    spaceConfigCache.clear(configPath)
+
+    console.log(`[SpaceConfig] Updated space config: ${configPath}`)
+    return updated
+  } catch (error) {
+    console.error(`[SpaceConfig] Failed to update space config:`, error)
+    return null
   }
 }

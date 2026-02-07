@@ -8,12 +8,13 @@
  * Each command is a markdown file (.md).
  */
 
-import { join, dirname } from 'path'
+import { join } from 'path'
 import { readdirSync, readFileSync, statSync } from 'fs'
 import { getHaloDir } from './config.service'
 import { getAllSpacePaths } from './space.service'
-import { isPathWithinBasePaths, isValidDirectoryPath } from '../utils/path-validation'
+import { isPathWithinBasePaths, isValidDirectoryPath, isFileNotFoundError } from '../utils/path-validation'
 import { listEnabledPlugins } from './plugins.service'
+import { FileCache } from '../utils/file-cache'
 
 // ============================================
 // Command Types
@@ -31,42 +32,22 @@ export interface CommandDefinition {
 // Cache for commands list (in-memory only)
 let globalCommandsCache: CommandDefinition[] | null = null
 const spaceCommandsCache = new Map<string, CommandDefinition[]>()
-
-function isValidCommandDir(dirPath: string): boolean {
-  return isValidDirectoryPath(dirPath, 'Commands')
-}
+const contentCache = new FileCache<string>({ maxSize: 200 })
 
 function getAllowedCommandBaseDirs(): string[] {
   return getAllSpacePaths().map((spacePath) => join(spacePath, '.claude', 'commands'))
 }
 
-function normalizePath(path: string): string {
-  return path.replace(/\\/g, '/')
-}
-
-function resolveWorkDirForCommandPath(commandPath: string): string | null {
-  const normalizedPath = normalizePath(commandPath)
-  const allowedBases = getAllowedCommandBaseDirs().map(normalizePath)
-  for (const base of allowedBases) {
-    if (normalizedPath.startsWith(base)) {
-      return dirname(dirname(base))
-    }
-  }
-  return null
+function commandKey(cmd: CommandDefinition): string {
+  return cmd.namespace ? `${cmd.namespace}:${cmd.name}` : cmd.name
 }
 
 function extractDescription(filePath: string): string | undefined {
   try {
-    const content = readFileSync(filePath, 'utf-8')
-    const firstLine = content.split('\n')[0]?.trim()
+    const firstLine = readFileSync(filePath, 'utf-8').split('\n')[0]?.trim()
     if (!firstLine) return undefined
-
-    if (firstLine.startsWith('# ')) {
-      return firstLine.slice(2).trim().slice(0, 100)
-    }
-    if (!firstLine.startsWith('#')) {
-      return firstLine.slice(0, 100)
-    }
+    if (firstLine.startsWith('# ')) return firstLine.slice(2).trim().slice(0, 100)
+    if (!firstLine.startsWith('#')) return firstLine.slice(0, 100)
   } catch {
     // Ignore read errors
   }
@@ -79,27 +60,20 @@ function scanCommandDir(
   pluginRoot?: string,
   namespace?: string
 ): CommandDefinition[] {
+  if (!isValidDirectoryPath(dirPath, 'Commands')) return []
+
   const commands: CommandDefinition[] = []
-  if (!isValidCommandDir(dirPath)) return commands
-
   try {
-    const files = readdirSync(dirPath)
-    for (const file of files) {
+    for (const file of readdirSync(dirPath)) {
       if (!file.endsWith('.md')) continue
-
       const filePath = join(dirPath, file)
       try {
-        const stat = statSync(filePath)
-        if (!stat.isFile()) continue
-
-        const name = file.slice(0, -3)
-        const description = extractDescription(filePath)
-
+        if (!statSync(filePath).isFile()) continue
         commands.push({
-          name,
+          name: file.slice(0, -3),
           path: filePath,
           source,
-          description,
+          description: extractDescription(filePath),
           ...(pluginRoot && { pluginRoot }),
           ...(namespace && { namespace })
         })
@@ -110,22 +84,13 @@ function scanCommandDir(
   } catch (error) {
     console.warn(`[Commands] Failed to scan directory ${dirPath}:`, error)
   }
-
   return commands
-}
-
-function commandKey(command: CommandDefinition): string {
-  return command.namespace ? `${command.namespace}:${command.name}` : command.name
 }
 
 function mergeCommands(globalCommands: CommandDefinition[], spaceCommands: CommandDefinition[]): CommandDefinition[] {
   const merged = new Map<string, CommandDefinition>()
-  for (const command of globalCommands) {
-    merged.set(commandKey(command), command)
-  }
-  for (const command of spaceCommands) {
-    merged.set(commandKey(command), command)
-  }
+  for (const cmd of globalCommands) merged.set(commandKey(cmd), cmd)
+  for (const cmd of spaceCommands) merged.set(commandKey(cmd), cmd)
   return Array.from(merged.values())
 }
 
@@ -133,51 +98,59 @@ function buildGlobalCommands(): CommandDefinition[] {
   const commands: CommandDefinition[] = []
   const seenNames = new Set<string>()
 
-  const addCommands = (newCommands: CommandDefinition[]) => {
-    for (const command of newCommands) {
-      const key = commandKey(command)
+  const addCommands = (newCommands: CommandDefinition[]): void => {
+    for (const cmd of newCommands) {
+      const key = commandKey(cmd)
       if (seenNames.has(key)) {
         const idx = commands.findIndex(c => commandKey(c) === key)
-        if (idx >= 0) {
-          commands.splice(idx, 1)
-        }
+        if (idx >= 0) commands.splice(idx, 1)
       }
-      commands.push(command)
+      commands.push(cmd)
       seenNames.add(key)
     }
   }
 
-  const enabledPlugins = listEnabledPlugins()
-  for (const plugin of enabledPlugins) {
-    const pluginCommandsPath = join(plugin.installPath, 'commands')
-    addCommands(scanCommandDir(pluginCommandsPath, 'plugin', plugin.installPath, plugin.name))
+  for (const plugin of listEnabledPlugins()) {
+    addCommands(scanCommandDir(join(plugin.installPath, 'commands'), 'plugin', plugin.installPath, plugin.name))
   }
 
   const haloDir = getHaloDir()
   if (haloDir) {
-    const appCommandsPath = join(haloDir, 'commands')
-    addCommands(scanCommandDir(appCommandsPath, 'app'))
+    addCommands(scanCommandDir(join(haloDir, 'commands'), 'app'))
   }
 
   return commands
 }
 
 function buildSpaceCommands(workDir: string): CommandDefinition[] {
-  const spaceCommandsPath = join(workDir, '.claude', 'commands')
-  return scanCommandDir(spaceCommandsPath, 'space')
+  return scanCommandDir(join(workDir, '.claude', 'commands'), 'space')
+}
+
+function findCommand(commands: CommandDefinition[], name: string): CommandDefinition | undefined {
+  if (name.includes(':')) {
+    const [namespace, cmdName] = name.split(':', 2)
+    return commands.find(c => c.name === cmdName && c.namespace === namespace)
+      ?? commands.find(c => c.name === cmdName && !c.namespace)
+      ?? commands.find(c => c.name === cmdName)
+  }
+  return commands.find(c => c.name === name && !c.namespace)
+    ?? commands.find(c => c.name === name)
+}
+
+function logFound(items: CommandDefinition[]): void {
+  if (items.length > 0) {
+    console.log(`[Commands] Found ${items.length} commands: ${items.map(commandKey).join(', ')}`)
+  }
 }
 
 export function listCommands(workDir?: string): CommandDefinition[] {
-  const globalCommands = globalCommandsCache ?? buildGlobalCommands()
   if (!globalCommandsCache) {
-    globalCommandsCache = globalCommands
+    globalCommandsCache = buildGlobalCommands()
   }
 
   if (!workDir) {
-    if (globalCommands.length > 0) {
-      console.log(`[Commands] Found ${globalCommands.length} commands: ${globalCommands.map(c => commandKey(c)).join(', ')}`)
-    }
-    return globalCommands
+    logFound(globalCommandsCache)
+    return globalCommandsCache
   }
 
   let spaceCommands = spaceCommandsCache.get(workDir)
@@ -186,22 +159,9 @@ export function listCommands(workDir?: string): CommandDefinition[] {
     spaceCommandsCache.set(workDir, spaceCommands)
   }
 
-  const commands = mergeCommands(globalCommands, spaceCommands)
-  if (commands.length > 0) {
-    console.log(`[Commands] Found ${commands.length} commands: ${commands.map(c => commandKey(c)).join(', ')}`)
-  }
+  const commands = mergeCommands(globalCommandsCache, spaceCommands)
+  logFound(commands)
   return commands
-}
-
-function findCommand(commands: CommandDefinition[], name: string): CommandDefinition | undefined {
-  if (name.includes(':')) {
-    const [namespace, cmdName] = name.split(':', 2)
-    return commands.find(c => c.name === cmdName && c.namespace === namespace) ||
-           commands.find(c => c.name === cmdName && !c.namespace) ||
-           commands.find(c => c.name === cmdName)
-  }
-  return commands.find(c => c.name === name && !c.namespace) ||
-         commands.find(c => c.name === name)
 }
 
 export function getCommandContent(
@@ -209,24 +169,26 @@ export function getCommandContent(
   workDir?: string,
   opts?: { silent?: boolean }
 ): string | null {
-  const commands = listCommands(workDir)
-  const command = findCommand(commands, name)
+  const command = findCommand(listCommands(workDir), name)
 
   if (!command) {
-    if (!opts?.silent) {
-      console.warn(`[Commands] Command not found: ${name}`)
-    }
+    if (!opts?.silent) console.warn(`[Commands] Command not found: ${name}`)
     return null
   }
 
   try {
-    let content = readFileSync(command.path, 'utf-8')
+    let content = contentCache.get(command.path, () => readFileSync(command.path, 'utf-8'))
     if (command.pluginRoot) {
       content = content.replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, command.pluginRoot)
     }
     return content
   } catch (error) {
-    console.error(`[Commands] Failed to read command ${name}:`, error)
+    contentCache.clear(command.path)
+    if (isFileNotFoundError(error)) {
+      console.debug(`[Commands] Command file not found: ${name}`)
+    } else {
+      console.warn(`[Commands] Failed to read command ${name}:`, error)
+    }
     return null
   }
 }
@@ -234,17 +196,19 @@ export function getCommandContent(
 export function clearCommandsCache(): void {
   globalCommandsCache = null
   spaceCommandsCache.clear()
+  contentCache.clear()
 }
 
 export function invalidateCommandsCache(workDir?: string | null): void {
   if (!workDir) {
     globalCommandsCache = null
+    contentCache.clear()
     return
   }
   spaceCommandsCache.delete(workDir)
+  contentCache.clearForDir(workDir)
 }
 
 export function isCommandPathAllowed(commandPath: string): boolean {
-  const allowedBases = getAllowedCommandBaseDirs()
-  return isPathWithinBasePaths(commandPath, allowedBases)
+  return isPathWithinBasePaths(commandPath, getAllowedCommandBaseDirs())
 }
