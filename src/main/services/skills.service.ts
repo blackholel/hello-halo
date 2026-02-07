@@ -15,100 +15,41 @@ import { readdirSync, readFileSync, statSync, existsSync, mkdirSync, writeFileSy
 import { getConfig, getHaloDir } from './config.service'
 import { listEnabledPlugins } from './plugins.service'
 import { getAllSpacePaths } from './space.service'
-import { isPathWithinBasePaths, isValidDirectoryPath } from '../utils/path-validation'
+import { isPathWithinBasePaths, isValidDirectoryPath, isFileNotFoundError } from '../utils/path-validation'
+import { FileCache } from '../utils/file-cache'
 
 // ============================================
 // Skill Types
 // ============================================
 
 export interface SkillDefinition {
-  name: string                              // Directory name
-  path: string                              // Full path to skill directory
-  source: 'app' | 'global' | 'space' | 'installed'  // Where the skill was loaded from
-  description?: string                      // Description from frontmatter
-  triggers?: string[]                       // Trigger patterns from frontmatter
-  category?: string                         // Category from frontmatter
-  pluginRoot?: string                       // Plugin root path (for installed skills)
-  namespace?: string                        // Plugin namespace
+  name: string
+  path: string
+  source: 'app' | 'global' | 'space' | 'installed'
+  description?: string
+  triggers?: string[]
+  category?: string
+  pluginRoot?: string
+  namespace?: string
 }
 
 export interface SkillContent {
   name: string
-  content: string                           // Full SKILL.md content
-  frontmatter?: Record<string, unknown>     // Parsed frontmatter
+  content: string
+  frontmatter?: Record<string, unknown>
 }
 
-// Cache for skills list (in-memory only)
+// Cache
 let globalSkillsCache: SkillDefinition[] | null = null
 const spaceSkillsCache = new Map<string, SkillDefinition[]>()
+const contentCache = new FileCache<string>({ maxSize: 200 })
 
 // ============================================
-// Frontmatter Parsing
+// Helpers
 // ============================================
 
-/**
- * Parse YAML frontmatter from skill content
- */
-function parseFrontmatter(content: string): Record<string, unknown> | null {
-  const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/)
-  if (!frontmatterMatch) return null
-
-  const frontmatterStr = frontmatterMatch[1]
-  const result: Record<string, unknown> = {}
-
-  // Simple YAML parsing for common fields
-  const lines = frontmatterStr.split('\n')
-  let currentKey: string | null = null
-  let currentArray: string[] | null = null
-
-  for (const line of lines) {
-    // Check for array item
-    if (line.match(/^\s+-\s+/)) {
-      if (currentKey && currentArray) {
-        const value = line.replace(/^\s+-\s+/, '').trim()
-        currentArray.push(value)
-      }
-      continue
-    }
-
-    // Save previous array if exists
-    if (currentKey && currentArray) {
-      result[currentKey] = currentArray
-      currentArray = null
-      currentKey = null
-    }
-
-    // Check for key-value pair
-    const kvMatch = line.match(/^(\w+):\s*(.*)$/)
-    if (kvMatch) {
-      const [, key, value] = kvMatch
-      if (value.trim() === '') {
-        // Start of array
-        currentKey = key
-        currentArray = []
-      } else {
-        result[key] = value.trim()
-      }
-    }
-  }
-
-  // Save final array if exists
-  if (currentKey && currentArray) {
-    result[currentKey] = currentArray
-  }
-
-  return result
-}
-
-// ============================================
-// Directory Scanning
-// ============================================
-
-/**
- * Validate skill directory path
- */
-function isValidSkillDir(dirPath: string): boolean {
-  return isValidDirectoryPath(dirPath, 'Skills')
+function skillKey(skill: SkillDefinition): string {
+  return skill.namespace ? `${skill.namespace}:${skill.name}` : skill.name
 }
 
 function getAllowedSkillBaseDirs(): string[] {
@@ -121,8 +62,7 @@ function normalizePath(path: string): string {
 
 function resolveWorkDirForSkillPath(skillMdPath: string): string | null {
   const normalizedPath = normalizePath(skillMdPath)
-  const allowedBases = getAllowedSkillBaseDirs().map(normalizePath)
-  for (const base of allowedBases) {
+  for (const base of getAllowedSkillBaseDirs().map(normalizePath)) {
     if (normalizedPath.startsWith(base)) {
       return dirname(dirname(base))
     }
@@ -130,41 +70,87 @@ function resolveWorkDirForSkillPath(skillMdPath: string): string | null {
   return null
 }
 
-/**
- * Scan a directory for skill subdirectories (each containing SKILL.md)
- */
+function findSkill(skills: SkillDefinition[], name: string): SkillDefinition | undefined {
+  if (name.includes(':')) {
+    const [namespace, skillName] = name.split(':', 2)
+    return skills.find(s => s.name === skillName && s.namespace === namespace)
+  }
+  return skills.find(s => s.name === name && !s.namespace)
+    ?? skills.find(s => s.name === name)
+}
+
+// ============================================
+// Frontmatter Parsing
+// ============================================
+
+function parseFrontmatter(content: string): Record<string, unknown> | null {
+  const match = content.match(/^---\n([\s\S]*?)\n---/)
+  if (!match) return null
+
+  const result: Record<string, unknown> = {}
+  let currentKey: string | null = null
+  let currentArray: string[] | null = null
+
+  for (const line of match[1].split('\n')) {
+    if (line.match(/^\s+-\s+/)) {
+      if (currentKey && currentArray) {
+        currentArray.push(line.replace(/^\s+-\s+/, '').trim())
+      }
+      continue
+    }
+
+    if (currentKey && currentArray) {
+      result[currentKey] = currentArray
+      currentArray = null
+      currentKey = null
+    }
+
+    const kvMatch = line.match(/^(\w+):\s*(.*)$/)
+    if (kvMatch) {
+      const [, key, value] = kvMatch
+      if (value.trim() === '') {
+        currentKey = key
+        currentArray = []
+      } else {
+        result[key] = value.trim()
+      }
+    }
+  }
+
+  if (currentKey && currentArray) {
+    result[currentKey] = currentArray
+  }
+
+  return result
+}
+
+// ============================================
+// Directory Scanning
+// ============================================
+
 function scanSkillDir(
   dirPath: string,
   source: SkillDefinition['source'],
   pluginRoot?: string,
   namespace?: string
 ): SkillDefinition[] {
+  if (!isValidDirectoryPath(dirPath, 'Skills')) return []
+
   const skills: SkillDefinition[] = []
-
-  if (!isValidSkillDir(dirPath)) {
-    return skills
-  }
-
   try {
-    const entries = readdirSync(dirPath)
-    for (const entry of entries) {
+    for (const entry of readdirSync(dirPath)) {
       const skillPath = join(dirPath, entry)
       try {
-        const stat = statSync(skillPath)
-        if (!stat.isDirectory()) continue
+        if (!statSync(skillPath).isDirectory()) continue
 
-        // Check for SKILL.md file
         const skillMdPath = join(skillPath, 'SKILL.md')
         if (!existsSync(skillMdPath)) continue
 
-        // Read and parse SKILL.md for metadata
         let description: string | undefined
         let triggers: string[] | undefined
         let category: string | undefined
-
         try {
-          const content = readFileSync(skillMdPath, 'utf-8')
-          const frontmatter = parseFrontmatter(content)
+          const frontmatter = parseFrontmatter(readFileSync(skillMdPath, 'utf-8'))
           if (frontmatter) {
             description = frontmatter.description as string | undefined
             triggers = frontmatter.triggers as string[] | undefined
@@ -181,8 +167,8 @@ function scanSkillDir(
           description,
           triggers,
           category,
-          ...(pluginRoot ? { pluginRoot } : {}),
-          ...(namespace ? { namespace } : {})
+          ...(pluginRoot && { pluginRoot }),
+          ...(namespace && { namespace })
         })
       } catch {
         // Skip entries that can't be stat'd
@@ -191,37 +177,26 @@ function scanSkillDir(
   } catch (error) {
     console.warn(`[Skills] Failed to scan directory ${dirPath}:`, error)
   }
-
   return skills
 }
 
 function mergeSkills(globalSkills: SkillDefinition[], spaceSkills: SkillDefinition[]): SkillDefinition[] {
   const merged = new Map<string, SkillDefinition>()
-  const skillKey = (skill: SkillDefinition) =>
-    skill.namespace ? `${skill.namespace}:${skill.name}` : skill.name
-
-  for (const skill of globalSkills) {
-    merged.set(skillKey(skill), skill)
-  }
-  for (const skill of spaceSkills) {
-    merged.set(skillKey(skill), skill)
-  }
+  for (const skill of globalSkills) merged.set(skillKey(skill), skill)
+  for (const skill of spaceSkills) merged.set(skillKey(skill), skill)
   return Array.from(merged.values())
 }
 
 function buildGlobalSkills(): SkillDefinition[] {
   const skills: SkillDefinition[] = []
   const seenNames = new Set<string>()
-  const config = getConfig()
 
-  const addSkills = (newSkills: SkillDefinition[]) => {
+  const addSkills = (newSkills: SkillDefinition[]): void => {
     for (const skill of newSkills) {
-      const key = skill.namespace ? `${skill.namespace}:${skill.name}` : skill.name
+      const key = skillKey(skill)
       if (seenNames.has(key)) {
-        const idx = skills.findIndex(s => (s.namespace ? `${s.namespace}:${s.name}` : s.name) === key)
-        if (idx >= 0) {
-          skills.splice(idx, 1)
-        }
+        const idx = skills.findIndex(s => skillKey(s) === key)
+        if (idx >= 0) skills.splice(idx, 1)
       }
       skills.push(skill)
       seenNames.add(key)
@@ -229,8 +204,7 @@ function buildGlobalSkills(): SkillDefinition[] {
   }
 
   // 0. Enabled plugins - lowest priority
-  const enabledPlugins = listEnabledPlugins()
-  for (const plugin of enabledPlugins) {
+  for (const plugin of listEnabledPlugins()) {
     const skillsSubdir = join(plugin.installPath, 'skills')
     if (existsSync(skillsSubdir)) {
       addSkills(scanSkillDir(skillsSubdir, 'installed', plugin.installPath, plugin.name))
@@ -240,12 +214,11 @@ function buildGlobalSkills(): SkillDefinition[] {
   // 1. App-level skills (~/.halo/skills/)
   const haloDir = getHaloDir()
   if (haloDir) {
-    const appSkillsPath = join(haloDir, 'skills')
-    addSkills(scanSkillDir(appSkillsPath, 'app'))
+    addSkills(scanSkillDir(join(haloDir, 'skills'), 'app'))
   }
 
   // 2. Global custom paths from config.claudeCode.plugins.globalPaths
-  const globalPaths = config.claudeCode?.plugins?.globalPaths || []
+  const globalPaths = getConfig().claudeCode?.plugins?.globalPaths || []
   for (const globalPath of globalPaths) {
     const resolvedPath = globalPath.startsWith('/')
       ? globalPath
@@ -260,8 +233,13 @@ function buildGlobalSkills(): SkillDefinition[] {
 }
 
 function buildSpaceSkills(workDir: string): SkillDefinition[] {
-  const spaceSkillsPath = join(workDir, '.claude', 'skills')
-  return scanSkillDir(spaceSkillsPath, 'space')
+  return scanSkillDir(join(workDir, '.claude', 'skills'), 'space')
+}
+
+function logFound(items: SkillDefinition[]): void {
+  if (items.length > 0) {
+    console.log(`[Skills] Found ${items.length} skills: ${items.map(skillKey).join(', ')}`)
+  }
 }
 
 // ============================================
@@ -270,25 +248,15 @@ function buildSpaceSkills(workDir: string): SkillDefinition[] {
 
 /**
  * List all available skills from all sources
- *
- * @param workDir - Optional workspace directory for space-level skills
- * @returns Array of skill definitions
  */
 export function listSkills(workDir?: string): SkillDefinition[] {
-  const globalSkills = globalSkillsCache ?? buildGlobalSkills()
   if (!globalSkillsCache) {
-    globalSkillsCache = globalSkills
+    globalSkillsCache = buildGlobalSkills()
   }
 
   if (!workDir) {
-    if (globalSkills.length > 0) {
-      console.log(
-        `[Skills] Found ${globalSkills.length} skills: ${globalSkills
-          .map(s => (s.namespace ? `${s.namespace}:${s.name}` : s.name))
-          .join(', ')}`
-      )
-    }
-    return globalSkills
+    logFound(globalSkillsCache)
+    return globalSkillsCache
   }
 
   let spaceSkills = spaceSkillsCache.get(workDir)
@@ -297,39 +265,16 @@ export function listSkills(workDir?: string): SkillDefinition[] {
     spaceSkillsCache.set(workDir, spaceSkills)
   }
 
-  const skills = mergeSkills(globalSkills, spaceSkills)
-  if (skills.length > 0) {
-    console.log(
-      `[Skills] Found ${skills.length} skills: ${skills
-        .map(s => (s.namespace ? `${s.namespace}:${s.name}` : s.name))
-        .join(', ')}`
-    )
-  }
-
+  const skills = mergeSkills(globalSkillsCache, spaceSkills)
+  logFound(skills)
   return skills
 }
 
 /**
  * Get skill content by name
- *
- * @param name - Skill name (directory name)
- * @param workDir - Optional workspace directory for space-level skills
- * @returns Skill content with parsed frontmatter or null if not found
  */
 export function getSkillContent(name: string, workDir?: string): SkillContent | null {
-  const skills = listSkills(workDir)
-  let skill: SkillDefinition | undefined
-
-  if (name.includes(':')) {
-    const [namespace, skillName] = name.split(':', 2)
-    skill = skills.find(s => s.name === skillName && s.namespace === namespace)
-  } else {
-    skill = skills.find(s => s.name === name && !s.namespace)
-    if (!skill) {
-      skill = skills.find(s => s.name === name)
-    }
-  }
-
+  const skill = findSkill(listSkills(workDir), name)
   if (!skill) {
     console.warn(`[Skills] Skill not found: ${name}`)
     return null
@@ -337,52 +282,40 @@ export function getSkillContent(name: string, workDir?: string): SkillContent | 
 
   try {
     const skillMdPath = join(skill.path, 'SKILL.md')
-    let content = readFileSync(skillMdPath, 'utf-8')
+    let content = contentCache.get(skillMdPath, () => readFileSync(skillMdPath, 'utf-8'))
     if (skill.pluginRoot) {
       content = content.replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, skill.pluginRoot)
     }
-    const frontmatter = parseFrontmatter(content) || undefined
-
     return {
       name: skill.name,
       content,
-      frontmatter
+      frontmatter: parseFrontmatter(content) ?? undefined
     }
   } catch (error) {
-    console.error(`[Skills] Failed to read skill ${name}:`, error)
+    contentCache.clear(join(skill.path, 'SKILL.md'))
+    if (isFileNotFoundError(error)) {
+      console.debug(`[Skills] Skill file not found: ${name}`)
+    } else {
+      console.warn(`[Skills] Failed to read skill ${name}:`, error)
+    }
     return null
   }
 }
 
 /**
  * Create a new skill in the space directory
- *
- * @param workDir - Workspace directory
- * @param name - Skill name (will be used as directory name)
- * @param content - SKILL.md content
- * @returns Created skill definition or throws on error
  */
 export function createSkill(workDir: string, name: string, content: string): SkillDefinition {
-  // Validate skill name (no path traversal, no special chrs)
   if (!name || name.includes('/') || name.includes('\\') || name.includes('..') || name.startsWith('.')) {
     throw new Error(`Invalid skill name: ${name}`)
   }
 
   const skillDir = join(workDir, '.claude', 'skills', name)
-  const skillMdPath = join(skillDir, 'SKILL.md')
-
-  // Create directory
   mkdirSync(skillDir, { recursive: true })
-
-  // Write SKILL.md
-  writeFileSync(skillMdPath, content, 'utf-8')
-
-  // Clear cache for this space
+  writeFileSync(join(skillDir, 'SKILL.md'), content, 'utf-8')
   invalidateSkillsCache(workDir)
 
-  // Parse frontmatter for return value
   const frontmatter = parseFrontmatter(content)
-
   return {
     name,
     path: skillDir,
@@ -395,20 +328,14 @@ export function createSkill(workDir: string, name: string, content: string): Ski
 
 /**
  * Update an existing skill's content
- *
- * @param skillPath - Full path to the skill directory or SKILL.md file
- * @param content - New SKILL.md content
- * @returns true if successful, false otherwise
  */
 export function updateSkill(skillPath: string, content: string): boolean {
   try {
-    // Determine the SKILL.md path
     const skillMdPath = skillPath.endsWith('SKILL.md')
       ? skillPath
       : join(skillPath, 'SKILL.md')
 
-    const allowedBases = getAllowedSkillBaseDirs()
-    if (!isPathWithinBasePaths(skillMdPath, allowedBases)) {
+    if (!isPathWithinBasePaths(skillMdPath, getAllowedSkillBaseDirs())) {
       console.warn(`[Skills] Cannot update skill outside of space skills directory: ${skillPath}`)
       return false
     }
@@ -427,23 +354,17 @@ export function updateSkill(skillPath: string, content: string): boolean {
     }
     return true
   } catch (error) {
-    console.error(`[Skills] Failed to update skill:`, error)
+    console.error('[Skills] Failed to update skill:', error)
     return false
   }
 }
 
 /**
  * Delete a skill
- *
- * @param skillPath - Full path to the skill directory
- * @returns true if successful, false otherwise
  */
 export function deleteSkill(skillPath: string): boolean {
   try {
-    // Security check: only allow deleting from known skill directories
     const normalizedPath = skillPath.replace(/\\/g, '/')
-
-    // Must be in a skills directory
     if (!normalizedPath.includes('/skills/') && !normalizedPath.includes('/.claude/skills/')) {
       console.warn(`[Skills] Cannot delete skill outside of skills directory: ${skillPath}`)
       return false
@@ -463,28 +384,21 @@ export function deleteSkill(skillPath: string): boolean {
     }
     return true
   } catch (error) {
-    console.error(`[Skills] Failed to delete skill:`, error)
+    console.error('[Skills] Failed to delete skill:', error)
     return false
   }
 }
 
 /**
  * Copy a skill to the space directory
- *
- * @param skillName - Name of the skill to copy
- * @param workDir - Target workspace directory
- * @returns New skill definition or null if source not found
  */
 export function copySkillToSpace(skillName: string, workDir: string): SkillDefinition | null {
-  const skills = listSkills(workDir)
-  const sourceSkill = skills.find(s => s.name === skillName)
-
+  const sourceSkill = listSkills(workDir).find(s => s.name === skillName)
   if (!sourceSkill) {
     console.warn(`[Skills] Source skill not found: ${skillName}`)
     return null
   }
 
-  // Don't copy if already in space
   if (sourceSkill.source === 'space') {
     console.warn(`[Skills] Skill is already in space: ${skillName}`)
     return sourceSkill
@@ -492,36 +406,23 @@ export function copySkillToSpace(skillName: string, workDir: string): SkillDefin
 
   try {
     const targetDir = join(workDir, '.claude', 'skills', skillName)
-    const sourceMdPath = join(sourceSkill.path, 'SKILL.md')
-    const targetMdPath = join(targetDir, 'SKILL.md')
-
-    // Create target directory
     mkdirSync(targetDir, { recursive: true })
-
-    // Copy SKILL.md
-    copyFileSync(sourceMdPath, targetMdPath)
-
-    // Clear cache for this space
+    copyFileSync(join(sourceSkill.path, 'SKILL.md'), join(targetDir, 'SKILL.md'))
     invalidateSkillsCache(workDir)
-
-    return {
-      ...sourceSkill,
-      path: targetDir,
-      source: 'space'
-    }
+    return { ...sourceSkill, path: targetDir, source: 'space' }
   } catch (error) {
-    console.error(`[Skills] Failed to copy skill to space:`, error)
+    console.error('[Skills] Failed to copy skill to space:', error)
     return null
   }
 }
 
 /**
  * Clear skills cache
- * Call this when skill files are modified
  */
 export function clearSkillsCache(): void {
   globalSkillsCache = null
   spaceSkillsCache.clear()
+  contentCache.clear()
 }
 
 /**
@@ -530,7 +431,9 @@ export function clearSkillsCache(): void {
 export function invalidateSkillsCache(workDir?: string | null): void {
   if (!workDir) {
     globalSkillsCache = null
+    contentCache.clear()
     return
   }
   spaceSkillsCache.delete(workDir)
+  contentCache.clearForDir(workDir)
 }

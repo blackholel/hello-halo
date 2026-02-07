@@ -118,6 +118,7 @@ export interface HaloAPI {
   onAgentMcpStatus: (callback: (data: unknown) => void) => () => void
   onAgentCompact: (callback: (data: unknown) => void) => () => void
   onSkillsChanged: (callback: (data: unknown) => void) => () => void
+  onCommandsChanged: (callback: (data: unknown) => void) => () => void
   onAgentsChanged: (callback: (data: unknown) => void) => () => void
 
   // Artifact
@@ -155,6 +156,12 @@ export interface HaloAPI {
   deleteAgent: (agentPath: string) => Promise<IpcResponse>
   copyAgentToSpace: (agentName: string, workDir: string) => Promise<IpcResponse>
   clearAgentsCache: () => Promise<IpcResponse>
+
+  // Toolkit
+  getToolkit: (spaceId: string) => Promise<IpcResponse>
+  addToolkitResource: (spaceId: string, directive: Record<string, unknown>) => Promise<IpcResponse>
+  removeToolkitResource: (spaceId: string, directive: Record<string, unknown>) => Promise<IpcResponse>
+  clearToolkit: (spaceId: string) => Promise<IpcResponse>
 
   // Workflows
   listWorkflows: (spaceId: string) => Promise<IpcResponse>
@@ -455,6 +462,7 @@ const api: HaloAPI = {
   onAgentMcpStatus: (callback) => createEventListener('agent:mcp-status', callback),
   onAgentCompact: (callback) => createEventListener('agent:compact', callback),
   onSkillsChanged: (callback) => createEventListener('skills:changed', callback),
+  onCommandsChanged: (callback) => createEventListener('commands:changed', callback),
   onAgentsChanged: (callback) => createEventListener('agents:changed', callback),
 
   // Artifact
@@ -494,6 +502,12 @@ const api: HaloAPI = {
   deleteAgent: (agentPath) => ipcRenderer.invoke('agents:delete', agentPath),
   copyAgentToSpace: (agentName, workDir) => ipcRenderer.invoke('agents:copy-to-space', agentName, workDir),
   clearAgentsCache: () => ipcRenderer.invoke('agents:clear-cache'),
+
+  // Toolkit
+  getToolkit: (spaceId) => ipcRenderer.invoke('toolkit:get', spaceId),
+  addToolkitResource: (spaceId, directive) => ipcRenderer.invoke('toolkit:add', spaceId, directive),
+  removeToolkitResource: (spaceId, directive) => ipcRenderer.invoke('toolkit:remove', spaceId, directive),
+  clearToolkit: (spaceId) => ipcRenderer.invoke('toolkit:clear', spaceId),
 
   // Workflows
   listWorkflows: (spaceId) => ipcRenderer.invoke('workflow:list', spaceId),

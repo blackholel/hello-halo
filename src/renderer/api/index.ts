@@ -661,6 +661,35 @@ export const api = {
     return httpRequest('POST', '/api/agents/clear-cache')
   },
 
+  // ===== Toolkit =====
+  getToolkit: async (spaceId: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.getToolkit(spaceId)
+    }
+    return httpRequest('GET', `/api/toolkit/${encodeURIComponent(spaceId)}`)
+  },
+
+  addToolkitResource: async (spaceId: string, directive: Record<string, unknown>): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.addToolkitResource(spaceId, directive)
+    }
+    return httpRequest('POST', `/api/toolkit/${encodeURIComponent(spaceId)}/add`, directive)
+  },
+
+  removeToolkitResource: async (spaceId: string, directive: Record<string, unknown>): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.removeToolkitResource(spaceId, directive)
+    }
+    return httpRequest('POST', `/api/toolkit/${encodeURIComponent(spaceId)}/remove`, directive)
+  },
+
+  clearToolkit: async (spaceId: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.clearToolkit(spaceId)
+    }
+    return httpRequest('DELETE', `/api/toolkit/${encodeURIComponent(spaceId)}`)
+  },
+
   // ===== Workflows =====
   listWorkflows: async (spaceId: string): Promise<ApiResponse> => {
     if (isElectron()) {
@@ -834,6 +863,8 @@ export const api = {
     onEvent('agent:compact', callback),
   onSkillsChanged: (callback: (data: unknown) => void) =>
     onEvent('skills:changed', callback),
+  onCommandsChanged: (callback: (data: unknown) => void) =>
+    onEvent('commands:changed', callback),
   onAgentsChanged: (callback: (data: unknown) => void) =>
     onEvent('agents:changed', callback),
   onRemoteStatusChange: (callback: (data: unknown) => void) =>

@@ -5,90 +5,119 @@
  * Used to avoid repeated file reads when content hasn't changed.
  */
 
-import { existsSync, statSync } from 'fs'
+import { statSync } from 'fs'
+import { relative, isAbsolute } from 'path'
+import { normalizePlatformPath } from './path-validation'
 
 interface CacheEntry<T> {
   data: T
   mtime: number
+  size: number
   timestamp: number
 }
 
 /**
- * Generic file cache with mtime-based invalidation
+ * Generic file cache with mtime+size-based invalidation and optional LRU eviction.
  *
- * @template T - Type of cached data
+ * Two mutually exclusive modes:
+ * - TTL mode (ttlMs): For non-file or rarely-changing data. Skips mtime/size checks
+ *   within the TTL window. File changes won't be visible until TTL expires.
+ * - File mode (maxSize): For file content caching. Uses mtime+size validation on
+ *   every hit. Supports LRU eviction when maxSize is reached.
  */
 export class FileCache<T> {
   private cache = new Map<string, CacheEntry<T>>()
   private ttlMs: number | null
+  private maxSize: number | null
 
-  /**
-   * Create a new FileCache
-   *
-   * @param ttlMs - Optional TTL in milliseconds. If provided, cache entries
-   *                expire after this duration regardless of mtime.
-   */
-  constructor(ttlMs?: number) {
-    this.ttlMs = ttlMs ?? null
+  constructor(opts?: number | { ttlMs?: number; maxSize?: number }) {
+    if (typeof opts === 'number') {
+      this.ttlMs = opts
+      this.maxSize = null
+    } else {
+      this.ttlMs = opts?.ttlMs ?? null
+      this.maxSize = opts?.maxSize ?? null
+    }
+    if (this.ttlMs !== null && this.maxSize !== null) {
+      throw new Error('FileCache: ttlMs and maxSize are mutually exclusive')
+    }
   }
 
-  /**
-   * Get cached data or load it using the provided loader function
-   *
-   * @param filePath - Path to the file being cached
-   * @param loader - Function to load data when cache is invalid
-   * @returns Cached or freshly loaded data
-   */
+  private normalizeKey(filePath: string): string {
+    return normalizePlatformPath(filePath)
+  }
+
+  /** Move entry to the end of the Map (most recently used). */
+  private touch(key: string, entry: CacheEntry<T>): void {
+    this.cache.delete(key)
+    this.cache.set(key, entry)
+  }
+
   get(filePath: string, loader: () => T): T {
-    const cached = this.cache.get(filePath)
+    const key = this.normalizeKey(filePath)
+    const cached = this.cache.get(key)
     const now = Date.now()
 
     if (cached) {
-      // Check TTL first if configured
       if (this.ttlMs !== null && now - cached.timestamp < this.ttlMs) {
+        this.touch(key, cached)
         return cached.data
       }
 
-      // Check mtime if no TTL or TTL expired
       if (this.ttlMs === null) {
         try {
-          if (existsSync(filePath)) {
-            const stat = statSync(filePath)
-            if (stat.mtimeMs === cached.mtime) {
-              return cached.data
-            }
+          const stat = statSync(filePath)
+          if (stat.mtimeMs === cached.mtime && stat.size === cached.size) {
+            this.touch(key, cached)
+            return cached.data
           }
         } catch {
-          // Stat failed, proceed to reload
+          this.cache.delete(key)
         }
       }
     }
 
-    // Load fresh data
     const data = loader()
 
-    // Cache with mtime
+    if (this.maxSize !== null && this.cache.size >= this.maxSize) {
+      const deleteCount = Math.max(1, Math.floor(this.maxSize * 0.25))
+      const iter = this.cache.keys()
+      for (let i = 0; i < deleteCount; i++) {
+        const oldest = iter.next()
+        if (oldest.done) break
+        this.cache.delete(oldest.value)
+      }
+    }
+
     try {
-      const mtime = existsSync(filePath) ? statSync(filePath).mtimeMs : 0
-      this.cache.set(filePath, { data, mtime, timestamp: now })
+      const stat = statSync(filePath)
+      this.cache.set(key, { data, mtime: stat.mtimeMs, size: stat.size, timestamp: now })
     } catch {
-      // Cache without mtime if stat fails
-      this.cache.set(filePath, { data, mtime: 0, timestamp: now })
+      this.cache.set(key, { data, mtime: 0, size: 0, timestamp: now })
     }
 
     return data
   }
 
-  /**
-   * Clear cache entries
-   *
-   * @param filePath - Optional specific file to clear. If omitted, clears all.
-   */
+  clearForDir(dir: string): void {
+    const normalizedDir = this.normalizeKey(dir)
+    for (const key of this.cache.keys()) {
+      const rel = relative(normalizedDir, key)
+      if (rel === '' || (rel && !rel.startsWith('..') && !isAbsolute(rel))) {
+        this.cache.delete(key)
+      }
+    }
+  }
+
   clear(filePath?: string): void {
     if (filePath) {
-      this.cache.delete(filePath)
+      this.cache.delete(this.normalizeKey(filePath))
     } else {
       this.cache.clear()
     }
+  }
+
+  get currentSize(): number {
+    return this.cache.size
   }
 }

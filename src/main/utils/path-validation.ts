@@ -6,7 +6,16 @@
  */
 
 import { lstatSync } from 'fs'
-import { resolve, sep } from 'path'
+import { resolve, relative, isAbsolute } from 'path'
+
+/**
+ * Normalize a file path for cross-platform comparison.
+ * Resolves to absolute and lowercases on Windows.
+ */
+export function normalizePlatformPath(value: string): string {
+  const resolved = resolve(value)
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved
+}
 
 /**
  * Validate that a path is a valid directory and not a symlink
@@ -38,11 +47,26 @@ export function isValidDirectoryPath(dirPath: string, context: string = 'Path'):
 export function isPathWithinBasePaths(targetPath: string, basePaths: string[]): boolean {
   if (!targetPath || basePaths.length === 0) return false
 
-  const resolvedTarget = resolve(targetPath)
+  const resolvedTarget = normalizePlatformPath(targetPath)
 
   return basePaths.some((basePath) => {
     if (!basePath) return false
-    const resolvedBase = resolve(basePath)
-    return resolvedTarget === resolvedBase || resolvedTarget.startsWith(resolvedBase + sep)
+    const resolvedBase = normalizePlatformPath(basePath)
+    if (resolvedTarget === resolvedBase) return true
+    const rel = relative(resolvedBase, resolvedTarget)
+    return !!rel && !rel.startsWith('..') && !isAbsolute(rel)
   })
+}
+
+/**
+ * Check if an error represents a file-not-found condition (ENOENT / ENOTDIR)
+ *
+ * Use this to decide log severity: file-not-found → debug, others → warn.
+ */
+export function isFileNotFoundError(error: unknown): boolean {
+  if (error instanceof Error && 'code' in error) {
+    const code = (error as NodeJS.ErrnoException).code
+    return code === 'ENOENT' || code === 'ENOTDIR'
+  }
+  return false
 }

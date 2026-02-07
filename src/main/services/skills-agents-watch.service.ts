@@ -1,73 +1,92 @@
 /**
- * Skills/Agents Watch Service
+ * Skills/Agents/Commands Watch Service
  *
- * Watches skill and agent directories for changes and notifies renderer to refresh.
+ * Watches skill, agent, and command directories for changes and notifies renderer to refresh.
  */
 
 import type { BrowserWindow } from 'electron'
-import { watch, existsSync } from 'fs'
-import { join } from 'path'
+import { watch, existsSync, readdirSync, statSync } from 'fs'
+import { join, relative, isAbsolute } from 'path'
 import { getConfig, getHaloDir, getSpacesDir } from './config.service'
 import { listEnabledPlugins } from './plugins.service'
 import { invalidateSkillsCache } from './skills.service'
 import { invalidateAgentsCache } from './agents.service'
+import { invalidateCommandsCache } from './commands.service'
 import { getAllSpacePaths } from './space.service'
+import { normalizePlatformPath } from '../utils/path-validation'
 
-type WatchKind = 'skills' | 'agents' | 'spaces-root'
+type WatchKind = 'skills' | 'agents' | 'commands' | 'spaces-root'
+type ResourceKind = 'skills' | 'agents' | 'commands'
 
 interface WatchEntry {
   kind: WatchKind
   path: string
   watcher: ReturnType<typeof watch>
   workDir?: string
+  isRoot?: boolean
+}
+
+interface DirEntry {
+  path: string
+  workDir?: string
 }
 
 const watchers = new Map<string, WatchEntry>()
 const debounceTimers = new Map<string, NodeJS.Timeout>()
 let mainWindow: BrowserWindow | null = null
+let linuxRescanTimer: NodeJS.Timeout | null = null
+const LINUX_RESCAN_INTERVAL = 60_000
 
-function makeKey(kind: WatchKind, path: string): string {
-  return `${kind}:${path}`
+const invalidators: Record<ResourceKind, (workDir?: string | null) => void> = {
+  skills: invalidateSkillsCache,
+  agents: invalidateAgentsCache,
+  commands: invalidateCommandsCache
 }
 
-function sendEvent(channel: 'skills:changed' | 'agents:changed', payload: Record<string, unknown>): void {
+function makeKey(kind: WatchKind, path: string): string {
+  return `${kind}:${normalizePlatformPath(path)}`
+}
+
+function sendEvent(channel: string, payload: Record<string, unknown>): void {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(channel, payload)
   }
 }
 
-function scheduleNotify(kind: 'skills' | 'agents', workDir?: string): void {
+function scheduleNotify(kind: ResourceKind, workDir?: string): void {
   const key = `${kind}:${workDir || 'global'}`
   const timer = debounceTimers.get(key)
-  if (timer) {
-    clearTimeout(timer)
-  }
+  if (timer) clearTimeout(timer)
+
   debounceTimers.set(key, setTimeout(() => {
     debounceTimers.delete(key)
-    if (kind === 'skills') {
-      invalidateSkillsCache(workDir || null)
-      sendEvent('skills:changed', { workDir: workDir || null })
-    } else {
-      invalidateAgentsCache(workDir || null)
-      sendEvent('agents:changed', { workDir: workDir || null })
-    }
+    invalidators[kind](workDir || null)
+    sendEvent(`${kind}:changed`, { workDir: workDir || null })
   }, 200))
 }
 
-function createWatcher(kind: WatchKind, path: string, workDir?: string): void {
+function createWatcher(kind: WatchKind, path: string, workDir?: string, opts?: { isRoot?: boolean }): void {
   const key = makeKey(kind, path)
-  if (watchers.has(key)) return
-  if (!existsSync(path)) return
+  if (watchers.has(key) || !existsSync(path)) return
+
+  const supportsRecursive = process.platform !== 'linux'
 
   try {
-    const watcher = watch(path, { recursive: true }, () => {
-      if (kind === 'skills' || kind === 'agents') {
-        scheduleNotify(kind, workDir)
-      } else if (kind === 'spaces-root') {
+    const watcher = watch(path, { recursive: supportsRecursive }, () => {
+      if (kind === 'spaces-root') {
         refreshSpaceWatchers()
+      } else {
+        scheduleNotify(kind, workDir)
+        if (!supportsRecursive && kind === 'skills') {
+          patchSubdirWatchers(kind, path, workDir)
+        }
       }
     })
-    watchers.set(key, { kind, path, watcher, workDir })
+    watchers.set(key, { kind, path, watcher, workDir, isRoot: opts?.isRoot ?? false })
+
+    if (!supportsRecursive && kind === 'skills') {
+      patchSubdirWatchers(kind, path, workDir)
+    }
   } catch (error) {
     console.warn(`[Watch] Failed to watch ${path}:`, error)
   }
@@ -76,11 +95,7 @@ function createWatcher(kind: WatchKind, path: string, workDir?: string): void {
 function stopWatcher(key: string): void {
   const entry = watchers.get(key)
   if (!entry) return
-  try {
-    entry.watcher.close()
-  } catch {
-    // ignore
-  }
+  try { entry.watcher.close() } catch { /* ignore */ }
   watchers.delete(key)
 }
 
@@ -90,103 +105,127 @@ function resolveGlobalPath(globalPath: string): string {
     : join(require('os').homedir(), globalPath)
 }
 
-function getSkillDirs(): Array<{ path: string; workDir?: string }> {
-  const dirs: Array<{ path: string; workDir?: string }> = []
+/**
+ * Collect directories to watch for a given resource kind.
+ */
+function getResourceDirs(kind: ResourceKind): DirEntry[] {
+  const dirs: DirEntry[] = []
   const haloDir = getHaloDir()
-  if (haloDir) {
-    dirs.push({ path: join(haloDir, 'skills') })
-  }
-
   const config = getConfig()
-  const globalPaths = config.claudeCode?.plugins?.globalPaths || []
-  for (const globalPath of globalPaths) {
-    const resolvedPath = resolveGlobalPath(globalPath)
-    const skillsSubdir = join(resolvedPath, 'skills')
-    dirs.push({ path: skillsSubdir })
+
+  // App-level directory
+  if (haloDir) {
+    dirs.push({ path: join(haloDir, kind) })
   }
 
-  const enabledPlugins = listEnabledPlugins()
-  for (const plugin of enabledPlugins) {
-    dirs.push({ path: join(plugin.installPath, 'skills') })
+  // Config-driven global paths (skills use plugins.globalPaths + /skills subdir, agents use agents.paths directly)
+  if (kind === 'skills') {
+    for (const p of config.claudeCode?.plugins?.globalPaths || []) {
+      dirs.push({ path: join(resolveGlobalPath(p), 'skills') })
+    }
+  } else if (kind === 'agents') {
+    for (const p of config.claudeCode?.agents?.paths || []) {
+      dirs.push({ path: resolveGlobalPath(p) })
+    }
   }
 
-  const spaces = getAllSpacePaths()
-  for (const spacePath of spaces) {
-    dirs.push({ path: join(spacePath, '.claude', 'skills'), workDir: spacePath })
+  // Plugin directories
+  for (const plugin of listEnabledPlugins()) {
+    dirs.push({ path: join(plugin.installPath, kind) })
+  }
+
+  // Space directories
+  for (const spacePath of getAllSpacePaths()) {
+    dirs.push({ path: join(spacePath, '.claude', kind), workDir: spacePath })
   }
 
   return dirs
 }
 
-function getAgentDirs(): Array<{ path: string; workDir?: string }> {
-  const dirs: Array<{ path: string; workDir?: string }> = []
-  const haloDir = getHaloDir()
-  if (haloDir) {
-    dirs.push({ path: join(haloDir, 'agents') })
+function isChildPath(parent: string, child: string): boolean {
+  const rel = relative(parent, child)
+  return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel)
+}
+
+function patchSubdirWatchers(kind: WatchKind, dirPath: string, workDir?: string): void {
+  const normalizedDir = normalizePlatformPath(dirPath)
+
+  // Remove watchers for deleted subdirectories
+  for (const [key, entry] of Array.from(watchers.entries())) {
+    if (entry.kind !== kind) continue
+    const normalizedEntry = normalizePlatformPath(entry.path)
+    if (normalizedEntry === normalizedDir) continue
+    if (isChildPath(normalizedDir, normalizedEntry) && !existsSync(entry.path)) {
+      stopWatcher(key)
+    }
   }
 
-  const config = getConfig()
-  const globalPaths = config.claudeCode?.agents?.paths || []
-  for (const globalPath of globalPaths) {
-    const resolvedPath = resolveGlobalPath(globalPath)
-    dirs.push({ path: resolvedPath })
-  }
+  // Add watchers for new subdirectories
+  try {
+    for (const name of readdirSync(dirPath)) {
+      const subPath = join(dirPath, name)
+      const subKey = makeKey(kind, subPath)
+      if (watchers.has(subKey)) continue
+      try {
+        if (!statSync(subPath).isDirectory()) continue
+        const subWatcher = watch(subPath, () => scheduleNotify(kind as ResourceKind, workDir))
+        watchers.set(subKey, { kind, path: subPath, watcher: subWatcher, workDir, isRoot: false })
+      } catch { /* skip */ }
+    }
+  } catch { /* skip */ }
+}
 
-  const enabledPlugins = listEnabledPlugins()
-  for (const plugin of enabledPlugins) {
-    dirs.push({ path: join(plugin.installPath, 'agents') })
-  }
-
-  const spaces = getAllSpacePaths()
-  for (const spacePath of spaces) {
-    dirs.push({ path: join(spacePath, '.claude', 'agents'), workDir: spacePath })
-  }
-
-  return dirs
+function startLinuxRescan(): void {
+  if (process.platform !== 'linux' || linuxRescanTimer) return
+  linuxRescanTimer = setInterval(() => {
+    for (const entry of watchers.values()) {
+      if (entry.kind === 'skills' && entry.isRoot) {
+        patchSubdirWatchers(entry.kind, entry.path, entry.workDir)
+      }
+    }
+  }, LINUX_RESCAN_INTERVAL)
 }
 
 function refreshSpaceWatchers(): void {
-  const currentSpaceDirs = new Set(getAllSpacePaths().map((p) => p))
+  const currentSpaces = new Set(getAllSpacePaths())
 
   // Remove watchers for deleted spaces
   for (const [key, entry] of watchers.entries()) {
-    if (entry.kind === 'skills' || entry.kind === 'agents') {
-      if (entry.workDir && !currentSpaceDirs.has(entry.workDir)) {
-        stopWatcher(key)
-      }
+    if (entry.workDir && !currentSpaces.has(entry.workDir)) {
+      stopWatcher(key)
     }
   }
 
   // Add watchers for new spaces
-  for (const spacePath of currentSpaceDirs) {
-    createWatcher('skills', join(spacePath, '.claude', 'skills'), spacePath)
+  for (const spacePath of currentSpaces) {
+    createWatcher('skills', join(spacePath, '.claude', 'skills'), spacePath, { isRoot: true })
     createWatcher('agents', join(spacePath, '.claude', 'agents'), spacePath)
+    createWatcher('commands', join(spacePath, '.claude', 'commands'), spacePath)
   }
 }
 
 export function initSkillAgentWatchers(window: BrowserWindow): void {
   mainWindow = window
-
-  // Watch spaces root for new/deleted spaces
   createWatcher('spaces-root', getSpacesDir())
 
-  // Initialize skill watchers
-  for (const dir of getSkillDirs()) {
-    createWatcher('skills', dir.path, dir.workDir)
+  const kinds: ResourceKind[] = ['skills', 'agents', 'commands']
+  for (const kind of kinds) {
+    for (const dir of getResourceDirs(kind)) {
+      createWatcher(kind, dir.path, dir.workDir, kind === 'skills' ? { isRoot: true } : undefined)
+    }
   }
 
-  // Initialize agent watchers
-  for (const dir of getAgentDirs()) {
-    createWatcher('agents', dir.path, dir.workDir)
-  }
+  startLinuxRescan()
 }
 
 export function cleanupSkillAgentWatchers(): void {
-  for (const key of watchers.keys()) {
-    stopWatcher(key)
+  if (linuxRescanTimer) {
+    clearInterval(linuxRescanTimer)
+    linuxRescanTimer = null
   }
+  for (const key of watchers.keys()) stopWatcher(key)
   watchers.clear()
-  debounceTimers.forEach((timer) => clearTimeout(timer))
+  for (const timer of debounceTimers.values()) clearTimeout(timer)
   debounceTimers.clear()
   mainWindow = null
 }
