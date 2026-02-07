@@ -343,6 +343,7 @@ export async function sendMessage(
     // Token-level streaming state
     let currentStreamingText = '' // Accumulates text_delta tokens
     let isStreamingTextBlock = false // True when inside a text content block
+    let hasStreamEventText = false // True when we have any stream_event text (use as single source of truth)
 
     console.log(`[Agent][${conversationId}] Sending message to V2 session...`)
     const t1 = Date.now()
@@ -452,6 +453,9 @@ export async function sendMessage(
         if (event.type === 'content_block_start' && event.content_block?.type === 'text') {
           isStreamingTextBlock = true
           currentStreamingText = event.content_block.text || ''
+          if (currentStreamingText.length > 0) {
+            hasStreamEventText = true
+          }
 
           // 🔑 Send precise signal for new text block (fixes truncation bug)
           // This is 100% reliable - comes directly from SDK's content_block_start event
@@ -475,6 +479,9 @@ export async function sendMessage(
           isStreamingTextBlock
         ) {
           const delta = event.delta.text || ''
+          if (delta.length > 0) {
+            hasStreamEventText = true
+          }
           currentStreamingText += delta
 
           // Send delta immediately without throttling
@@ -570,15 +577,17 @@ export async function sendMessage(
 
         // Handle specific thought types
         if (thought.type === 'text') {
-          // Accumulate text blocks - multi-step tasks may produce multiple text blocks
-          accumulatedTextContent += (accumulatedTextContent ? '\n\n' : '') + thought.content
+          if (!hasStreamEventText) {
+            // Accumulate text blocks - multi-step tasks may produce multiple text blocks
+            accumulatedTextContent += (accumulatedTextContent ? '\n\n' : '') + thought.content
 
-          // Send streaming update - frontend shows this during generation
-          sendToRenderer('agent:message', spaceId, conversationId, {
-            type: 'message',
-            content: accumulatedTextContent,
-            isComplete: false
-          })
+            // Send streaming update - frontend shows this during generation
+            sendToRenderer('agent:message', spaceId, conversationId, {
+              type: 'message',
+              content: accumulatedTextContent,
+              isComplete: false
+            })
+          }
         } else if (thought.type === 'tool_use') {
           trackChangeFileFromToolUse(
             conversationId,
