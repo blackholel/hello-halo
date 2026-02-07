@@ -29,6 +29,7 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
           size?: number
         }>
         thinkingEnabled?: boolean  // Enable extended thinking mode
+        planEnabled?: boolean  // Enable plan mode (no tool execution)
         aiBrowserEnabled?: boolean  // Enable AI Browser tools
         canvasContext?: {
           isOpen: boolean

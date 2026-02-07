@@ -67,6 +67,7 @@ interface Message {
   images?: ImageAttachment[]  // Attached images for multi-modal messages
   tokenUsage?: TokenUsage  // Optional token usage stats for assistant messages
   fileContexts?: FileContextAttachment[]  // File contexts for context injection (metadata only)
+  isPlan?: boolean  // Whether this message is a plan mode response
 }
 
 interface ToolCall {

@@ -404,11 +404,11 @@ export function WorkflowEditorModal({ spaceId, workflow, onClose, onSaved }: Wor
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in"
+        className="absolute inset-0 glass-overlay animate-fade-in"
         onClick={onClose}
       />
 
-      <div className="relative w-full max-w-5xl max-h-[85vh] mx-4 bg-card rounded-2xl
+      <div className="relative w-full max-w-5xl max-h-[85vh] mx-4 glass-dialog
         border border-border/50 shadow-2xl overflow-hidden animate-scale-in flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border/50 flex-shrink-0">
           <div className="flex items-center gap-3">

@@ -80,6 +80,7 @@ export interface HaloAPI {
     }>
     aiBrowserEnabled?: boolean  // Enable AI Browser tools
     thinkingEnabled?: boolean  // Enable extended thinking mode
+    planEnabled?: boolean  // Enable plan mode (no tool execution)
     canvasContext?: {  // Canvas context for AI awareness
       isOpen: boolean
       tabCount: number

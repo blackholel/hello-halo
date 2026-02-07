@@ -98,29 +98,29 @@ export function UpdateNotification() {
   const hasNotes = releaseNotes.length > 0
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 animate-in slide-in-from-bottom-4 fade-in duration-300">
-      <div className={`bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl p-4 ${hasNotes ? 'max-w-md' : 'max-w-sm'}`}>
+    <div className="fixed bottom-4 right-4 z-50 animate-fade-in">
+      <div className={`glass-dialog !p-4 ${hasNotes ? 'max-w-md' : 'max-w-sm'}`}>
         <div className="flex items-start gap-3">
-          <div className="flex-shrink-0 w-10 h-10 bg-emerald-500/20 rounded-full flex items-center justify-center">
-            <Download className="w-5 h-5 text-emerald-400" />
+          <div className="flex-shrink-0 w-10 h-10 bg-halo-success/15 rounded-2xl flex items-center justify-center">
+            <Download className="w-5 h-5 text-halo-success" />
           </div>
 
           <div className="flex-1 min-w-0">
-            <h4 className="text-sm font-medium text-zinc-100">
+            <h4 className="text-sm font-semibold tracking-tight text-foreground">
               {t('New version Halo {{version}} available', { version: notificationVersion })}
             </h4>
 
             {hasNotes ? (
-              <ul className="mt-2 space-y-1 max-h-32 overflow-y-auto text-xs text-zinc-300">
+              <ul className="mt-2 space-y-1 max-h-32 overflow-y-auto text-xs text-muted-foreground">
                 {releaseNotes.map((note, index) => (
                   <li key={index} className="flex items-start gap-1.5">
-                    <span className="text-emerald-400 mt-0.5">•</span>
+                    <span className="text-halo-success mt-0.5">•</span>
                     <span>{note}</span>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="text-xs text-zinc-400 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 {isManualDownload || isMac ? t('Click to download') : t('Click to restart and complete update')}
               </p>
             )}
@@ -128,7 +128,7 @@ export function UpdateNotification() {
             <div className="flex items-center gap-2 mt-3">
               <button
                 onClick={handleInstall}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium rounded-md transition-colors"
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-halo-success hover:brightness-110 text-white text-xs font-medium rounded-xl transition-all duration-200"
               >
                 {isManualDownload || isMac ? (
                   <>
@@ -144,7 +144,7 @@ export function UpdateNotification() {
               </button>
               <button
                 onClick={handleDismiss}
-                className="px-3 py-1.5 text-zinc-400 hover:text-zinc-200 text-xs transition-colors"
+                className="px-3 py-1.5 btn-ghost text-xs"
               >
                 {t('Later')}
               </button>
@@ -153,7 +153,7 @@ export function UpdateNotification() {
 
           <button
             onClick={handleDismiss}
-            className="flex-shrink-0 text-zinc-500 hover:text-zinc-300 transition-colors"
+            className="flex-shrink-0 p-1 rounded-lg text-muted-foreground/40 hover:text-foreground hover:bg-secondary/50 transition-all duration-200"
           >
             <X className="w-4 h-4" />
           </button>

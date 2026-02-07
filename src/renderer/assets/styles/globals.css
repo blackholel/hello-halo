@@ -27,60 +27,70 @@
    ============================================ */
 
 :root {
-  /* Dark theme (default) */
-  --background: 0 0% 4%;
-  --foreground: 0 0% 98%;
-  --card: 0 0% 7%;
-  --card-foreground: 0 0% 98%;
-  --popover: 0 0% 7%;
-  --popover-foreground: 0 0% 98%;
+  /* Dark theme (default) - Apple-inspired refined palette */
+  --background: 225 10% 6%;
+  --foreground: 0 0% 95%;
+  --card: 225 8% 10%;
+  --card-foreground: 0 0% 95%;
+  --popover: 225 8% 10%;
+  --popover-foreground: 0 0% 95%;
   --primary: 217 91% 60%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 0 0% 15%;
-  --secondary-foreground: 0 0% 98%;
-  --muted: 0 0% 15%;
-  --muted-foreground: 0 0% 64%;
+  --secondary: 225 6% 16%;
+  --secondary-foreground: 0 0% 90%;
+  --muted: 225 6% 16%;
+  --muted-foreground: 220 5% 55%;
   --accent: 217 91% 60%;
   --accent-foreground: 0 0% 100%;
   --destructive: 0 62% 50%;
   --destructive-foreground: 0 0% 98%;
-  --border: 0 0% 20%;
-  --input: 0 0% 15%;
+  --border: 225 6% 18%;
+  --input: 225 6% 13%;
   --ring: 217 91% 60%;
   --radius: 0.75rem;
 
+  /* Glass effect tokens */
+  --glass-bg: 225 8% 12% / 0.6;
+  --glass-border: 0 0% 100% / 0.08;
+  --glass-highlight: 0 0% 100% / 0.04;
+
   /* Halo brand colors */
   --halo-glow: 217 91% 60%;
-  --halo-success: 142 71% 45%;
+  --halo-success: 152 69% 45%;
   --halo-warning: 38 92% 50%;
   --halo-error: 0 62% 50%;
 }
 
-/* Light theme */
+/* Light theme - Apple-inspired */
 .light {
-  --background: 0 0% 100%;
-  --foreground: 0 0% 9%;
-  --card: 0 0% 98%;
-  --card-foreground: 0 0% 9%;
+  --background: 220 14% 96%;
+  --foreground: 225 15% 12%;
+  --card: 0 0% 100%;
+  --card-foreground: 225 15% 12%;
   --popover: 0 0% 100%;
-  --popover-foreground: 0 0% 9%;
+  --popover-foreground: 225 15% 12%;
   --primary: 217 91% 55%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 0 0% 94%;
-  --secondary-foreground: 0 0% 20%;
-  --muted: 0 0% 94%;
-  --muted-foreground: 0 0% 45%;
+  --secondary: 220 13% 91%;
+  --secondary-foreground: 225 10% 25%;
+  --muted: 220 13% 91%;
+  --muted-foreground: 220 8% 46%;
   --accent: 217 91% 55%;
   --accent-foreground: 0 0% 100%;
   --destructive: 0 72% 51%;
   --destructive-foreground: 0 0% 100%;
-  --border: 0 0% 90%;
-  --input: 0 0% 94%;
+  --border: 220 13% 88%;
+  --input: 220 13% 93%;
   --ring: 217 91% 55%;
+
+  /* Glass effect tokens - light */
+  --glass-bg: 0 0% 100% / 0.7;
+  --glass-border: 0 0% 100% / 0.6;
+  --glass-highlight: 0 0% 100% / 0.3;
 
   /* Halo brand colors (adjusted for light) */
   --halo-glow: 217 91% 55%;
-  --halo-success: 142 71% 40%;
+  --halo-success: 152 69% 38%;
   --halo-warning: 38 92% 45%;
   --halo-error: 0 72% 51%;
 }
@@ -723,29 +733,277 @@ body {
   transform: translateY(0);
 }
 
-/* Space card styles */
+/* ============================================
+   Glass Effect System (Apple Liquid Glass inspired)
+   ============================================ */
+
+.glass {
+  background: hsl(var(--glass-bg));
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  border: 1px solid hsl(var(--glass-border));
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 hsl(var(--glass-highlight));
+}
+
+.glass-subtle {
+  background: hsl(var(--glass-bg));
+  backdrop-filter: blur(12px) saturate(1.1);
+  -webkit-backdrop-filter: blur(12px) saturate(1.1);
+  border: 1px solid hsl(var(--glass-border));
+}
+
+/* Glass card base - shared by .glass-card and .space-card */
+.glass-card,
 .space-card {
   background: hsl(var(--card));
-  border: 1px solid hsl(var(--border));
-  border-radius: var(--radius);
-  transition: all 0.2s ease;
+  border: 1px solid hsl(var(--glass-border));
+  border-radius: 1rem;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   cursor: pointer;
+  position: relative;
+  overflow: hidden;
 }
 
+.glass-card::before,
+.space-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, hsl(var(--glass-highlight)), transparent);
+  opacity: 0.6;
+}
+
+.glass-card:hover,
 .space-card:hover {
-  border-color: hsl(var(--primary) / 0.5);
-  transform: translateY(-2px);
+  border-color: hsl(0 0% 100% / 0.12);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
 }
 
-/* Halo space special style */
+.glass-card:hover {
+  box-shadow: 
+    0 12px 40px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 hsl(var(--glass-highlight));
+}
+
+.glass-card:active,
+.space-card:active {
+  transform: translateY(-1px);
+  transition-duration: 0.1s;
+}
+
+/* Halo space special style - premium glass */
 .halo-space-card {
-  background: linear-gradient(135deg, hsl(var(--primary) / 0.15), hsl(var(--primary) / 0.05));
-  border: 1px solid hsl(var(--primary) / 0.3);
+  background: linear-gradient(135deg, hsl(var(--primary) / 0.12), hsl(var(--primary) / 0.04));
+  border: 1px solid hsl(var(--primary) / 0.2);
+  position: relative;
+  overflow: hidden;
+}
+
+.halo-space-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, hsl(var(--primary) / 0.3), transparent);
+}
+
+.halo-space-card::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -50%;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle, hsl(var(--primary) / 0.06) 0%, transparent 70%);
+  pointer-events: none;
 }
 
 .halo-space-card:hover {
-  border-color: hsl(var(--primary));
-  box-shadow: 0 0 20px hsl(var(--primary) / 0.2);
+  border-color: hsl(var(--primary) / 0.35);
+  box-shadow: 
+    0 12px 40px hsl(var(--primary) / 0.1),
+    0 0 0 1px hsl(var(--primary) / 0.1);
+  transform: translateY(-3px);
+}
+
+.halo-space-card:active {
+  transform: translateY(-1px);
+  transition-duration: 0.1s;
+}
+
+/* Ambient background for home page */
+.ambient-bg {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.ambient-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.3;
+  animation: ambient-drift 20s ease-in-out infinite;
+}
+
+.ambient-orb-1 {
+  width: 400px;
+  height: 400px;
+  background: hsl(var(--primary) / 0.15);
+  top: -10%;
+  right: -5%;
+  animation-delay: 0s;
+}
+
+.ambient-orb-2 {
+  width: 300px;
+  height: 300px;
+  background: hsl(270 60% 50% / 0.1);
+  bottom: -5%;
+  left: -5%;
+  animation-delay: -7s;
+}
+
+.ambient-orb-3 {
+  width: 200px;
+  height: 200px;
+  background: hsl(var(--halo-success) / 0.08);
+  top: 40%;
+  left: 30%;
+  animation-delay: -14s;
+}
+
+@keyframes ambient-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(30px, -20px) scale(1.05); }
+  50% { transform: translate(-20px, 15px) scale(0.95); }
+  75% { transform: translate(15px, -10px) scale(1.02); }
+}
+
+.light .ambient-orb {
+  opacity: 0.15;
+}
+
+.light .ambient-orb-1 {
+  background: hsl(var(--primary) / 0.2);
+}
+
+.light .ambient-orb-2 {
+  background: hsl(270 60% 60% / 0.12);
+}
+
+.light .ambient-orb-3 {
+  background: hsl(var(--halo-success) / 0.1);
+}
+
+/* Glass dialog overlay */
+.glass-overlay {
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.light .glass-overlay {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+/* Glass dialog */
+.glass-dialog {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--glass-border));
+  box-shadow: 
+    0 24px 80px rgba(0, 0, 0, 0.3),
+    0 0 0 1px hsl(var(--glass-border)),
+    inset 0 1px 0 hsl(var(--glass-highlight));
+  border-radius: 1.25rem;
+}
+
+.light .glass-dialog {
+  box-shadow: 
+    0 24px 80px rgba(0, 0, 0, 0.12),
+    0 0 0 1px hsl(var(--glass-border));
+}
+
+/* Refined input style */
+.input-apple {
+  background: hsl(var(--input));
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.75rem;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.input-apple:focus {
+  outline: none;
+  border-color: hsl(var(--primary) / 0.5);
+  box-shadow: 
+    0 0 0 3px hsl(var(--primary) / 0.1),
+    0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* Apple-style button */
+.btn-apple {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border-radius: 0.75rem;
+  font-weight: 500;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-apple:hover {
+  filter: brightness(1.1);
+  box-shadow: 0 4px 16px hsl(var(--primary) / 0.3);
+  transform: translateY(-1px);
+}
+
+.btn-apple:active {
+  filter: brightness(0.95);
+  transform: translateY(0);
+  transition-duration: 0.1s;
+}
+
+.btn-apple:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+  filter: none;
+  box-shadow: none;
+}
+
+.btn-ghost {
+  color: hsl(var(--muted-foreground));
+  border-radius: 0.75rem;
+  transition: all 0.2s ease;
+}
+
+.btn-ghost:hover {
+  background: hsl(var(--secondary));
+  color: hsl(var(--foreground));
+}
+
+/* Stagger animation for list items */
+.stagger-item {
+  opacity: 0;
+  transform: translateY(12px);
+  animation: stagger-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes stagger-in {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Conversation history panel styles */
@@ -857,4 +1115,122 @@ body {
 
 .tab-drop-indicator.visible {
   opacity: 1;
+}
+
+/* ============================================
+   Apple-style Settings Components
+   ============================================ */
+
+/* Settings section card */
+.settings-section {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--glass-border));
+  border-radius: 1rem;
+  padding: 1.5rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.settings-section::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 10%, hsl(0 0% 100% / 0.05) 50%, transparent 90%);
+}
+
+/* Apple-style toggle switch */
+.toggle-apple {
+  position: relative;
+  width: 2.75rem;
+  height: 1.625rem;
+  border-radius: 9999px;
+  transition: background-color 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.toggle-apple-off {
+  background-color: hsl(var(--secondary));
+}
+
+.toggle-apple-on {
+  background-color: hsl(var(--primary));
+}
+
+.toggle-apple-knob {
+  position: absolute;
+  top: 0.125rem;
+  width: 1.375rem;
+  height: 1.375rem;
+  border-radius: 9999px;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15), 0 1px 2px rgba(0, 0, 0, 0.1);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.toggle-apple-off .toggle-apple-knob {
+  transform: translateX(0.125rem);
+}
+
+.toggle-apple-on .toggle-apple-knob {
+  transform: translateX(1.25rem);
+}
+
+/* Settings select / dropdown */
+.select-apple {
+  background: hsl(var(--input));
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.75rem;
+  padding: 0.5rem 1rem;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  padding-right: 2.25rem;
+}
+
+.select-apple:focus {
+  outline: none;
+  border-color: hsl(var(--primary) / 0.5);
+  box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
+}
+
+/* Settings info banner */
+.settings-info {
+  background: hsl(var(--secondary) / 0.5);
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
+}
+
+/* Settings warning banner */
+.settings-warning {
+  background: hsl(38 92% 50% / 0.08);
+  border: 1px solid hsl(38 92% 50% / 0.15);
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+
+/* Refined message styles */
+.message-user {
+  background: linear-gradient(135deg, hsl(var(--primary) / 0.15), hsl(var(--primary) / 0.08));
+  border: 1px solid hsl(var(--primary) / 0.2);
+}
+
+.message-assistant {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--glass-border));
+}
+
+.light .message-user {
+  background: linear-gradient(135deg, hsl(var(--primary) / 0.1), hsl(var(--primary) / 0.05));
+  border: 1px solid hsl(var(--primary) / 0.15);
+}
+
+.light .message-assistant {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
 }

@@ -270,21 +270,15 @@ export function SearchPanel({ isOpen, onClose }: SearchPanelProps) {
   const scopeLabels = {
     conversation: t('Current conversation'),
     space: t('Current space'),
-    global: t('All spaces')
-  }
-
-  const scopeDescriptions = {
-    conversation: t('Current conversation'),
-    space: t('Current space'),
-    global: t('All spaces')
+    global: t('All spaces'),
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-background border border-border rounded-lg shadow-lg w-full max-w-3xl h-[80vh] flex flex-col">
+    <div className="fixed inset-0 glass-overlay flex items-center justify-center z-50 p-4 animate-fade-in">
+      <div className="glass-dialog w-full max-w-3xl h-[80vh] flex flex-col overflow-hidden animate-scale-in">
         {/* Search Input */}
-        <div className="flex items-center border-b border-border p-4 gap-3">
-          <span className="text-lg text-muted-foreground">🔍</span>
+        <div className="flex items-center border-b border-border/30 px-5 py-3.5 gap-3">
+          <span className="text-base text-muted-foreground/50">🔍</span>
           <input
             ref={inputRef}
             type="text"
@@ -300,24 +294,24 @@ export function SearchPanel({ isOpen, onClose }: SearchPanelProps) {
           />
           <button
             onClick={onClose}
-            className="text-muted-foreground hover:text-foreground transition-colors"
+            className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-all duration-200"
             aria-label="Close search"
           >
-            <X size={18} />
+            <X size={16} />
           </button>
         </div>
 
         {/* Scope Tabs */}
-        <div className="flex border-b border-border px-4 pt-2">
+        <div className="flex border-b border-border/30 px-5 pt-1">
           {(['conversation', 'space', 'global'] as SearchScope[]).map((s) => (
             <button
               key={s}
               onClick={() => setScope(s)}
               className={cn(
-                'px-4 py-2 border-b-2 text-sm transition-colors',
+                'px-4 py-2.5 border-b-2 text-sm font-medium transition-all duration-200',
                 searchScope === s
                   ? 'border-primary text-foreground'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
+                  : 'border-transparent text-muted-foreground/60 hover:text-foreground'
               )}
             >
               {scopeLabels[s]}
@@ -326,16 +320,16 @@ export function SearchPanel({ isOpen, onClose }: SearchPanelProps) {
         </div>
 
         {/* Results or Loading State */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-5">
           {isSearching ? (
-            <div className="text-center py-8">
-              <div className="mb-4 text-sm">📋 {t('Searching {{scope}}...', { scope: scopeDescriptions[searchScope] })}</div>
-              <div className="text-xs text-muted-foreground mb-4">
+            <div className="text-center py-12">
+              <div className="mb-4 text-sm text-muted-foreground">{t('Searching {{scope}}...', { scope: scopeLabels[searchScope] })}</div>
+              <div className="text-xs text-muted-foreground/50 mb-4 tabular-nums">
                 {t('Scanned {{current}} / {{total}} conversations', { current: progress.current, total: progress.total })}
               </div>
-              <div className="w-full bg-border rounded-full h-2 mb-4">
+              <div className="w-full max-w-xs mx-auto bg-secondary/30 rounded-full h-1 mb-5">
                 <div
-                  className="bg-primary h-2 rounded-full transition-all"
+                  className="bg-primary/70 h-1 rounded-full transition-all duration-300"
                   style={{
                     width: `${progress.total ? (progress.current / progress.total) * 100 : 0}%`
                   }}
@@ -343,72 +337,70 @@ export function SearchPanel({ isOpen, onClose }: SearchPanelProps) {
               </div>
               <button
                 onClick={handleCancel}
-                className="px-3 py-1 text-xs border border-border rounded hover:bg-muted transition-colors"
+                className="px-4 py-1.5 text-xs btn-ghost rounded-xl"
               >
                 {t('Cancel search')}
               </button>
             </div>
           ) : results !== null && results.length > 0 ? (
-            <div className="space-y-3">
-              <div className="text-xs text-muted-foreground">
-                💬 {t('Found {{count}} results', { count: results.length })}
+            <div className="space-y-2.5">
+              <div className="text-xs text-muted-foreground/50 font-medium">
+                {t('Found {{count}} results', { count: results.length })}
               </div>
               {results.map((result, idx) => (
                 <button
                   key={idx}
                   onClick={() => handleResultClick(result)}
-                  className="w-full text-left p-3 border border-border rounded hover:bg-muted/50 transition-colors text-sm"
+                  className="w-full text-left p-3.5 rounded-xl border border-border/30 hover:bg-secondary/20 hover:border-border/50 transition-all duration-200 text-sm"
                 >
-                  {/* Result Header - Space, Conversation, Time */}
+                  {/* Result Header */}
                   <div className="flex items-start justify-between mb-2 gap-2">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground flex-shrink-0">
+                        <span className="text-[11px] px-2 py-0.5 rounded-md bg-secondary/50 text-muted-foreground/60 flex-shrink-0">
                           {result.spaceName}
                         </span>
-                        <span className="font-medium text-xs truncate">
+                        <span className="font-medium text-xs truncate text-foreground/80">
                           {result.conversationTitle}
                         </span>
                       </div>
-                      <div className="text-xs text-muted-foreground mt-1">
+                      <div className="text-[11px] text-muted-foreground/40 mt-1 tabular-nums">
                         {new Date(result.messageTimestamp).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })} {new Date(result.messageTimestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
                       </div>
                     </div>
-                    {/* Role badge */}
-                    <span className="text-xs px-2 py-1 rounded bg-primary/10 text-primary flex-shrink-0">
+                    <span className="text-[11px] px-2 py-0.5 rounded-md bg-primary/8 text-primary/70 flex-shrink-0 font-medium">
                       {result.messageRole === 'user' ? t('You') : 'AI'}
                     </span>
                   </div>
 
-                  {/* Highlighted Context - showing where the match is */}
-                  <div className="text-sm text-foreground bg-muted/30 p-2 rounded mt-2 border-l-2 border-primary/50">
-                    <span className="text-muted-foreground">{result.contextBefore}</span>
-                    <span className="bg-yellow-500/30 font-semibold px-0.5 py-0 rounded">{searchedQuery}</span>
-                    <span className="text-muted-foreground">{result.contextAfter}</span>
+                  {/* Highlighted Context */}
+                  <div className="text-[13px] text-foreground/70 bg-secondary/15 p-2.5 rounded-lg mt-2 border-l-2 border-primary/30">
+                    <span className="text-muted-foreground/60">{result.contextBefore}</span>
+                    <span className="bg-yellow-500/20 font-semibold px-0.5 rounded">{searchedQuery}</span>
+                    <span className="text-muted-foreground/60">{result.contextAfter}</span>
                   </div>
 
-                  {/* Show if there are multiple matches */}
                   {result.matchCount > 1 && (
-                    <div className="text-xs text-muted-foreground mt-1">
-                      ↳ {t('{{count}} matches in this message', { count: result.matchCount })}
+                    <div className="text-[11px] text-muted-foreground/40 mt-1.5">
+                      {t('{{count}} matches in this message', { count: result.matchCount })}
                     </div>
                   )}
                 </button>
               ))}
             </div>
           ) : results !== null && results.length === 0 ? (
-            <div className="text-center py-8">
-              <div className="text-sm text-muted-foreground">{t('No matching results found')}</div>
+            <div className="text-center py-12">
+              <div className="text-sm text-muted-foreground/50">{t('No matching results found')}</div>
             </div>
           ) : (
-            <div className="text-center py-8">
-              <div className="text-sm text-muted-foreground">{t('Enter search content, press Enter to search')}</div>
+            <div className="text-center py-12">
+              <div className="text-sm text-muted-foreground/40">{t('Enter search content, press Enter to search')}</div>
             </div>
           )}
         </div>
 
         {/* Footer Help */}
-        <div className="border-t border-border px-4 py-2 text-xs text-muted-foreground text-center">
+        <div className="border-t border-border/20 px-5 py-2.5 text-[11px] text-muted-foreground/40 text-center">
           {t('Press Esc to close · Enter to search')}
         </div>
       </div>

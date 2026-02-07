@@ -73,20 +73,20 @@ function TodoItemRow({ item, index }: { item: TodoItem; index: number }) {
   return (
     <div
       className={`
-        flex items-start gap-3 px-3 py-2 rounded-lg transition-all duration-200
+        flex items-start gap-2.5 px-3 py-2 rounded-xl transition-all duration-200
         ${display.bgColor}
         ${item.status === 'in_progress' ? 'animate-fade-in' : ''}
       `}
     >
       <Icon
-        size={16}
+        size={14}
         className={`
           flex-shrink-0 mt-0.5
           ${display.color}
           ${display.spin ? 'animate-spin' : ''}
         `}
       />
-      <span className={`text-sm leading-relaxed ${display.textStyle}`}>
+      <span className={`text-[13px] leading-relaxed ${display.textStyle}`}>
         {displayText}
       </span>
     </div>
@@ -112,14 +112,14 @@ export function TodoCard({ todos }: TodoCardProps) {
 
   return (
     <div className="animate-fade-in">
-      <div className="rounded-xl border border-border/50 bg-card/50 overflow-hidden">
+      <div className="rounded-2xl border border-border/30 bg-secondary/10 overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border/30 bg-secondary/20">
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/15 bg-secondary/15">
           <div className="flex items-center gap-2">
-            <ListTodo size={16} className="text-primary" />
-            <span className="text-sm font-medium text-foreground">{t('Task plan')}</span>
+            <ListTodo size={14} className="text-primary/60" />
+            <span className="text-[13px] font-medium text-foreground/80">{t('Task plan')}</span>
           </div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2 text-[11px] text-muted-foreground/60">
             {stats.completed > 0 && (
               <span className="text-green-500">{t('{{count}} completed', { count: stats.completed })}</span>
             )}
@@ -134,16 +134,16 @@ export function TodoCard({ todos }: TodoCardProps) {
 
         {/* Progress bar */}
         {stats.total > 0 && (
-          <div className="h-1 bg-secondary/30">
+          <div className="h-0.5 bg-secondary/20">
             <div
-              className="h-full bg-green-500 transition-all duration-500 ease-out"
+              className="h-full bg-halo-success/70 transition-all duration-500 ease-out rounded-full"
               style={{ width: `${stats.progress}%` }}
             />
           </div>
         )}
 
         {/* Todo items */}
-        <div className="p-2 space-y-1">
+        <div className="p-2 space-y-0.5">
           {todos.map((item, index) => (
             <TodoItemRow key={index} item={item} index={index} />
           ))}

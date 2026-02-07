@@ -129,8 +129,8 @@ interface ChatState {
   renameConversation: (spaceId: string, conversationId: string, newTitle: string) => Promise<boolean>
 
   // Messaging
-  sendMessage: (content: string, images?: ImageAttachment[], aiBrowserEnabled?: boolean, thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[]) => Promise<void>
-  sendMessageToConversation: (spaceId: string, conversationId: string, content: string, images?: ImageAttachment[], thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[], aiBrowserEnabled?: boolean) => Promise<void>
+  sendMessage: (content: string, images?: ImageAttachment[], aiBrowserEnabled?: boolean, thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[], planEnabled?: boolean) => Promise<void>
+  sendMessageToConversation: (spaceId: string, conversationId: string, content: string, images?: ImageAttachment[], thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[], aiBrowserEnabled?: boolean, planEnabled?: boolean) => Promise<void>
   stopGeneration: (conversationId?: string) => Promise<void>
 
   // Tool approval
@@ -526,8 +526,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  // Send message (with optional images for multi-modal, optional AI Browser and thinking mode, optional file contexts)
-  sendMessage: async (content, images, aiBrowserEnabled, thinkingEnabled, fileContexts) => {
+  // Send message (with optional images for multi-modal, optional AI Browser and thinking mode, optional file contexts, optional plan mode)
+  sendMessage: async (content, images, aiBrowserEnabled, thinkingEnabled, fileContexts, planEnabled) => {
     const conversation = get().getCurrentConversation()
     const conversationMeta = get().getCurrentConversationMeta()
     const { currentSpaceId } = get()
@@ -619,7 +619,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
       }
 
-      // Send to agent (with images, AI Browser state, thinking mode, canvas context, and file contexts)
+      // Send to agent (with images, AI Browser state, thinking mode, plan mode, canvas context, and file contexts)
       await api.sendMessage({
         spaceId: currentSpaceId,
         conversationId,
@@ -627,6 +627,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         images: images,  // Pass images to API
         aiBrowserEnabled,  // Pass AI Browser state to API
         thinkingEnabled,  // Pass thinking mode to API
+        planEnabled,  // Pass plan mode to API
         canvasContext: buildCanvasContext(),  // Pass canvas context for AI awareness
         fileContexts: fileContexts  // Pass file contexts for context injection
       })
@@ -648,7 +649,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   // Send message to a specific conversation (for Chat Tabs - avoids global context switching)
-  sendMessageToConversation: async (spaceId, conversationId, content, images, thinkingEnabled, fileContexts, aiBrowserEnabled) => {
+  sendMessageToConversation: async (spaceId, conversationId, content, images, thinkingEnabled, fileContexts, aiBrowserEnabled, planEnabled) => {
     if (!spaceId || !conversationId) {
       console.error('[ChatStore] spaceId and conversationId are required')
       return
@@ -703,7 +704,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         return { spaceStates: newSpaceStates, conversationCache: newCache }
       })
 
-      // Send to agent (without AI Browser for tab context, with thinking mode and file contexts)
+      // Send to agent (without AI Browser for tab context, with thinking mode, plan mode and file contexts)
       await api.sendMessage({
         spaceId,
         conversationId,
@@ -711,6 +712,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         images: images,
         aiBrowserEnabled: aiBrowserEnabled ?? false,
         thinkingEnabled,
+        planEnabled,
         canvasContext: undefined, // No canvas context for tab messages
         fileContexts: fileContexts
       })

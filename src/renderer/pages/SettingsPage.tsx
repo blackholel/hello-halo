@@ -13,6 +13,75 @@ import { Header } from '../components/layout/Header'
 import { McpServerList } from '../components/settings/McpServerList'
 import { useTranslation, setLanguage, getCurrentLanguage, SUPPORTED_LOCALES, type LocaleCode } from '../i18n'
 
+// Map provider ID to display name (avoids nested ternaries)
+const PROVIDER_NAMES: Record<string, string> = {
+  anthropic: 'Claude (Recommended)',
+  'anthropic-compat': 'OpenRouter',
+  zhipu: 'ZhipuAI (智谱)',
+  minimax: 'MiniMax',
+  openai: 'OpenAI Compatible',
+}
+
+function getProviderDisplayName(provider: string): string {
+  return PROVIDER_NAMES[provider] ?? 'OpenAI Compatible'
+}
+
+const PROVIDER_DESCRIPTIONS: Record<string, string> = {
+  anthropic: 'Connect directly to Anthropic official or compatible proxy',
+  'anthropic-compat': 'Direct connection to Anthropic-compatible backends (OpenRouter, etc.) - zero overhead',
+  zhipu: 'ZhipuAI Anthropic-compatible API - direct connection',
+  minimax: 'MiniMax Anthropic-compatible API - direct connection',
+  openai: 'Support OpenAI/compatible models via local protocol conversion',
+}
+
+function getProviderDescription(provider: string): string {
+  return PROVIDER_DESCRIPTIONS[provider] ?? PROVIDER_DESCRIPTIONS.anthropic
+}
+
+const API_KEY_PLACEHOLDERS: Record<string, string> = {
+  anthropic: 'sk-ant-xxxxxxxxxxxxx',
+  'anthropic-compat': 'sk-ant-xxxxxxxxxxxxx',
+  zhipu: 'xxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxx',
+  minimax: 'eyJhbGciOiJSUzI1NiIs...',
+  openai: 'sk-xxxxxxxxxxxxx',
+}
+
+function getApiKeyPlaceholder(provider: string): string {
+  return API_KEY_PLACEHOLDERS[provider] ?? 'sk-ant-xxxxxxxxxxxxx'
+}
+
+const API_URL_PLACEHOLDERS: Record<string, string> = {
+  anthropic: 'https://api.anthropic.com',
+  'anthropic-compat': 'https://openrouter.ai/api',
+  openai: 'BASE_URL/v1/chat/completions or BASE_URL/v1/responses',
+}
+
+function getApiUrlPlaceholder(provider: string): string {
+  return API_URL_PLACEHOLDERS[provider] ?? 'https://api.anthropic.com'
+}
+
+const THEME_LABELS: Record<string, string> = {
+  light: 'Light',
+  dark: 'Dark',
+  system: 'Follow System',
+}
+
+// Apple-style toggle component (extracted to top-level to avoid re-creation on every render)
+function AppleToggle({ checked, onChange, disabled = false }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={() => !disabled && onChange(!checked)}
+      className={`toggle-apple ${checked ? 'toggle-apple-on' : 'toggle-apple-off'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+    >
+      <div className="toggle-apple-knob" />
+    </button>
+  )
+}
+
 // Remote access status type
 interface RemoteAccessStatus {
   enabled: boolean
@@ -301,59 +370,52 @@ export function SettingsPage() {
     }
   }
 
-  // Handle back - return to previous view (not always home)
-  const handleBack = () => {
-    goBack()
-  }
-
   return (
-    <div className="h-full w-full flex flex-col">
-      {/* Header - cross-platform support */}
+    <div className="h-full w-full flex flex-col relative">
+      {/* Ambient background */}
+      <div className="ambient-bg">
+        <div className="ambient-orb ambient-orb-1" />
+        <div className="ambient-orb ambient-orb-2" />
+      </div>
+
+      {/* Header */}
       <Header
         left={
           <>
             <button
-              onClick={handleBack}
-              className="p-1.5 hover:bg-secondary rounded-lg transition-colors"
+              onClick={goBack}
+              className="p-1.5 rounded-xl hover:bg-secondary/80 transition-all duration-200 group"
             >
-              <ArrowLeft className="w-5 h-5" />
+              <ArrowLeft className="w-[18px] h-[18px] text-muted-foreground group-hover:text-foreground transition-colors" />
             </button>
-            <span className="font-medium text-sm">{t('Settings')}</span>
+            <span className="font-semibold text-sm tracking-tight">{t('Settings')}</span>
           </>
         }
       />
 
       {/* Content */}
-      <main className="flex-1 overflow-auto p-6">
-        <div className="max-w-2xl mx-auto space-y-6">
+      <main className="flex-1 overflow-auto relative z-10">
+        <div className="max-w-2xl mx-auto px-6 py-8 space-y-5">
           {/* AI Connection Section */}
-          <section className="bg-card rounded-xl border border-border p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-8 h-8 rounded-lg bg-[#da7756]/20 flex items-center justify-center">
+          <section className="settings-section">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-9 h-9 rounded-xl bg-[#da7756]/15 flex items-center justify-center">
                 <svg className="w-5 h-5 text-[#da7756]" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M4.709 15.955l4.72-2.647.08-.08 2.726-1.529.08-.08 6.206-3.48a.25.25 0 00.125-.216V6.177a.25.25 0 00-.375-.217l-6.206 3.48-.08.08-2.726 1.53-.08.079-4.72 2.647a.25.25 0 00-.125.217v1.746c0 .18.193.294.354.216h.001zm13.937-3.584l-4.72 2.647-.08.08-2.726 1.529-.08.08-6.206 3.48a.25.25 0 00-.125.216v1.746a.25.25 0 00.375.217l6.206-3.48.08-.08 2.726-1.53.08-.079 4.72-2.647a.25.25 0 00.125-.217v-1.746a.25.25 0 00-.375-.216z"/>
                 </svg>
               </div>
               <div>
-                <h2 className="text-lg font-medium">
-                  {provider === 'anthropic'
-                    ? t('Claude (Recommended)')
-                    : provider === 'anthropic-compat'
-                    ? t('OpenRouter')
-                    : provider === 'zhipu'
-                    ? t('ZhipuAI (智谱)')
-                    : provider === 'minimax'
-                    ? t('MiniMax')
-                    : t('OpenAI Compatible')}
+                <h2 className="text-base font-semibold tracking-tight">
+                  {t(getProviderDisplayName(provider))}
                 </h2>
                 <p className="text-xs text-muted-foreground">{t('AI Connection Configuration')}</p>
               </div>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-5">
               {/* Provider */}
               <div>
-                <label className="block text-sm text-muted-foreground mb-2">Provider</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">Provider</label>
                 <select
                   value={provider}
                   onChange={(e) => {
@@ -398,7 +460,7 @@ export function SettingsPage() {
                       setUseCustomModel(true)
                     }
                   }}
-                  className="w-full px-4 py-2 bg-input rounded-lg border border-border focus:border-primary focus:outline-none transition-colors"
+                  className="w-full select-apple text-sm"
                 >
                   <option value="anthropic">{t('Claude (Recommended)')}</option>
                   <option value="zhipu">{t('ZhipuAI (智谱)')}</option>
@@ -407,28 +469,20 @@ export function SettingsPage() {
                   <option value="openai">{t('OpenAI Compatible')}</option>
                 </select>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {provider === 'openai'
-                    ? t('Support OpenAI/compatible models via local protocol conversion')
-                    : provider === 'anthropic-compat'
-                    ? t('Direct connection to Anthropic-compatible backends (OpenRouter, etc.) - zero overhead')
-                    : provider === 'zhipu'
-                    ? t('ZhipuAI Anthropic-compatible API - direct connection')
-                    : provider === 'minimax'
-                    ? t('MiniMax Anthropic-compatible API - direct connection')
-                    : t('Connect directly to Anthropic official or compatible proxy')}
+                  {t(getProviderDescription(provider))}
                 </p>
               </div>
 
               {/* API Key */}
               <div>
-                <label className="block text-sm text-muted-foreground mb-2">API Key</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">API Key</label>
                 <div className="relative">
                   <input
                     type={showApiKey ? 'text' : 'password'}
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
-                    placeholder={provider === 'openai' ? 'sk-xxxxxxxxxxxxx' : provider === 'zhipu' ? 'xxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxx' : provider === 'minimax' ? 'eyJhbGciOiJSUzI1NiIs...' : 'sk-ant-xxxxxxxxxxxxx'}
-                    className="w-full px-4 py-2 pr-12 bg-input rounded-lg border border-border focus:border-primary focus:outline-none transition-colors"
+                    placeholder={getApiKeyPlaceholder(provider)}
+                    className="w-full px-4 py-2.5 pr-12 input-apple text-sm"
                   />
                   <button
                     type="button"
@@ -447,19 +501,13 @@ export function SettingsPage() {
 
               {/* API URL */}
               <div>
-                <label className="block text-sm text-muted-foreground mb-2">API URL</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">API URL</label>
                 <input
                   type="text"
                   value={apiUrl}
                   onChange={(e) => setApiUrl(e.target.value)}
-                  placeholder={
-                    provider === 'openai'
-                      ? 'BASE_URL/v1/chat/completions or BASE_URL/v1/responses'
-                      : provider === 'anthropic-compat'
-                      ? 'https://openrouter.ai/api'
-                      : 'https://api.anthropic.com'
-                  }
-                  className="w-full px-4 py-2 bg-input rounded-lg border border-border focus:border-primary focus:outline-none transition-colors"
+                  placeholder={getApiUrlPlaceholder(provider)}
+                  className="w-full px-4 py-2.5 input-apple text-sm"
                 />
                 {provider === 'openai' && apiUrl && !apiUrl.endsWith('/chat/completions') && !apiUrl.endsWith('responses') && (
                   <p className="mt-1 text-xs text-destructive">
@@ -470,7 +518,7 @@ export function SettingsPage() {
 
               {/* Model Selection */}
               <div>
-                <label className="block text-sm text-muted-foreground mb-2">{t('Model')}</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">{t('Model')}</label>
                 {(provider === 'anthropic' || provider === 'anthropic-compat') ? (
                   <>
                     {useCustomModel ? (
@@ -479,13 +527,13 @@ export function SettingsPage() {
                         value={model}
                         onChange={(e) => setModel(e.target.value)}
                         placeholder="claude-sonnet-4-5-20250929"
-                        className="w-full px-4 py-2 bg-input rounded-lg border border-border focus:border-primary focus:outline-none transition-colors"
+                        className="w-full px-4 py-2.5 input-apple text-sm"
                       />
                     ) : (
                       <select
                         value={model}
                         onChange={(e) => setModel(e.target.value)}
-                        className="w-full px-4 py-2 bg-input rounded-lg border border-border focus:border-primary focus:outline-none transition-colors"
+                        className="w-full px-4 py-2.5 input-apple text-sm"
                       >
                         {AVAILABLE_MODELS.map((m) => (
                           <option key={m.id} value={m.id}>
@@ -525,7 +573,7 @@ export function SettingsPage() {
                       value={model}
                       onChange={(e) => setModel(e.target.value)}
                       placeholder="gpt-4o-mini / deepseek-chat"
-                      className="w-full px-4 py-2 bg-input rounded-lg border border-border focus:border-primary focus:outline-none transition-colors"
+                      className="w-full px-4 py-2.5 input-apple text-sm"
                     />
                     <p className="mt-1 text-xs text-muted-foreground">
                       {t('Enter OpenAI compatible service model name')}
@@ -539,7 +587,7 @@ export function SettingsPage() {
                 <button
                   onClick={handleSave}
                   disabled={isValidating || !apiKey}
-                  className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+                  className="px-5 py-2.5 btn-apple text-sm"
                 >
                   {isValidating ? t('Saving...') : t('Save')}
                 </button>
@@ -568,16 +616,16 @@ export function SettingsPage() {
           </section>
 
           {/* Permissions Section */}
-          <section className="bg-card rounded-xl border border-border p-6">
+          <section className="settings-section">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-medium">{t('Permissions')}</h2>
-              <span className="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-500">
+              <span className="text-xs px-2.5 py-1 rounded-lg bg-halo-success/15 text-halo-success font-medium">
                 {t('Full Permission Mode')}
               </span>
             </div>
 
             {/* Info banner */}
-            <div className="bg-muted/50 rounded-lg p-3 mb-4 text-sm text-muted-foreground">
+            <div className="settings-info mb-5 text-sm text-muted-foreground">
               {t('Current version defaults to full permission mode, AI can freely perform all operations. Future versions will support fine-grained permission control.')}
             </div>
 
@@ -588,13 +636,9 @@ export function SettingsPage() {
                   <p className="font-medium">{t('File Read/Write')}</p>
                   <p className="text-sm text-muted-foreground">{t('Allow AI to read and create files')}</p>
                 </div>
-                <select
-                  value="allow"
-                  disabled
-                  className="px-3 py-1 bg-input rounded-lg border border-border cursor-not-allowed"
-                >
-                  <option value="allow">{t('Allow')}</option>
-                </select>
+                <span className="text-xs px-2.5 py-1 rounded-lg bg-halo-success/15 text-halo-success font-medium">
+                  {t('Allow')}
+                </span>
               </div>
 
               {/* Command Execution */}
@@ -603,46 +647,32 @@ export function SettingsPage() {
                   <p className="font-medium">{t('Execute Commands')}</p>
                   <p className="text-sm text-muted-foreground">{t('Allow AI to execute terminal commands')}</p>
                 </div>
-                <select
-                  value="allow"
-                  disabled
-                  className="px-3 py-1 bg-input rounded-lg border border-border cursor-not-allowed"
-                >
-                  <option value="allow">{t('Allow')}</option>
-                </select>
+                <span className="text-xs px-2.5 py-1 rounded-lg bg-halo-success/15 text-halo-success font-medium">
+                  {t('Allow')}
+                </span>
               </div>
 
               {/* Trust Mode */}
-              <div className="flex items-center justify-between pt-4 border-t border-border">
+              <div className="flex items-center justify-between pt-4 border-t border-border/50">
                 <div>
                   <p className="font-medium">{t('Trust Mode')}</p>
                   <p className="text-sm text-muted-foreground">{t('Automatically execute all operations')}</p>
                 </div>
-                <label className="relative inline-flex items-center cursor-not-allowed">
-                  <input
-                    type="checkbox"
-                    checked={true}
-                    disabled
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-primary rounded-full">
-                    <div className="w-5 h-5 bg-white rounded-full shadow-md transform translate-x-5 mt-0.5" />
-                  </div>
-                </label>
+                <AppleToggle checked={true} onChange={() => {}} disabled={true} />
               </div>
             </div>
           </section>
 
           {/* Python Environment Section */}
-          <section className="bg-card rounded-xl border border-border p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-8 h-8 rounded-lg bg-[#3776ab]/20 flex items-center justify-center">
+          <section className="settings-section">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-9 h-9 rounded-xl bg-[#3776ab]/15 flex items-center justify-center">
                 <svg className="w-5 h-5 text-[#3776ab]" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M14.25.18l.9.2.73.26.59.3.45.32.34.34.25.34.16.33.1.3.04.26.02.2-.01.13V8.5l-.05.63-.13.55-.21.46-.26.38-.3.31-.33.25-.35.19-.35.14-.33.1-.3.07-.26.04-.21.02H8.77l-.69.05-.59.14-.5.22-.41.27-.33.32-.27.35-.2.36-.15.37-.1.35-.07.32-.04.27-.02.21v3.06H3.17l-.21-.03-.28-.07-.32-.12-.35-.18-.36-.26-.36-.36-.35-.46-.32-.59-.28-.73-.21-.88-.14-1.05-.05-1.23.06-1.22.16-1.04.24-.87.32-.71.36-.57.4-.44.42-.33.42-.24.4-.16.36-.1.32-.05.24-.01h.16l.06.01h8.16v-.83H6.18l-.01-2.75-.02-.37.05-.34.11-.31.17-.28.25-.26.31-.23.38-.2.44-.18.51-.15.58-.12.64-.1.71-.06.77-.04.84-.02 1.27.05zm-6.3 1.98l-.23.33-.08.41.08.41.23.34.33.22.41.09.41-.09.33-.22.23-.34.08-.41-.08-.41-.23-.33-.33-.22-.41-.09-.41.09zm13.09 3.95l.28.06.32.12.35.18.36.27.36.35.35.47.32.59.28.73.21.88.14 1.04.05 1.23-.06 1.23-.16 1.04-.24.86-.32.71-.36.57-.4.45-.42.33-.42.24-.4.16-.36.09-.32.05-.24.02-.16-.01h-8.22v.82h5.84l.01 2.76.02.36-.05.34-.11.31-.17.29-.25.25-.31.24-.38.2-.44.17-.51.15-.58.13-.64.09-.71.07-.77.04-.84.01-1.27-.04-1.07-.14-.9-.2-.73-.25-.59-.3-.45-.33-.34-.34-.25-.34-.16-.33-.1-.3-.04-.25-.02-.2.01-.13v-5.34l.05-.64.13-.54.21-.46.26-.38.3-.32.33-.24.35-.2.35-.14.33-.1.3-.06.26-.04.21-.02.13-.01h5.84l.69-.05.59-.14.5-.21.41-.28.33-.32.27-.35.2-.36.15-.36.1-.35.07-.32.04-.28.02-.21V6.07h2.09l.14.01zm-6.47 14.25l-.23.33-.08.41.08.41.23.33.33.23.41.08.41-.08.33-.23.23-.33.08-.41-.08-.41-.23-.33-.33-.23-.41-.08-.41.08z"/>
                 </svg>
               </div>
               <div>
-                <h2 className="text-lg font-medium">{t('Python Environment')}</h2>
+                <h2 className="text-base font-semibold tracking-tight">{t('Python Environment')}</h2>
                 <p className="text-xs text-muted-foreground">{t('Built-in Python for code execution')}</p>
               </div>
             </div>
@@ -689,7 +719,7 @@ export function SettingsPage() {
 
               {/* Packages Section */}
               {pythonAvailable && (
-                <div className="pt-4 border-t border-border">
+                <div className="pt-4 border-t border-border/50">
                   <button
                     onClick={() => setShowPythonPackages(!showPythonPackages)}
                     className="flex items-center gap-2 w-full text-left"
@@ -716,13 +746,13 @@ export function SettingsPage() {
                           onChange={(e) => setNewPackageName(e.target.value)}
                           onKeyDown={(e) => e.key === 'Enter' && handleInstallPackage()}
                           placeholder={t('Package name (e.g., requests)')}
-                          className="flex-1 px-3 py-1.5 text-sm bg-input rounded-lg border border-border focus:border-primary focus:outline-none"
+                          className="flex-1 px-3 py-1.5 text-sm input-apple"
                           disabled={isInstallingPackage}
                         />
                         <button
                           onClick={handleInstallPackage}
                           disabled={isInstallingPackage || !newPackageName.trim()}
-                          className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
+                          className="px-4 py-1.5 text-sm btn-apple"
                         >
                           {isInstallingPackage ? t('Installing...') : t('Install')}
                         </button>
@@ -786,23 +816,23 @@ export function SettingsPage() {
           </section>
 
           {/* Appearance Section */}
-          <section className="bg-card rounded-xl border border-border p-6">
-            <h2 className="text-lg font-medium mb-4">{t('Appearance')}</h2>
+          <section className="settings-section">
+            <h2 className="text-base font-semibold tracking-tight mb-5">{t('Appearance')}</h2>
 
             <div>
-              <label className="block text-sm text-muted-foreground mb-2">{t('Theme')}</label>
-              <div className="flex gap-4">
+              <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">{t('Theme')}</label>
+              <div className="flex gap-2.5">
                 {(['light', 'dark', 'system'] as ThemeMode[]).map((themeMode) => (
                   <button
                     key={themeMode}
                     onClick={() => handleThemeChange(themeMode)}
-                    className={`px-4 py-2 rounded-lg transition-colors ${
+                    className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
                       theme === themeMode
-                        ? 'bg-primary/20 text-primary border border-primary'
-                        : 'bg-secondary hover:bg-secondary/80'
+                        ? 'bg-primary/15 text-primary ring-2 ring-primary/30'
+                        : 'bg-secondary/50 hover:bg-secondary/80 text-foreground/70'
                     }`}
                   >
-                    {themeMode === 'light' ? t('Light') : themeMode === 'dark' ? t('Dark') : t('Follow System')}
+                    {t(THEME_LABELS[themeMode])}
                   </button>
                 ))}
               </div>
@@ -810,15 +840,15 @@ export function SettingsPage() {
           </section>
 
           {/* Language Section */}
-          <section className="bg-card rounded-xl border border-border p-6">
-            <h2 className="text-lg font-medium mb-4">{t('Language')}</h2>
+          <section className="settings-section">
+            <h2 className="text-base font-semibold tracking-tight mb-5">{t('Language')}</h2>
 
             <div>
-              <label className="block text-sm text-muted-foreground mb-2">{t('Language')}</label>
+              <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">{t('Language')}</label>
               <select
                 value={getCurrentLanguage()}
                 onChange={(e) => setLanguage(e.target.value as LocaleCode)}
-                className="w-full px-4 py-2 bg-input rounded-lg border border-border focus:border-primary focus:outline-none transition-colors"
+                className="w-full px-4 py-2.5 input-apple text-sm"
               >
                 {Object.entries(SUPPORTED_LOCALES).map(([code, name]) => (
                   <option key={code} value={code}>
@@ -831,8 +861,8 @@ export function SettingsPage() {
 
           {/* System Section */}
           {!api.isRemoteMode() && (
-            <section className="bg-card rounded-xl border border-border p-6">
-              <h2 className="text-lg font-medium mb-4">{t('System')}</h2>
+            <section className="settings-section">
+              <h2 className="text-base font-semibold tracking-tight mb-5">{t('System')}</h2>
 
               <div className="space-y-4">
                 {/* Auto Launch */}
@@ -851,34 +881,14 @@ export function SettingsPage() {
                       {t('Automatically run Halo when system starts')}
                     </p>
                   </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={autoLaunch}
-                      onChange={(e) => handleAutoLaunchChange(e.target.checked)}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-secondary rounded-full peer peer-checked:bg-primary transition-colors">
-                      <div
-                        className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform ${
-                          autoLaunch ? 'translate-x-5' : 'translate-x-0.5'
-                        } mt-0.5`}
-                      />
-                    </div>
-                  </label>
+                  <AppleToggle checked={autoLaunch} onChange={handleAutoLaunchChange} />
                 </div>
 
                 {/* Minimize to Tray */}
-                <div className="flex items-center justify-between pt-4 border-t border-border">
+                <div className="flex items-center justify-between pt-4 border-t border-border/50">
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <p className="font-medium">{t('Background Daemon')}</p>
-                      <span
-                        className="inline-flex items-center justify-center w-4 h-4 text-xs rounded-full bg-muted text-muted-foreground cursor-help"
-                        title={t('Minimize to system tray when closing window, can be awakened anytime')}
-                      >
-                        ?
-                      </span>
                     </div>
                     <p className="text-sm text-muted-foreground">
                       {t('Minimize to {{trayType}} when closing window, instead of exiting the program', {
@@ -891,35 +901,21 @@ export function SettingsPage() {
                       })}
                     </p>
                   </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={minimizeToTray}
-                      onChange={(e) => handleMinimizeToTrayChange(e.target.checked)}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-secondary rounded-full peer peer-checked:bg-primary transition-colors">
-                      <div
-                        className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform ${
-                          minimizeToTray ? 'translate-x-5' : 'translate-x-0.5'
-                        } mt-0.5`}
-                      />
-                    </div>
-                  </label>
+                  <AppleToggle checked={minimizeToTray} onChange={handleMinimizeToTrayChange} />
                 </div>
               </div>
             </section>
           )}
 
           {/* MCP Servers Section */}
-          <section className="bg-card rounded-xl border border-border p-6">
+          <section className="settings-section">
             <McpServerList
               servers={config?.mcpServers || {}}
               onSave={handleMcpServersSave}
             />
 
             {/* Help text */}
-            <div className="mt-4 pt-4 border-t border-border">
+            <div className="mt-5 pt-4 border-t border-border/50">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs text-muted-foreground">{t('Format compatible with Cursor / Claude Desktop')}</span>
                 <a
@@ -938,11 +934,11 @@ export function SettingsPage() {
           </section>
 
           {/* Remote Access Section */}
-          <section className="bg-card rounded-xl border border-border p-6">
-            <h2 className="text-lg font-medium mb-4">{t('Remote Access')}</h2>
+          <section className="settings-section">
+            <h2 className="text-base font-semibold tracking-tight mb-5">{t('Remote Access')}</h2>
 
             {/* Security Warning */}
-            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 mb-4">
+            <div className="settings-warning mb-5">
               <div className="flex items-start gap-3">
                 <span className="text-amber-500 text-xl">⚠️</span>
                 <div className="text-sm">
@@ -963,22 +959,11 @@ export function SettingsPage() {
                     {t('Allow access to Halo from other devices')}
                   </p>
                 </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={remoteStatus?.enabled || false}
-                    onChange={handleToggleRemote}
-                    disabled={isEnablingRemote}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-secondary rounded-full peer peer-checked:bg-primary transition-colors">
-                    <div
-                      className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform ${
-                        remoteStatus?.enabled ? 'translate-x-5' : 'translate-x-0.5'
-                      } mt-0.5`}
-                    />
-                  </div>
-                </label>
+                <AppleToggle
+                  checked={remoteStatus?.enabled || false}
+                  onChange={handleToggleRemote}
+                  disabled={isEnablingRemote}
+                />
               </div>
 
               {/* Remote Access Details */}
@@ -1048,7 +1033,7 @@ export function SettingsPage() {
                   </div>
 
                   {/* Tunnel Section */}
-                  <div className="pt-4 border-t border-border">
+                  <div className="pt-4 border-t border-border/50">
                     <div className="flex items-center justify-between mb-3">
                       <div>
                         <p className="font-medium">{t('Internet Access')}</p>
@@ -1105,7 +1090,7 @@ export function SettingsPage() {
 
                   {/* QR Code */}
                   {qrCode && (
-                    <div className="pt-4 border-t border-border">
+                    <div className="pt-4 border-t border-border/50">
                       <p className="font-medium mb-3">{t('Scan to Access')}</p>
                       <div className="flex flex-col items-center gap-3">
                         <div className="bg-white p-3 rounded-xl">
@@ -1128,8 +1113,8 @@ export function SettingsPage() {
           </section>
 
           {/* About Section */}
-          <section className="bg-card rounded-xl border border-border p-6">
-            <h2 className="text-lg font-medium mb-4">{t('About')}</h2>
+          <section className="settings-section">
+            <h2 className="text-base font-semibold tracking-tight mb-5">{t('About')}</h2>
 
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">

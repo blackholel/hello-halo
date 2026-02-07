@@ -20,7 +20,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback, KeyboardEvent, ClipboardEvent, DragEvent } from 'react'
-import { Plus, ImagePlus, Loader2, AlertCircle, Atom, Globe } from 'lucide-react'
+import { Plus, ImagePlus, Loader2, AlertCircle, Atom, Globe, ClipboardList } from 'lucide-react'
 import { useOnboardingStore } from '../../stores/onboarding.store'
 import { useAIBrowserStore } from '../../stores/ai-browser.store'
 import { getOnboardingPrompt } from '../onboarding/onboardingData'
@@ -33,7 +33,7 @@ import { useTranslation } from '../../i18n'
 import { useComposerStore } from '../../stores/composer.store'
 
 interface InputAreaProps {
-  onSend: (content: string, images?: ImageAttachment[], thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[]) => void
+  onSend: (content: string, images?: ImageAttachment[], thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[], planEnabled?: boolean) => void
   onStop: () => void
   isGenerating: boolean
   placeholder?: string
@@ -61,6 +61,7 @@ export function InputArea({ onSend, onStop, isGenerating, placeholder, isCompact
   const [isProcessingImages, setIsProcessingImages] = useState(false)
   const [imageError, setImageError] = useState<ImageError | null>(null)
   const [thinkingEnabled, setThinkingEnabled] = useState(false)  // Extended thinking mode
+  const [planEnabled, setPlanEnabled] = useState(false)  // Plan mode (no tool execution)
   const [showAttachMenu, setShowAttachMenu] = useState(false)  // Attachment menu visibility
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -288,7 +289,8 @@ export function InputArea({ onSend, onStop, isGenerating, placeholder, isCompact
         textToSend,
         images.length > 0 ? images : undefined,
         thinkingEnabled,
-        fileContexts.length > 0 ? fileContexts : undefined
+        fileContexts.length > 0 ? fileContexts : undefined,
+        planEnabled
       )
 
       if (!isOnboardingSendStep) {
@@ -459,6 +461,8 @@ export function InputArea({ onSend, onStop, isGenerating, placeholder, isCompact
             isProcessingImages={isProcessingImages}
             thinkingEnabled={thinkingEnabled}
             onThinkingToggle={() => setThinkingEnabled(!thinkingEnabled)}
+            planEnabled={planEnabled}
+            onPlanToggle={() => setPlanEnabled(!planEnabled)}
             aiBrowserEnabled={aiBrowserEnabled}
             onAIBrowserToggle={() => setAIBrowserEnabled(!aiBrowserEnabled)}
             showAttachMenu={showAttachMenu}
@@ -491,6 +495,8 @@ interface InputToolbarProps {
   isProcessingImages: boolean
   thinkingEnabled: boolean
   onThinkingToggle: () => void
+  planEnabled: boolean
+  onPlanToggle: () => void
   aiBrowserEnabled: boolean
   onAIBrowserToggle: () => void
   showAttachMenu: boolean
@@ -512,6 +518,8 @@ function InputToolbar({
   isProcessingImages,
   thinkingEnabled,
   onThinkingToggle,
+  planEnabled,
+  onPlanToggle,
   aiBrowserEnabled,
   onAIBrowserToggle,
   showAttachMenu,
@@ -529,102 +537,114 @@ function InputToolbar({
   const { t } = useTranslation()
   return (
     <div className="flex items-center justify-between px-2 pb-2 pt-1">
-      {/* Left section: attachment button + thinking toggle */}
+      {/* Left section: attachment button + mode toggles */}
       <div className="flex items-center gap-1">
-        {/* Attachment menu */}
         {!isGenerating && !isOnboarding && (
-          <div className="relative" ref={attachMenuRef}>
+          <>
+            {/* Attachment menu */}
+            <div className="relative" ref={attachMenuRef}>
+              <button
+                onClick={onAttachMenuToggle}
+                disabled={isProcessingImages}
+                className={`w-8 h-8 flex items-center justify-center rounded-lg
+                  transition-all duration-150
+                  ${showAttachMenu
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground/60 hover:text-muted-foreground hover:bg-muted/50'
+                  }
+                  ${isProcessingImages ? 'opacity-50 cursor-not-allowed' : ''}
+                `}
+                title={t('Add attachment')}
+              >
+                <Plus size={18} className={`transition-transform duration-200 ${showAttachMenu ? 'rotate-45' : ''}`} />
+              </button>
+
+              {/* Attachment menu dropdown */}
+              {showAttachMenu && (
+                <div className="absolute bottom-full left-0 mb-2 py-1.5 bg-popover border border-border
+                  rounded-xl shadow-lg min-w-[160px] z-20 animate-fade-in">
+                  <button
+                    onClick={onImageClick}
+                    disabled={imageCount >= maxImages}
+                    className={`w-full px-3 py-2 flex items-center gap-3 text-sm
+                      transition-colors duration-150
+                      ${imageCount >= maxImages
+                        ? 'text-muted-foreground/40 cursor-not-allowed'
+                        : 'text-foreground hover:bg-muted/50'
+                      }
+                    `}
+                  >
+                    <ImagePlus size={16} className="text-muted-foreground" />
+                    <span>{t('Add image')}</span>
+                    {imageCount > 0 && (
+                      <span className="ml-auto text-xs text-muted-foreground">
+                        {imageCount}/{maxImages}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* AI Browser toggle */}
             <button
-              onClick={onAttachMenuToggle}
-              disabled={isProcessingImages}
-              className={`w-8 h-8 flex items-center justify-center rounded-lg
-                transition-all duration-150
-                ${showAttachMenu
+              onClick={onAIBrowserToggle}
+              className={`h-8 flex items-center gap-1.5 px-2.5 rounded-lg
+                transition-colors duration-200 relative
+                ${aiBrowserEnabled
                   ? 'bg-primary/10 text-primary'
-                  : 'text-muted-foreground/60 hover:text-muted-foreground hover:bg-muted/50'
+                  : 'text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50'
                 }
-                ${isProcessingImages ? 'opacity-50 cursor-not-allowed' : ''}
               `}
-              title={t('Add attachment')}
+              title={aiBrowserEnabled ? t('AI Browser enabled (click to disable)') : t('Enable AI Browser')}
             >
-              <Plus size={18} className={`transition-transform duration-200 ${showAttachMenu ? 'rotate-45' : ''}`} />
+              <Globe size={15} />
+              <span className="text-xs">{t('Browser')}</span>
+              {aiBrowserEnabled && (
+                <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-primary rounded-full" />
+              )}
             </button>
 
-            {/* Attachment menu dropdown */}
-            {showAttachMenu && (
-              <div className="absolute bottom-full left-0 mb-2 py-1.5 bg-popover border border-border
-                rounded-xl shadow-lg min-w-[160px] z-20 animate-fade-in">
-                <button
-                  onClick={onImageClick}
-                  disabled={imageCount >= maxImages}
-                  className={`w-full px-3 py-2 flex items-center gap-3 text-sm
-                    transition-colors duration-150
-                    ${imageCount >= maxImages
-                      ? 'text-muted-foreground/40 cursor-not-allowed'
-                      : 'text-foreground hover:bg-muted/50'
-                    }
-                  `}
-                >
-                  <ImagePlus size={16} className="text-muted-foreground" />
-                  <span>{t('Add image')}</span>
-                  {imageCount > 0 && (
-                    <span className="ml-auto text-xs text-muted-foreground">
-                      {imageCount}/{maxImages}
-                    </span>
-                  )}
-                </button>
-                {/* Future extensibility: add more options here */}
-              </div>
+            {/* Skills dropdown */}
+            {workDir && (
+              <SkillsDropdown
+                workDir={workDir}
+                onInsertSkill={onInsertSkill}
+              />
             )}
-          </div>
-        )}
 
-        {/* AI Browser toggle */}
-        {!isGenerating && !isOnboarding && (
-          <button
-            onClick={onAIBrowserToggle}
-            className={`h-8 flex items-center gap-1.5 px-2.5 rounded-lg
-              transition-colors duration-200 relative
-              ${aiBrowserEnabled
-                ? 'bg-primary/10 text-primary'
-                : 'text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50'
-              }
-            `}
-            title={aiBrowserEnabled ? t('AI Browser enabled (click to disable)') : t('Enable AI Browser')}
-          >
-            <Globe size={15} />
-            <span className="text-xs">{t('Browser')}</span>
-            {/* Active indicator dot */}
-            {aiBrowserEnabled && (
-              <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-primary rounded-full" />
-            )}
-          </button>
-        )}
+            {/* Thinking mode toggle */}
+            <button
+              onClick={onThinkingToggle}
+              className={`h-8 flex items-center gap-1.5 px-2.5 rounded-lg
+                transition-colors duration-200
+                ${thinkingEnabled
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50'
+                }
+              `}
+              title={thinkingEnabled ? t('Disable Deep Thinking') : t('Enable Deep Thinking')}
+            >
+              <Atom size={15} />
+              <span className="text-xs">{t('Deep Thinking')}</span>
+            </button>
 
-        {/* Skills dropdown */}
-        {!isGenerating && !isOnboarding && workDir && (
-          <SkillsDropdown
-            workDir={workDir}
-            onInsertSkill={onInsertSkill}
-          />
-        )}
-
-        {/* Thinking mode toggle - always show full label, no expansion */}
-        {!isGenerating && !isOnboarding && (
-          <button
-            onClick={onThinkingToggle}
-            className={`h-8 flex items-center gap-1.5 px-2.5 rounded-lg
-              transition-colors duration-200
-              ${thinkingEnabled
-                ? 'bg-primary/10 text-primary'
-                : 'text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50'
-              }
-            `}
-            title={thinkingEnabled ? t('Disable Deep Thinking') : t('Enable Deep Thinking')}
-          >
-            <Atom size={15} />
-            <span className="text-xs">{t('Deep Thinking')}</span>
-          </button>
+            {/* Plan mode toggle */}
+            <button
+              onClick={onPlanToggle}
+              className={`h-8 flex items-center gap-1.5 px-2.5 rounded-lg
+                transition-colors duration-200
+                ${planEnabled
+                  ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                  : 'text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50'
+                }
+              `}
+              title={planEnabled ? t('Disable Plan Mode') : t('Enable Plan Mode')}
+            >
+              <ClipboardList size={15} />
+              <span className="text-xs">{t('Plan')}</span>
+            </button>
+          </>
         )}
       </div>
 
@@ -653,7 +673,7 @@ function InputToolbar({
                 : 'bg-muted/50 text-muted-foreground/40 cursor-not-allowed'
               }
             `}
-            title={thinkingEnabled ? t('Send (Deep Thinking)') : t('Send')}
+            title={t(planEnabled ? 'Send (Plan Mode)' : thinkingEnabled ? 'Send (Deep Thinking)' : 'Send')}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" />

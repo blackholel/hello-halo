@@ -32,30 +32,24 @@ interface SubAgentCardProps {
   hasError: boolean
 }
 
-// Get brief description for a thought
+// Tool name to input field mapping for brief descriptions
+const TOOL_BRIEF_EXTRACTORS: Record<string, (input: Record<string, unknown> | undefined) => string> = {
+  Read: (input) => extractFileName(input?.file_path),
+  Write: (input) => extractFileName(input?.file_path),
+  Edit: (input) => extractFileName(input?.file_path),
+  Grep: (input) => extractSearchTerm(input?.pattern),
+  Glob: (input) => extractSearchTerm(input?.pattern),
+  Bash: (input) => extractCommand(input?.command),
+  WebFetch: (input) => extractSearchTerm(input?.url),
+  WebSearch: (input) => extractSearchTerm(input?.query),
+}
+
 function getThoughtBrief(thought: Thought): string {
   if (thought.type !== 'tool_use' || !thought.toolName) {
     return thought.content?.substring(0, 50) || ''
   }
-
-  const input = thought.toolInput
-  switch (thought.toolName) {
-    case 'Read':
-    case 'Write':
-    case 'Edit':
-      return extractFileName(input?.file_path)
-    case 'Grep':
-    case 'Glob':
-      return extractSearchTerm(input?.pattern)
-    case 'Bash':
-      return extractCommand(input?.command)
-    case 'WebFetch':
-      return extractSearchTerm(input?.url)
-    case 'WebSearch':
-      return extractSearchTerm(input?.query)
-    default:
-      return thought.toolName
-  }
+  const extractor = TOOL_BRIEF_EXTRACTORS[thought.toolName]
+  return extractor ? extractor(thought.toolInput) : thought.toolName
 }
 
 // Collapsed summary component for sub-agent card
@@ -183,15 +177,15 @@ export const SubAgentCard = memo(function SubAgentCard({
 
   // Get status color based on running/error state
   function getStatusColor(): string {
-    if (isRunning) return 'border-primary/50 bg-primary/5'
-    if (hasError) return 'border-destructive/50 bg-destructive/5'
-    return 'border-green-500/50 bg-green-500/5'
+    if (isRunning) return 'border-primary/20 bg-primary/[0.03]'
+    if (hasError) return 'border-destructive/20 bg-destructive/[0.03]'
+    return 'border-halo-success/20 bg-halo-success/[0.03]'
   }
 
   function getLeftBorderColor(): string {
-    if (isRunning) return 'bg-primary'
-    if (hasError) return 'bg-destructive'
-    return 'bg-green-500'
+    if (isRunning) return 'bg-primary/70'
+    if (hasError) return 'bg-destructive/70'
+    return 'bg-halo-success/70'
   }
 
   const statusColor = getStatusColor()
@@ -199,20 +193,20 @@ export const SubAgentCard = memo(function SubAgentCard({
 
   return (
     <div className={`
-      animate-fade-in mb-3 rounded-xl border overflow-hidden
+      animate-fade-in mb-3 rounded-2xl border overflow-hidden transition-all duration-300
       ${statusColor}
     `}>
       {/* Left color indicator + content */}
       <div className="flex">
         {/* Left color bar */}
-        <div className={`w-1 ${leftBorderColor} flex-shrink-0`} />
+        <div className={`w-0.5 ${leftBorderColor} flex-shrink-0`} />
 
         {/* Main content */}
         <div className="flex-1 min-w-0">
           {/* Header */}
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-white/5 transition-colors"
+            className="w-full flex items-center gap-2 px-3.5 py-2.5 text-left hover:bg-secondary/15 transition-colors duration-200"
           >
             {/* Expand icon */}
             {isExpanded ? (
@@ -234,7 +228,7 @@ export const SubAgentCard = memo(function SubAgentCard({
 
             {/* Sub-agent type badge */}
             {subagentType && (
-              <span className="text-xs text-muted-foreground/60 px-1.5 py-0.5 bg-muted/30 rounded flex-shrink-0">
+              <span className="text-[11px] text-muted-foreground/40 px-2 py-0.5 bg-secondary/30 rounded-md flex-shrink-0">
                 {subagentType}
               </span>
             )}
@@ -263,7 +257,7 @@ export const SubAgentCard = memo(function SubAgentCard({
 
           {/* Expanded content */}
           {isExpanded && (
-            <div className="px-3 pb-3 border-t border-border/20">
+            <div className="px-3.5 pb-3 border-t border-border/10">
               {/* Tool operations list */}
               {toolUseThoughts.length > 0 ? (
                 <div className="mt-2 space-y-0.5">

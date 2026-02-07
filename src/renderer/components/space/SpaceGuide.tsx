@@ -1,141 +1,160 @@
 /**
- * SpaceGuide - Collapsible guide component for explaining space concepts
+ * SpaceGuide - Elegant collapsible guide
  *
- * Features:
- * - Collapsed by default, shows only title bar
- * - Expands to show full educational content
- * - Smooth slide animation
- * - Persistent state via localStorage
- * - Cross-platform & theme-aware
+ * Apple-inspired design:
+ * - Minimal collapsed state with subtle visual cue
+ * - Smooth spring-based expand/collapse animation
+ * - Clean typography with generous spacing
+ * - Glass card aesthetic when expanded
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
-  ChevronDown,
+  ChevronRight,
   Zap,
   Folder,
-  HelpCircle,
-  AlertTriangle
+  Lightbulb,
+  ShieldAlert
 } from 'lucide-react'
 import { useTranslation } from '../../i18n'
 
-// localStorage key for guide state
 const GUIDE_STATE_KEY = 'halo-space-guide-expanded'
 
 export function SpaceGuide() {
   const { t } = useTranslation()
+  const contentRef = useRef<HTMLDivElement>(null)
+  const [contentHeight, setContentHeight] = useState(0)
 
-  // Read initial state from localStorage, default to collapsed
   const [isExpanded, setIsExpanded] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem(GUIDE_STATE_KEY)
-      // Default to collapsed (false) for returning users
-      // First time users will see collapsed, can expand if curious
       return saved === 'true'
     }
     return false
   })
 
-  // Persist state to localStorage
   useEffect(() => {
     localStorage.setItem(GUIDE_STATE_KEY, String(isExpanded))
+  }, [isExpanded])
+
+  // Measure content height for smooth animation
+  useEffect(() => {
+    if (contentRef.current) {
+      setContentHeight(contentRef.current.scrollHeight)
+    }
   }, [isExpanded])
 
   const toggleExpand = () => {
     setIsExpanded(!isExpanded)
   }
 
+  const sections = [
+    {
+      icon: Zap,
+      iconColor: 'text-primary',
+      iconBg: 'bg-primary/10',
+      title: t('What can AI do?'),
+      lines: [
+        t('Halo is not just chat, it can help you do things'),
+        t('Use natural language to have it write documents, create spreadsheets, search the web, write code...'),
+      ]
+    },
+    {
+      icon: Folder,
+      iconColor: 'text-amber-500',
+      iconBg: 'bg-amber-500/10',
+      title: t('What is a space?'),
+      lines: [
+        t('AI-generated files (we call them "artifacts") need a place to be stored'),
+        t('A space is their home, an independent folder'),
+      ]
+    },
+    {
+      icon: Lightbulb,
+      iconColor: 'text-emerald-500',
+      iconBg: 'bg-emerald-500/10',
+      title: t('When do you need to create one?'),
+      hints: [
+        { label: t('Casual chat, asking questions'), value: t('Use Halo space') },
+        { label: t('Projects, long-term tasks'), value: t('Recommend creating a dedicated space') },
+      ]
+    }
+  ]
+
   return (
-    <div className="mb-6 animate-fade-in">
-      {/* Collapsed title bar - always visible */}
+    <div className="mb-5">
+      {/* Toggle button */}
       <button
         onClick={toggleExpand}
-        className="w-full flex items-center justify-between px-3 py-2.5 sm:p-3 rounded-lg bg-card border border-border hover:border-primary/30 transition-all group"
+        className="w-full flex items-center gap-2.5 px-3.5 py-3 rounded-xl hover:bg-secondary/50 transition-all duration-200 group"
       >
-        <div className="flex items-center gap-2">
-          <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-md bg-primary/10 flex items-center justify-center">
-            <HelpCircle className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-primary" />
-          </div>
-          <span className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">
-            {t('Learn what spaces are')}
-          </span>
-        </div>
-        <ChevronDown
-          className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${
-            isExpanded ? 'rotate-0' : '-rotate-90'
+        <ChevronRight
+          className={`w-3.5 h-3.5 text-muted-foreground/50 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+            isExpanded ? 'rotate-90' : 'rotate-0'
           }`}
         />
+        <span className="text-[13px] text-muted-foreground group-hover:text-foreground/80 transition-colors">
+          {t('Learn what spaces are')}
+        </span>
       </button>
 
-      {/* Expanded content - no divider lines, use spacing instead */}
-      {isExpanded && (
-        <div className="mt-2 rounded-lg bg-card border border-border overflow-hidden animate-slide-down">
-          <div className="p-3 sm:p-4 space-y-4 sm:space-y-5">
-            {/* Section 1: What can AI do */}
-            <div className="flex items-start gap-2.5 sm:gap-3">
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h4 className="text-sm font-medium mb-1 sm:mb-1.5">{t('What can AI do?')}</h4>
-                <div className="text-xs sm:text-sm text-muted-foreground leading-relaxed space-y-0.5 sm:space-y-1">
-                  <p>{t('Halo is not just chat, it can help you do things')}</p>
-                  <p>{t('Use natural language to have it write documents, create spreadsheets, search the web, write code...')}</p>
-                  <p>{t('It can create, modify, and delete files')}</p>
-                </div>
-              </div>
+      {/* Expandable content with smooth height animation */}
+      <div
+        className="overflow-hidden transition-all duration-400 ease-[cubic-bezier(0.16,1,0.3,1)]"
+        style={{
+          maxHeight: isExpanded ? `${contentHeight + 20}px` : '0px',
+          opacity: isExpanded ? 1 : 0,
+        }}
+      >
+        <div ref={contentRef} className="pt-2 pb-1">
+          <div className="space-card p-5 !cursor-default">
+            <div className="space-y-5">
+              {sections.map((section, i) => {
+                const Icon = section.icon
+                return (
+                  <div key={i} className="flex items-start gap-3">
+                    <div className={`w-8 h-8 rounded-xl ${section.iconBg} flex items-center justify-center flex-shrink-0`}>
+                      <Icon className={`w-4 h-4 ${section.iconColor}`} />
+                    </div>
+                    <div className="flex-1 min-w-0 pt-0.5">
+                      <h4 className="text-sm font-medium mb-1.5">{section.title}</h4>
+                      {section.lines && (
+                        <div className="text-[13px] text-muted-foreground leading-relaxed space-y-0.5">
+                          {section.lines.map((line, j) => (
+                            <p key={j}>{line}</p>
+                          ))}
+                        </div>
+                      )}
+                      {section.hints && (
+                        <div className="text-[13px] text-muted-foreground space-y-1">
+                          {section.hints.map((hint, j) => (
+                            <p key={j}>
+                              <span className="text-foreground/70">{hint.label}</span>
+                              <span className="mx-1.5 text-muted-foreground/40">&rarr;</span>
+                              <span>{hint.value}</span>
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
 
-            {/* Section 2: What is a space */}
-            <div className="flex items-start gap-2.5 sm:gap-3">
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-amber-500/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <Folder className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-500" />
+            {/* Warning */}
+            <div className="mt-5 pt-4 border-t border-border/50">
+              <div className="flex items-center gap-2.5">
+                <ShieldAlert className="w-3.5 h-3.5 text-halo-warning flex-shrink-0" />
+                <p className="text-xs text-muted-foreground">
+                  <span className="text-halo-warning font-medium">{t('AI has delete permissions')}</span>
+                  {t(', be mindful of backing up important files')}
+                </p>
               </div>
-              <div className="flex-1 min-w-0">
-                <h4 className="text-sm font-medium mb-1 sm:mb-1.5">{t('What is a space?')}</h4>
-                <div className="text-xs sm:text-sm text-muted-foreground leading-relaxed space-y-0.5 sm:space-y-1">
-                  <p>{t('AI-generated files (we call them "artifacts") need a place to be stored')}</p>
-                  <p>{t('A space is their home, an independent folder')}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Section 3: When to create one */}
-            <div className="flex items-start gap-2.5 sm:gap-3">
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <HelpCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-500" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h4 className="text-sm font-medium mb-1 sm:mb-1.5">{t('When do you need to create one?')}</h4>
-                <div className="text-xs sm:text-sm text-muted-foreground leading-relaxed space-y-0.5 sm:space-y-1">
-                  <p>
-                    <span className="text-foreground/80">{t('Casual chat, asking questions')}</span>
-                    <span className="mx-1 sm:mx-1.5">→</span>
-                    {t('Use Halo space')}
-                  </p>
-                  <p>
-                    <span className="text-foreground/80">{t('Projects, long-term tasks')}</span>
-                    <span className="mx-1 sm:mx-1.5">→</span>
-                    {t('Recommend creating a dedicated space')}
-                  </p>
-                  <p className="mt-1">{t('Keep files from different projects organized')}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Warning section - keep separate with subtle top border */}
-          <div className="px-3 py-2.5 sm:p-3 bg-halo-warning/5 border-t border-border/50">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-halo-warning flex-shrink-0" />
-              <p className="text-xs text-muted-foreground">
-                <span className="text-halo-warning font-medium">{t('AI has delete permissions')}</span>
-                {t(', be mindful of backing up important files')}
-              </p>
             </div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   )
 }

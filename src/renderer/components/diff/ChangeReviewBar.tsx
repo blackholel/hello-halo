@@ -113,7 +113,7 @@ export function ChangeReviewBar({
   return (
     <>
       <div className="mx-4 mb-2">
-        <div className="rounded-xl border border-border/40 bg-muted/20">
+        <div className="rounded-2xl border border-border/25 bg-secondary/10">
           {/* Summary bar */}
           <div className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
             <button

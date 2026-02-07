@@ -1,13 +1,18 @@
 /**
- * Header Component - Cross-platform title bar
+ * Header Component - Apple-style minimal title bar
  *
- * Handles platform-specific padding for window controls:
+ * Design:
+ * - Clean, transparent header with glass-subtle effect
+ * - Minimal visual weight, content takes priority
+ * - Platform-aware padding for window controls
+ *
+ * Platform handling:
  * - macOS Electron: traffic lights on the left (pl-20)
  * - Windows/Linux Electron: titleBarOverlay buttons on the right (pr-36)
  * - Browser/Mobile: no extra padding needed (pl-4)
  *
- * Height: 40px (compact, modern style)
- * Traffic light vertical center formula: y = height/2 - 7 = 13
+ * Height: 44px (slightly taller for elegance)
+ * Traffic light vertical center formula: y = height/2 - 7 = 15
  */
 
 import { ReactNode } from 'react'
@@ -27,7 +32,6 @@ const getPlatform = () => {
   if (typeof window !== 'undefined' && window.platform) {
     return window.platform
   }
-  // Fallback for non-Electron environments (e.g., remote web access)
   return {
     platform: 'darwin' as const,
     isMac: true,
@@ -40,22 +44,19 @@ export function Header({ left, right, className = '' }: HeaderProps) {
   const platform = getPlatform()
   const isInElectron = isElectron()
 
-  // Platform-specific padding classes
-  // macOS: traffic lights overlay on the left
-  // Windows/Linux: titleBarOverlay buttons overlay on the right
-  // Browser/Mobile: no overlay, use normal padding
   const platformPadding = isInElectron
     ? platform.isMac
-      ? 'pl-20 pr-4'   // Electron macOS: 80px left for traffic lights
-      : 'pl-4 pr-36'   // Electron Windows/Linux: 140px right for titleBarOverlay buttons
-    : 'pl-4 pr-4'      // Browser/Mobile: normal padding
+      ? 'pl-20 pr-4'
+      : 'pl-4 pr-36'
+    : 'pl-4 pr-4'
 
-  // Header height: 40px, trafficLightPosition.y should be 40/2 - 7 = 13
   return (
     <header
       className={`
-        flex items-center justify-between h-10
-        border-b border-border drag-region
+        flex items-center justify-between h-11
+        border-b border-border/50 drag-region
+        bg-background/80 backdrop-blur-md
+        relative z-20
         ${platformPadding}
         ${className}
       `.trim().replace(/\s+/g, ' ')}
@@ -64,7 +65,7 @@ export function Header({ left, right, className = '' }: HeaderProps) {
         {left}
       </div>
 
-      <div className="flex items-center gap-2 no-drag flex-shrink-0">
+      <div className="flex items-center gap-1.5 no-drag flex-shrink-0">
         {right}
       </div>
     </header>

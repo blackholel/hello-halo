@@ -26,6 +26,7 @@ import { BrowserTaskCard, isBrowserTool } from '../tool/BrowserTaskCard'
 import { MarkdownRenderer } from './MarkdownRenderer'
 import { MessageImages } from './ImageAttachmentPreview'
 import { TokenUsageIndicator } from './TokenUsageIndicator'
+import { PlanCard } from './PlanCard'
 import type { Message, Thought } from '../../types'
 import { useTranslation } from '../../i18n'
 
@@ -37,6 +38,7 @@ interface MessageItemProps {
   isWorking?: boolean  // True when AI is still generating (not yet complete)
   isWaitingMore?: boolean  // True when content paused (e.g., during tool call), show "..." animation
   workDir?: string  // For skill suggestion card creation
+  onExecutePlan?: (planContent: string) => void  // Callback when "Execute Plan" button is clicked
 }
 
 // Collapsible thought history component
@@ -54,17 +56,17 @@ function ThoughtHistory({ thoughts }: { thoughts: Thought[] }) {
   const toolCount = thoughts.filter(t => t.type === 'tool_use').length
 
   return (
-    <div className="mt-3 border-t border-border/30 pt-2">
+    <div className="mt-3 border-t border-border/15 pt-2.5">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
+        className="flex items-center gap-2 text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors w-full"
       >
         <ChevronRight
-          size={12}
-          className={`transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+          size={10}
+          className={`transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
         />
         <span>{t('View thought process')}</span>
-        <span className="text-muted-foreground/50">
+        <span className="text-muted-foreground/30">
           ({thinkingCount > 0 && `${thinkingCount} ${t('thoughts')}`}
           {thinkingCount > 0 && toolCount > 0 && ', '}
           {toolCount > 0 && `${toolCount} ${t('tools')}`})
@@ -147,7 +149,7 @@ function ThoughtItem({ thought }: { thought: Thought }) {
   )
 }
 
-export function MessageItem({ message, previousCost = 0, hideThoughts = false, isInContainer = false, isWorking = false, isWaitingMore = false, workDir }: MessageItemProps) {
+export function MessageItem({ message, previousCost = 0, hideThoughts = false, isInContainer = false, isWorking = false, isWaitingMore = false, workDir, onExecutePlan }: MessageItemProps) {
   const isUser = message.role === 'user'
   const isStreaming = (message as any).isStreaming
   const [copied, setCopied] = useState(false)
@@ -183,17 +185,21 @@ export function MessageItem({ message, previousCost = 0, hideThoughts = false, i
   const hasBrowserActivity = isWorking && browserToolCalls.length > 0
 
   // Message bubble content
+  const bubbleClasses = [
+    'rounded-2xl px-4 py-3.5 overflow-hidden transition-all duration-300',
+    isUser ? 'message-user' : 'message-assistant',
+    isStreaming && 'streaming-message',
+    isWorking && 'message-working',
+    isInContainer ? 'w-full' : 'max-w-[85%]',
+  ].filter(Boolean).join(' ')
+
   const bubble = (
-    <div
-      className={`rounded-2xl px-4 py-3 overflow-hidden ${
-        isUser ? 'message-user' : 'message-assistant'
-      } ${isStreaming ? 'streaming-message' : ''} ${isWorking ? 'message-working' : ''} ${!isInContainer ? 'max-w-[85%]' : 'w-full'}`}
-    >
+    <div className={bubbleClasses}>
       {/* Working indicator - shows when AI is working */}
       {isWorking && !isUser && (
-        <div className="flex items-center gap-1.5 mb-2 pb-2 border-b border-border/30 working-indicator-fade">
-          <Sparkles size={12} className="text-primary/60 animate-pulse-gentle" />
-          <span className="text-xs text-muted-foreground/70">{t('Halo is working')}</span>
+        <div className="flex items-center gap-2 mb-2.5 pb-2 border-b border-border/20 working-indicator-fade">
+          <Sparkles size={12} className="text-primary/50 animate-pulse-gentle" />
+          <span className="text-[11px] text-muted-foreground/60 font-medium tracking-wide">{t('Halo is working')}</span>
         </div>
       )}
 
@@ -208,6 +214,9 @@ export function MessageItem({ message, previousCost = 0, hideThoughts = false, i
           isUser ? (
             // User messages: simple whitespace-preserving text
             <span className="whitespace-pre-wrap">{message.content}</span>
+          ) : message.isPlan ? (
+            // Plan mode: structured plan card
+            <PlanCard content={message.content} onExecute={onExecutePlan} workDir={workDir} />
           ) : (
             // Assistant messages: full markdown rendering
             <MarkdownRenderer content={message.content} workDir={workDir} />
@@ -238,24 +247,24 @@ export function MessageItem({ message, previousCost = 0, hideThoughts = false, i
 
       {/* Token usage indicator + copy button - only for completed assistant messages with tokenUsage */}
       {!isUser && !isWorking && message.tokenUsage && (
-        <div className="flex justify-end items-center gap-2 mt-2 pt-1">
+        <div className="flex justify-end items-center gap-1.5 mt-3 pt-2 border-t border-border/10">
           {/* Token usage indicator */}
           <TokenUsageIndicator tokenUsage={message.tokenUsage} previousCost={previousCost} />
 
           {/* Copy button */}
           <button
             onClick={handleCopyMessage}
-            className="flex items-center gap-1.5 px-2 py-1 text-xs text-muted-foreground/60
-              hover:text-foreground hover:bg-white/5 rounded-md transition-all"
+            className="flex items-center gap-1 px-2 py-1 text-[11px] text-muted-foreground/40
+              hover:text-foreground/70 hover:bg-secondary/30 rounded-lg transition-all duration-200"
             title={t('Copy message')}
           >
             {copied ? (
               <>
-                <Check size={14} className="text-green-400" />
-                <span className="text-green-400">{t('Copied')}</span>
+                <Check size={12} className="text-halo-success" />
+                <span className="text-halo-success">{t('Copied')}</span>
               </>
             ) : (
-              <Copy size={14} />
+              <Copy size={12} />
             )}
           </button>
         </div>

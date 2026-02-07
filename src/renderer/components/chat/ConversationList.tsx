@@ -1,12 +1,18 @@
 /**
- * Conversation List - Resizable sidebar for multiple conversations
- * Supports drag-to-resize, inline title editing, and conversation management
+ * Conversation List - Apple-style sidebar
+ *
+ * Design:
+ * - Clean glass sidebar with subtle depth
+ * - Conversation items with elegant hover states
+ * - Skills & Agents panels at bottom
+ * - Drag-to-resize support
+ * - Inline title editing
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { ConversationMeta } from '../../types'
 import { MessageSquare, Plus } from '../icons/ToolIcons'
-import { ExternalLink } from 'lucide-react'
+import { ExternalLink, Pencil, Trash2, MessageCircle } from 'lucide-react'
 import { useCanvasLifecycle } from '../../hooks/useCanvasLifecycle'
 import { useTranslation } from '../../i18n'
 import { SkillsPanel } from '../skills/SkillsPanel'
@@ -16,9 +22,9 @@ import type { SkillDefinition } from '../../stores/skills.store'
 import type { AgentDefinition } from '../../stores/agents.store'
 
 // Width constraints (in pixels)
-const MIN_WIDTH = 140
-const MAX_WIDTH = 320
-const DEFAULT_WIDTH = 192 // w-48 = 12rem = 192px
+const MIN_WIDTH = 200
+const MAX_WIDTH = 340
+const DEFAULT_WIDTH = 240
 
 interface ConversationListProps {
   conversations: ConversationMeta[]
@@ -106,23 +112,25 @@ export function ConversationList({
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
     const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
     const isToday = date.toDateString() === now.toDateString()
 
-    if (isToday) {
-      return t('Today')
-    }
-
-    return `${date.getMonth() + 1}-${date.getDate()}`
+    if (diffMins < 1) return t('Just now')
+    if (diffMins < 60) return `${diffMins}m`
+    if (isToday) return `${diffHours}h`
+    return `${date.getMonth() + 1}/${date.getDate()}`
   }
 
-  // Start editing a conversation title
+  // Start editing
   const handleStartEdit = (e: React.MouseEvent, conv: ConversationMeta) => {
     e.stopPropagation()
     setEditingId(conv.id)
     setEditingTitle(conv.title || '')
   }
 
-  // Save edited title
+  // Save edit
   const handleSaveEdit = () => {
     if (editingId && editingTitle.trim() && onRename) {
       onRename(editingId, editingTitle.trim())
@@ -131,13 +139,13 @@ export function ConversationList({
     setEditingTitle('')
   }
 
-  // Cancel editing
+  // Cancel edit
   const handleCancelEdit = () => {
     setEditingId(null)
     setEditingTitle('')
   }
 
-  // Handle input key events
+  // Key events
   const handleEditKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       e.preventDefault()
@@ -151,108 +159,132 @@ export function ConversationList({
   return (
     <div
       ref={containerRef}
-      className="border-r border-border flex flex-col bg-card/50 relative"
+      className="border-r border-border/50 flex flex-col bg-card/30 backdrop-blur-sm relative"
       style={{ width, transition: isDragging ? 'none' : 'width 0.2s ease' }}
     >
       {/* Header */}
-      <div className="p-3 border-b border-border">
-        <span className="text-sm font-medium text-muted-foreground">{t('Conversations')}</span>
+      <div className="px-4 py-3 flex items-center justify-between">
+        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+          {t('Conversations')}
+        </span>
+        <button
+          onClick={onNew}
+          className="p-1 rounded-lg hover:bg-secondary/80 transition-colors group"
+          title={t('New conversation')}
+        >
+          <Plus className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+        </button>
       </div>
 
       {/* Conversation list */}
-      <div className="flex-1 overflow-auto py-2">
-        {conversations.map((conversation) => (
-          <div
-            key={conversation.id}
-            onClick={() => editingId !== conversation.id && onSelect(conversation.id)}
-            className={`w-full px-3 py-2 text-left hover:bg-secondary/50 transition-colors cursor-pointer group ${
-              conversation.id === currentConversationId ? 'bg-primary/10 border-l-2 border-primary' : ''
-            }`}
-          >
-            {/* Edit mode */}
-            {editingId === conversation.id ? (
-              <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                <input
-                  ref={editInputRef}
-                  type="text"
-                  value={editingTitle}
-                  onChange={(e) => setEditingTitle(e.target.value)}
-                  onKeyDown={handleEditKeyDown}
-                  onBlur={handleSaveEdit}
-                  className="flex-1 text-sm bg-input border border-border rounded px-2 py-1 focus:outline-none focus:border-primary min-w-0"
-                  placeholder={t('Conversation title...')}
-                />
-                <button
-                  onClick={handleSaveEdit}
-                  className="p-1 hover:bg-primary/20 text-primary rounded transition-colors flex-shrink-0"
-                  title={t('Save')}
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                </button>
-              </div>
-            ) : (
-              <>
-                <div className="flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4 text-blue-500 flex-shrink-0" />
-                  <span className="text-sm truncate flex-1">
-                    {conversation.title.slice(0, 20)}
-                    {conversation.title.length > 20 && '...'}
-                  </span>
-                  {/* Action buttons (on hover) */}
-                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0">
-                    {/* Open in tab button - hidden in tabs-only mode since clicking opens in tab */}
-                    {spaceId && layoutMode !== 'tabs-only' && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          openChat(spaceId, conversation.id, conversation.title)
-                        }}
-                        className="p-1 hover:bg-primary/20 text-muted-foreground hover:text-primary rounded transition-colors"
-                        title={t('Open in tab')}
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                    {onRename && (
-                      <button
-                        onClick={(e) => handleStartEdit(e, conversation)}
-                        className="p-1 hover:bg-primary/20 text-muted-foreground hover:text-primary rounded transition-colors"
-                        title={t('Edit title')}
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
-                      </button>
-                    )}
-                    {onDelete && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onDelete(conversation.id)
-                        }}
-                        className="p-1 hover:bg-destructive/20 text-muted-foreground hover:text-destructive rounded transition-colors"
-                        title={t('Delete conversation')}
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {formatDate(conversation.updatedAt)}
-                </p>
-              </>
-            )}
+      <div className="flex-1 overflow-auto px-2 py-1">
+        {conversations.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
+            <div className="w-10 h-10 rounded-xl bg-secondary/50 flex items-center justify-center mb-3">
+              <MessageCircle className="w-5 h-5 text-muted-foreground/40" />
+            </div>
+            <p className="text-xs text-muted-foreground/60">{t('No conversations yet')}</p>
           </div>
-        ))}
+        ) : (
+          <div className="space-y-0.5">
+            {conversations.map((conversation) => (
+              <div
+                key={conversation.id}
+                onClick={() => editingId !== conversation.id && onSelect(conversation.id)}
+                className={`
+                  w-full px-3 py-2.5 rounded-xl text-left transition-all duration-200 cursor-pointer group relative
+                  ${conversation.id === currentConversationId
+                    ? 'bg-primary/10'
+                    : 'hover:bg-secondary/50'
+                  }
+                `}
+              >
+                {/* Selection indicator */}
+                {conversation.id === currentConversationId && (
+                  <div className="absolute left-0.5 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-primary rounded-full" />
+                )}
+
+                {/* Edit mode */}
+                {editingId === conversation.id ? (
+                  <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      ref={editInputRef}
+                      type="text"
+                      value={editingTitle}
+                      onChange={(e) => setEditingTitle(e.target.value)}
+                      onKeyDown={handleEditKeyDown}
+                      onBlur={handleSaveEdit}
+                      className="flex-1 text-sm bg-input border border-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 min-w-0 transition-all"
+                      placeholder={t('Conversation title...')}
+                    />
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`text-sm truncate flex-1 ${
+                        conversation.id === currentConversationId ? 'font-medium text-foreground' : 'text-foreground/80'
+                      }`}>
+                        {conversation.title.slice(0, 24)}
+                        {conversation.title.length > 24 && '...'}
+                      </span>
+                      <span className="text-[11px] text-muted-foreground/50 flex-shrink-0 tabular-nums">
+                        {formatDate(conversation.updatedAt)}
+                      </span>
+                    </div>
+
+                    {/* Preview text */}
+                    {conversation.preview && (
+                      <p className="text-xs text-muted-foreground/50 mt-0.5 truncate">
+                        {conversation.preview.slice(0, 40)}
+                      </p>
+                    )}
+
+                    {/* Action buttons (on hover) */}
+                    <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all duration-150">
+                      {spaceId && layoutMode !== 'tabs-only' && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            openChat(spaceId, conversation.id, conversation.title)
+                          }}
+                          className="p-1 hover:bg-secondary rounded-md transition-colors"
+                          title={t('Open in tab')}
+                        >
+                          <ExternalLink className="w-3 h-3 text-muted-foreground" />
+                        </button>
+                      )}
+                      {onRename && (
+                        <button
+                          onClick={(e) => handleStartEdit(e, conversation)}
+                          className="p-1 hover:bg-secondary rounded-md transition-colors"
+                          title={t('Edit title')}
+                        >
+                          <Pencil className="w-3 h-3 text-muted-foreground" />
+                        </button>
+                      )}
+                      {onDelete && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onDelete(conversation.id)
+                          }}
+                          className="p-1 hover:bg-destructive/15 rounded-md transition-colors"
+                          title={t('Delete conversation')}
+                        >
+                          <Trash2 className="w-3 h-3 text-destructive/70" />
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Skills & Agents panel */}
-      <div className="p-2 border-t border-border/50 space-y-2">
+      {/* Skills & Agents panels */}
+      <div className="p-2 border-t border-border/30 space-y-1.5">
         <SkillsPanel
           workDir={workDir}
           onSelectSkill={onSelectSkill}
@@ -272,22 +304,14 @@ export function ConversationList({
         )}
       </div>
 
-      {/* New conversation button */}
-      <div className="p-2 border-t border-border">
-        <button
-          onClick={onNew}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm text-primary hover:bg-primary/10 rounded-lg transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          {t('New conversation')}
-        </button>
-      </div>
-
-      {/* Drag handle - on right side */}
+      {/* Drag handle */}
       <div
-        className={`absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary/50 transition-colors z-20 ${
-          isDragging ? 'bg-primary/50' : ''
-        }`}
+        className={`
+          absolute right-0 top-0 bottom-0 w-1 cursor-col-resize z-20
+          transition-colors duration-150
+          hover:bg-primary/30
+          ${isDragging ? 'bg-primary/30' : ''}
+        `}
         onMouseDown={handleMouseDown}
         title={t('Drag to resize width')}
       />

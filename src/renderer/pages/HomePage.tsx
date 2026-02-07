@@ -1,5 +1,12 @@
 /**
- * Home Page - Space list view
+ * Home Page - Apple-inspired Space Selection
+ *
+ * Design philosophy:
+ * - Liquid Glass aesthetic with subtle depth and translucency
+ * - Ambient background orbs for visual richness
+ * - Clean hierarchy with generous whitespace
+ * - Smooth, spring-based animations
+ * - Refined glass cards with light/shadow interplay
  */
 
 import { useEffect, useState } from 'react'
@@ -18,7 +25,7 @@ import {
 } from '../components/icons/ToolIcons'
 import { Header } from '../components/layout/Header'
 import { SpaceGuide } from '../components/space/SpaceGuide'
-import { Monitor } from 'lucide-react'
+import { Monitor, ArrowRight, X } from 'lucide-react'
 import { api } from '../api'
 import { useTranslation } from '../i18n'
 
@@ -63,7 +70,7 @@ export function HomePage() {
 
   // Handle folder selection
   const handleSelectFolder = async () => {
-    if (isWebMode) return // Disabled in web mode
+    if (isWebMode) return
     const res = await api.selectFolder()
     if (res.success && res.data) {
       setCustomPath(res.data as string)
@@ -80,7 +87,7 @@ export function HomePage() {
     setCustomPath(null)
   }
 
-  // Handle space click - no reset needed, SpacePage handles its own state
+  // Handle space click
   const handleSpaceClick = (space: Space) => {
     setCurrentSpace(space)
     setView('space')
@@ -113,11 +120,9 @@ export function HomePage() {
   const handleDeleteSpace = async (e: React.MouseEvent, spaceId: string) => {
     e.stopPropagation()
 
-    // Find the space to check if it's a custom path
     const space = spaces.find(s => s.id === spaceId)
     if (!space) return
 
-    // Check if it's a custom path (not under default spaces directory)
     const isCustomPath = !space.path.includes('/.halo/spaces/')
 
     const message = isCustomPath
@@ -129,7 +134,7 @@ export function HomePage() {
     }
   }
 
-  // Handle edit space - open dialog
+  // Handle edit space
   const handleEditSpace = (e: React.MouseEvent, space: Space) => {
     e.stopPropagation()
     setEditingSpace(space)
@@ -173,181 +178,236 @@ export function HomePage() {
   }
 
   return (
-    <div className="h-full w-full flex flex-col">
-      {/* Header - cross-platform support */}
+    <div className="h-full w-full flex flex-col relative">
+      {/* Ambient background orbs */}
+      <div className="ambient-bg">
+        <div className="ambient-orb ambient-orb-1" />
+        <div className="ambient-orb ambient-orb-2" />
+        <div className="ambient-orb ambient-orb-3" />
+      </div>
+
+      {/* Header */}
       <Header
         left={
           <>
-            <div className="w-[22px] h-[22px] rounded-full border-2 border-primary/60 flex items-center justify-center">
-              <div className="w-3 h-3 rounded-full bg-gradient-to-br from-primary/30 to-transparent" />
+            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary/50 to-primary/20 flex items-center justify-center">
+              <div className="w-2.5 h-2.5 rounded-full bg-primary/80" />
             </div>
-            <span className="text-sm font-medium">Halo</span>
+            <span className="text-sm font-semibold tracking-tight">Halo</span>
           </>
         }
         right={
           <button
             onClick={() => setView('settings')}
-            className="p-1.5 hover:bg-secondary rounded-lg transition-colors"
+            className="p-2 rounded-xl hover:bg-secondary/80 transition-all duration-200 group"
           >
-            <Settings className="w-5 h-5" />
+            <Settings className="w-[18px] h-[18px] text-muted-foreground group-hover:text-foreground transition-colors" />
           </button>
         }
       />
 
       {/* Content */}
-      <main className="flex-1 overflow-auto p-6">
-        {/* Halo Space Card */}
-        {haloSpace && (
-          <div
-            data-onboarding="halo-space"
-            onClick={() => handleSpaceClick(haloSpace)}
-            className="halo-space-card p-6 rounded-xl cursor-pointer mb-8 animate-fade-in"
-          >
-            <div className="flex items-center gap-3">
-              <Sparkles className="w-6 h-6 text-primary" />
-              <div>
-                <h2 className="text-lg font-medium">{t('Enter Halo')}</h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {t('Aimless time, ideas will crystallize here')}
-                </p>
-                {(haloSpace.stats.artifactCount > 0 || haloSpace.stats.conversationCount > 0) && (
-                  <p className="text-xs text-muted-foreground mt-2">
+      <main className="flex-1 overflow-auto relative z-10">
+        <div className="max-w-2xl mx-auto px-6 py-8">
+
+          {/* Hero - Halo Space Card */}
+          {haloSpace && (
+            <div
+              data-onboarding="halo-space"
+              onClick={() => handleSpaceClick(haloSpace)}
+              className="halo-space-card rounded-2xl p-7 cursor-pointer mb-10 stagger-item"
+              style={{ animationDelay: '0ms' }}
+            >
+              <div className="flex items-center justify-between relative z-10">
+                <div className="flex items-center gap-4">
+                  <div className="w-11 h-11 rounded-2xl bg-primary/15 flex items-center justify-center">
+                    <Sparkles className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold tracking-tight">{t('Enter Halo')}</h2>
+                    <p className="text-sm text-muted-foreground mt-0.5 leading-relaxed">
+                      {t('Aimless time, ideas will crystallize here')}
+                    </p>
+                  </div>
+                </div>
+                <ArrowRight className="w-5 h-5 text-primary/50" />
+              </div>
+              {(haloSpace.stats.artifactCount > 0 || haloSpace.stats.conversationCount > 0) && (
+                <div className="mt-4 pt-4 border-t border-primary/10 relative z-10">
+                  <p className="text-xs text-muted-foreground">
                     {t('{{count}} artifacts · {{conversations}} conversations', {
                       count: haloSpace.stats.artifactCount,
                       conversations: haloSpace.stats.conversationCount
                     })}
                   </p>
-                )}
-              </div>
+                </div>
+              )}
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Spaces Section */}
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-sm font-medium text-muted-foreground">{t('Dedicated Spaces')}</h3>
-          <button
-            onClick={() => setShowCreateDialog(true)}
-            className="flex items-center gap-1 px-3 py-1 text-sm text-primary hover:bg-primary/10 rounded-lg transition-colors"
+          {/* Spaces Section Header */}
+          <div
+            className="mb-5 flex items-center justify-between stagger-item"
+            style={{ animationDelay: '60ms' }}
           >
-            <Plus className="w-4 h-4" />
-            {t('New')}
-          </button>
-        </div>
-
-        {/* Space Guide - always visible */}
-        <SpaceGuide />
-
-        {spaces.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground">
-            <p className="text-sm">{t('No dedicated spaces yet')}</p>
+            <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              {t('Dedicated Spaces')}
+            </h3>
+            <button
+              onClick={() => setShowCreateDialog(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-primary hover:bg-primary/10 rounded-xl transition-all duration-200 font-medium"
+            >
+              <Plus className="w-4 h-4" />
+              {t('New')}
+            </button>
           </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-4">
-            {spaces.map((space) => (
-              <div
-                key={space.id}
-                onClick={() => handleSpaceClick(space)}
-                className="space-card p-4 group animate-fade-in"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2">
-                    <SpaceIcon iconId={space.icon} size={20} />
-                    <span className="font-medium truncate">{space.name}</span>
+
+          {/* Space Guide */}
+          <div className="stagger-item" style={{ animationDelay: '90ms' }}>
+            <SpaceGuide />
+          </div>
+
+          {/* Space Grid */}
+          {spaces.length === 0 ? (
+            <div
+              className="text-center py-16 stagger-item"
+              style={{ animationDelay: '120ms' }}
+            >
+              <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-secondary/60 flex items-center justify-center">
+                <FolderOpen className="w-6 h-6 text-muted-foreground/50" />
+              </div>
+              <p className="text-sm text-muted-foreground">{t('No dedicated spaces yet')}</p>
+              <p className="text-xs text-muted-foreground/60 mt-1">
+                {t('Create one to organize your projects')}
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {spaces.map((space, index) => (
+                <div
+                  key={space.id}
+                  onClick={() => handleSpaceClick(space)}
+                  className="space-card p-5 group stagger-item"
+                  style={{ animationDelay: `${120 + index * 50}ms` }}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-secondary/60 flex items-center justify-center flex-shrink-0">
+                        <SpaceIcon iconId={space.icon} size={20} />
+                      </div>
+                      <div className="min-w-0">
+                        <span className="font-medium text-[15px] truncate block">{space.name}</span>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {formatTimeAgo(space.updatedAt)}{t('active')}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all duration-200 flex-shrink-0 ml-2">
+                      <button
+                        onClick={(e) => handleEditSpace(e, space)}
+                        className="p-1.5 hover:bg-secondary rounded-lg transition-all"
+                        title={t('Edit Space')}
+                      >
+                        <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+                      </button>
+                      <button
+                        onClick={(e) => handleDeleteSpace(e, space.id)}
+                        className="p-1.5 hover:bg-destructive/15 rounded-lg transition-all"
+                        title={t('Delete space')}
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-destructive/70" />
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                    <button
-                      onClick={(e) => handleEditSpace(e, space)}
-                      className="p-1 hover:bg-secondary rounded transition-all"
-                      title={t('Edit Space')}
-                    >
-                      <Pencil className="w-4 h-4 text-muted-foreground" />
-                    </button>
-                    <button
-                      onClick={(e) => handleDeleteSpace(e, space.id)}
-                      className="p-1 hover:bg-destructive/20 rounded transition-all"
-                      title={t('Delete space')}
-                    >
-                      <Trash2 className="w-4 h-4 text-destructive" />
-                    </button>
+                  <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground/70">
+                    <span>{space.stats.artifactCount} {t('artifacts')}</span>
+                    <span className="w-0.5 h-0.5 rounded-full bg-muted-foreground/30" />
+                    <span>{space.stats.conversationCount} {t('conversations')}</span>
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  {t('{{count}} artifacts · {{conversations}} conversations', {
-                    count: space.stats.artifactCount,
-                    conversations: space.stats.conversationCount
-                  })}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {formatTimeAgo(space.updatedAt)}{t('active')}
-                </p>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </div>
       </main>
 
       {/* Create Space Dialog */}
       {showCreateDialog && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md animate-fade-in">
-            <h2 className="text-lg font-medium mb-4">{t('Create Dedicated Space')}</h2>
+        <div className="fixed inset-0 glass-overlay flex items-center justify-center z-50 animate-fade-in">
+          <div
+            className="glass-dialog p-7 w-full max-w-md mx-4 animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Dialog header */}
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-semibold tracking-tight">{t('Create Dedicated Space')}</h2>
+              <button
+                onClick={resetDialog}
+                className="p-1.5 rounded-lg hover:bg-secondary transition-colors"
+              >
+                <X className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </div>
 
             {/* Space name */}
-            <div className="mb-4">
-              <label className="block text-sm text-muted-foreground mb-2">{t('Space Name')}</label>
+            <div className="mb-5">
+              <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">
+                {t('Space Name')}
+              </label>
               <input
                 type="text"
                 value={newSpaceName}
                 onChange={(e) => setNewSpaceName(e.target.value)}
                 placeholder={t('My Project')}
-                className="w-full px-4 py-2 bg-input rounded-lg border border-border focus:border-primary focus:outline-none transition-colors"
+                className="w-full px-4 py-2.5 input-apple text-sm"
                 autoFocus
               />
             </div>
 
             {/* Icon select */}
-            <div className="mb-4">
-              <label className="block text-sm text-muted-foreground mb-2">{t('Icon (optional)')}</label>
-              <div className="flex flex-wrap gap-2">
+            <div className="mb-5">
+              <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">
+                {t('Icon (optional)')}
+              </label>
+              <div className="flex flex-wrap gap-1.5">
                 {SPACE_ICONS.map((iconId) => (
                   <button
                     key={iconId}
                     onClick={() => setNewSpaceIcon(iconId)}
-                    className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all ${
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 ${
                       newSpaceIcon === iconId
-                        ? 'bg-primary/20 border-2 border-primary'
-                        : 'bg-secondary hover:bg-secondary/80'
+                        ? 'bg-primary/15 ring-2 ring-primary/40 scale-105'
+                        : 'bg-secondary/50 hover:bg-secondary/80'
                     }`}
                   >
-                    <SpaceIcon iconId={iconId} size={20} />
+                    <SpaceIcon iconId={iconId} size={18} />
                   </button>
                 ))}
               </div>
             </div>
 
             {/* Storage location */}
-            <div className="mb-6">
-              <label className="block text-sm text-muted-foreground mb-2">{t('Storage Location')}</label>
+            <div className="mb-7">
+              <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">
+                {t('Storage Location')}
+              </label>
               <div className="space-y-2">
                 {/* Default location */}
                 <label
-                  className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                  className={`flex items-center gap-3 p-3.5 rounded-xl border cursor-pointer transition-all duration-200 ${
                     !useCustomPath
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border hover:border-muted-foreground/50'
+                      ? 'border-primary/30 bg-primary/5'
+                      : 'border-border hover:border-muted-foreground/30'
                   }`}
                 >
-                  <input
-                    type="radio"
-                    name="pathType"
-                    checked={!useCustomPath}
-                    onChange={() => setUseCustomPath(false)}
-                    className="w-4 h-4 text-primary"
-                  />
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                    !useCustomPath ? 'border-primary' : 'border-muted-foreground/40'
+                  }`}>
+                    {!useCustomPath && <div className="w-2 h-2 rounded-full bg-primary" />}
+                  </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm">{t('Default Location')}</div>
-                    <div className="text-xs text-muted-foreground truncate">
+                    <div className="text-sm font-medium">{t('Default Location')}</div>
+                    <div className="text-xs text-muted-foreground truncate mt-0.5">
                       {shortenPath(defaultPath)}/{newSpaceName || '...'}
                     </div>
                   </div>
@@ -355,35 +415,32 @@ export function HomePage() {
 
                 {/* Custom location */}
                 <label
-                  className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${
+                  className={`flex items-center gap-3 p-3.5 rounded-xl border transition-all duration-200 ${
                     isWebMode
-                      ? 'cursor-not-allowed opacity-60 border-border'
+                      ? 'cursor-not-allowed opacity-50 border-border'
                       : useCustomPath
-                        ? 'cursor-pointer border-primary bg-primary/5'
-                        : 'cursor-pointer border-border hover:border-muted-foreground/50'
+                        ? 'cursor-pointer border-primary/30 bg-primary/5'
+                        : 'cursor-pointer border-border hover:border-muted-foreground/30'
                   }`}
                 >
-                  <input
-                    type="radio"
-                    name="pathType"
-                    checked={useCustomPath}
-                    onChange={() => !isWebMode && setUseCustomPath(true)}
-                    disabled={isWebMode}
-                    className="w-4 h-4 text-primary"
-                  />
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                    useCustomPath ? 'border-primary' : 'border-muted-foreground/40'
+                  }`}>
+                    {useCustomPath && <div className="w-2 h-2 rounded-full bg-primary" />}
+                  </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm">{t('Custom Folder')}</div>
+                    <div className="text-sm font-medium">{t('Custom Folder')}</div>
                     {isWebMode ? (
-                      <div className="text-xs text-muted-foreground flex items-center gap-1">
+                      <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                         <Monitor className="w-3 h-3" />
                         {t('Please select folder in desktop app')}
                       </div>
                     ) : customPath ? (
-                      <div className="text-xs text-muted-foreground truncate">
+                      <div className="text-xs text-muted-foreground truncate mt-0.5">
                         {shortenPath(customPath)}
                       </div>
                     ) : (
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-xs text-muted-foreground mt-0.5">
                         {t('Select an existing project or folder')}
                       </div>
                     )}
@@ -395,7 +452,7 @@ export function HomePage() {
                         e.preventDefault()
                         handleSelectFolder()
                       }}
-                      className="px-3 py-1.5 text-xs bg-secondary hover:bg-secondary/80 rounded-md flex items-center gap-1.5 transition-colors"
+                      className="px-3 py-1.5 text-xs bg-secondary hover:bg-secondary/80 rounded-lg flex items-center gap-1.5 transition-colors font-medium"
                     >
                       <FolderOpen className="w-3.5 h-3.5" />
                       {t('Browse')}
@@ -406,17 +463,17 @@ export function HomePage() {
             </div>
 
             {/* Actions */}
-            <div className="flex justify-end gap-3">
+            <div className="flex justify-end gap-2.5">
               <button
                 onClick={resetDialog}
-                className="px-4 py-2 text-muted-foreground hover:bg-secondary rounded-lg transition-colors"
+                className="px-5 py-2.5 btn-ghost text-sm font-medium"
               >
                 {t('Cancel')}
               </button>
               <button
                 onClick={handleCreateSpace}
                 disabled={!newSpaceName.trim() || (useCustomPath && !customPath)}
-                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-5 py-2.5 btn-apple text-sm"
               >
                 {t('Create')}
               </button>
@@ -427,55 +484,71 @@ export function HomePage() {
 
       {/* Edit Space Dialog */}
       {editingSpace && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md animate-fade-in">
-            <h2 className="text-lg font-medium mb-4">{t('Edit Space')}</h2>
+        <div className="fixed inset-0 glass-overlay flex items-center justify-center z-50 animate-fade-in">
+          <div
+            className="glass-dialog p-7 w-full max-w-md mx-4 animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Dialog header */}
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-semibold tracking-tight">{t('Edit Space')}</h2>
+              <button
+                onClick={handleCancelEdit}
+                className="p-1.5 rounded-lg hover:bg-secondary transition-colors"
+              >
+                <X className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </div>
 
             {/* Space name */}
-            <div className="mb-4">
-              <label className="block text-sm text-muted-foreground mb-2">{t('Space Name')}</label>
+            <div className="mb-5">
+              <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">
+                {t('Space Name')}
+              </label>
               <input
                 type="text"
                 value={editSpaceName}
                 onChange={(e) => setEditSpaceName(e.target.value)}
                 placeholder={t('My Project')}
-                className="w-full px-4 py-2 bg-input rounded-lg border border-border focus:border-primary focus:outline-none transition-colors"
+                className="w-full px-4 py-2.5 input-apple text-sm"
                 autoFocus
               />
             </div>
 
             {/* Icon select */}
-            <div className="mb-6">
-              <label className="block text-sm text-muted-foreground mb-2">{t('Icon')}</label>
-              <div className="flex flex-wrap gap-2">
+            <div className="mb-7">
+              <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">
+                {t('Icon')}
+              </label>
+              <div className="flex flex-wrap gap-1.5">
                 {SPACE_ICONS.map((iconId) => (
                   <button
                     key={iconId}
                     onClick={() => setEditSpaceIcon(iconId)}
-                    className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all ${
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 ${
                       editSpaceIcon === iconId
-                        ? 'bg-primary/20 border-2 border-primary'
-                        : 'bg-secondary hover:bg-secondary/80'
+                        ? 'bg-primary/15 ring-2 ring-primary/40 scale-105'
+                        : 'bg-secondary/50 hover:bg-secondary/80'
                     }`}
                   >
-                    <SpaceIcon iconId={iconId} size={20} />
+                    <SpaceIcon iconId={iconId} size={18} />
                   </button>
                 ))}
               </div>
             </div>
 
             {/* Actions */}
-            <div className="flex justify-end gap-3">
+            <div className="flex justify-end gap-2.5">
               <button
                 onClick={handleCancelEdit}
-                className="px-4 py-2 text-muted-foreground hover:bg-secondary rounded-lg transition-colors"
+                className="px-5 py-2.5 btn-ghost text-sm font-medium"
               >
                 {t('Cancel')}
               </button>
               <button
                 onClick={handleSaveEdit}
                 disabled={!editSpaceName.trim()}
-                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-5 py-2.5 btn-apple text-sm"
               >
                 {t('Save')}
               </button>

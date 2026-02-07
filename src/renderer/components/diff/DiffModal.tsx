@@ -113,14 +113,14 @@ export function DiffModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-background/80 backdrop-blur-sm animate-fade-in"
+        className="absolute inset-0 glass-overlay animate-fade-in"
         onClick={onClose}
       />
 
       {/* Modal content */}
-      <div className="relative w-[90vw] max-w-4xl h-[80vh] bg-card border border-border rounded-xl shadow-2xl flex flex-col animate-scale-in overflow-hidden">
+      <div className="relative w-[90vw] max-w-4xl h-[80vh] glass-dialog flex flex-col animate-scale-in overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 bg-muted/30 shrink-0">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border/30 bg-secondary/10 shrink-0">
           {/* Left: File info */}
           <div className="flex items-center gap-3 min-w-0">
             {/* File icon */}
@@ -255,7 +255,7 @@ export function DiffModal({
         </div>
 
         {/* Footer hint */}
-        <div className="px-4 py-2 border-t border-border/30 bg-muted/20 text-xs text-muted-foreground/50 shrink-0">
+        <div className="px-4 py-2 border-t border-border/15 bg-secondary/10 text-[11px] text-muted-foreground/40 shrink-0">
           <span>{t('Esc to close')}</span>
           {allFiles.length > 1 && (
             <span className="ml-4">{t('← → to switch files')}</span>

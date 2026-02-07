@@ -47,72 +47,50 @@ interface ThoughtProcessProps {
   defaultExpanded?: boolean
 }
 
-// Get icon component for thought type
-function getThoughtIcon(type: Thought['type'], toolName?: string) {
-  switch (type) {
-    case 'thinking':
-      return Lightbulb
-    case 'tool_use':
-      return toolName ? getToolIcon(toolName) : Braces
-    case 'tool_result':
-      return CheckCircle2
-    case 'text':
-      return MessageSquare
-    case 'system':
-      return Info
-    case 'error':
-      return XCircle
-    case 'result':
-      return Check
-    default:
-      return Zap
-  }
+// Thought type to icon mapping
+const THOUGHT_ICONS: Record<string, typeof Zap> = {
+  thinking: Lightbulb,
+  tool_result: CheckCircle2,
+  text: MessageSquare,
+  system: Info,
+  error: XCircle,
+  result: Check,
 }
 
-// Get color class for thought type
+function getThoughtIcon(type: Thought['type'], toolName?: string) {
+  if (type === 'tool_use') return toolName ? getToolIcon(toolName) : Braces
+  return THOUGHT_ICONS[type] ?? Zap
+}
+
+// Thought type to color class mapping
+const THOUGHT_COLORS: Record<string, string> = {
+  thinking: 'text-blue-400',
+  tool_use: 'text-amber-400',
+  tool_result: 'text-green-400',
+  text: 'text-foreground',
+  system: 'text-muted-foreground',
+  error: 'text-destructive',
+  result: 'text-primary',
+}
+
 function getThoughtColor(type: Thought['type'], isError?: boolean): string {
   if (isError) return 'text-destructive'
-
-  switch (type) {
-    case 'thinking':
-      return 'text-blue-400'
-    case 'tool_use':
-      return 'text-amber-400'
-    case 'tool_result':
-      return 'text-green-400'
-    case 'text':
-      return 'text-foreground'
-    case 'system':
-      return 'text-muted-foreground'
-    case 'error':
-      return 'text-destructive'
-    case 'result':
-      return 'text-primary'
-    default:
-      return 'text-muted-foreground'
-  }
+  return THOUGHT_COLORS[type] ?? 'text-muted-foreground'
 }
 
-// Get label for thought type - returns translation key
+// Thought type to translation key mapping
+const THOUGHT_LABEL_KEYS: Record<string, string> = {
+  thinking: 'Thinking',
+  tool_use: 'Tool call',
+  tool_result: 'Tool result',
+  text: 'AI',
+  system: 'System',
+  error: 'Error',
+  result: 'Complete',
+}
+
 function getThoughtLabelKey(type: Thought['type']): string {
-  switch (type) {
-    case 'thinking':
-      return 'Thinking'
-    case 'tool_use':
-      return 'Tool call'
-    case 'tool_result':
-      return 'Tool result'
-    case 'text':
-      return 'AI'
-    case 'system':
-      return 'System'
-    case 'error':
-      return 'Error'
-    case 'result':
-      return 'Complete'
-    default:
-      return 'AI'
-  }
+  return THOUGHT_LABEL_KEYS[type] ?? 'AI'
 }
 
 // Get human-friendly action summary for collapsed header (isThinking=true only)
@@ -209,25 +187,25 @@ const ThoughtItem = memo(function ThoughtItem({
     <div className="flex gap-3 group animate-fade-in">
       {/* Timeline line */}
       <div className="flex flex-col items-center">
-        <div className={`w-7 h-7 rounded-full flex items-center justify-center ${
-          thought.isError ? 'bg-destructive/20' : 'bg-primary/10'
+        <div className={`w-6 h-6 rounded-lg flex items-center justify-center ${
+          thought.isError ? 'bg-destructive/15' : 'bg-secondary/60'
         } ${color}`}>
-          <Icon size={14} />
+          <Icon size={12} />
         </div>
         {!isLast && (
-          <div className="w-0.5 flex-1 bg-border/30 mt-1" />
+          <div className="w-px flex-1 bg-border/20 mt-1" />
         )}
       </div>
 
       {/* Content */}
-      <div className="flex-1 pb-4 min-w-0">
+      <div className="flex-1 pb-3.5 min-w-0">
         {/* Header */}
-        <div className="flex items-center gap-2 mb-1">
-          <span className={`text-xs font-medium ${color}`}>
+        <div className="flex items-center gap-2 mb-0.5">
+          <span className={`text-[11px] font-medium ${color}`}>
             {t(getThoughtLabelKey(thought.type))}
-            {thought.toolName && ` - ${thought.toolName}`}
+            {thought.toolName && ` · ${thought.toolName}`}
           </span>
-          <span className="text-xs text-muted-foreground/50">
+          <span className="text-[10px] text-muted-foreground/30 tabular-nums">
             {new Date(thought.timestamp).toLocaleTimeString('zh-CN', {
               hour: '2-digit',
               minute: '2-digit',
@@ -235,12 +213,12 @@ const ThoughtItem = memo(function ThoughtItem({
             })}
           </span>
           {thought.duration && (
-            <span className="text-xs text-muted-foreground/40">
-              ({(thought.duration / 1000).toFixed(1)}s)
+            <span className="text-[10px] text-muted-foreground/25 tabular-nums">
+              {(thought.duration / 1000).toFixed(1)}s
             </span>
           )}
           {thought.status === 'running' && (
-            <Loader2 size={12} className="animate-spin text-primary" />
+            <Loader2 size={10} className="animate-spin text-primary" />
           )}
         </div>
 
@@ -268,7 +246,7 @@ const ThoughtItem = memo(function ThoughtItem({
 
         {/* Tool input details */}
         {thought.type === 'tool_use' && thought.toolInput && isExpanded && (
-          <pre className="mt-2 p-2 rounded bg-muted/30 text-xs text-muted-foreground overflow-x-auto">
+          <pre className="mt-2 p-2.5 rounded-lg bg-secondary/20 text-[11px] text-muted-foreground/70 overflow-x-auto font-mono">
             {JSON.stringify(thought.toolInput, null, 2)}
           </pre>
         )}
@@ -322,10 +300,10 @@ const ParallelGroupView = memo(function ParallelGroupView({
             <div
               key={thought.id}
               className={`
-                p-2 rounded-lg border text-xs
-                ${status === 'running' ? 'border-primary/30 bg-primary/5' : ''}
-                ${status === 'success' ? 'border-green-500/30 bg-green-500/5' : ''}
-                ${status === 'error' ? 'border-destructive/30 bg-destructive/5' : ''}
+                p-2.5 rounded-xl border text-xs transition-all duration-200
+                ${status === 'running' ? 'border-primary/20 bg-primary/[0.04]' : ''}
+                ${status === 'success' ? 'border-halo-success/20 bg-halo-success/[0.04]' : ''}
+                ${status === 'error' ? 'border-destructive/20 bg-destructive/[0.04]' : ''}
               `}
             >
               <div className="flex items-center gap-2">
@@ -454,39 +432,39 @@ export function ThoughtProcess({
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           className={`
-            flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs
+            flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs
             transition-all duration-200 w-full
             ${isExpanded
-              ? 'bg-primary/10 border border-primary/30'
-              : 'bg-muted/30 hover:bg-muted/50 border border-transparent'
+              ? 'bg-secondary/50'
+              : 'bg-secondary/20 hover:bg-secondary/40'
             }
           `}
         >
           {/* Expand icon */}
           <ChevronDown
-            size={12}
-            className={`text-muted-foreground transition-transform duration-200 ${isExpanded ? 'rotate-180' : '-rotate-90'}`}
+            size={11}
+            className={`text-muted-foreground/50 transition-transform duration-200 ${isExpanded ? 'rotate-0' : '-rotate-90'}`}
           />
 
           {/* Icon */}
           {errorCount > 0 ? (
-            <XCircle size={14} className="text-destructive" />
+            <XCircle size={13} className="text-destructive" />
           ) : (
-            <Lightbulb size={14} className="text-primary" />
+            <Lightbulb size={13} className="text-primary/60" />
           )}
 
           {/* Label */}
-          <span className="text-muted-foreground">{t('Thought process')}</span>
+          <span className="text-muted-foreground/60">{t('Thought process')}</span>
 
           {/* Stats: time only */}
-          <div className="flex items-center gap-1.5 text-muted-foreground/60">
+          <div className="flex items-center gap-1.5 text-muted-foreground/40 tabular-nums">
             <span>{duration.toFixed(1)}s</span>
           </div>
         </button>
 
         {/* Expanded content */}
         {isExpanded && (
-          <div className="mt-1 px-3 py-2 bg-muted/20 rounded-lg border border-border/30 animate-slide-down">
+          <div className="mt-1.5 px-3 py-2.5 bg-secondary/15 rounded-xl animate-slide-down">
             {hasDisplayContent && (
               <div
                 ref={contentRef}
@@ -526,30 +504,30 @@ export function ThoughtProcess({
     <div className="animate-fade-in mb-4">
       <div
         className={`
-          relative rounded-xl border overflow-hidden transition-all duration-300
+          relative rounded-2xl border overflow-hidden transition-all duration-300
           ${isThinking
-            ? 'border-primary/40 bg-primary/5'
+            ? 'border-primary/25 bg-primary/[0.03]'
             : errorCount > 0
-              ? 'border-destructive/30 bg-destructive/5'
-              : 'border-border/50 bg-card/30'
+              ? 'border-destructive/20 bg-destructive/[0.03]'
+              : 'border-border/30 bg-secondary/10'
           }
         `}
       >
         {/* Header */}
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/5 transition-colors"
+          className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-secondary/20 transition-colors duration-200"
         >
           {isThinking ? (
-            <Loader2 size={16} className="text-primary animate-spin" />
+            <Loader2 size={14} className="text-primary animate-spin" />
           ) : (
             <CheckCircle2
-              size={16}
-              className={errorCount > 0 ? 'text-destructive' : 'text-primary'}
+              size={14}
+              className={errorCount > 0 ? 'text-destructive/70' : 'text-halo-success/70'}
             />
           )}
 
-          <span className={`text-sm font-medium ${isThinking ? 'text-primary' : 'text-foreground'}`}>
+          <span className={`text-[13px] font-medium ${isThinking ? 'text-primary' : 'text-foreground/80'}`}>
             {isThinking ? (() => {
               const data = getActionSummaryData(thoughts)
               return t(data.key, data.params)
@@ -557,7 +535,7 @@ export function ThoughtProcess({
           </span>
 
           {!isThinking && (
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground/60">
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/40 tabular-nums">
               <TimerDisplay startTime={startTime} isThinking={isThinking} />
             </div>
           )}
@@ -565,14 +543,14 @@ export function ThoughtProcess({
           <div className="flex-1" />
 
           <ChevronDown
-            size={16}
-            className={`text-muted-foreground transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+            size={14}
+            className={`text-muted-foreground/40 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
           />
         </button>
 
         {/* Content */}
         {isExpanded && (
-          <div className="border-t border-border/30">
+          <div className="border-t border-border/15">
             {hasDisplayContent && (
               <div
                 ref={contentRef}

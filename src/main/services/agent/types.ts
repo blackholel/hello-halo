@@ -68,6 +68,7 @@ export interface AgentRequest {
   images?: ImageAttachment[]
   aiBrowserEnabled?: boolean
   thinkingEnabled?: boolean
+  planEnabled?: boolean
   model?: string
   canvasContext?: CanvasContext
   fileContexts?: FileContextAttachment[]
@@ -150,7 +151,8 @@ export interface SessionConfig {
   skillsLazyLoad: boolean
   enabledPluginMcpsHash?: string
 }
-export interface V2SessionInfo {
+
+export interface V2SessionInfo {
   session: V2SDKSession
   spaceId: string
   conversationId: string

@@ -59,20 +59,20 @@ export const SkillCard = memo(function SkillCard({
 
   return (
     <div className={`
-      animate-fade-in mb-3 rounded-xl border overflow-hidden
+      animate-fade-in mb-3 rounded-2xl border overflow-hidden transition-all duration-300
       ${statusColor}
     `}>
       {/* Left color indicator + content */}
       <div className="flex">
         {/* Left color bar */}
-        <div className={`w-1 ${leftBorderColor} flex-shrink-0`} />
+        <div className={`w-0.5 ${leftBorderColor} flex-shrink-0`} />
 
         {/* Main content */}
         <div className="flex-1 min-w-0">
           {/* Header */}
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-white/5 transition-colors"
+            className="w-full flex items-center gap-2 px-3.5 py-2.5 text-left hover:bg-secondary/15 transition-colors duration-200"
           >
             {/* Expand icon */}
             {isExpanded ? (
@@ -128,9 +128,9 @@ export const SkillCard = memo(function SkillCard({
 
        {/* Expanded content */}
           {isExpanded && (
-            <div className="px-3 pb-3 border-t border-border/20">
+            <div className="px-3.5 pb-3 border-t border-border/10">
               {result ? (
-                <div className="mt-2 text-xs text-muted-foreground whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+                <div className="mt-2.5 text-[11px] text-muted-foreground/70 whitespace-pre-wrap break-words max-h-48 overflow-y-auto leading-relaxed">
                   {stripErrorTags(result)}
                 </div>
               ) : isRunning ? (

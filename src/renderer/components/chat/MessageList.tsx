@@ -39,6 +39,7 @@ interface MessageListProps {
   isCompact?: boolean  // Compact mode when Canvas is open
   textBlockVersion?: number  // Increments on each new text block (for StreamingBubble reset)
   workDir?: string  // For skill suggestion card creation
+  onExecutePlan?: (planContent: string) => void  // Callback when "Execute Plan" button is clicked
 }
 
 /**
@@ -270,7 +271,8 @@ export function MessageList({
   error = null,
   isCompact = false,
   textBlockVersion = 0,
-  workDir
+  workDir,
+  onExecutePlan
 }: MessageListProps) {
   const { t } = useTranslation()
 
@@ -370,12 +372,12 @@ export function MessageList({
                   defaultExpanded={false}
                 />
                 {/* Then the message itself (without embedded thoughts) */}
-                <MessageItem message={message} previousCost={previousCost} hideThoughts isInContainer workDir={workDir} />
+                <MessageItem message={message} previousCost={previousCost} hideThoughts isInContainer workDir={workDir} onExecutePlan={onExecutePlan} />
               </div>
             </div>
           )
         }
-        return <MessageItem key={message.id} message={message} previousCost={previousCost} workDir={workDir} />
+        return <MessageItem key={message.id} message={message} previousCost={previousCost} workDir={workDir} onExecutePlan={onExecutePlan} />
       })}
 
       {/* Current generation block: Timeline segments + Streaming content below */}

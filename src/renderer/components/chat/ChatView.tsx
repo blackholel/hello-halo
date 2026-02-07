@@ -228,19 +228,19 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
   // AI Browser state
   const { enabled: aiBrowserEnabled } = useAIBrowserStore()
 
-  // Handle send (with optional images for multi-modal messages, optional thinking mode, optional file contexts)
-  const handleSend = async (content: string, images?: ImageAttachment[], thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[]) => {
+  // Handle send (with optional images for multi-modal messages, optional thinking mode, optional file contexts, optional plan mode)
+  const handleSend = async (content: string, images?: ImageAttachment[], thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[], planEnabled?: boolean) => {
     // In onboarding mode, intercept and play mock response
     if (isOnboarding && currentStep === 'send-message') {
       handleOnboardingSend()
       return
     }
 
-    // Can send if has text OR has images OR has file contexts
-    if ((!content.trim() && (!images || images.length === 0) && (!fileContexts || fileContexts.length === 0)) || isGenerating) return
+    const hasContent = content.trim() || (images && images.length > 0) || (fileContexts && fileContexts.length > 0)
+    if (!hasContent || isGenerating) return
 
-    // Pass both AI Browser and thinking state to sendMessage
-    await sendMessage(content, images, aiBrowserEnabled, thinkingEnabled, fileContexts)
+    // Pass AI Browser, thinking, and plan state to sendMessage
+    await sendMessage(content, images, aiBrowserEnabled, thinkingEnabled, fileContexts, planEnabled)
   }
 
   // Handle stop - stops the current conversation's generation
@@ -248,6 +248,12 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     if (currentConversation) {
       await stopGeneration(currentConversation.id)
     }
+  }
+
+  // Handle "Execute Plan" - sends the plan content as a follow-up message in normal mode
+  const handleExecutePlan = async (planContent: string) => {
+    const executePrompt = `${t('Execute according to the following plan')}:\n\n${planContent}`
+    await sendMessage(executePrompt, undefined, aiBrowserEnabled, false, undefined, false)
   }
 
   // Combine real messages with mock onboarding messages
@@ -325,6 +331,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
                 isCompact={isCompact}
                 textBlockVersion={textBlockVersion}
                 workDir={currentSpace?.path}
+                onExecutePlan={handleExecutePlan}
               />
               <div ref={bottomRef} />
             </>
@@ -385,57 +392,103 @@ function LoadingState() {
   )
 }
 
-// Empty state component - adapts to compact mode
+// Empty state component - Apple-inspired welcome screen
 function EmptyState({ isTemp, isCompact = false }: { isTemp: boolean; isCompact?: boolean }) {
   const { t } = useTranslation()
+
   // Compact mode shows minimal UI
   if (isCompact) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-center px-4">
-        <Sparkles className="w-8 h-8 text-primary/70" />
-        <p className="mt-4 text-sm text-muted-foreground">
+        <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center">
+          <Sparkles className="w-5 h-5 text-primary/70" />
+        </div>
+        <p className="mt-3 text-sm text-muted-foreground">
           {t('Continue the conversation here')}
         </p>
       </div>
     )
   }
 
+  // Capability cards
+  const capabilities = [
+    {
+      icon: '💻',
+      title: t('Programming Development'),
+      desc: t('Write, debug and refactor code'),
+    },
+    {
+      icon: '📄',
+      title: t('File Processing'),
+      desc: t('Create and edit documents'),
+    },
+    {
+      icon: '🔍',
+      title: t('Information Retrieval'),
+      desc: t('Search and analyze data'),
+    },
+    {
+      icon: '✨',
+      title: t('Content Creation'),
+      desc: t('Generate creative content'),
+    },
+  ]
+
   return (
-    <div className="h-full flex flex-col items-center justify-center text-center px-8">
-      {/* Icon */}
-      <Sparkles className="w-12 h-12 text-primary" />
+    <div className="h-full flex flex-col items-center justify-center text-center px-8 relative">
+      {/* Ambient glow behind logo */}
+      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
+
+      {/* Logo */}
+      <div className="relative mb-8 stagger-item" style={{ animationDelay: '0ms' }}>
+        <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center border border-primary/10">
+          <Sparkles className="w-9 h-9 text-primary" />
+        </div>
+        {/* Subtle glow ring */}
+        <div className="absolute -inset-3 rounded-[2rem] bg-primary/5 blur-xl -z-10" />
+      </div>
 
       {/* Title */}
-      <h2 className="mt-6 text-xl font-medium">
-        {t('Halo, not just chat, can help you get things done')}
+      <h2 className="text-2xl font-semibold tracking-tight stagger-item" style={{ animationDelay: '60ms' }}>
+        {isTemp ? 'Halo' : t('Ready to start')}
       </h2>
 
-      {/* Capabilities */}
-      <div className="mt-4 flex flex-wrap justify-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-        <span>{t('Programming Development')}</span>
-        <span className="text-muted-foreground/30">·</span>
-        <span>{t('File Processing')}</span>
-        <span className="text-muted-foreground/30">·</span>
-        <span>{t('Information Retrieval')}</span>
-        <span className="text-muted-foreground/30">·</span>
-        <span>{t('Data Analysis')}</span>
-        <span className="text-muted-foreground/30">·</span>
-        <span>{t('Content Creation')}</span>
-        <span className="text-muted-foreground/30">·</span>
-        <span>{t('Task Automation')}</span>
+      {/* Subtitle */}
+      <p className="mt-2 text-sm text-muted-foreground max-w-sm leading-relaxed stagger-item" style={{ animationDelay: '100ms' }}>
+        {isTemp
+          ? t('Aimless time, ideas will crystallize here')
+          : t('Halo, not just chat, can help you get things done')
+        }
+      </p>
+
+      {/* Capability cards grid */}
+      <div className="mt-8 grid grid-cols-2 gap-3 max-w-md w-full stagger-item" style={{ animationDelay: '160ms' }}>
+        {capabilities.map((cap, i) => (
+          <div
+            key={i}
+            className="glass-card !cursor-default p-4 text-left"
+          >
+            <span className="text-xl">{cap.icon}</span>
+            <h4 className="text-[13px] font-medium mt-2">{cap.title}</h4>
+            <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{cap.desc}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Powered by badge */}
+      <div className="mt-8 stagger-item" style={{ animationDelay: '220ms' }}>
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-secondary/50 border border-border/50">
+          <div className="w-1.5 h-1.5 rounded-full bg-halo-success animate-pulse" />
+          <span className="text-xs text-muted-foreground">
+            {t('Powered by Claude Code with full Agent capabilities')}
+          </span>
+        </div>
       </div>
 
       {/* Permission hint */}
-      <p className="mt-6 text-xs text-muted-foreground/50">
+      <p className="mt-3 text-[11px] text-muted-foreground/40 stagger-item" style={{ animationDelay: '260ms' }}>
         {t('Halo has full access to the current space')}
       </p>
-
-      {/* Powered by badge */}
-      <div className="mt-3 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20">
-        <span className="text-xs text-primary">
-          {t('Powered by Claude Code with full Agent capabilities')}
-        </span>
-      </div>
     </div>
   )
 }

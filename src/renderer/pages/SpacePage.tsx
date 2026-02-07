@@ -88,8 +88,8 @@ export function SpacePage() {
   const currentConversation = getCurrentConversation()
   const currentConversationId = getCurrentConversationId()
 
-  // Show conversation list for non-temp spaces
-  const [showConversationList, setShowConversationList] = useState(false)
+  // Show conversation list sidebar - default to true for better UX
+  const [showConversationList, setShowConversationList] = useState(true)
 
   // Skills panel state
   const [selectedSkill, setSelectedSkill] = useState<SkillDefinition | null>(null)
@@ -263,6 +263,8 @@ export function SpacePage() {
   }, [currentSpace?.id, isCanvasOpen])
 
   // Initialize space when entering
+  // On first entry: load conversations but don't auto-select (show welcome state)
+  // Only auto-select if user previously had a conversation selected
   useEffect(() => {
     if (!currentSpace) return
 
@@ -273,17 +275,16 @@ export function SpacePage() {
     const initSpace = async () => {
       await loadConversations(currentSpace.id)
 
-      // After loading, check if we need to select or create a conversation
+      // After loading, check state
       const store = useChatStore.getState()
       const spaceState = store.getSpaceState(currentSpace.id)
 
       if (spaceState.conversations.length > 0) {
-        // If no conversation selected, select the first one
-        if (!spaceState.currentConversationId) {
-          selectConversation(spaceState.conversations[0].id)
-        }
+        // If a conversation was previously selected (returning to space), keep it
+        // Otherwise, don't auto-select - show the welcome state instead
+        // This gives a clean entry experience
       } else {
-        // No conversations exist - create a new one
+        // No conversations exist - create a new one (will show empty/welcome state)
         await createConversation(currentSpace.id)
       }
     }
@@ -445,19 +446,23 @@ export function SpacePage() {
           <>
             <button
               onClick={handleBack}
-              className="p-1.5 hover:bg-secondary rounded-lg transition-colors"
+              className="p-1.5 rounded-xl hover:bg-secondary/80 transition-all duration-200 group"
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-[18px] h-[18px] text-muted-foreground group-hover:text-foreground transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
 
-            <SpaceIcon iconId={currentSpace.icon} size={22} />
-            <span className="font-medium text-sm">{currentSpace.isTemp ? 'Halo' : currentSpace.name}</span>
+            <div className="flex items-center gap-2">
+              <SpaceIcon iconId={currentSpace.icon} size={20} />
+              <span className="font-semibold text-sm tracking-tight">
+                {currentSpace.isTemp ? 'Halo' : currentSpace.name}
+              </span>
+            </div>
 
             {/* Chat History Panel - integrated in header */}
             {conversations.length > 0 && (
-              <div className="ml-1">
+              <div className="ml-0.5">
                 <ChatHistoryPanel
                   conversations={conversations}
                   currentConversationId={currentConversationId}
@@ -471,59 +476,65 @@ export function SpacePage() {
                 />
               </div>
             )}
-
           </>
         }
         right={
           <>
-            {/* New conversation button for all spaces */}
+            {/* New conversation */}
             <button
               onClick={handleNewConversation}
-              className="flex items-center gap-1.5 px-2.5 py-1 text-sm hover:bg-secondary rounded-lg transition-colors"
+              className="p-2 rounded-xl hover:bg-secondary/80 transition-all duration-200 group"
               title={t('New conversation')}
             >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-[18px] h-[18px] text-muted-foreground group-hover:text-foreground transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              <span className="hidden sm:inline">{t('New conversation')}</span>
             </button>
 
+            {/* Sidebar toggle */}
             <button
               onClick={() => setShowConversationList(!showConversationList)}
-              className={`p-1.5 rounded-lg transition-colors ${
-                showConversationList ? 'bg-primary/20 text-primary' : 'hover:bg-secondary'
+              className={`p-2 rounded-xl transition-all duration-200 ${
+                showConversationList
+                  ? 'bg-primary/10 text-primary'
+                  : 'hover:bg-secondary/80 text-muted-foreground hover:text-foreground'
               }`}
               title={t('Sidebar')}
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
-              </svg>
+              {showConversationList ? (
+                <PanelLeftClose className="w-[18px] h-[18px]" />
+              ) : (
+                <PanelLeft className="w-[18px] h-[18px]" />
+              )}
             </button>
 
-            {/* Search Icon */}
+            {/* Search */}
             <SearchIcon onClick={openSearch} isInSpace={true} />
 
             {/* Layout mode toggle */}
             <button
               onClick={() => setLayoutMode(layoutMode === 'split' ? 'tabs-only' : 'split')}
-              className={`p-1.5 rounded-lg transition-colors ${
-                layoutMode === 'tabs-only' ? 'bg-primary/20 text-primary' : 'hover:bg-secondary'
+              className={`p-2 rounded-xl transition-all duration-200 ${
+                layoutMode === 'tabs-only'
+                  ? 'bg-primary/10 text-primary'
+                  : 'hover:bg-secondary/80 text-muted-foreground hover:text-foreground'
               }`}
               title={layoutMode === 'split' ? t('Switch to tabs-only mode') : t('Switch to split mode')}
             >
               {layoutMode === 'split' ? (
-                <LayoutGrid className="w-5 h-5" />
+                <LayoutGrid className="w-[18px] h-[18px]" />
               ) : (
-                <Columns2 className="w-5 h-5" />
+                <Columns2 className="w-[18px] h-[18px]" />
               )}
             </button>
 
+            {/* Settings */}
             <button
               onClick={() => setView('settings')}
-              className="p-1.5 hover:bg-secondary rounded-lg transition-colors"
+              className="p-2 rounded-xl hover:bg-secondary/80 transition-all duration-200 group"
               title={t('Settings')}
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-[18px] h-[18px] text-muted-foreground group-hover:text-foreground transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>

@@ -127,6 +127,7 @@ export async function sendMessage(
     images,
     aiBrowserEnabled,
     thinkingEnabled,
+    planEnabled,
     canvasContext,
     fileContexts
   } = request
@@ -310,6 +311,14 @@ export async function sendMessage(
         await v2Session.setMaxThinkingTokens(thinkingEnabled ? 10240 : null)
         console.log(
           `[Agent][${conversationId}] Thinking mode: ${thinkingEnabled ? 'ON (10240 tokens)' : 'OFF'}`
+        )
+      }
+      // Set permission mode dynamically (plan mode = no tool execution)
+      if (v2Session.setPermissionMode) {
+        const targetMode = planEnabled ? 'plan' : 'acceptEdits'
+        await v2Session.setPermissionMode(targetMode)
+        console.log(
+          `[Agent][${conversationId}] Permission mode: ${targetMode}${planEnabled ? ' (Plan mode ON)' : ''}`
         )
       }
     } catch (e) {
@@ -758,16 +767,18 @@ export async function sendMessage(
       const latestMessage = updateLastMessage(spaceId, conversationId, {
         content: accumulatedTextContent,
         thoughts: sessionState.thoughts.length > 0 ? [...sessionState.thoughts] : undefined,
-        tokenUsage: tokenUsage || undefined // Include token usage if available
+        tokenUsage: tokenUsage || undefined, // Include token usage if available
+        isPlan: planEnabled || undefined // Mark as plan mode response
       })
       finalizeChangeSet(spaceId, conversationId, latestMessage?.id)
       console.log(
-        `[Agent][${conversationId}] Saved ${sessionState.thoughts.length} thoughts${tokenUsage ? ' with tokenUsage' : ''} to backend`
+        `[Agent][${conversationId}] Saved ${sessionState.thoughts.length} thoughts${tokenUsage ? ' with tokenUsage' : ''}${planEnabled ? ' (plan mode)' : ''} to backend`
       )
       sendToRenderer('agent:complete', spaceId, conversationId, {
         type: 'complete',
         duration: 0,
-        tokenUsage // Include token usage data
+        tokenUsage, // Include token usage data
+        isPlan: planEnabled || undefined // Pass plan flag to renderer
       })
     } else {
       console.log(`[Agent][${conversationId}] WARNING: No text content after SDK query completed`)
