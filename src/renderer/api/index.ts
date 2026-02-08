@@ -23,6 +23,12 @@ interface ApiResponse<T = unknown> {
   error?: string
 }
 
+/** Placeholder response for Commands APIs not yet available in remote mode */
+const COMMANDS_REMOTE_UNAVAILABLE: ApiResponse = {
+  success: false,
+  error: 'Commands panel is not available in remote mode yet'
+}
+
 /**
  * API object - drop-in replacement for window.halo
  * Works in both Electron and remote web mode
@@ -608,6 +614,22 @@ export const api = {
       return window.halo.clearSkillsCache()
     }
     return httpRequest('POST', '/api/skills/clear-cache')
+  },
+
+  // ===== Commands =====
+  // TODO: Implement HTTP endpoints for remote-mode commands support
+  listCommands: async (workDir?: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.listCommands(workDir)
+    }
+    return COMMANDS_REMOTE_UNAVAILABLE
+  },
+
+  getCommandContent: async (name: string, workDir?: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.getCommandContent(name, workDir)
+    }
+    return COMMANDS_REMOTE_UNAVAILABLE
   },
 
   // ===== Agents =====

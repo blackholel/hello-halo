@@ -15,6 +15,7 @@ import { getAllSpacePaths } from './space.service'
 import { isPathWithinBasePaths, isValidDirectoryPath, isFileNotFoundError } from '../utils/path-validation'
 import { listEnabledPlugins } from './plugins.service'
 import { FileCache } from '../utils/file-cache'
+import { commandKey } from '../../shared/command-utils'
 
 // ============================================
 // Command Types
@@ -36,10 +37,6 @@ const contentCache = new FileCache<string>({ maxSize: 200 })
 
 function getAllowedCommandBaseDirs(): string[] {
   return getAllSpacePaths().map((spacePath) => join(spacePath, '.claude', 'commands'))
-}
-
-function commandKey(cmd: CommandDefinition): string {
-  return cmd.namespace ? `${cmd.namespace}:${cmd.name}` : cmd.name
 }
 
 function extractDescription(filePath: string): string | undefined {

@@ -22,7 +22,7 @@ interface CommandsState {
   loadedWorkDir: string | null
   isLoading: boolean
   error: string | null
-  loadCommands: (workDir?: string) => Promise<void>
+  loadCommands: (workDir?: string, force?: boolean) => Promise<void>
 }
 
 export const useCommandsStore = create<CommandsState>((set, get) => ({
@@ -31,12 +31,12 @@ export const useCommandsStore = create<CommandsState>((set, get) => ({
   isLoading: false,
   error: null,
 
-  loadCommands: async (workDir?: string): Promise<void> => {
+  loadCommands: async (workDir?: string, force?: boolean): Promise<void> => {
     const targetWorkDir = workDir ?? null
     const { loadedWorkDir, commands } = get()
 
     // Skip if already loaded for this workDir
-    if (loadedWorkDir === targetWorkDir && commands.length > 0) return
+    if (!force && loadedWorkDir === targetWorkDir && commands.length > 0) return
 
     set({ isLoading: true, error: null })
 
@@ -57,3 +57,33 @@ export const useCommandsStore = create<CommandsState>((set, get) => ({
     }
   }
 }))
+
+/** Payload shape for the commands:changed IPC event */
+interface CommandsChangedPayload {
+  workDir?: string | null
+}
+
+function isCommandsChangedPayload(data: unknown): data is CommandsChangedPayload {
+  if (data == null || typeof data !== 'object') return true // treat null/undefined as "reload all"
+  const obj = data as Record<string, unknown>
+  return !('workDir' in obj) || obj.workDir === null || typeof obj.workDir === 'string'
+}
+
+let commandsListenersInitialized = false
+
+export function initCommandsStoreListeners(): void {
+  if (commandsListenersInitialized) return
+  commandsListenersInitialized = true
+
+  api.onCommandsChanged((data) => {
+    if (!isCommandsChangedPayload(data)) return
+
+    const { loadedWorkDir, loadCommands } = useCommandsStore.getState()
+    const changedWorkDir = (data as CommandsChangedPayload)?.workDir
+
+    // Reload if: event targets all workDirs (null/undefined), or matches the currently loaded one
+    if (changedWorkDir == null || changedWorkDir === loadedWorkDir) {
+      loadCommands(loadedWorkDir ?? undefined, true)
+    }
+  })
+}

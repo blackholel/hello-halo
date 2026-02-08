@@ -149,6 +149,10 @@ export interface HaloAPI {
   copySkillToSpace: (skillName: string, workDir: string) => Promise<IpcResponse>
   clearSkillsCache: () => Promise<IpcResponse>
 
+  // Commands
+  listCommands: (workDir?: string) => Promise<IpcResponse>
+  getCommandContent: (name: string, workDir?: string) => Promise<IpcResponse>
+
   // Agents
   listAgents: (workDir?: string) => Promise<IpcResponse>
   getAgentContent: (name: string, workDir?: string) => Promise<IpcResponse>
@@ -494,6 +498,10 @@ const api: HaloAPI = {
   deleteSkill: (skillPath) => ipcRenderer.invoke('skills:delete', skillPath),
   copySkillToSpace: (skillName, workDir) => ipcRenderer.invoke('skills:copy-to-space', skillName, workDir),
   clearSkillsCache: () => ipcRenderer.invoke('skills:clear-cache'),
+
+  // Commands
+  listCommands: (workDir) => ipcRenderer.invoke('commands:list', workDir),
+  getCommandContent: (name, workDir) => ipcRenderer.invoke('commands:get-content', name, workDir),
 
   // Agents
   listAgents: (workDir) => ipcRenderer.invoke('agents:list', workDir),

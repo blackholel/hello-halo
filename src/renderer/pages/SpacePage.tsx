@@ -42,6 +42,7 @@ import { AgentDetailModal } from '../components/agents/AgentDetailModal'
 import { AgentEditorModal } from '../components/agents/AgentEditorModal'
 import { useSkillsStore, type SkillDefinition } from '../stores/skills.store'
 import { useAgentsStore, type AgentDefinition } from '../stores/agents.store'
+import { useCommandsStore } from '../stores/commands.store'
 import { useComposerStore } from '../stores/composer.store'
 // Mobile breakpoint (matches Tailwind sm: 640px)
 const MOBILE_BREAKPOINT = 640
@@ -108,6 +109,10 @@ export function SpacePage() {
     requestInsert(`@${agentName} `, 'agent')
   }, [requestInsert])
 
+  const handleInsertCommand = useCallback((commandName: string) => {
+    requestInsert(`/${commandName} `, 'command')
+  }, [requestInsert])
+
   const handleCreateSkill = useCallback(() => {
     setEditingSkill(null)
     setIsSkillEditorOpen(true)
@@ -130,14 +135,16 @@ export function SpacePage() {
 
   const { loadSkills } = useSkillsStore()
   const { loadAgents } = useAgentsStore()
+  const { loadCommands } = useCommandsStore()
 
-  // Preload skills/agents when space changes
+  // Preload skills/agents/commands when space changes
   useEffect(() => {
     if (currentSpace?.path) {
       loadSkills(currentSpace.path)
       loadAgents(currentSpace.path)
+      loadCommands(currentSpace.path)
     }
-  }, [currentSpace?.path, loadSkills, loadAgents])
+  }, [currentSpace?.path, loadSkills, loadAgents, loadCommands])
 
   // Layout mode: 'split' = 分栏布局 (左侧固定 ChatView), 'tabs-only' = 纯标签页模式
   const [layoutMode, setLayoutMode] = useState<'split' | 'tabs-only'>(() => {
@@ -572,6 +579,7 @@ export function SpacePage() {
             onSelectAgent={setSelectedAgent}
             onInsertAgent={handleInsertAgent}
             onCreateAgent={handleCreateAgent}
+            onInsertCommand={handleInsertCommand}
           />
         )}
 

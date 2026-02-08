@@ -10,7 +10,7 @@ import { create } from 'zustand'
 export interface InsertRequest {
   id: string
   text: string
-  source?: 'skill' | 'agent'
+  source?: 'skill' | 'agent' | 'command'
 }
 
 interface ComposerState {

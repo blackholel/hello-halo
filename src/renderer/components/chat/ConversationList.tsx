@@ -17,6 +17,7 @@ import { useCanvasLifecycle } from '../../hooks/useCanvasLifecycle'
 import { useTranslation } from '../../i18n'
 import { SkillsPanel } from '../skills/SkillsPanel'
 import { AgentsPanel } from '../agents/AgentsPanel'
+import { CommandsPanel } from '../commands/CommandsPanel'
 import { WorkflowsPanel } from '../workflows/WorkflowsPanel'
 import type { SkillDefinition } from '../../stores/skills.store'
 import type { AgentDefinition } from '../../stores/agents.store'
@@ -42,6 +43,7 @@ interface ConversationListProps {
   onSelectAgent?: (agent: AgentDefinition) => void
   onInsertAgent?: (agentName: string) => void
   onCreateAgent?: () => void
+  onInsertCommand?: (commandName: string) => void
 }
 
 export function ConversationList({
@@ -59,7 +61,8 @@ export function ConversationList({
   onCreateSkill,
   onSelectAgent,
   onInsertAgent,
-  onCreateAgent
+  onCreateAgent,
+  onInsertCommand
 }: ConversationListProps) {
   const { t } = useTranslation()
   const { openChat } = useCanvasLifecycle()
@@ -297,6 +300,11 @@ export function ConversationList({
           onSelectAgent={onSelectAgent}
           onInsertAgent={onInsertAgent}
           onCreateAgent={onCreateAgent}
+          preferInsertOnClick
+        />
+        <CommandsPanel
+          workDir={workDir}
+          onInsertCommand={onInsertCommand}
           preferInsertOnClick
         />
         {spaceId && (
