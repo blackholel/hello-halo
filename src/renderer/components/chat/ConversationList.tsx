@@ -44,6 +44,7 @@ interface ConversationListProps {
   onInsertAgent?: (agentName: string) => void
   onCreateAgent?: () => void
   onInsertCommand?: (commandName: string) => void
+  onCreateCommand?: () => void
 }
 
 export function ConversationList({
@@ -62,7 +63,8 @@ export function ConversationList({
   onSelectAgent,
   onInsertAgent,
   onCreateAgent,
-  onInsertCommand
+  onInsertCommand,
+  onCreateCommand
 }: ConversationListProps) {
   const { t } = useTranslation()
   const { openChat } = useCanvasLifecycle()
@@ -305,6 +307,7 @@ export function ConversationList({
         <CommandsPanel
           workDir={workDir}
           onInsertCommand={onInsertCommand}
+          onCreateCommand={onCreateCommand}
           preferInsertOnClick
         />
         {spaceId && (

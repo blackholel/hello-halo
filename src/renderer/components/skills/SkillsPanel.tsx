@@ -8,6 +8,8 @@ import { Zap, Search, Plus, Star, Copy, Trash2, ChevronDown, MoreHorizontal, Pow
 import { useTranslation } from '../../i18n'
 import { useSkillsStore, type SkillDefinition } from '../../stores/skills.store'
 import { useSpaceStore } from '../../stores/space.store'
+import { useToolkitStore } from '../../stores/toolkit.store'
+import { buildDirective } from '../../utils/directive-helpers'
 
 interface SkillsPanelProps {
   workDir?: string
@@ -33,6 +35,12 @@ const SOURCE_COLORS: Record<SkillDefinition['source'], string> = {
   installed: 'bg-orange-500/10 text-orange-500'
 }
 
+/** Animation duration for panel expand/collapse (ms) */
+const PANEL_ANIMATION_MS = 200
+
+/** Per-item stagger delay (ms) */
+const ITEM_STAGGER_MS = 30
+
 export function SkillsPanel({
   workDir,
   onSelectSkill,
@@ -46,6 +54,8 @@ export function SkillsPanel({
   const [localSearchQuery, setLocalSearchQuery] = useState('')
   const [viewMode, setViewMode] = useState<'all' | 'favorites'>('all')
   const [openMenuSkill, setOpenMenuSkill] = useState<string | null>(null)
+  const [showAllInToolkitMode, setShowAllInToolkitMode] = useState(false)
+  const [updatingToolkitSkill, setUpdatingToolkitSkill] = useState<string | null>(null)
 
   // Skills store
   const {
@@ -59,9 +69,22 @@ export function SkillsPanel({
 
   // Space store for favorites
   const { currentSpace, updateSpacePreferences } = useSpaceStore()
+  const {
+    loadToolkit,
+    getToolkit,
+    isInToolkit,
+    addResource,
+    removeResource,
+    isToolkitLoaded
+  } = useToolkitStore()
   const favorites = currentSpace?.preferences?.skills?.favorites || []
   const enabledSkills = currentSpace?.preferences?.skills?.enabled || []
   const showOnlyEnabled = currentSpace?.preferences?.skills?.showOnlyEnabled ?? false
+
+  const isToolkitManageableSpace = !!currentSpace && !currentSpace.isTemp
+  const toolkitLoaded = !!currentSpace && isToolkitLoaded(currentSpace.id)
+  const toolkit = currentSpace ? getToolkit(currentSpace.id) : null
+  const isToolkitMode = isToolkitManageableSpace && toolkitLoaded && toolkit !== null
 
   // Load skills when panel opens
   useEffect(() => {
@@ -70,13 +93,35 @@ export function SkillsPanel({
     }
   }, [isExpanded, workDir, skills.length, loadedWorkDir, loadSkills])
 
+  useEffect(() => {
+    if (!isExpanded || !currentSpace || currentSpace.isTemp || toolkitLoaded) return
+    void loadToolkit(currentSpace.id)
+  }, [isExpanded, currentSpace, toolkitLoaded, loadToolkit])
+
+  useEffect(() => {
+    setShowAllInToolkitMode(false)
+  }, [currentSpace?.id])
+
   // Filter skills based on search query
   const isEnabled = (skillName: string) => enabledSkills.includes(skillName)
 
+  const toolkitSkills = useMemo(() => {
+    if (!isToolkitMode || !currentSpace) return [] as SkillDefinition[]
+    return skills.filter(skill => isInToolkit(currentSpace.id, buildDirective('skill', skill)))
+  }, [skills, isToolkitMode, currentSpace, toolkit, isInToolkit])
+
+  const totalSkillsCount = skills.length
+  const toolkitSkillsCount = toolkitSkills.length
+  const displaySkillsCount = isToolkitMode && !showAllInToolkitMode ? toolkitSkillsCount : totalSkillsCount
+
   const filteredSkills = useMemo(() => {
-    const base = showOnlyEnabled
-      ? skills.filter(skill => isEnabled(skill.name))
-      : skills
+    let base = skills
+
+    if (isToolkitMode && !showAllInToolkitMode) {
+      base = toolkitSkills
+    } else if (!isToolkitMode && showOnlyEnabled) {
+      base = skills.filter(skill => isEnabled(skill.name))
+    }
     if (!localSearchQuery.trim()) {
       return base
     }
@@ -87,7 +132,18 @@ export function SkillsPanel({
       skill.category?.toLowerCase().includes(query) ||
       skill.triggers?.some(t => t.toLowerCase().includes(query))
     )
-  }, [skills, localSearchQuery, showOnlyEnabled, enabledSkills])
+  }, [
+    skills,
+    localSearchQuery,
+    showOnlyEnabled,
+    enabledSkills,
+    isToolkitMode,
+    showAllInToolkitMode,
+    toolkitSkills
+  ])
+
+  // Check if skill is favorited
+  const isFavorite = (skillName: string) => favorites.includes(skillName)
 
   const visibleSkills = useMemo(() => {
     if (viewMode === 'favorites') {
@@ -104,27 +160,22 @@ export function SkillsPanel({
       global: [],
       app: []
     }
-    filteredSkills.forEach(skill => {
+    for (const skill of filteredSkills) {
       groups[skill.source].push(skill)
-    })
+    }
     return groups
   }, [filteredSkills])
-
-  // Check if skill is favorited
-  const isFavorite = (skillName: string) => favorites.includes(skillName)
 
   // Toggle favorite
   const toggleFavorite = async (skillName: string, e: React.MouseEvent) => {
     e.stopPropagation()
+    if (!currentSpace) return
     const newFavorites = isFavorite(skillName)
       ? favorites.filter(f => f !== skillName)
       : [...favorites, skillName]
-
-    if (currentSpace) {
-      await updateSpacePreferences(currentSpace.id, {
-        skills: { favorites: newFavorites }
-      })
-    }
+    await updateSpacePreferences(currentSpace.id, {
+      skills: { favorites: newFavorites }
+    })
   }
 
   const toggleEnabled = async (skillName: string, e: React.MouseEvent) => {
@@ -145,13 +196,32 @@ export function SkillsPanel({
     })
   }
 
+  const handleToggleToolkit = async (skill: SkillDefinition, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!currentSpace || currentSpace.isTemp) return
+
+    const directive = buildDirective('skill', skill)
+    const currentlyInToolkit = isInToolkit(currentSpace.id, directive)
+
+    try {
+      setUpdatingToolkitSkill(skill.path)
+      if (currentlyInToolkit) {
+        await removeResource(currentSpace.id, directive)
+      } else {
+        await addResource(currentSpace.id, directive)
+      }
+    } finally {
+      setUpdatingToolkitSkill(null)
+    }
+  }
+
   // Handle close
   const handleClose = () => {
     setIsAnimatingOut(true)
     setTimeout(() => {
       setIsExpanded(false)
       setIsAnimatingOut(false)
-    }, 200)
+    }, PANEL_ANIMATION_MS)
   }
 
   // Handle toggle
@@ -230,6 +300,12 @@ export function SkillsPanel({
     const canCopyToSpace = skill.source !== 'space' && workDir
     const isMenuOpen = openMenuSkill === skill.name
     const canViewDetails = !!onSelectSkill
+    const skillInToolkit = isToolkitManageableSpace && currentSpace
+      ? isInToolkit(currentSpace.id, buildDirective('skill', skill))
+      : false
+    const toolkitActionLabel = isToolkitMode
+      ? (skillInToolkit ? t('Remove from toolkit') : t('Add to toolkit'))
+      : t('Activate in space')
 
     return (
       <div
@@ -239,22 +315,24 @@ export function SkillsPanel({
           hover:bg-muted/40 group relative cursor-pointer"
         style={{
           animation: !isAnimatingOut
-            ? `fade-in 0.2s ease-out ${index * 30}ms forwards`
+            ? `fade-in 0.2s ease-out ${index * ITEM_STAGGER_MS}ms forwards`
             : undefined
         }}
       >
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <button
-                onClick={(e) => toggleEnabled(skill.name, e)}
-                className={`flex-shrink-0 transition-colors ${
-                  isEnabled(skill.name) ? 'text-green-500' : 'text-muted-foreground/40 hover:text-green-500/60'
-                }`}
-                title={isEnabled(skill.name) ? t('Disable skill') : t('Enable skill')}
-              >
-                <Power size={12} />
-              </button>
+              {!isToolkitMode && (
+                <button
+                  onClick={(e) => toggleEnabled(skill.name, e)}
+                  className={`flex-shrink-0 transition-colors ${
+                    isEnabled(skill.name) ? 'text-green-500' : 'text-muted-foreground/40 hover:text-green-500/60'
+                  }`}
+                  title={isEnabled(skill.name) ? t('Disable skill') : t('Enable skill')}
+                >
+                  <Power size={12} />
+                </button>
+              )}
               <button
                 onClick={(e) => toggleFavorite(skill.name, e)}
                 className={`flex-shrink-0 transition-colors ${
@@ -264,6 +342,18 @@ export function SkillsPanel({
               >
                 <Star size={14} fill={favorite ? 'currentColor' : 'none'} />
               </button>
+              {isToolkitManageableSpace && (
+                <button
+                  onClick={(e) => handleToggleToolkit(skill, e)}
+                  disabled={updatingToolkitSkill === skill.path}
+                  className="px-1.5 py-0.5 text-[10px] rounded bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-50"
+                  title={toolkitActionLabel}
+                >
+                  {updatingToolkitSkill === skill.path
+                    ? t('Loading...')
+                    : toolkitActionLabel}
+                </button>
+              )}
               <span className="text-xs font-mono text-foreground truncate">
                 /{skill.name}
               </span>
@@ -385,7 +475,7 @@ export function SkillsPanel({
         </span>
         <span className="flex items-center gap-2">
           <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-            {skills.length}
+            {displaySkillsCount}
           </span>
           <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
         </span>
@@ -407,7 +497,12 @@ export function SkillsPanel({
             <div>
               <h3 className="text-xs font-semibold text-foreground">{t('Skills')}</h3>
               <p className="text-[10px] text-muted-foreground mt-0.5">
-                {t('{{count}} skills available', { count: skills.length })}
+                {isToolkitMode && !showAllInToolkitMode
+                  ? t('{{toolkit}} / {{total}} skills in toolkit', {
+                    toolkit: toolkitSkillsCount,
+                    total: totalSkillsCount
+                  })
+                  : t('{{count}} skills available', { count: totalSkillsCount })}
               </p>
             </div>
             {workDir && onCreateSkill && (
@@ -458,18 +553,30 @@ export function SkillsPanel({
                   {t('Favorites')}
                 </button>
               </div>
-              <button
-                onClick={toggleShowOnlyEnabled}
-                className={`px-2 py-0.5 text-[10px] rounded ${
-                  showOnlyEnabled
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {showOnlyEnabled ? t('Enabled only') : t('All')}
-              </button>
+              {!isToolkitMode && (
+                <button
+                  onClick={toggleShowOnlyEnabled}
+                  className={`px-2 py-0.5 text-[10px] rounded ${
+                    showOnlyEnabled
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {showOnlyEnabled ? t('Enabled only') : t('All')}
+                </button>
+              )}
+              {isToolkitMode && (
+                <button
+                  onClick={() => setShowAllInToolkitMode(prev => !prev)}
+                  className="px-2 py-0.5 text-[10px] rounded text-muted-foreground hover:text-foreground"
+                >
+                  {showAllInToolkitMode ? t('Toolkit resources only') : t('Browse all resources')}
+                </button>
+              )}
               <span className="ml-auto text-[10px] text-muted-foreground/60">
-                {t('Click a skill to insert /name')}
+                {isToolkitMode && !showAllInToolkitMode
+                  ? t('Toolkit mode enabled')
+                  : t('Click a skill to insert /name')}
               </span>
             </div>
           </div>
@@ -487,7 +594,9 @@ export function SkillsPanel({
                   <Zap size={24} className="text-muted-foreground/50" />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {localSearchQuery ? t('No skills found') : t('No skills available')}
+                  {localSearchQuery
+                    ? t('No skills found')
+                    : (isToolkitMode && !showAllInToolkitMode ? t('No toolkit resources available') : t('No skills available'))}
                 </p>
                 <p className="text-[10px] text-muted-foreground/60 mt-1">
                   {localSearchQuery

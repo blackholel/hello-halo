@@ -6,6 +6,8 @@ import { useTranslation } from '../../i18n'
 import { type AgentDefinition, useAgentsStore } from '../../stores/agents.store'
 import { type CommandDefinition, useCommandsStore } from '../../stores/commands.store'
 import { type SkillDefinition, useSkillsStore } from '../../stores/skills.store'
+import { useToolkitStore } from '../../stores/toolkit.store'
+import { useSpaceStore } from '../../stores/space.store'
 import { ResourceCard } from './ResourceCard'
 
 type FilterTab = 'all' | 'skills' | 'agents' | 'commands'
@@ -48,6 +50,8 @@ export function ExtensionsView(): JSX.Element {
   const [query, setQuery] = useState('')
   const isRemote = api.isRemoteMode()
   const hasRequestedGlobalResources = useRef(false)
+  const currentSpace = useSpaceStore((state) => state.currentSpace)
+  const { loadToolkit } = useToolkitStore()
 
   const {
     skills,
@@ -81,6 +85,12 @@ export function ExtensionsView(): JSX.Element {
     if (!isRemote && !commandsLoading) loadCommands()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    if (currentSpace && !currentSpace.isTemp) {
+      void loadToolkit(currentSpace.id)
+    }
+  }, [currentSpace, loadToolkit])
 
   const normalizedItems = useMemo<ExtensionItem[]>(() => {
     const skillItems: ExtensionItem[] = skills.map((skill) => ({

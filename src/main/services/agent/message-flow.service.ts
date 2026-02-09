@@ -9,12 +9,14 @@ import { BrowserWindow } from 'electron'
 import { promises as fsPromises } from 'fs'
 import { getConfig } from '../config.service'
 import { getSpaceConfig } from '../space-config.service'
+import { getToolkitHash } from '../toolkit.service'
 import { getConversation, saveSessionId, addMessage, updateLastMessage } from '../conversation.service'
 import { setMainWindow, sendToRenderer, createCanUseTool } from './renderer-comm'
 import { getHeadlessElectronPath } from './electron-path'
 import { resolveProvider } from './provider-resolver'
 import {
   buildSdkOptions,
+  getEffectiveSkillsLazyLoad,
   getWorkingDir,
   getEnabledMcpServers
 } from './sdk-config.builder'
@@ -157,9 +159,8 @@ export async function sendMessage(
   const workDir = getWorkingDir(spaceId)
   beginChangeSet(spaceId, conversationId, workDir)
   const spaceConfig = getSpaceConfig(workDir)
-  const skillsLazyLoad =
-    config.claudeCode?.skillsLazyLoad === true ||
-    spaceConfig?.claudeCode?.skillsLazyLoad === true
+  const { effectiveLazyLoad: skillsLazyLoad, toolkit } = getEffectiveSkillsLazyLoad(workDir, config)
+  const toolkitHash = getToolkitHash(toolkit)
 
   const mcpDirectiveResult = skillsLazyLoad
     ? extractMcpDirectives(message, conversationId)
@@ -290,6 +291,7 @@ export async function sendMessage(
     const sessionConfig: SessionConfig = {
       aiBrowserEnabled: !!effectiveAiBrowserEnabled,
       skillsLazyLoad,
+      toolkitHash,
       enabledPluginMcpsHash: getEnabledPluginMcpHash(conversationId)
     }
 
@@ -365,7 +367,7 @@ export async function sendMessage(
     const canvasPrefix = formatCanvasContext(canvasContext)
 
     const expandedMessage = skillsLazyLoad
-      ? expandLazyDirectives(messageForSend, workDir)
+      ? expandLazyDirectives(messageForSend, workDir, toolkit)
       : {
           text: messageForSend,
           expanded: { skills: [], commands: [], agents: [] },

@@ -3,9 +3,12 @@ import { Bot, Copy, Terminal, X, Zap } from 'lucide-react'
 import { commandKey } from '../../../shared/command-utils'
 import { api } from '../../api'
 import { useTranslation } from '../../i18n'
+import { useSpaceStore } from '../../stores/space.store'
+import { useToolkitStore } from '../../stores/toolkit.store'
 import type { AgentDefinition } from '../../stores/agents.store'
 import type { CommandDefinition } from '../../stores/commands.store'
 import type { SkillDefinition } from '../../stores/skills.store'
+import { buildDirective } from '../../utils/directive-helpers'
 import { getSourceColor, getSourceLabel, type AnySource } from './source-labels'
 
 type ResourceType = 'skill' | 'agent' | 'command'
@@ -16,6 +19,7 @@ interface ResourceCardProps {
   resource: AnyResource
   type: ResourceType
   index: number
+  onAddedToToolkit?: () => void
 }
 
 interface ResourceMeta {
@@ -84,14 +88,39 @@ function fetchResourceContent(resource: AnyResource, type: ResourceType) {
   return api.getCommandContent(commandKey(resource as CommandDefinition))
 }
 
-export function ResourceCard({ resource, type, index }: ResourceCardProps): JSX.Element {
+function toDirective(resource: AnyResource, type: ResourceType) {
+  return buildDirective(type, resource as { name: string; namespace?: string; source?: string })
+}
+
+export function ResourceCard({ resource, type, index, onAddedToToolkit }: ResourceCardProps): JSX.Element {
   const { t } = useTranslation()
   const [isOpen, setIsOpen] = useState(false)
   const [content, setContent] = useState<string>('')
   const [contentError, setContentError] = useState<string | null>(null)
   const [isLoadingContent, setIsLoadingContent] = useState(false)
+  const [isUpdatingToolkit, setIsUpdatingToolkit] = useState(false)
+
+  const currentSpace = useSpaceStore((state) => state.currentSpace)
+  const { getToolkit, isInToolkit, addResource, removeResource, loadToolkit, isToolkitLoaded } = useToolkitStore()
 
   const meta = useMemo(() => mapResourceMeta(resource, type), [resource, type])
+  const directive = useMemo(() => toDirective(resource, type), [resource, type])
+  const toolkitLoaded = !!currentSpace && isToolkitLoaded(currentSpace.id)
+  const toolkit = getToolkit(currentSpace?.id)
+  const hasToolkit = toolkitLoaded && toolkit !== null
+  const inToolkit = hasToolkit && isInToolkit(currentSpace?.id, directive)
+  const canManageToolkit = !!currentSpace && !currentSpace.isTemp
+
+  let toolkitButtonLabel: string
+  if (isUpdatingToolkit) {
+    toolkitButtonLabel = t('Loading...')
+  } else if (!hasToolkit) {
+    toolkitButtonLabel = t('Activate in space')
+  } else if (inToolkit) {
+    toolkitButtonLabel = t('Remove from toolkit')
+  } else {
+    toolkitButtonLabel = t('Add to toolkit')
+  }
 
   const closeDialog = useCallback(() => setIsOpen(false), [])
 
@@ -113,6 +142,28 @@ export function ResourceCard({ resource, type, index }: ResourceCardProps): JSX.
       // Clipboard API may fail in some environments; silently ignore
     }
   }
+
+  const handleToolkitAction = async (event: React.MouseEvent): Promise<void> => {
+    event.stopPropagation()
+    if (!currentSpace) return
+    try {
+      setIsUpdatingToolkit(true)
+      if (inToolkit) {
+        await removeResource(currentSpace.id, directive)
+      } else {
+        await addResource(currentSpace.id, directive)
+      }
+      onAddedToToolkit?.()
+    } finally {
+      setIsUpdatingToolkit(false)
+    }
+  }
+
+  useEffect(() => {
+    if (currentSpace && !currentSpace.isTemp && !toolkitLoaded) {
+      void loadToolkit(currentSpace.id)
+    }
+  }, [currentSpace, toolkitLoaded, loadToolkit])
 
   useEffect(() => {
     if (!isOpen) return
@@ -192,6 +243,18 @@ export function ResourceCard({ resource, type, index }: ResourceCardProps): JSX.
             {getSourceLabel(meta.source, t)}
           </span>
         </div>
+        {canManageToolkit && (
+          <div className="mt-3 flex justify-end">
+            <button
+              type="button"
+              onClick={handleToolkitAction}
+              disabled={isUpdatingToolkit}
+              className="px-2.5 py-1 text-[10px] font-medium rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
+            >
+              {toolkitButtonLabel}
+            </button>
+          </div>
+        )}
       </button>
 
       {isOpen && (

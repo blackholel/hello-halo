@@ -149,6 +149,7 @@ export interface V2SDKSession {
 export interface SessionConfig {
   aiBrowserEnabled: boolean
   skillsLazyLoad: boolean
+  toolkitHash?: string
   enabledPluginMcpsHash?: string
 }
 

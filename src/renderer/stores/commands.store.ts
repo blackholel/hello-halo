@@ -7,6 +7,9 @@
 
 import { create } from 'zustand'
 import { api } from '../api'
+import { useSpaceStore } from './space.store'
+import { useToolkitStore } from './toolkit.store'
+import { buildDirective } from '../utils/directive-helpers'
 
 export interface CommandDefinition {
   name: string
@@ -21,14 +24,22 @@ interface CommandsState {
   commands: CommandDefinition[]
   loadedWorkDir: string | null
   isLoading: boolean
+  isLoadingContent: boolean
   error: string | null
   loadCommands: (workDir?: string, force?: boolean) => Promise<void>
+  getCommandContent: (name: string, workDir?: string) => Promise<string | null>
+  createCommand: (workDir: string, name: string, content: string) => Promise<CommandDefinition | null>
+  updateCommand: (commandPath: string, content: string) => Promise<boolean>
+  deleteCommand: (commandPath: string) => Promise<boolean>
+  copyToSpace: (commandName: string, workDir: string) => Promise<CommandDefinition | null>
+  clearCache: () => Promise<void>
 }
 
 export const useCommandsStore = create<CommandsState>((set, get) => ({
   commands: [],
   loadedWorkDir: null,
   isLoading: false,
+  isLoadingContent: false,
   error: null,
 
   loadCommands: async (workDir?: string, force?: boolean): Promise<void> => {
@@ -54,6 +65,121 @@ export const useCommandsStore = create<CommandsState>((set, get) => ({
     } catch (error) {
       console.error('[CommandsStore] Failed to load commands:', error)
       set({ error: 'Failed to load commands', isLoading: false })
+    }
+  },
+
+  getCommandContent: async (name, workDir) => {
+    try {
+      set({ isLoadingContent: true, error: null })
+      const response = await api.getCommandContent(name, workDir)
+      if (response.success && response.data) {
+        return response.data as string
+      }
+      set({ error: response.error || 'Failed to load command content' })
+      return null
+    } catch (error) {
+      console.error('[CommandsStore] Failed to load command content:', error)
+      set({ error: 'Failed to load command content' })
+      return null
+    } finally {
+      set({ isLoadingContent: false })
+    }
+  },
+
+  createCommand: async (workDir, name, content) => {
+    try {
+      const response = await api.createCommand(workDir, name, content)
+      if (response.success && response.data) {
+        const newCommand = response.data as CommandDefinition
+        const targetWorkDir = workDir ?? null
+        set((state) => {
+          const nextCommands = state.loadedWorkDir === targetWorkDir
+            ? [...state.commands, newCommand]
+            : state.commands
+
+          return { commands: nextCommands }
+        })
+
+        const currentSpace = useSpaceStore.getState().currentSpace
+        if (currentSpace) {
+          const toolkitStore = useToolkitStore.getState()
+          if (toolkitStore.getToolkit(currentSpace.id)) {
+            void toolkitStore.addResource(currentSpace.id, buildDirective('command', newCommand))
+          }
+        }
+
+        return newCommand
+      }
+      set({ error: response.error || 'Failed to create command' })
+      return null
+    } catch (error) {
+      console.error('[CommandsStore] Failed to create command:', error)
+      set({ error: 'Failed to create command' })
+      return null
+    }
+  },
+
+  updateCommand: async (commandPath, content) => {
+    try {
+      const response = await api.updateCommand(commandPath, content)
+      if (response.success) {
+        return true
+      }
+      set({ error: response.error || 'Failed to update command' })
+      return false
+    } catch (error) {
+      console.error('[CommandsStore] Failed to update command:', error)
+      set({ error: 'Failed to update command' })
+      return false
+    }
+  },
+
+  deleteCommand: async (commandPath) => {
+    try {
+      const response = await api.deleteCommand(commandPath)
+      if (response.success) {
+        set((state) => ({
+          commands: state.commands.filter(command => command.path !== commandPath)
+        }))
+        return true
+      }
+      set({ error: response.error || 'Failed to delete command' })
+      return false
+    } catch (error) {
+      console.error('[CommandsStore] Failed to delete command:', error)
+      set({ error: 'Failed to delete command' })
+      return false
+    }
+  },
+
+  copyToSpace: async (commandName, workDir) => {
+    try {
+      const response = await api.copyCommandToSpace(commandName, workDir)
+      if (response.success && response.data) {
+        const copiedCommand = response.data as CommandDefinition
+        const targetWorkDir = workDir ?? null
+        set((state) => ({
+          commands: state.loadedWorkDir === targetWorkDir
+            ? state.commands.map(command => command.name === commandName ? copiedCommand : command)
+            : state.commands
+        }))
+        return copiedCommand
+      }
+      set({ error: response.error || 'Failed to copy command to space' })
+      return null
+    } catch (error) {
+      console.error('[CommandsStore] Failed to copy command to space:', error)
+      set({ error: 'Failed to copy command to space' })
+      return null
+    }
+  },
+
+  clearCache: async () => {
+    try {
+      await api.clearCommandsCache()
+      set({ loadedWorkDir: null, commands: [] })
+    } catch (error) {
+      console.error('[CommandsStore] Failed to clear commands cache:', error)
     }
   }
 }))

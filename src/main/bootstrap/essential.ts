@@ -31,6 +31,7 @@ import { registerSystemHandlers } from '../ipc/system'
 import { registerSkillsHandlers } from '../ipc/skills'
 import { registerAgentsHandlers } from '../ipc/agents'
 import { registerCommandsHandlers } from '../ipc/commands'
+import { registerToolkitHandlers } from '../ipc/toolkit'
 import { registerUpdaterHandlers, initAutoUpdater } from '../services/updater.service'
 
 /**
@@ -74,6 +75,9 @@ export function initializeEssentialServices(mainWindow: BrowserWindow): void {
 
   // Commands: Commands management for sidebar and chat input
   registerCommandsHandlers()
+
+  // Toolkit: Space-level allowlist management for skills/agents/commands
+  registerToolkitHandlers()
 
   // System: Window controls (maximize, minimize, tray) are basic functionality
   registerSystemHandlers(mainWindow)

@@ -12,6 +12,8 @@
 import { getSkillContent } from '../skills.service'
 import { getCommandContent } from '../commands.service'
 import { getAgentContent } from '../agents.service'
+import { buildDirectiveId, toolkitContains } from '../toolkit.service'
+import type { SpaceToolkit } from '../space-config.service'
 
 const SLASH_LINE_RE = /^\/([A-Za-z0-9._:-]+)(?:\s+(.+))?$/
 const AT_LINE_RE = /^@([A-Za-z0-9._:-]+)(?:\s+(.+))?$/
@@ -86,7 +88,23 @@ function findReferencedSkill(commandContent: string): string | null {
   return match[1]
 }
 
-export function expandLazyDirectives(input: string, workDir?: string): LazyExpansionResult {
+function canUseFromToolkit(
+  toolkit: SpaceToolkit | null | undefined,
+  type: 'skill' | 'command' | 'agent',
+  name: string
+): boolean {
+  if (!toolkit) return true
+  return toolkitContains(toolkit, type, {
+    id: buildDirectiveId({ type, name }),
+    name
+  })
+}
+
+export function expandLazyDirectives(
+  input: string,
+  workDir?: string,
+  toolkit?: SpaceToolkit | null
+): LazyExpansionResult {
   const lines = input.split(/\r?\n/)
   const expanded = { skills: [] as string[], commands: [] as string[], agents: [] as string[] }
   const missing = { skills: [] as string[], commands: [] as string[], agents: [] as string[] }
@@ -104,6 +122,10 @@ export function expandLazyDirectives(input: string, workDir?: string): LazyExpan
     if (agentMatch) {
       const name = agentMatch[1]
       const args = agentMatch[2]
+      if (!canUseFromToolkit(toolkit, 'agent', name)) {
+        missing.agents.push(name)
+        return line
+      }
       const agentContent = getAgentContent(name, workDir)
       if (!agentContent) {
         missing.agents.push(name)
@@ -128,8 +150,16 @@ export function expandLazyDirectives(input: string, workDir?: string): LazyExpan
 
     const command = getCommandContent(name, workDir, { silent: true })
     if (command) {
+      if (!canUseFromToolkit(toolkit, 'command', name)) {
+        missing.commands.push(name)
+        return line
+      }
       const referencedSkill = findReferencedSkill(command)
       if (referencedSkill) {
+        if (!canUseFromToolkit(toolkit, 'skill', referencedSkill)) {
+          missing.skills.push(referencedSkill)
+          return line
+        }
         const skill = getSkillContent(referencedSkill, workDir)
         if (skill) {
           expanded.skills.push(referencedSkill)
@@ -149,6 +179,11 @@ export function expandLazyDirectives(input: string, workDir?: string): LazyExpan
         command.trimEnd(),
         '</command>'
       ].join('\n')
+    }
+
+    if (!canUseFromToolkit(toolkit, 'skill', name)) {
+      missing.skills.push(name)
+      return line
     }
 
     const skill = getSkillContent(name, workDir)

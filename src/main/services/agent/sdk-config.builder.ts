@@ -9,12 +9,13 @@ import { join } from 'path'
 import { existsSync, mkdirSync } from 'fs'
 import { homedir } from 'os'
 import { getConfig, getTempSpacePath, getHaloDir } from '../config.service'
-import { getSpaceConfig } from '../space-config.service'
+import { getSpaceConfig, type SpaceToolkit } from '../space-config.service'
 import { buildHooksConfig } from '../hooks.service'
 import { listEnabledPlugins } from '../plugins.service'
 import { getEmbeddedPythonDir, getPythonEnhancedPath } from '../python.service'
 import { isValidDirectoryPath } from '../../utils/path-validation'
 import { getSpace } from '../space.service'
+import { getSpaceToolkit } from '../toolkit.service'
 import { createAIBrowserMcpServer, AI_BROWSER_SYSTEM_PROMPT } from '../ai-browser'
 import { SKILLS_LAZY_SYSTEM_PROMPT } from '../skills-mcp-server'
 import { buildPluginMcpServers } from '../plugin-mcp.service'
@@ -53,6 +54,36 @@ export function getWorkingDir(spaceId: string): string {
   return getTempSpacePath()
 }
 
+function getConfigSkillsLazyLoad(
+  config: ReturnType<typeof getConfig>,
+  spaceConfig: ReturnType<typeof getSpaceConfig>
+): boolean {
+  return (
+    config.claudeCode?.skillsLazyLoad === true ||
+    spaceConfig?.claudeCode?.skillsLazyLoad === true
+  )
+}
+
+/**
+ * Toolkit-aware lazy-load decision.
+ * When toolkit is configured (non-null), lazy-load is forced.
+ */
+export function getEffectiveSkillsLazyLoad(
+  workDir: string,
+  config?: ReturnType<typeof getConfig>
+): {
+  configLazyLoad: boolean
+  effectiveLazyLoad: boolean
+  toolkit: SpaceToolkit | null
+} {
+  const resolvedConfig = config ?? getConfig()
+  const spaceConfig = getSpaceConfig(workDir)
+  const configLazyLoad = getConfigSkillsLazyLoad(resolvedConfig, spaceConfig)
+  const toolkit = getSpaceToolkit(workDir)
+  const effectiveLazyLoad = configLazyLoad || toolkit !== null
+  return { configLazyLoad, effectiveLazyLoad, toolkit }
+}
+
 /**
  * Build plugins configuration for skills loading.
  * Loading priority: installed plugins → system → global → app → space → workDir/.claude/
@@ -62,9 +93,7 @@ export function buildPluginsConfig(workDir: string): PluginConfig[] {
   const config = getConfig()
   const spaceConfig = getSpaceConfig(workDir)
   const claudeCodeConfig = config.claudeCode
-  const skillsLazyLoad =
-    claudeCodeConfig?.skillsLazyLoad === true ||
-    spaceConfig?.claudeCode?.skillsLazyLoad === true
+  const { configLazyLoad, effectiveLazyLoad, toolkit } = getEffectiveSkillsLazyLoad(workDir, config)
 
   // Helper to add plugin if valid and not already added
   const addedPaths = new Set<string>()
@@ -82,8 +111,12 @@ export function buildPluginsConfig(workDir: string): PluginConfig[] {
     return plugins
   }
 
-  if (skillsLazyLoad) {
-    console.log('[Agent] Skills lazy-load enabled: skipping plugin directories for Claude Code')
+  if (effectiveLazyLoad) {
+    if (!configLazyLoad && toolkit) {
+      console.log('[Agent] Toolkit allowlist active: forcing skills lazy-load and skipping plugin directories')
+    } else {
+      console.log('[Agent] Skills lazy-load enabled: skipping plugin directories for Claude Code')
+    }
     return plugins
   }
 
@@ -155,12 +188,14 @@ export function buildPluginsConfig(workDir: string): PluginConfig[] {
 export function buildSettingSources(workDir: string): SettingSource[] {
   const config = getConfig()
   const spaceConfig = getSpaceConfig(workDir)
-  const skillsLazyLoad =
-    config.claudeCode?.skillsLazyLoad === true ||
-    spaceConfig?.claudeCode?.skillsLazyLoad === true
+  const { configLazyLoad, effectiveLazyLoad, toolkit } = getEffectiveSkillsLazyLoad(workDir, config)
 
-  if (skillsLazyLoad) {
-    console.log('[Agent] Skills lazy-load enabled: settingSources=local only')
+  if (effectiveLazyLoad) {
+    if (!configLazyLoad && toolkit) {
+      console.log('[Agent] Toolkit allowlist active: forcing settingSources=local only')
+    } else {
+      console.log('[Agent] Skills lazy-load enabled: settingSources=local only')
+    }
     return ['local']
   }
 
@@ -246,7 +281,15 @@ function buildMcpServersConfig(
 /**
  * Build system prompt append with Python environment instructions
  */
-export function buildSystemPromptAppend(workDir: string): string {
+function formatToolkitList(items: Array<{ name: string; namespace?: string }>): string {
+  if (items.length === 0) return '[]'
+  const sorted = [...items]
+    .map(item => item.namespace ? `${item.namespace}:${item.name}` : item.name)
+    .sort((a, b) => a.localeCompare(b))
+  return `[${sorted.join(', ')}]`
+}
+
+export function buildSystemPromptAppend(workDir: string, toolkit?: SpaceToolkit | null): string {
   const pythonDir = getEmbeddedPythonDir()
   const pythonBinDir = process.platform === 'win32' ? pythonDir : join(pythonDir, 'bin')
   const pythonExecutable =
@@ -254,7 +297,7 @@ export function buildSystemPromptAppend(workDir: string): string {
 
   console.log(`[Agent] System prompt Python executable: ${pythonExecutable}`)
 
-  return `
+  const base = `
 You are Halo, an AI assistant that helps users accomplish real work.
 All created files will be saved in the user's workspace. Current workspace: ${workDir}.
 
@@ -266,6 +309,21 @@ Examples:
 - Run script: \`${pythonExecutable} script.py\`
 - Install package: \`${pythonExecutable} -m pip install package_name\`
 `
+
+  if (!toolkit) {
+    return base
+  }
+
+  const toolkitAppend = `
+
+## Space Toolkit Allowlist
+Available skills in this space: ${formatToolkitList(toolkit.skills)}
+Available agents in this space: ${formatToolkitList(toolkit.agents)}
+Available commands in this space: ${formatToolkitList(toolkit.commands)}
+Do NOT use resources outside this list.
+`
+
+  return `${base}${toolkitAppend}`
 }
 
 /**
@@ -324,12 +382,10 @@ export function buildSdkOptions(params: BuildSdkOptionsParams): Record<string, a
   } = params
 
   const spaceConfig = getSpaceConfig(workDir)
-  const skillsLazyLoad =
-    config.claudeCode?.skillsLazyLoad === true ||
-    spaceConfig?.claudeCode?.skillsLazyLoad === true
+  const { effectiveLazyLoad, toolkit } = getEffectiveSkillsLazyLoad(workDir, config)
 
   const configDir = (() => {
-    if (skillsLazyLoad) {
+    if (effectiveLazyLoad) {
       const isolated = join(getTempSpacePath(), 'claude-config')
       if (!existsSync(isolated)) {
         mkdirSync(isolated, { recursive: true })
@@ -368,9 +424,9 @@ export function buildSdkOptions(params: BuildSdkOptionsParams): Record<string, a
       type: 'preset' as const,
       preset: 'claude_code' as const,
       append: [
-        buildSystemPromptAppend(workDir),
+        buildSystemPromptAppend(workDir, toolkit),
         aiBrowserEnabled ? AI_BROWSER_SYSTEM_PROMPT : '',
-        skillsLazyLoad ? SKILLS_LAZY_SYSTEM_PROMPT : ''
+        effectiveLazyLoad ? SKILLS_LAZY_SYSTEM_PROMPT : ''
       ].filter(Boolean).join('\n')
     },
     maxTurns: 50,

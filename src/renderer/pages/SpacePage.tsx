@@ -40,9 +40,11 @@ import { SkillDetailModal } from '../components/skills/SkillDetailModal'
 import { SkillEditorModal } from '../components/skills/SkillEditorModal'
 import { AgentDetailModal } from '../components/agents/AgentDetailModal'
 import { AgentEditorModal } from '../components/agents/AgentEditorModal'
+import { CommandEditorModal } from '../components/commands/CommandEditorModal'
 import { useSkillsStore, type SkillDefinition } from '../stores/skills.store'
 import { useAgentsStore, type AgentDefinition } from '../stores/agents.store'
-import { useCommandsStore } from '../stores/commands.store'
+import { useCommandsStore, type CommandDefinition } from '../stores/commands.store'
+import { useToolkitStore } from '../stores/toolkit.store'
 import { useComposerStore } from '../stores/composer.store'
 // Mobile breakpoint (matches Tailwind sm: 640px)
 const MOBILE_BREAKPOINT = 640
@@ -99,6 +101,8 @@ export function SpacePage() {
   const [selectedAgent, setSelectedAgent] = useState<AgentDefinition | null>(null)
   const [editingAgent, setEditingAgent] = useState<AgentDefinition | null>(null)
   const [isAgentEditorOpen, setIsAgentEditorOpen] = useState(false)
+  const [editingCommand, setEditingCommand] = useState<CommandDefinition | null>(null)
+  const [isCommandEditorOpen, setIsCommandEditorOpen] = useState(false)
   const requestInsert = useComposerStore(state => state.requestInsert)
 
   const handleInsertSkill = useCallback((skillName: string) => {
@@ -128,6 +132,11 @@ export function SpacePage() {
     setIsAgentEditorOpen(true)
   }, [])
 
+  const handleCreateCommand = useCallback(() => {
+    setEditingCommand(null)
+    setIsCommandEditorOpen(true)
+  }, [])
+
   const handleEditAgent = useCallback((agent: AgentDefinition) => {
     setEditingAgent(agent)
     setIsAgentEditorOpen(true)
@@ -136,6 +145,7 @@ export function SpacePage() {
   const { loadSkills } = useSkillsStore()
   const { loadAgents } = useAgentsStore()
   const { loadCommands } = useCommandsStore()
+  const { loadToolkit, isToolkitLoaded } = useToolkitStore()
 
   // Preload skills/agents/commands when space changes
   useEffect(() => {
@@ -145,6 +155,13 @@ export function SpacePage() {
       loadCommands(currentSpace.path)
     }
   }, [currentSpace?.path, loadSkills, loadAgents, loadCommands])
+
+  useEffect(() => {
+    if (!currentSpace || currentSpace.isTemp) return
+    const toolkitLoaded = isToolkitLoaded(currentSpace.id)
+    if (toolkitLoaded) return
+    void loadToolkit(currentSpace.id)
+  }, [currentSpace?.id, currentSpace?.isTemp, isToolkitLoaded, loadToolkit])
 
   // Layout mode: 'split' = 分栏布局 (左侧固定 ChatView), 'tabs-only' = 纯标签页模式
   const [layoutMode, setLayoutMode] = useState<'split' | 'tabs-only'>(() => {
@@ -580,6 +597,7 @@ export function SpacePage() {
             onInsertAgent={handleInsertAgent}
             onCreateAgent={handleCreateAgent}
             onInsertCommand={handleInsertCommand}
+            onCreateCommand={handleCreateCommand}
           />
         )}
 
@@ -743,6 +761,14 @@ export function SpacePage() {
           workDir={currentSpace.path}
           onClose={() => setIsAgentEditorOpen(false)}
           onSaved={(agent) => setSelectedAgent(agent)}
+        />
+      )}
+
+      {isCommandEditorOpen && currentSpace && (
+        <CommandEditorModal
+          command={editingCommand || undefined}
+          workDir={currentSpace.path}
+          onClose={() => setIsCommandEditorOpen(false)}
         />
       )}
     </div>

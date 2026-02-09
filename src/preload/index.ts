@@ -152,6 +152,11 @@ export interface HaloAPI {
   // Commands
   listCommands: (workDir?: string) => Promise<IpcResponse>
   getCommandContent: (name: string, workDir?: string) => Promise<IpcResponse>
+  createCommand: (workDir: string, name: string, content: string) => Promise<IpcResponse>
+  updateCommand: (commandPath: string, content: string) => Promise<IpcResponse>
+  deleteCommand: (commandPath: string) => Promise<IpcResponse>
+  copyCommandToSpace: (commandName: string, workDir: string) => Promise<IpcResponse>
+  clearCommandsCache: () => Promise<IpcResponse>
 
   // Agents
   listAgents: (workDir?: string) => Promise<IpcResponse>
@@ -167,6 +172,7 @@ export interface HaloAPI {
   addToolkitResource: (spaceId: string, directive: Record<string, unknown>) => Promise<IpcResponse>
   removeToolkitResource: (spaceId: string, directive: Record<string, unknown>) => Promise<IpcResponse>
   clearToolkit: (spaceId: string) => Promise<IpcResponse>
+  migrateToToolkit: (spaceId: string, skills: string[], agents: string[]) => Promise<IpcResponse>
 
   // Workflows
   listWorkflows: (spaceId: string) => Promise<IpcResponse>
@@ -502,6 +508,11 @@ const api: HaloAPI = {
   // Commands
   listCommands: (workDir) => ipcRenderer.invoke('commands:list', workDir),
   getCommandContent: (name, workDir) => ipcRenderer.invoke('commands:get-content', name, workDir),
+  createCommand: (workDir, name, content) => ipcRenderer.invoke('commands:create', workDir, name, content),
+  updateCommand: (commandPath, content) => ipcRenderer.invoke('commands:update', commandPath, content),
+  deleteCommand: (commandPath) => ipcRenderer.invoke('commands:delete', commandPath),
+  copyCommandToSpace: (commandName, workDir) => ipcRenderer.invoke('commands:copy-to-space', commandName, workDir),
+  clearCommandsCache: () => ipcRenderer.invoke('commands:clear-cache'),
 
   // Agents
   listAgents: (workDir) => ipcRenderer.invoke('agents:list', workDir),
@@ -517,6 +528,7 @@ const api: HaloAPI = {
   addToolkitResource: (spaceId, directive) => ipcRenderer.invoke('toolkit:add', spaceId, directive),
   removeToolkitResource: (spaceId, directive) => ipcRenderer.invoke('toolkit:remove', spaceId, directive),
   clearToolkit: (spaceId) => ipcRenderer.invoke('toolkit:clear', spaceId),
+  migrateToToolkit: (spaceId, skills, agents) => ipcRenderer.invoke('toolkit:migrate', spaceId, skills, agents),
 
   // Workflows
   listWorkflows: (spaceId) => ipcRenderer.invoke('workflow:list', spaceId),

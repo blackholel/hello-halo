@@ -23,12 +23,6 @@ interface ApiResponse<T = unknown> {
   error?: string
 }
 
-/** Placeholder response for Commands APIs not yet available in remote mode */
-const COMMANDS_REMOTE_UNAVAILABLE: ApiResponse = {
-  success: false,
-  error: 'Commands panel is not available in remote mode yet'
-}
-
 /**
  * API object - drop-in replacement for window.halo
  * Works in both Electron and remote web mode
@@ -617,19 +611,55 @@ export const api = {
   },
 
   // ===== Commands =====
-  // TODO: Implement HTTP endpoints for remote-mode commands support
   listCommands: async (workDir?: string): Promise<ApiResponse> => {
     if (isElectron()) {
       return window.halo.listCommands(workDir)
     }
-    return COMMANDS_REMOTE_UNAVAILABLE
+    return httpRequest('GET', `/api/commands${workDir ? `?workDir=${encodeURIComponent(workDir)}` : ''}`)
   },
 
   getCommandContent: async (name: string, workDir?: string): Promise<ApiResponse> => {
     if (isElectron()) {
       return window.halo.getCommandContent(name, workDir)
     }
-    return COMMANDS_REMOTE_UNAVAILABLE
+    const params = new URLSearchParams({ name })
+    if (workDir) params.append('workDir', workDir)
+    return httpRequest('GET', `/api/commands/content?${params.toString()}`)
+  },
+
+  createCommand: async (workDir: string, name: string, content: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.createCommand(workDir, name, content)
+    }
+    return httpRequest('POST', '/api/commands', { workDir, name, content })
+  },
+
+  updateCommand: async (commandPath: string, content: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.updateCommand(commandPath, content)
+    }
+    return httpRequest('PUT', '/api/commands', { commandPath, content })
+  },
+
+  deleteCommand: async (commandPath: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.deleteCommand(commandPath)
+    }
+    return httpRequest('DELETE', `/api/commands?path=${encodeURIComponent(commandPath)}`)
+  },
+
+  copyCommandToSpace: async (commandName: string, workDir: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.copyCommandToSpace(commandName, workDir)
+    }
+    return httpRequest('POST', '/api/commands/copy', { commandName, workDir })
+  },
+
+  clearCommandsCache: async (): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.clearCommandsCache()
+    }
+    return httpRequest('POST', '/api/commands/clear-cache')
   },
 
   // ===== Agents =====
@@ -711,6 +741,20 @@ export const api = {
       return window.halo.clearToolkit(spaceId)
     }
     return httpRequest('DELETE', `/api/toolkit/${encodeURIComponent(spaceId)}`)
+  },
+
+  migrateToToolkit: async (
+    spaceId: string,
+    skills: string[],
+    agents: string[]
+  ): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.migrateToToolkit(spaceId, skills, agents)
+    }
+    return httpRequest('POST', `/api/toolkit/${encodeURIComponent(spaceId)}/migrate`, {
+      skills,
+      agents
+    })
   },
 
   // ===== Workflows =====

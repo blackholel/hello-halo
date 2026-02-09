@@ -8,11 +8,11 @@
  * Each command is a markdown file (.md).
  */
 
-import { join } from 'path'
-import { readdirSync, readFileSync, statSync } from 'fs'
+import { join, dirname } from 'path'
+import { readdirSync, readFileSync, statSync, existsSync, mkdirSync, writeFileSync, rmSync, copyFileSync } from 'fs'
 import { getHaloDir } from './config.service'
 import { getAllSpacePaths } from './space.service'
-import { isPathWithinBasePaths, isValidDirectoryPath, isFileNotFoundError } from '../utils/path-validation'
+import { isPathWithinBasePaths, isValidDirectoryPath, isFileNotFoundError, isWorkDirAllowed } from '../utils/path-validation'
 import { listEnabledPlugins } from './plugins.service'
 import { FileCache } from '../utils/file-cache'
 import { commandKey } from '../../shared/command-utils'
@@ -39,16 +39,34 @@ function getAllowedCommandBaseDirs(): string[] {
   return getAllSpacePaths().map((spacePath) => join(spacePath, '.claude', 'commands'))
 }
 
+function normalizePath(path: string): string {
+  return path.replace(/\\/g, '/')
+}
+
+function resolveWorkDirForCommandPath(commandPath: string): string | null {
+  const normalizedPath = normalizePath(commandPath)
+  for (const base of getAllowedCommandBaseDirs().map(normalizePath)) {
+    if (normalizedPath.startsWith(base)) {
+      return dirname(dirname(base))
+    }
+  }
+  return null
+}
+
+function extractDescriptionFromContent(content: string): string | undefined {
+  const firstLine = content.split('\n')[0]?.trim()
+  if (!firstLine) return undefined
+  if (firstLine.startsWith('# ')) return firstLine.slice(2).trim().slice(0, 100)
+  if (!firstLine.startsWith('#')) return firstLine.slice(0, 100)
+  return undefined
+}
+
 function extractDescription(filePath: string): string | undefined {
   try {
-    const firstLine = readFileSync(filePath, 'utf-8').split('\n')[0]?.trim()
-    if (!firstLine) return undefined
-    if (firstLine.startsWith('# ')) return firstLine.slice(2).trim().slice(0, 100)
-    if (!firstLine.startsWith('#')) return firstLine.slice(0, 100)
+    return extractDescriptionFromContent(readFileSync(filePath, 'utf-8'))
   } catch {
-    // Ignore read errors
+    return undefined
   }
-  return undefined
 }
 
 function scanCommandDir(
@@ -186,6 +204,108 @@ export function getCommandContent(
     } else {
       console.warn(`[Commands] Failed to read command ${name}:`, error)
     }
+    return null
+  }
+}
+
+/**
+ * Validate that a command path is within allowed directories and exists on disk.
+ * Returns false (with a warning log) if validation fails.
+ */
+function validateCommandPath(commandPath: string, action: string): boolean {
+  if (!isPathWithinBasePaths(commandPath, getAllowedCommandBaseDirs())) {
+    console.warn(`[Commands] Cannot ${action} command outside of space commands directory: ${commandPath}`)
+    return false
+  }
+  if (!existsSync(commandPath)) {
+    console.warn(`[Commands] Command file not found: ${commandPath}`)
+    return false
+  }
+  return true
+}
+
+function invalidateCacheForPath(commandPath: string): void {
+  const workDir = resolveWorkDirForCommandPath(commandPath)
+  if (workDir) {
+    invalidateCommandsCache(workDir)
+  } else {
+    clearCommandsCache()
+  }
+}
+
+export function createCommand(workDir: string, name: string, content: string): CommandDefinition {
+  if (!name || name.includes('/') || name.includes('\\') || name.includes('..') || name.startsWith('.')) {
+    throw new Error(`Invalid command name: ${name}`)
+  }
+
+  if (!isWorkDirAllowed(workDir, getAllSpacePaths())) {
+    throw new Error(`workDir is not an allowed workspace path: ${workDir}`)
+  }
+
+  const commandsDir = join(workDir, '.claude', 'commands')
+  const commandPath = join(commandsDir, `${name}.md`)
+
+  mkdirSync(commandsDir, { recursive: true })
+  writeFileSync(commandPath, content, 'utf-8')
+  invalidateCommandsCache(workDir)
+
+  return {
+    name,
+    path: commandPath,
+    source: 'space',
+    description: extractDescriptionFromContent(content)
+  }
+}
+
+export function updateCommand(commandPath: string, content: string): boolean {
+  try {
+    if (!validateCommandPath(commandPath, 'update')) return false
+    writeFileSync(commandPath, content, 'utf-8')
+    invalidateCacheForPath(commandPath)
+    return true
+  } catch (error) {
+    console.error('[Commands] Failed to update command:', error)
+    return false
+  }
+}
+
+export function deleteCommand(commandPath: string): boolean {
+  try {
+    if (!validateCommandPath(commandPath, 'delete')) return false
+    rmSync(commandPath, { force: true })
+    invalidateCacheForPath(commandPath)
+    return true
+  } catch (error) {
+    console.error('[Commands] Failed to delete command:', error)
+    return false
+  }
+}
+
+export function copyCommandToSpace(commandName: string, workDir: string): CommandDefinition | null {
+  const sourceCommand = findCommand(listCommands(workDir), commandName)
+  if (!sourceCommand) {
+    console.warn(`[Commands] Source command not found: ${commandName}`)
+    return null
+  }
+
+  if (sourceCommand.source === 'space') {
+    console.warn(`[Commands] Command is already in space: ${commandName}`)
+    return sourceCommand
+  }
+
+  try {
+    const targetDir = join(workDir, '.claude', 'commands')
+    const targetPath = join(targetDir, `${sourceCommand.name}.md`)
+    mkdirSync(targetDir, { recursive: true })
+    copyFileSync(sourceCommand.path, targetPath)
+    invalidateCommandsCache(workDir)
+    return {
+      ...sourceCommand,
+      path: targetPath,
+      source: 'space'
+    }
+  } catch (error) {
+    console.error('[Commands] Failed to copy command to space:', error)
     return null
   }
 }

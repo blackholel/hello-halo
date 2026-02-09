@@ -55,8 +55,8 @@ function matchesRef(
 ): boolean {
   if (candidate.id && candidate.id === ref.id) return true
   if (ref.name !== candidate.name) return false
-  if (ref.namespace && ref.namespace !== candidate.namespace) return false
-  if (ref.source && ref.source !== candidate.source) return false
+  if (candidate.namespace && ref.namespace !== candidate.namespace) return false
+  if (candidate.source && ref.source !== candidate.source) return false
   return true
 }
 
@@ -74,6 +74,19 @@ export function toolkitContains(
 ): boolean {
   if (!toolkit) return false
   return toolkit[TYPE_TO_KEY[type]].some(ref => matchesRef(candidate, ref))
+}
+
+/**
+ * Compute a stable hash-like fingerprint for toolkit change detection.
+ */
+export function getToolkitHash(toolkit: SpaceToolkit | null): string {
+  if (!toolkit) return ''
+  const allIds = [
+    ...toolkit.skills.map(ref => normalizeDirective(ref).id),
+    ...toolkit.commands.map(ref => normalizeDirective(ref).id),
+    ...toolkit.agents.map(ref => normalizeDirective(ref).id)
+  ].sort()
+  return allIds.join('|')
 }
 
 /**

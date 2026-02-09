@@ -18,7 +18,9 @@ interface ToolkitState {
   addResource: (spaceId: string, directive: DirectiveRef) => Promise<SpaceToolkit | null>
   removeResource: (spaceId: string, directive: DirectiveRef) => Promise<SpaceToolkit | null>
   clearToolkit: (spaceId: string) => Promise<void>
+  migrateFromPreferences: (spaceId: string, skills: string[], agents: string[]) => Promise<SpaceToolkit | null>
   getToolkit: (spaceId?: string | null) => SpaceToolkit | null
+  isToolkitLoaded: (spaceId?: string | null) => boolean
   isInToolkit: (spaceId: string | null | undefined, directive: DirectiveRef) => boolean
 }
 
@@ -133,9 +135,32 @@ export const useToolkitStore = create<ToolkitState>((set, get) => ({
     }
   },
 
+  migrateFromPreferences: async (spaceId, skills, agents): Promise<SpaceToolkit | null> => {
+    if (!spaceId) return null
+    try {
+      const response = await api.migrateToToolkit(spaceId, skills, agents)
+      if (response.success) {
+        const toolkit = (response.data as SpaceToolkit | null) ?? null
+        setSpaceToolkit(set, spaceId, toolkit)
+        return toolkit
+      }
+      set({ error: response.error || 'Failed to migrate toolkit' })
+      return null
+    } catch (error) {
+      console.error('[ToolkitStore] Failed to migrate toolkit:', error)
+      set({ error: 'Failed to migrate toolkit' })
+      return null
+    }
+  },
+
   getToolkit: (spaceId): SpaceToolkit | null => {
     if (!spaceId) return null
     return get().toolkitsBySpaceId[spaceId] ?? null
+  },
+
+  isToolkitLoaded: (spaceId): boolean => {
+    if (!spaceId) return false
+    return Object.prototype.hasOwnProperty.call(get().toolkitsBySpaceId, spaceId)
   },
 
   isInToolkit: (spaceId, directive): boolean => {

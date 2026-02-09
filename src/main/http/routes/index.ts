@@ -8,7 +8,6 @@ import { BrowserWindow } from 'electron'
 import { createReadStream, statSync, existsSync, readdirSync } from 'fs'
 import { join, basename, relative } from 'path'
 import { createGzip } from 'zlib'
-import { Readable } from 'stream'
 
 import * as agentController from '../../controllers/agent.controller'
 import * as spaceController from '../../controllers/space.controller'
@@ -16,8 +15,16 @@ import * as conversationController from '../../controllers/conversation.controll
 import * as configController from '../../controllers/config.controller'
 import * as changeSetController from '../../controllers/change-set.controller'
 import { listArtifacts } from '../../services/artifact.service'
-import { getTempSpacePath } from '../../services/config.service'
+import { getTempSpacePath, getSpacesDir } from '../../services/config.service'
 import { getSpace, getAllSpacePaths } from '../../services/space.service'
+import { isWorkDirAllowed } from '../../utils/path-validation'
+import {
+  addToolkitResource,
+  clearSpaceToolkit,
+  getSpaceToolkit,
+  migrateToToolkit,
+  removeToolkitResource
+} from '../../services/toolkit.service'
 
 // Helper: get working directory for a space
 function getWorkingDir(spaceId: string): string {
@@ -26,6 +33,33 @@ function getWorkingDir(spaceId: string): string {
   }
   const space = getSpace(spaceId)
   return space ? space.path : getTempSpacePath()
+}
+
+/**
+ * Validate and extract workDir from request.
+ * Returns:
+ *   - the validated workDir string (possibly empty) if OK
+ *   - null if validation failed (response already sent)
+ */
+function validateWorkDir(req: Request, res: Response): string | null {
+  const workDir = (req.body?.workDir || req.query?.workDir) as string | undefined
+  if (!workDir) return ''   // No workDir provided, allowed
+  if (!isWorkDirAllowed(workDir, getAllSpacePaths())) {
+    res.status(403).json({ success: false, error: 'workDir is not an allowed workspace path' })
+    return null
+  }
+  return workDir
+}
+
+/** Wraps an async route handler with standard error response */
+function safeRoute(fn: (req: Request, res: Response) => Promise<void>) {
+  return async (req: Request, res: Response): Promise<void> => {
+    try {
+      await fn(req, res)
+    } catch (error) {
+      res.json({ success: false, error: (error as Error).message })
+    }
+  }
 }
 
 // Helper: collect all files in a directory recursively for tar-like output
@@ -75,14 +109,9 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
   })
 
   // Get default space path (must be before :spaceId route)
-  app.get('/api/spaces/default-path', async (req: Request, res: Response) => {
-    try {
-      const spacesDir = getSpacesDir()
-      res.json({ success: true, data: spacesDir })
-    } catch (error) {
-      res.json({ success: false, error: (error as Error).message })
-    }
-  })
+  app.get('/api/spaces/default-path', safeRoute(async (_req, res) => {
+    res.json({ success: true, data: getSpacesDir() })
+  }))
 
   app.get('/api/spaces', async (req: Request, res: Response) => {
     const result = spaceController.listSpaces()
@@ -267,26 +296,288 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
     res.json(result)
   })
 
-  // ===== Artifact Routes =====
-  app.get('/api/spaces/:spaceId/artifacts', async (req: Request, res: Response) => {
-    try {
-      const artifacts = listArtifacts(req.params.spaceId)
-      res.json({ success: true, data: artifacts })
-    } catch (error) {
-      res.json({ success: false, error: (error as Error).message })
+  // ===== Toolkit Routes =====
+  app.get('/api/toolkit/:spaceId', safeRoute(async (req, res) => {
+    const workDir = getWorkingDir(req.params.spaceId)
+    res.json({ success: true, data: getSpaceToolkit(workDir) })
+  }))
+
+  app.post('/api/toolkit/:spaceId/add', safeRoute(async (req, res) => {
+    const workDir = getWorkingDir(req.params.spaceId)
+    res.json({ success: true, data: addToolkitResource(workDir, req.body) })
+  }))
+
+  app.post('/api/toolkit/:spaceId/remove', safeRoute(async (req, res) => {
+    const workDir = getWorkingDir(req.params.spaceId)
+    res.json({ success: true, data: removeToolkitResource(workDir, req.body) })
+  }))
+
+  app.delete('/api/toolkit/:spaceId', safeRoute(async (req, res) => {
+    const workDir = getWorkingDir(req.params.spaceId)
+    clearSpaceToolkit(workDir)
+    res.json({ success: true, data: null })
+  }))
+
+  app.post('/api/toolkit/:spaceId/migrate', safeRoute(async (req, res) => {
+    const workDir = getWorkingDir(req.params.spaceId)
+    const skills = Array.isArray(req.body?.skills) ? req.body.skills : []
+    const agents = Array.isArray(req.body?.agents) ? req.body.agents : []
+    res.json({ success: true, data: migrateToToolkit(workDir, skills, agents) })
+  }))
+
+  // ===== Skills Routes =====
+  app.get('/api/skills', safeRoute(async (req, res) => {
+    const workDir = validateWorkDir(req, res)
+    if (workDir === null) return
+    const { listSkills } = await import('../../services/skills.service')
+    res.json({ success: true, data: listSkills(workDir || undefined) })
+  }))
+
+  app.get('/api/skills/content', safeRoute(async (req, res) => {
+    const workDir = validateWorkDir(req, res)
+    if (workDir === null) return
+    const { getSkillContent } = await import('../../services/skills.service')
+    const name = (req.query.name as string) || ''
+    const content = getSkillContent(name, workDir || undefined)
+    if (!content) {
+      res.json({ success: false, error: `Skill not found: ${name}` })
+      return
     }
-  })
+    res.json({ success: true, data: content })
+  }))
+
+  app.post('/api/skills', safeRoute(async (req, res) => {
+    const workDir = validateWorkDir(req, res)
+    if (workDir === null) return
+    const { createSkill } = await import('../../services/skills.service')
+    const { name, content } = req.body
+    res.json({ success: true, data: createSkill(workDir, name, content) })
+  }))
+
+  app.put('/api/skills', safeRoute(async (req, res) => {
+    const { updateSkill } = await import('../../services/skills.service')
+    const { skillPath, content } = req.body
+    if (!updateSkill(skillPath, content)) {
+      res.json({ success: false, error: 'Failed to update skill' })
+      return
+    }
+    res.json({ success: true, data: true })
+  }))
+
+  app.delete('/api/skills', safeRoute(async (req, res) => {
+    const { deleteSkill } = await import('../../services/skills.service')
+    if (!deleteSkill(req.query.path as string)) {
+      res.json({ success: false, error: 'Failed to delete skill' })
+      return
+    }
+    res.json({ success: true, data: true })
+  }))
+
+  app.post('/api/skills/copy', safeRoute(async (req, res) => {
+    const workDir = validateWorkDir(req, res)
+    if (workDir === null) return
+    const { copySkillToSpace } = await import('../../services/skills.service')
+    const { skillName } = req.body
+    const skill = copySkillToSpace(skillName, workDir)
+    if (!skill) {
+      res.json({ success: false, error: `Failed to copy skill: ${skillName}` })
+      return
+    }
+    res.json({ success: true, data: skill })
+  }))
+
+  app.post('/api/skills/clear-cache', safeRoute(async (_req, res) => {
+    const { clearSkillsCache } = await import('../../services/skills.service')
+    clearSkillsCache()
+    res.json({ success: true })
+  }))
+
+  // ===== Agents Routes =====
+  app.get('/api/agents', safeRoute(async (req, res) => {
+    const workDir = validateWorkDir(req, res)
+    if (workDir === null) return
+    const { listAgents } = await import('../../services/agents.service')
+    res.json({ success: true, data: listAgents(workDir || undefined) })
+  }))
+
+  app.get('/api/agents/content', safeRoute(async (req, res) => {
+    const workDir = validateWorkDir(req, res)
+    if (workDir === null) return
+    const { getAgentContent } = await import('../../services/agents.service')
+    const name = (req.query.name as string) || ''
+    const content = getAgentContent(name, workDir || undefined)
+    if (!content) {
+      res.json({ success: false, error: `Agent not found: ${name}` })
+      return
+    }
+    res.json({ success: true, data: content })
+  }))
+
+  app.post('/api/agents', safeRoute(async (req, res) => {
+    const workDir = validateWorkDir(req, res)
+    if (workDir === null) return
+    const { createAgent } = await import('../../services/agents.service')
+    const { name, content } = req.body
+    res.json({ success: true, data: createAgent(workDir, name, content) })
+  }))
+
+  app.put('/api/agents', safeRoute(async (req, res) => {
+    const { updateAgent } = await import('../../services/agents.service')
+    const { agentPath, content } = req.body
+    if (!updateAgent(agentPath, content)) {
+      res.json({ success: false, error: 'Failed to update agent' })
+      return
+    }
+    res.json({ success: true, data: true })
+  }))
+
+  app.delete('/api/agents', safeRoute(async (req, res) => {
+    const { deleteAgent } = await import('../../services/agents.service')
+    if (!deleteAgent(req.query.path as string)) {
+      res.json({ success: false, error: 'Failed to delete agent' })
+      return
+    }
+    res.json({ success: true, data: true })
+  }))
+
+  app.post('/api/agents/copy', safeRoute(async (req, res) => {
+    const workDir = validateWorkDir(req, res)
+    if (workDir === null) return
+    const { copyAgentToSpace } = await import('../../services/agents.service')
+    const { agentName } = req.body
+    const agent = copyAgentToSpace(agentName, workDir)
+    if (!agent) {
+      res.json({ success: false, error: `Failed to copy agent: ${agentName}` })
+      return
+    }
+    res.json({ success: true, data: agent })
+  }))
+
+  app.post('/api/agents/clear-cache', safeRoute(async (_req, res) => {
+    const { clearAgentsCache } = await import('../../services/agents.service')
+    clearAgentsCache()
+    res.json({ success: true })
+  }))
+
+  // ===== Commands Routes =====
+  app.get('/api/commands', safeRoute(async (req, res) => {
+    const workDir = validateWorkDir(req, res)
+    if (workDir === null) return
+    const { listCommands } = await import('../../services/commands.service')
+    res.json({ success: true, data: listCommands(workDir || undefined) })
+  }))
+
+  app.get('/api/commands/content', safeRoute(async (req, res) => {
+    const workDir = validateWorkDir(req, res)
+    if (workDir === null) return
+    const { getCommandContent } = await import('../../services/commands.service')
+    const name = (req.query.name as string) || ''
+    const content = getCommandContent(name, workDir || undefined)
+    if (!content) {
+      res.json({ success: false, error: `Command not found: ${name}` })
+      return
+    }
+    res.json({ success: true, data: content })
+  }))
+
+  app.post('/api/commands', safeRoute(async (req, res) => {
+    const workDir = validateWorkDir(req, res)
+    if (workDir === null) return
+    const { createCommand } = await import('../../services/commands.service')
+    const { name, content } = req.body
+    res.json({ success: true, data: createCommand(workDir, name, content) })
+  }))
+
+  app.put('/api/commands', safeRoute(async (req, res) => {
+    const { updateCommand } = await import('../../services/commands.service')
+    const { commandPath, content } = req.body
+    if (!updateCommand(commandPath, content)) {
+      res.json({ success: false, error: 'Failed to update command' })
+      return
+    }
+    res.json({ success: true, data: true })
+  }))
+
+  app.delete('/api/commands', safeRoute(async (req, res) => {
+    const { deleteCommand } = await import('../../services/commands.service')
+    if (!deleteCommand(req.query.path as string)) {
+      res.json({ success: false, error: 'Failed to delete command' })
+      return
+    }
+    res.json({ success: true, data: true })
+  }))
+
+  app.post('/api/commands/copy', safeRoute(async (req, res) => {
+    const workDir = validateWorkDir(req, res)
+    if (workDir === null) return
+    const { copyCommandToSpace } = await import('../../services/commands.service')
+    const { commandName } = req.body
+    const command = copyCommandToSpace(commandName, workDir)
+    if (!command) {
+      res.json({ success: false, error: `Failed to copy command: ${commandName}` })
+      return
+    }
+    res.json({ success: true, data: command })
+  }))
+
+  app.post('/api/commands/clear-cache', safeRoute(async (_req, res) => {
+    const { clearCommandsCache } = await import('../../services/commands.service')
+    clearCommandsCache()
+    res.json({ success: true })
+  }))
+
+  // ===== Workflows Routes =====
+  app.get('/api/workflows', safeRoute(async (req, res) => {
+    const { listWorkflows } = await import('../../services/workflow.service')
+    res.json({ success: true, data: listWorkflows(req.query.spaceId as string) })
+  }))
+
+  app.get('/api/workflows/:workflowId', safeRoute(async (req, res) => {
+    const { getWorkflow } = await import('../../services/workflow.service')
+    const workflow = getWorkflow(req.query.spaceId as string, req.params.workflowId)
+    if (!workflow) {
+      res.json({ success: false, error: `Workflow not found: ${req.params.workflowId}` })
+      return
+    }
+    res.json({ success: true, data: workflow })
+  }))
+
+  app.post('/api/workflows', safeRoute(async (req, res) => {
+    const { createWorkflow } = await import('../../services/workflow.service')
+    const { spaceId, input } = req.body
+    res.json({ success: true, data: createWorkflow(spaceId, input) })
+  }))
+
+  app.put('/api/workflows/:workflowId', safeRoute(async (req, res) => {
+    const { updateWorkflow } = await import('../../services/workflow.service')
+    const { spaceId, updates } = req.body
+    const workflow = updateWorkflow(spaceId, req.params.workflowId, updates)
+    if (!workflow) {
+      res.json({ success: false, error: 'Failed to update workflow' })
+      return
+    }
+    res.json({ success: true, data: workflow })
+  }))
+
+  app.delete('/api/workflows/:workflowId', safeRoute(async (req, res) => {
+    const { deleteWorkflow } = await import('../../services/workflow.service')
+    if (!deleteWorkflow(req.query.spaceId as string, req.params.workflowId)) {
+      res.json({ success: false, error: 'Failed to delete workflow' })
+      return
+    }
+    res.json({ success: true, data: true })
+  }))
+
+  // ===== Artifact Routes =====
+  app.get('/api/spaces/:spaceId/artifacts', safeRoute(async (req, res) => {
+    res.json({ success: true, data: listArtifacts(req.params.spaceId) })
+  }))
 
   // Tree view of artifacts
-  app.get('/api/spaces/:spaceId/artifacts/tree', async (req: Request, res: Response) => {
-    try {
-      const { listArtifactsTree } = await import('../../services/artifact.service')
-      const tree = listArtifactsTree(req.params.spaceId)
-      res.json({ success: true, data: tree })
-    } catch (error) {
-      res.json({ success: false, error: (error as Error).message })
-    }
-  })
+  app.get('/api/spaces/:spaceId/artifacts/tree', safeRoute(async (req, res) => {
+    const { listArtifactsTree } = await import('../../services/artifact.service')
+    res.json({ success: true, data: listArtifactsTree(req.params.spaceId) })
+  }))
 
   // Download single file
   app.get('/api/artifacts/download', async (req: Request, res: Response) => {

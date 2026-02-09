@@ -6,11 +6,11 @@
 
 import { unstable_v2_createSession } from '@anthropic-ai/claude-agent-sdk'
 import { getConfig, onApiConfigChange } from '../config.service'
-import { getSpaceConfig } from '../space-config.service'
+import { getToolkitHash } from '../toolkit.service'
 import { getConversation } from '../conversation.service'
 import { getHeadlessElectronPath } from './electron-path'
 import { resolveProvider } from './provider-resolver'
-import { buildSdkOptions, getWorkingDir } from './sdk-config.builder'
+import { buildSdkOptions, getWorkingDir, getEffectiveSkillsLazyLoad } from './sdk-config.builder'
 import type { V2SDKSession, V2SessionInfo, SessionConfig, SessionState } from './types'
 import { getEnabledPluginMcpHash, getEnabledPluginMcpList } from '../plugin-mcp.service'
 
@@ -54,6 +54,7 @@ function needsSessionRebuild(existing: V2SessionInfo, newConfig: SessionConfig):
   return (
     existing.config.aiBrowserEnabled !== newConfig.aiBrowserEnabled ||
     existing.config.skillsLazyLoad !== newConfig.skillsLazyLoad ||
+    (existing.config.toolkitHash || '') !== (newConfig.toolkitHash || '') ||
     (existing.config.enabledPluginMcpsHash || '') !== (newConfig.enabledPluginMcpsHash || '')
   )
 }
@@ -115,7 +116,7 @@ export async function getOrCreateV2Session(
     conversationId,
     createdAt: Date.now(),
     lastUsedAt: Date.now(),
-    config: config || { aiBrowserEnabled: false, skillsLazyLoad: false, enabledPluginMcpsHash: '' }
+    config: config || { aiBrowserEnabled: false, skillsLazyLoad: false, toolkitHash: '', enabledPluginMcpsHash: '' }
   })
 
   startSessionCleanup()
@@ -132,10 +133,8 @@ export async function ensureSessionWarm(spaceId: string, conversationId: string)
   const conversation = getConversation(spaceId, conversationId)
   const sessionId = conversation?.sessionId
   const electronPath = getHeadlessElectronPath()
-  const spaceConfig = getSpaceConfig(workDir)
-  const skillsLazyLoad =
-    config.claudeCode?.skillsLazyLoad === true ||
-    spaceConfig?.claudeCode?.skillsLazyLoad === true
+  const { effectiveLazyLoad: skillsLazyLoad, toolkit } = getEffectiveSkillsLazyLoad(workDir, config)
+  const toolkitHash = getToolkitHash(toolkit)
 
   const abortController = new AbortController()
   const resolved = await resolveProvider(config.api)
@@ -163,7 +162,12 @@ export async function ensureSessionWarm(spaceId: string, conversationId: string)
       conversationId,
       sdkOptions,
       sessionId,
-      { aiBrowserEnabled: false, skillsLazyLoad, enabledPluginMcpsHash: getEnabledPluginMcpHash(conversationId) }
+      {
+        aiBrowserEnabled: false,
+        skillsLazyLoad,
+        toolkitHash,
+        enabledPluginMcpsHash: getEnabledPluginMcpHash(conversationId)
+      }
     )
     console.log(`[Agent] V2 session warmed up: ${conversationId}`)
   } catch (error) {

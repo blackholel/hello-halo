@@ -6,6 +6,7 @@ import { shell } from 'electron'
 import { join, basename } from 'path'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, rmSync } from 'fs'
 import { getHaloDir, getTempSpacePath, getSpacesDir } from './config.service'
+import { updateSpaceConfig } from './space-config.service'
 import { v4 as uuidv4 } from 'uuid'
 
 interface Space {
@@ -311,6 +312,18 @@ export function createSpace(input: { name: string; icon: string; customPath?: st
   }
 
   writeFileSync(join(spacePath, '.halo', 'meta.json'), JSON.stringify(meta, null, 2))
+
+  // Initialize empty toolkit for space isolation (whitelist mode)
+  // Uses updateSpaceConfig to merge safely — preserves existing claudeCode config
+  // when customPath points to a directory that already has space-config.json
+  const initResult = updateSpaceConfig(spacePath, (config) => ({
+    ...config,
+    toolkit: config.toolkit ?? { skills: [], commands: [], agents: [] }
+  }))
+
+  if (!initResult) {
+    console.error(`[Space] Failed to initialize toolkit for space: ${spacePath}`)
+  }
 
   // Register custom path in index
   if (isCustomPath) {

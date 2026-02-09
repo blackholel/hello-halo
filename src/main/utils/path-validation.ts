@@ -59,6 +59,34 @@ export function isPathWithinBasePaths(targetPath: string, basePaths: string[]): 
 }
 
 /**
+ * Validate that a path is one of the allowed workspace (space) directories.
+ *
+ * @param workDir - Path to validate
+ * @param allowedPaths - List of allowed workspace paths (e.g. from getAllSpacePaths())
+ * @returns true if workDir is exactly one of the allowed paths
+ */
+export function isWorkDirAllowed(workDir: string, allowedPaths?: string[]): boolean {
+  if (!workDir) return false
+
+  // When no explicit list is provided, dynamically resolve from space service
+  let paths = allowedPaths
+  if (!paths) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const spaceService = require('../services/space.service') as {
+        getAllSpacePaths: () => string[]
+      }
+      paths = spaceService.getAllSpacePaths()
+    } catch {
+      return false
+    }
+  }
+
+  const resolved = normalizePlatformPath(workDir)
+  return paths.some((spacePath) => spacePath && normalizePlatformPath(spacePath) === resolved)
+}
+
+/**
  * Check if an error represents a file-not-found condition (ENOENT / ENOTDIR)
  *
  * Use this to decide log severity: file-not-found → debug, others → warn.

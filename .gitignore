@@ -41,3 +41,6 @@ website/
 
 # Bundled Python runtime (downloaded at build time)
 resources/python/
+
+# Git worktrees
+worktrees/

@@ -6,6 +6,7 @@ import { create } from 'zustand'
 import { api } from '../api'
 import type { Workflow, WorkflowMeta, WorkflowStep } from '../types'
 import { useChatStore } from './chat.store'
+import { useToolkitStore } from './toolkit.store'
 
 export interface WorkflowRunStepState {
   id: string
@@ -78,6 +79,13 @@ function getLastAssistantContent(conversationId: string): string | undefined {
 
 function shouldSummarizeAfterStep(step: WorkflowStep, stepIndex: number, totalSteps: number): boolean {
   return !!step.summarizeAfter && stepIndex < totalSteps - 1
+}
+
+function hasToolkitResource(
+  name: string,
+  refs: Array<{ name: string }>
+): boolean {
+  return refs.some((ref) => ref.name === name)
 }
 
 export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
@@ -184,6 +192,31 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
 
     const workflow = await get().loadWorkflow(spaceId, workflowId)
     if (!workflow) return
+
+    const toolkit = await useToolkitStore.getState().loadToolkit(spaceId)
+    if (toolkit) {
+      const missingSteps: string[] = []
+
+      workflow.steps.forEach((step, index) => {
+        const stepName = step.name?.trim()
+        if (!stepName) return
+
+        if (step.type === 'skill' && !hasToolkitResource(stepName, toolkit.skills)) {
+          missingSteps.push(`Step ${index + 1}: skill ${stepName}`)
+        }
+
+        if (step.type === 'agent' && !hasToolkitResource(stepName, toolkit.agents)) {
+          missingSteps.push(`Step ${index + 1}: agent ${stepName}`)
+        }
+      })
+
+      if (missingSteps.length > 0) {
+        const message = `Workflow contains resources outside toolkit: ${missingSteps.join(', ')}`
+        console.warn('[WorkflowsStore]', message)
+        set({ error: message })
+        return
+      }
+    }
 
     const conversation = await useChatStore.getState().createConversation(spaceId, workflow.name)
     if (!conversation) {

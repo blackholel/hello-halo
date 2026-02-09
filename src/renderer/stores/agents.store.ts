@@ -11,6 +11,9 @@
 import { create } from 'zustand'
 import { api } from '../api'
 import { getCacheKey, getAllCacheKeys, GLOBAL_CACHE_KEY } from './cache-keys'
+import { useSpaceStore } from './space.store'
+import { useToolkitStore } from './toolkit.store'
+import { buildDirective } from '../utils/directive-helpers'
 
 // ============================================
 // Types
@@ -174,6 +177,15 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
             [cacheKey]: [...(state.agentsByWorkDir[cacheKey] || []), newAgent]
           }
         }))
+
+        const currentSpace = useSpaceStore.getState().currentSpace
+        if (currentSpace) {
+          const toolkitStore = useToolkitStore.getState()
+          if (toolkitStore.getToolkit(currentSpace.id)) {
+            void toolkitStore.addResource(currentSpace.id, buildDirective('agent', newAgent))
+          }
+        }
+
         return newAgent
       }
 

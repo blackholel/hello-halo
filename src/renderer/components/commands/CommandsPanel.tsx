@@ -3,14 +3,18 @@
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { Terminal, Search, ChevronDown } from 'lucide-react'
+import { Terminal, Search, ChevronDown, Plus } from 'lucide-react'
 import { useTranslation } from '../../i18n'
 import { useCommandsStore, type CommandDefinition } from '../../stores/commands.store'
 import { commandKey } from '../../../shared/command-utils'
+import { useSpaceStore } from '../../stores/space.store'
+import { useToolkitStore } from '../../stores/toolkit.store'
+import { buildDirective } from '../../utils/directive-helpers'
 
 interface CommandsPanelProps {
   workDir?: string
   onInsertCommand?: (commandName: string) => void
+  onCreateCommand?: () => void
   preferInsertOnClick?: boolean
 }
 
@@ -36,14 +40,26 @@ const SOURCE_COLORS: Record<CommandDefinition['source'], string> = {
 export function CommandsPanel({
   workDir,
   onInsertCommand,
+  onCreateCommand,
   preferInsertOnClick = false
 }: CommandsPanelProps): JSX.Element {
   const { t } = useTranslation()
   const [isExpanded, setIsExpanded] = useState(false)
   const [isAnimatingOut, setIsAnimatingOut] = useState(false)
   const [localSearchQuery, setLocalSearchQuery] = useState('')
+  const [showAllInToolkitMode, setShowAllInToolkitMode] = useState(false)
+  const [updatingToolkitCommand, setUpdatingToolkitCommand] = useState<string | null>(null)
 
   const { commands, loadedWorkDir, isLoading, loadCommands } = useCommandsStore()
+  const currentSpace = useSpaceStore((state) => state.currentSpace)
+  const {
+    loadToolkit,
+    getToolkit,
+    isInToolkit,
+    addResource,
+    removeResource,
+    isToolkitLoaded
+  } = useToolkitStore()
 
   useEffect(() => {
     if (isExpanded && (commands.length === 0 || loadedWorkDir !== (workDir ?? null))) {
@@ -51,14 +67,41 @@ export function CommandsPanel({
     }
   }, [isExpanded, workDir, commands.length, loadedWorkDir, loadCommands])
 
+  const isToolkitManageableSpace = !!currentSpace && !currentSpace.isTemp
+  const toolkitLoaded = !!currentSpace && isToolkitLoaded(currentSpace.id)
+  const toolkit = currentSpace ? getToolkit(currentSpace.id) : null
+  const isToolkitMode = isToolkitManageableSpace && toolkitLoaded && toolkit !== null
+
+  useEffect(() => {
+    if (!isExpanded || !currentSpace || currentSpace.isTemp || toolkitLoaded) return
+    void loadToolkit(currentSpace.id)
+  }, [isExpanded, currentSpace, toolkitLoaded, loadToolkit])
+
+  useEffect(() => {
+    setShowAllInToolkitMode(false)
+  }, [currentSpace?.id])
+
+  const toolkitCommands = useMemo(() => {
+    if (!isToolkitMode || !currentSpace) return [] as CommandDefinition[]
+    return commands.filter(command => isInToolkit(currentSpace.id, buildDirective('command', command)))
+  }, [commands, isToolkitMode, currentSpace, toolkit, isInToolkit])
+
+  const totalCommandsCount = commands.length
+  const toolkitCommandsCount = toolkitCommands.length
+  const displayCommandsCount = isToolkitMode && !showAllInToolkitMode ? toolkitCommandsCount : totalCommandsCount
+
   const filteredCommands = useMemo(() => {
-    if (!localSearchQuery.trim()) return commands
+    const baseCommands = isToolkitMode && !showAllInToolkitMode
+      ? toolkitCommands
+      : commands
+
+    if (!localSearchQuery.trim()) return baseCommands
     const query = localSearchQuery.toLowerCase()
-    return commands.filter(command =>
+    return baseCommands.filter(command =>
       commandKey(command).toLowerCase().includes(query) ||
       command.description?.toLowerCase().includes(query)
     )
-  }, [commands, localSearchQuery])
+  }, [commands, localSearchQuery, isToolkitMode, showAllInToolkitMode, toolkitCommands])
 
   const groupedCommands = useMemo(() => {
     const groups: Record<CommandDefinition['source'], CommandDefinition[]> = {
@@ -103,9 +146,34 @@ export function CommandsPanel({
     insertAndClose(command)
   }, [insertAndClose])
 
+  const handleToggleToolkit = useCallback(async (command: CommandDefinition, e: React.MouseEvent): Promise<void> => {
+    e.stopPropagation()
+    if (!currentSpace || currentSpace.isTemp) return
+
+    const directive = buildDirective('command', command)
+    const currentlyInToolkit = isInToolkit(currentSpace.id, directive)
+
+    try {
+      setUpdatingToolkitCommand(command.path)
+      if (currentlyInToolkit) {
+        await removeResource(currentSpace.id, directive)
+      } else {
+        await addResource(currentSpace.id, directive)
+      }
+    } finally {
+      setUpdatingToolkitCommand(null)
+    }
+  }, [currentSpace, isInToolkit, addResource, removeResource])
+
   function renderCommandItem(command: CommandDefinition, index: number): JSX.Element {
     const key = commandKey(command)
     const staggerDelay = Math.min(index * ITEM_STAGGER_MS, MAX_STAGGER_MS)
+    const commandInToolkit = isToolkitManageableSpace && currentSpace
+      ? isInToolkit(currentSpace.id, buildDirective('command', command))
+      : false
+    const toolkitActionLabel = isToolkitMode
+      ? (commandInToolkit ? t('Remove from toolkit') : t('Add to toolkit'))
+      : t('Activate in space')
     return (
       <div
         key={command.path}
@@ -135,8 +203,18 @@ export function CommandsPanel({
             )}
           </div>
 
-          {onInsertCommand && (
-            <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-all">
+          <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-all">
+            {isToolkitManageableSpace && (
+              <button
+                onClick={(e) => handleToggleToolkit(command, e)}
+                disabled={updatingToolkitCommand === command.path}
+                className="px-2 py-1 text-[10px] font-medium rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
+                title={toolkitActionLabel}
+              >
+                {updatingToolkitCommand === command.path ? t('Loading...') : toolkitActionLabel}
+              </button>
+            )}
+            {onInsertCommand && (
               <button
                 onClick={(e) => handleInsertButton(command, e)}
                 className="px-2 py-1 text-[10px] font-medium rounded-md
@@ -145,8 +223,8 @@ export function CommandsPanel({
               >
                 {t('Insert')}
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     )
@@ -184,7 +262,7 @@ export function CommandsPanel({
         </span>
         <span className="flex items-center gap-2">
           <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-            {commands.length}
+            {displayCommandsCount}
           </span>
           <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
         </span>
@@ -200,16 +278,33 @@ export function CommandsPanel({
           `}
           style={{ animationDuration: `${PANEL_ANIMATION_MS}ms` }}
         >
-          <div className="px-3 py-2.5 border-b border-border/50">
-            <h3 className="text-xs font-semibold text-foreground">{t('Commands')}</h3>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              {t('{{count}} commands available', { count: commands.length })}
-            </p>
-            <p className="text-[10px] text-muted-foreground/70 mt-1">
-              {workDir
-                ? t('Manage files in ~/.halo/commands/ and {{path}}/.claude/commands/', { path: workDir })
-                : t('Manage files in ~/.halo/commands/')}
-            </p>
+          <div className="px-3 py-2.5 border-b border-border/50 flex items-center justify-between">
+            <div>
+              <h3 className="text-xs font-semibold text-foreground">{t('Commands')}</h3>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                {isToolkitMode && !showAllInToolkitMode
+                  ? t('{{toolkit}} / {{total}} commands in toolkit', {
+                    toolkit: toolkitCommandsCount,
+                    total: totalCommandsCount
+                  })
+                  : t('{{count}} commands available', { count: totalCommandsCount })}
+              </p>
+              <p className="text-[10px] text-muted-foreground/70 mt-1">
+                {workDir
+                  ? t('Manage files in ~/.halo/commands/ and {{path}}/.claude/commands/', { path: workDir })
+                  : t('Manage files in ~/.halo/commands/')}
+              </p>
+            </div>
+            {workDir && onCreateCommand && (
+              <button
+                onClick={onCreateCommand}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-medium
+                  bg-primary/10 hover:bg-primary/20 text-primary rounded-lg transition-colors"
+              >
+                <Plus size={14} />
+                {t('New command')}
+              </button>
+            )}
           </div>
 
           <div className="px-3 py-2 border-b border-border/30">
@@ -224,9 +319,21 @@ export function CommandsPanel({
                   rounded-md focus:outline-none focus:border-primary/50 placeholder:text-muted-foreground/50"
               />
             </div>
-            <p className="text-[10px] text-muted-foreground/60 mt-1">
-              {t('Click a command to insert /name')}
-            </p>
+            <div className="mt-1 flex items-center gap-2">
+              {isToolkitMode && (
+                <button
+                  onClick={() => setShowAllInToolkitMode(prev => !prev)}
+                  className="px-2 py-0.5 text-[10px] rounded text-muted-foreground hover:text-foreground"
+                >
+                  {showAllInToolkitMode ? t('Toolkit resources only') : t('Browse all resources')}
+                </button>
+              )}
+              <p className="text-[10px] text-muted-foreground/60">
+                {isToolkitMode && !showAllInToolkitMode
+                  ? t('Toolkit mode enabled')
+                  : t('Click a command to insert /name')}
+              </p>
+            </div>
           </div>
 
           <div className="max-h-[320px] overflow-auto px-1 py-1">
@@ -241,7 +348,9 @@ export function CommandsPanel({
                   <Terminal size={24} className="text-muted-foreground/50" />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {localSearchQuery ? t('No commands found') : t('No commands available')}
+                  {localSearchQuery
+                    ? t('No commands found')
+                    : (isToolkitMode && !showAllInToolkitMode ? t('No toolkit resources available') : t('No commands available'))}
                 </p>
                 <p className="text-[10px] text-muted-foreground/60 mt-1">
                   {localSearchQuery
