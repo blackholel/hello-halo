@@ -14,6 +14,7 @@
 import { useCallback, useEffect } from 'react'
 import { useChatStore } from '../../../stores/chat.store'
 import { useSmartScroll } from '../../../hooks/useSmartScroll'
+import { useCanvasLifecycle } from '../../../hooks/useCanvasLifecycle'
 import { MessageList } from '../../chat/MessageList'
 import { InputArea } from '../../chat/InputArea'
 import { AskUserQuestionPanel } from '../../chat/AskUserQuestionPanel'
@@ -31,6 +32,7 @@ interface ChatTabViewerProps {
 export function ChatTabViewer({ tab }: ChatTabViewerProps) {
   const { t } = useTranslation()
   const { conversationId, spaceId } = tab
+  const { openPlan } = useCanvasLifecycle()
 
   // Get conversation and session from store
   const conversation = useChatStore(state =>
@@ -52,6 +54,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
   const rollbackChangeSet = useChatStore(state => state.rollbackChangeSet)
   const answerQuestion = useChatStore(state => state.answerQuestion)
   const dismissAskUserQuestion = useChatStore(state => state.dismissAskUserQuestion)
+  const setPlanEnabled = useChatStore(state => state.setPlanEnabled)
 
   // Load conversation if not in cache
   useEffect(() => {
@@ -81,6 +84,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
     toolStatusById = {},
     availableToolsSnapshot,
     pendingAskUserQuestion = null,
+    planEnabled = false,
     failedAskUserQuestion = null
   } = session || {}
 
@@ -104,13 +108,23 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
     content: string,
     images?: ImageAttachment[],
     thinkingEnabled?: boolean,
-    fileContexts?: FileContextAttachment[]
+    fileContexts?: FileContextAttachment[],
+    planEnabled?: boolean
   ) => {
     if (!conversationId || !spaceId) return
     if ((!content.trim() && (!images || images.length === 0) && (!fileContexts || fileContexts.length === 0)) || isGenerating) return
 
     // Send directly to the target conversation - no global context switching needed
-    await sendMessageToConversation(spaceId, conversationId, content, images, thinkingEnabled, fileContexts)
+    await sendMessageToConversation(
+      spaceId,
+      conversationId,
+      content,
+      images,
+      thinkingEnabled,
+      fileContexts,
+      undefined,
+      planEnabled
+    )
   }, [conversationId, spaceId, isGenerating, sendMessageToConversation])
 
   // Handle stop generation
@@ -122,6 +136,22 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
 
   const messages = conversation?.messages || []
   const hasMessages = messages.length > 0 || Boolean(streamingContent) || isThinking
+
+  const handlePlanEnabledChange = useCallback((enabled: boolean) => {
+    if (!conversationId) {
+      return
+    }
+    setPlanEnabled(conversationId, enabled)
+  }, [conversationId, setPlanEnabled])
+
+  const handleOpenPlanInCanvas = useCallback(async (planContent: string) => {
+    if (!spaceId || !conversationId) {
+      console.error('[ChatTabViewer] Missing conversation binding for plan tab')
+      return
+    }
+
+    await openPlan(planContent, t('Plan'), spaceId, conversationId)
+  }, [conversationId, openPlan, spaceId, t])
 
   // Loading state
   if (!conversation && isLoadingConversation) {
@@ -177,6 +207,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
                 textBlockVersion={textBlockVersion}
                 toolStatusById={toolStatusById}
                 availableToolsSnapshot={availableToolsSnapshot}
+                onOpenPlanInCanvas={handleOpenPlanInCanvas}
               />
               <div ref={bottomRef} />
             </>
@@ -258,6 +289,8 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
         isGenerating={isGenerating}
         placeholder={t('Continue conversation...')}
         isCompact={true}
+        planEnabled={planEnabled}
+        onPlanEnabledChange={handlePlanEnabledChange}
       />
     </div>
   )

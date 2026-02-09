@@ -614,6 +614,7 @@ export interface AgentCompleteEvent extends AgentEventBase {
   reason?: 'completed' | 'stopped' | 'error' | 'no_text';
   terminalAt?: string;
   tokenUsage?: TokenUsage | null;
+  isPlan?: boolean;
 }
 
 export interface AgentRunStartEvent extends AgentEventBase {

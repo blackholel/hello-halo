@@ -39,6 +39,8 @@ interface InputAreaProps {
   placeholder?: string
   isCompact?: boolean
   workDir?: string  // For skills dropdown
+  planEnabled: boolean
+  onPlanEnabledChange: (enabled: boolean) => void
 }
 
 // Image constraints
@@ -51,7 +53,16 @@ interface ImageError {
   message: string
 }
 
-export function InputArea({ onSend, onStop, isGenerating, placeholder, isCompact = false, workDir }: InputAreaProps) {
+export function InputArea({
+  onSend,
+  onStop,
+  isGenerating,
+  placeholder,
+  isCompact = false,
+  workDir,
+  planEnabled,
+  onPlanEnabledChange,
+}: InputAreaProps) {
   const { t } = useTranslation()
   const [content, setContent] = useState('')
   const [isFocused, setIsFocused] = useState(false)
@@ -61,7 +72,6 @@ export function InputArea({ onSend, onStop, isGenerating, placeholder, isCompact
   const [isProcessingImages, setIsProcessingImages] = useState(false)
   const [imageError, setImageError] = useState<ImageError | null>(null)
   const [thinkingEnabled, setThinkingEnabled] = useState(false)  // Extended thinking mode
-  const [planEnabled, setPlanEnabled] = useState(false)  // Plan mode (no tool execution)
   const [showAttachMenu, setShowAttachMenu] = useState(false)  // Attachment menu visibility
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -462,7 +472,7 @@ export function InputArea({ onSend, onStop, isGenerating, placeholder, isCompact
             thinkingEnabled={thinkingEnabled}
             onThinkingToggle={() => setThinkingEnabled(!thinkingEnabled)}
             planEnabled={planEnabled}
-            onPlanToggle={() => setPlanEnabled(!planEnabled)}
+            onPlanToggle={() => onPlanEnabledChange(!planEnabled)}
             aiBrowserEnabled={aiBrowserEnabled}
             onAIBrowserToggle={() => setAIBrowserEnabled(!aiBrowserEnabled)}
             showAttachMenu={showAttachMenu}

@@ -36,6 +36,7 @@ import { api } from '../api'
 export type ContentType =
   | 'code'
   | 'markdown'
+  | 'plan'
   | 'html'
   | 'image'
   | 'pdf'
@@ -69,7 +70,7 @@ export interface TabState {
   scrollPosition?: number
   browserViewId?: string
   browserState?: BrowserState
-  // Chat tab specific fields
+  // Session-bound tab fields (used by chat tabs and plan tabs)
   conversationId?: string
   spaceId?: string
 }
@@ -512,6 +513,65 @@ class CanvasLifecycle {
       title,
       content,
       language,
+      isDirty: false,
+      isLoading: false,
+    }
+
+    this.tabs.set(tabId, tab)
+    this.setOpen(true)
+    this.notifyTabsChange()
+
+    await this.switchTab(tabId)
+
+    return tabId
+  }
+
+  /**
+   * Open a plan tab bound to a specific space/conversation
+   * Reuses existing plan tab for the same conversation when possible
+   */
+  async openPlan(
+    content: string,
+    title: string,
+    spaceId: string,
+    conversationId: string
+  ): Promise<string> {
+    // Find existing plan tab for this conversation in this space
+    for (const [tabId, tab] of this.tabs) {
+      if (tab.type === 'plan' && tab.spaceId === spaceId && tab.conversationId === conversationId) {
+        this.setOpen(true)
+
+        // If user has local edits, keep local content
+        if (tab.isDirty) {
+          await this.switchTab(tabId)
+          return tabId
+        }
+
+        // Immutable update: create new tab object instead of mutating in-place
+        this.tabs.set(tabId, {
+          ...tab,
+          content,
+          title,
+          language: 'markdown',
+          isDirty: false,
+          error: undefined,
+        })
+        this.notifyTabsChange()
+        await this.switchTab(tabId)
+        return tabId
+      }
+    }
+
+    // Create new plan tab
+    const tabId = generateTabId()
+    const tab: TabState = {
+      id: tabId,
+      type: 'plan',
+      title,
+      content,
+      language: 'markdown',
+      conversationId,
+      spaceId,
       isDirty: false,
       isLoading: false,
     }

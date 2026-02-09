@@ -22,7 +22,7 @@ import { SearchHighlightBar } from './components/search/SearchHighlightBar'
 import { OnboardingOverlay } from './components/onboarding'
 import { UpdateNotification } from './components/updater/UpdateNotification'
 import { api } from './api'
-import type { AgentEventBase, Thought, ToolCall } from './types'
+import type { AgentEventBase, AgentCompleteEvent, Thought, ToolCall } from './types'
 
 // Lazy load heavy page components for better initial load performance
 // These pages contain complex components (chat, markdown, code highlighting, etc.)
