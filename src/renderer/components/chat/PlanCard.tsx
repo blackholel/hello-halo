@@ -4,7 +4,7 @@
  * Renders plan messages with a distinct visual style:
  * - Header with plan icon and label
  * - Structured markdown content with enhanced styling
- * - Action buttons: Execute, Copy, Save
+ * - Action buttons: Open in Canvas, Copy, Save
  *
  * Layout:
  * ┌─────────────────────────────────────────┐
@@ -12,18 +12,18 @@
  * ├─────────────────────────────────────────┤
  * │ (Structured plan content via Markdown)  │
  * ├─────────────────────────────────────────┤
- * │ [▶ Execute] [📋 Copy] [💾 Save]        │
+ * │ [↗ Open in Canvas] [📋 Copy] [💾 Save] │
  * └─────────────────────────────────────────┘
  */
 
 import { useState, useCallback } from 'react'
-import { ClipboardList, Play, Copy, Save, ChevronDown, ChevronUp, Check } from 'lucide-react'
+import { ClipboardList, ExternalLink, Copy, Save, ChevronDown, Check } from 'lucide-react'
 import { MarkdownRenderer } from './MarkdownRenderer'
 import { useTranslation } from '../../i18n'
 
 interface PlanCardProps {
   content: string
-  onExecute?: (planContent: string) => void
+  onOpenInCanvas?: (planContent: string) => void
   workDir?: string
 }
 
@@ -51,7 +51,7 @@ function PlanActionButton({
   )
 }
 
-export function PlanCard({ content, onExecute, workDir }: PlanCardProps) {
+export function PlanCard({ content, onOpenInCanvas, workDir }: PlanCardProps) {
   const { t } = useTranslation()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [copySuccess, setCopySuccess] = useState(false)
@@ -87,12 +87,11 @@ export function PlanCard({ content, onExecute, workDir }: PlanCardProps) {
     }
   }, [content])
 
-  // Execute plan - sends content back to chat
-  const handleExecute = useCallback(() => {
-    if (onExecute) {
-      onExecute(content)
+  const handleOpenInCanvas = useCallback(() => {
+    if (onOpenInCanvas) {
+      onOpenInCanvas(content)
     }
-  }, [content, onExecute])
+  }, [content, onOpenInCanvas])
 
   return (
     <div className="rounded-2xl border border-halo-warning/15 bg-halo-warning/[0.03] overflow-hidden">
@@ -128,10 +127,10 @@ export function PlanCard({ content, onExecute, workDir }: PlanCardProps) {
 
           {/* Action Buttons */}
           <div className="flex items-center gap-1.5 px-4 py-2.5 border-t border-halo-warning/10">
-            {onExecute && (
-              <PlanActionButton onClick={handleExecute} title={t('Execute this plan')} variant="primary">
-                <Play size={12} />
-                <span>{t('Execute Plan')}</span>
+            {onOpenInCanvas && (
+              <PlanActionButton onClick={handleOpenInCanvas} title={t('Open in Canvas')} variant="primary">
+                <ExternalLink size={12} />
+                <span>{t('Open in Canvas')}</span>
               </PlanActionButton>
             )}
             <PlanActionButton onClick={handleCopy} title={t('Copy plan to clipboard')}>

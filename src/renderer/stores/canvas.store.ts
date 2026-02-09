@@ -48,6 +48,7 @@ interface CanvasState {
   openUrl: (url: string, title?: string) => Promise<void>
   attachAIBrowserView: (viewId: string, url: string, title?: string) => void
   openContent: (content: string, title: string, type: ContentType, language?: string) => void
+  openPlan: (content: string, title: string, spaceId: string, conversationId: string) => Promise<string>
   openChat: (spaceId: string, conversationId: string, title: string) => Promise<void>
   closeTab: (tabId: string) => void
   closeAllTabs: () => void
@@ -137,6 +138,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => {
 
     openContent: (content: string, title: string, type: ContentType, language?: string) => {
       canvasLifecycle.openContent(content, title, type, language)
+    },
+
+    openPlan: async (content: string, title: string, spaceId: string, conversationId: string) => {
+      return await canvasLifecycle.openPlan(content, title, spaceId, conversationId)
     },
 
     openChat: async (spaceId: string, conversationId: string, title: string) => {

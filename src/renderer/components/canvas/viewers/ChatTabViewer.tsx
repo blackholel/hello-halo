@@ -14,6 +14,7 @@
 import { useCallback, useEffect } from 'react'
 import { useChatStore } from '../../../stores/chat.store'
 import { useSmartScroll } from '../../../hooks/useSmartScroll'
+import { useCanvasLifecycle } from '../../../hooks/useCanvasLifecycle'
 import { MessageList } from '../../chat/MessageList'
 import { InputArea } from '../../chat/InputArea'
 import { ScrollToBottomButton } from '../../chat/ScrollToBottomButton'
@@ -30,6 +31,7 @@ interface ChatTabViewerProps {
 export function ChatTabViewer({ tab }: ChatTabViewerProps) {
   const { t } = useTranslation()
   const { conversationId, spaceId } = tab
+  const { openPlan } = useCanvasLifecycle()
 
   // Get conversation and session from store
   const conversation = useChatStore(state =>
@@ -49,6 +51,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
   const loadChangeSets = useChatStore(state => state.loadChangeSets)
   const acceptChangeSet = useChatStore(state => state.acceptChangeSet)
   const rollbackChangeSet = useChatStore(state => state.rollbackChangeSet)
+  const setPlanEnabled = useChatStore(state => state.setPlanEnabled)
 
   // Load conversation if not in cache
   useEffect(() => {
@@ -74,7 +77,8 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
     isThinking = false,
     compactInfo = null,
     error = null,
-    textBlockVersion = 0
+    textBlockVersion = 0,
+    planEnabled = false,
   } = session || {}
 
   const currentChangeSets = conversationId ? (changeSets.get(conversationId) || []) : []
@@ -97,13 +101,23 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
     content: string,
     images?: ImageAttachment[],
     thinkingEnabled?: boolean,
-    fileContexts?: FileContextAttachment[]
+    fileContexts?: FileContextAttachment[],
+    planEnabled?: boolean
   ) => {
     if (!conversationId || !spaceId) return
     if ((!content.trim() && (!images || images.length === 0) && (!fileContexts || fileContexts.length === 0)) || isGenerating) return
 
     // Send directly to the target conversation - no global context switching needed
-    await sendMessageToConversation(spaceId, conversationId, content, images, thinkingEnabled, fileContexts)
+    await sendMessageToConversation(
+      spaceId,
+      conversationId,
+      content,
+      images,
+      thinkingEnabled,
+      fileContexts,
+      undefined,
+      planEnabled
+    )
   }, [conversationId, spaceId, isGenerating, sendMessageToConversation])
 
   // Handle stop generation
@@ -114,7 +128,23 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
   }, [conversationId, stopGeneration])
 
   const messages = conversation?.messages || []
-  const hasMessages = messages.length > 0 || streamingContent || isThinking
+  const hasMessages = messages.length > 0 || Boolean(streamingContent) || isThinking
+
+  const handlePlanEnabledChange = useCallback((enabled: boolean) => {
+    if (!conversationId) {
+      return
+    }
+    setPlanEnabled(conversationId, enabled)
+  }, [conversationId, setPlanEnabled])
+
+  const handleOpenPlanInCanvas = useCallback(async (planContent: string) => {
+    if (!spaceId || !conversationId) {
+      console.error('[ChatTabViewer] Missing conversation binding for plan tab')
+      return
+    }
+
+    await openPlan(planContent, t('Plan'), spaceId, conversationId)
+  }, [conversationId, openPlan, spaceId, t])
 
   // Loading state
   if (!conversation && isLoadingConversation) {
@@ -168,6 +198,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
                 error={error}
                 isCompact={true}
                 textBlockVersion={textBlockVersion}
+                onOpenPlanInCanvas={handleOpenPlanInCanvas}
               />
               <div ref={bottomRef} />
             </>
@@ -211,6 +242,8 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
         isGenerating={isGenerating}
         placeholder={t('Continue conversation...')}
         isCompact={true}
+        planEnabled={planEnabled}
+        onPlanEnabledChange={handlePlanEnabledChange}
       />
     </div>
   )

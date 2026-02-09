@@ -62,6 +62,18 @@ function getVitePort(): number {
   return 5173
 }
 
+/**
+ * Get Vite dev server host from environment variable.
+ * Default to 127.0.0.1 to avoid IPv6 (::1) listen permission issues.
+ */
+function getViteHost(): string {
+  const envHost = process.env.VITE_HOST?.trim()
+  if (envHost) {
+    return envHost
+  }
+  return '127.0.0.1'
+}
+
 export default defineConfig({
   main: {
     plugins: [
@@ -97,6 +109,7 @@ export default defineConfig({
   renderer: {
     root: resolve(__dirname, 'src/renderer'),
     server: {
+      host: getViteHost(),
       port: getVitePort()
     },
     build: {

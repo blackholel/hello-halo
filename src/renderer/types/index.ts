@@ -590,8 +590,9 @@ export interface TokenUsage {
 
 export interface AgentCompleteEvent extends AgentEventBase {
   type: 'complete';
-  duration: number;
+  duration?: number;
   tokenUsage?: TokenUsage | null;
+  isPlan?: boolean;
 }
 
 export interface AgentThoughtEvent extends AgentEventBase {

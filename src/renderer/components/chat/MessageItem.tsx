@@ -38,7 +38,7 @@ interface MessageItemProps {
   isWorking?: boolean  // True when AI is still generating (not yet complete)
   isWaitingMore?: boolean  // True when content paused (e.g., during tool call), show "..." animation
   workDir?: string  // For skill suggestion card creation
-  onExecutePlan?: (planContent: string) => void  // Callback when "Execute Plan" button is clicked
+  onOpenPlanInCanvas?: (planContent: string) => void
 }
 
 // Collapsible thought history component
@@ -149,7 +149,7 @@ function ThoughtItem({ thought }: { thought: Thought }) {
   )
 }
 
-export function MessageItem({ message, previousCost = 0, hideThoughts = false, isInContainer = false, isWorking = false, isWaitingMore = false, workDir, onExecutePlan }: MessageItemProps) {
+export function MessageItem({ message, previousCost = 0, hideThoughts = false, isInContainer = false, isWorking = false, isWaitingMore = false, workDir, onOpenPlanInCanvas }: MessageItemProps) {
   const isUser = message.role === 'user'
   const isStreaming = (message as any).isStreaming
   const [copied, setCopied] = useState(false)
@@ -216,7 +216,7 @@ export function MessageItem({ message, previousCost = 0, hideThoughts = false, i
             <span className="whitespace-pre-wrap">{message.content}</span>
           ) : message.isPlan ? (
             // Plan mode: structured plan card
-            <PlanCard content={message.content} onExecute={onExecutePlan} workDir={workDir} />
+            <PlanCard content={message.content} onOpenInCanvas={onOpenPlanInCanvas} workDir={workDir} />
           ) : (
             // Assistant messages: full markdown rendering
             <MarkdownRenderer content={message.content} workDir={workDir} />

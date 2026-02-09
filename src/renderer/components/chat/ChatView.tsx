@@ -14,6 +14,7 @@ import { useSpaceStore } from '../../stores/space.store'
 import { useChatStore } from '../../stores/chat.store'
 import { useOnboardingStore } from '../../stores/onboarding.store'
 import { useAIBrowserStore } from '../../stores/ai-browser.store'
+import { useCanvasLifecycle } from '../../hooks/useCanvasLifecycle'
 import { useSmartScroll } from '../../hooks/useSmartScroll'
 import { MessageList } from './MessageList'
 import { InputArea } from './InputArea'
@@ -48,8 +49,9 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     rollbackChangeSet,
     sendMessage,
     stopGeneration,
-    addMockMessage
+    setPlanEnabled,
   } = useChatStore()
+  const { openPlan } = useCanvasLifecycle()
 
   // Onboarding state
   const {
@@ -159,7 +161,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
   const currentConversation = getCurrentConversation()
   const { isLoadingConversation } = useChatStore()
   const session = getCurrentSession()
-  const { isGenerating, streamingContent, isStreaming, thoughts, parallelGroups, isThinking, compactInfo, error, textBlockVersion } = session
+  const { isGenerating, streamingContent, isStreaming, thoughts, parallelGroups, isThinking, compactInfo, error, textBlockVersion, planEnabled } = session
 
   // Smart auto-scroll: only scrolls when user is at bottom
   const {
@@ -243,6 +245,14 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     await sendMessage(content, images, aiBrowserEnabled, thinkingEnabled, fileContexts, planEnabled)
   }
 
+  const handlePlanEnabledChange = useCallback((enabled: boolean) => {
+    const conversationId = getCurrentConversationId()
+    if (!conversationId) {
+      return
+    }
+    setPlanEnabled(conversationId, enabled)
+  }, [getCurrentConversationId, setPlanEnabled])
+
   // Handle stop - stops the current conversation's generation
   const handleStop = async () => {
     if (currentConversation) {
@@ -250,10 +260,14 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     }
   }
 
-  // Handle "Execute Plan" - sends the plan content as a follow-up message in normal mode
-  const handleExecutePlan = async (planContent: string) => {
-    const executePrompt = `${t('Execute according to the following plan')}:\n\n${planContent}`
-    await sendMessage(executePrompt, undefined, aiBrowserEnabled, false, undefined, false)
+  const handleOpenPlanInCanvas = async (planContent: string) => {
+    const conversationId = getCurrentConversationId()
+    if (!currentSpaceId || !conversationId) {
+      console.error('[ChatView] No active conversation to open plan in canvas')
+      return
+    }
+
+    await openPlan(planContent, t('Plan'), currentSpaceId, conversationId)
   }
 
   // Combine real messages with mock onboarding messages
@@ -272,7 +286,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
   const displayIsGenerating = isMockAnimating || isGenerating
   const displayIsThinking = isMockThinking || isThinking
   const displayIsStreaming = isStreaming  // Only real streaming (not mock)
-  const hasMessages = displayMessages.length > 0 || displayStreamingContent || displayIsThinking
+  const hasMessages = displayMessages.length > 0 || Boolean(displayStreamingContent) || displayIsThinking
   const currentConversationId = getCurrentConversationId()
   const currentConversationSpaceId = currentSpaceId
   const currentChangeSets = currentConversationId ? (changeSets.get(currentConversationId) || []) : []
@@ -331,7 +345,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
                 isCompact={isCompact}
                 textBlockVersion={textBlockVersion}
                 workDir={currentSpace?.path}
-                onExecutePlan={handleExecutePlan}
+                onOpenPlanInCanvas={handleOpenPlanInCanvas}
               />
               <div ref={bottomRef} />
             </>
@@ -376,6 +390,8 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
         placeholder={isCompact ? t('Continue conversation...') : (currentSpace?.isTemp ? t('Say something to Halo...') : t('Continue conversation...'))}
         isCompact={isCompact}
         workDir={currentSpace?.path}
+        planEnabled={planEnabled}
+        onPlanEnabledChange={handlePlanEnabledChange}
       />
     </div>
   )

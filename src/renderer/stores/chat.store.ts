@@ -21,9 +21,10 @@
 
 import { create } from 'zustand'
 import { api } from '../api'
-import type { Conversation, ConversationMeta, Message, ToolCall, Artifact, Thought, AgentEventBase, ImageAttachment, CompactInfo, CanvasContext, FileContextAttachment, ParallelGroup, ChangeSet } from '../types'
+import type { Conversation, ConversationMeta, Message, ToolCall, Artifact, Thought, AgentEventBase, AgentCompleteEvent, ImageAttachment, CompactInfo, CanvasContext, FileContextAttachment, ParallelGroup, ChangeSet } from '../types'
 import { canvasLifecycle } from '../services/canvas-lifecycle'
 import { buildParallelGroups, getThoughtKey } from '../utils/thought-utils'
+import i18n from '../i18n'
 
 // LRU cache size limit
 const CONVERSATION_CACHE_SIZE = 10
@@ -53,6 +54,8 @@ interface SessionState {
   parallelGroups: Map<string, ParallelGroup>
   // Currently active sub-agent IDs (Task tools that haven't completed)
   activeAgentIds: string[]
+  planEnabled: boolean
+  activePlanTabId?: string
 }
 
 // Create empty session state
@@ -67,9 +70,10 @@ function createEmptySessionState(): SessionState {
     error: null,
     compactInfo: null,
     textBlockVersion: 0,
-    // New fields
     parallelGroups: new Map(),
-    activeAgentIds: []
+    activeAgentIds: [],
+    planEnabled: false,
+    activePlanTabId: undefined,
   }
 }
 
@@ -113,6 +117,8 @@ interface ChatState {
   getCurrentConversationMeta: () => ConversationMeta | null
   getCurrentSession: () => SessionState
   getSession: (conversationId: string) => SessionState
+  getPlanEnabled: (conversationId: string) => boolean
+  setPlanEnabled: (conversationId: string, enabled: boolean) => void
   getChangeSets: (conversationId: string) => ChangeSet[]
   getConversations: () => ConversationMeta[]
   getCurrentConversationId: () => string | null
@@ -131,6 +137,7 @@ interface ChatState {
   // Messaging
   sendMessage: (content: string, images?: ImageAttachment[], aiBrowserEnabled?: boolean, thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[], planEnabled?: boolean) => Promise<void>
   sendMessageToConversation: (spaceId: string, conversationId: string, content: string, images?: ImageAttachment[], thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[], aiBrowserEnabled?: boolean, planEnabled?: boolean) => Promise<void>
+  executePlan: (spaceId: string, conversationId: string, planContent: string) => Promise<void>
   stopGeneration: (conversationId?: string) => Promise<void>
 
   // Tool approval
@@ -142,7 +149,7 @@ interface ChatState {
   handleAgentToolCall: (data: AgentEventBase & ToolCall) => void
   handleAgentToolResult: (data: AgentEventBase & { toolId: string; result: string; isError: boolean }) => void
   handleAgentError: (data: AgentEventBase & { error: string }) => void
-  handleAgentComplete: (data: AgentEventBase) => void
+  handleAgentComplete: (data: AgentCompleteEvent) => void
   handleAgentThought: (data: AgentEventBase & { thought: Thought }) => void
   handleAgentCompact: (data: AgentEventBase & { trigger: 'manual' | 'auto'; preTokens: number }) => void
 
@@ -159,6 +166,51 @@ interface ChatState {
 // Default empty states
 const EMPTY_SESSION: SessionState = createEmptySessionState()
 const EMPTY_SPACE_STATE: SpaceState = createEmptySpaceState()
+
+/**
+ * Auto-open plan tab in Canvas when the last message is a plan response.
+ * Only opens for the currently active conversation to avoid background sessions stealing focus.
+ */
+async function autoOpenPlanTab(
+  conversation: Conversation,
+  spaceId: string,
+  conversationId: string,
+  get: () => ChatState,
+  set: (partial: Partial<ChatState> | ((state: ChatState) => Partial<ChatState>)) => void
+): Promise<void> {
+  const lastMessage = conversation.messages?.[conversation.messages.length - 1]
+  if (!lastMessage || lastMessage.role !== 'assistant' || !lastMessage.isPlan) {
+    return
+  }
+
+  // Only auto-open for the currently active conversation
+  const isActiveConversation =
+    get().currentSpaceId === spaceId &&
+    get().getCurrentConversationId() === conversationId
+
+  if (!isActiveConversation) {
+    return
+  }
+
+  const planTabId = await canvasLifecycle.openPlan(
+    lastMessage.content,
+    i18n.t('Plan'),
+    spaceId,
+    conversationId
+  )
+
+  set((state) => {
+    const newSessions = new Map(state.sessions)
+    const session = newSessions.get(conversationId)
+    if (session) {
+      newSessions.set(conversationId, {
+        ...session,
+        activePlanTabId: planTabId,
+      })
+    }
+    return { sessions: newSessions }
+  })
+}
 
 export const useChatStore = create<ChatState>((set, get) => ({
   // Initial state
@@ -223,6 +275,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // Get session state for any conversation
   getSession: (conversationId: string) => {
     return get().sessions.get(conversationId) || EMPTY_SESSION
+  },
+
+  getPlanEnabled: (conversationId: string) => {
+    return get().sessions.get(conversationId)?.planEnabled ?? false
+  },
+
+  setPlanEnabled: (conversationId: string, enabled: boolean) => {
+    set((state) => {
+      const newSessions = new Map(state.sessions)
+      const previousSession = newSessions.get(conversationId)
+      newSessions.set(conversationId, {
+        ...(previousSession || createEmptySessionState()),
+        planEnabled: enabled,
+      })
+      return { sessions: newSessions }
+    })
   },
 
   getChangeSets: (conversationId: string) => {
@@ -540,14 +608,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const conversationId = conversationMeta?.id || conversation?.id
     if (!conversationId) return
 
+    const snapshotSession = get().sessions.get(conversationId)
+    const effectivePlanEnabled = planEnabled ?? snapshotSession?.planEnabled ?? false
+
     try {
       // Initialize/reset session state for this conversation
       set((state) => {
         const newSessions = new Map(state.sessions)
+        const latestSession = newSessions.get(conversationId)
         newSessions.set(conversationId, {
           ...createEmptySessionState(),
           isGenerating: true,
-          isThinking: true
+          isThinking: true,
+          planEnabled: effectivePlanEnabled,
+          activePlanTabId: latestSession?.activePlanTabId,
         })
         return { sessions: newSessions }
       })
@@ -627,7 +701,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         images: images,  // Pass images to API
         aiBrowserEnabled,  // Pass AI Browser state to API
         thinkingEnabled,  // Pass thinking mode to API
-        planEnabled,  // Pass plan mode to API
+        planEnabled: effectivePlanEnabled,  // Pass plan mode to API
         canvasContext: buildCanvasContext(),  // Pass canvas context for AI awareness
         fileContexts: fileContexts  // Pass file contexts for context injection
       })
@@ -641,7 +715,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ...session,
           error: 'Failed to send message',
           isGenerating: false,
-          isThinking: false
+          isThinking: false,
+          planEnabled: session.planEnabled,
+          activePlanTabId: session.activePlanTabId,
         })
         return { sessions: newSessions }
       })
@@ -655,14 +731,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return
     }
 
+    const snapshotSession = get().sessions.get(conversationId)
+    const effectivePlanEnabled = planEnabled ?? snapshotSession?.planEnabled ?? false
+
     try {
       // Initialize/reset session state for this conversation
       set((state) => {
         const newSessions = new Map(state.sessions)
+        const latestSession = newSessions.get(conversationId)
         newSessions.set(conversationId, {
           ...createEmptySessionState(),
           isGenerating: true,
-          isThinking: true
+          isThinking: true,
+          planEnabled: effectivePlanEnabled,
+          activePlanTabId: latestSession?.activePlanTabId,
         })
         return { sessions: newSessions }
       })
@@ -712,7 +794,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         images: images,
         aiBrowserEnabled: aiBrowserEnabled ?? false,
         thinkingEnabled,
-        planEnabled,
+        planEnabled: effectivePlanEnabled,
         canvasContext: undefined, // No canvas context for tab messages
         fileContexts: fileContexts
       })
@@ -726,8 +808,59 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ...session,
           error: 'Failed to send message',
           isGenerating: false,
-          isThinking: false
+          isThinking: false,
+          planEnabled: session.planEnabled,
+          activePlanTabId: session.activePlanTabId,
         })
+        return { sessions: newSessions }
+      })
+    }
+  },
+
+  executePlan: async (spaceId, conversationId, planContent) => {
+    if (!spaceId || !conversationId) {
+      console.error('[ChatStore] spaceId and conversationId are required to execute plan')
+      return
+    }
+
+    try {
+      const prompt = `${i18n.t('Execute according to the following plan')}:\n\n${planContent}`
+      await get().sendMessageToConversation(
+        spaceId,
+        conversationId,
+        prompt,
+        undefined,
+        false,
+        undefined,
+        undefined,
+        false
+      )
+
+      // Only clear activePlanTabId after successful send
+      set((state) => {
+        const newSessions = new Map(state.sessions)
+        const session = newSessions.get(conversationId)
+        if (session) {
+          newSessions.set(conversationId, {
+            ...session,
+            activePlanTabId: undefined,
+          })
+        }
+        return { sessions: newSessions }
+      })
+    } catch (error) {
+      console.error('[ChatStore] Failed to execute plan:', error)
+      set((state) => {
+        const newSessions = new Map(state.sessions)
+        const session = newSessions.get(conversationId)
+        if (session) {
+          newSessions.set(conversationId, {
+            ...session,
+            error: 'Failed to execute plan',
+            isGenerating: false,
+            isThinking: false,
+          })
+        }
         return { sessions: newSessions }
       })
     }
@@ -735,7 +868,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   // Stop generation for a specific conversation
   stopGeneration: async (conversationId?: string) => {
-    const targetId = conversationId || get().getCurrentSpaceState().currentConversationId
+    // Convert potential null to undefined for type compatibility with api.stopGeneration(string | undefined)
+    const targetId = conversationId || get().getCurrentSpaceState().currentConversationId || undefined
     try {
       await api.stopGeneration(targetId)
 
@@ -880,7 +1014,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   // Handle complete - reload conversation from backend (Single Source of Truth)
   // Key: Only set isGenerating=false AFTER backend data is loaded to prevent flash
-  handleAgentComplete: async (data) => {
+  handleAgentComplete: async (data: AgentCompleteEvent) => {
     const { spaceId, conversationId } = data
 
     // First, just stop streaming indicator but keep isGenerating=true
@@ -959,6 +1093,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
             conversationCache: newCache
           }
         })
+
+        // Auto-open plan tab if the last message is a plan response
+        await autoOpenPlanTab(updatedConversation, spaceId, conversationId, get, set)
       }
 
       if (changeSetsResponse.success && changeSetsResponse.data) {
