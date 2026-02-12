@@ -71,6 +71,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
   const loadChangeSets = useChatStore(state => state.loadChangeSets)
   const acceptChangeSet = useChatStore(state => state.acceptChangeSet)
   const rollbackChangeSet = useChatStore(state => state.rollbackChangeSet)
+  const setPlanEnabled = useChatStore(state => state.setPlanEnabled)
   const answerQuestion = useChatStore(state => state.answerQuestion)
   const dismissAskUserQuestion = useChatStore(state => state.dismissAskUserQuestion)
 
@@ -99,8 +100,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
     compactInfo = null,
     error = null,
     textBlockVersion = 0,
-    toolStatusById = {},
-    availableToolsSnapshot,
+    planEnabled = false,
     pendingAskUserQuestion = null,
     failedAskUserQuestion = null
   } = session || {}
@@ -254,12 +254,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
       {pendingAskUserQuestion && conversationId && (
         <AskUserQuestionPanel
           toolCall={pendingAskUserQuestion}
-          onSubmit={(answer) => {
-            if (typeof answer === 'string') {
-              throw new Error('Expected structured AskUserQuestion payload')
-            }
-            return answerQuestion(conversationId, answer)
-          }}
+          onSubmit={(answer) => answerQuestion(conversationId, answer)}
           isCompact={true}
         />
       )}
@@ -268,11 +263,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
           toolCall={failedAskUserQuestion}
           failureReason={failedAskUserQuestion.error || failedAskUserQuestion.output}
           submitLabel={t('Send')}
-          submitAsText={true}
           onSubmit={async (answer) => {
-            if (typeof answer !== 'string') {
-              throw new Error('Expected manual answer text')
-            }
             dismissAskUserQuestion(conversationId)
             if (!spaceId) return
             await sendMessageToConversation(

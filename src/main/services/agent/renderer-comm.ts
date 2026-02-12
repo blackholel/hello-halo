@@ -37,117 +37,6 @@ function buildQuestionId(seed: string, index: number): string {
   return normalized ? `q_${normalized}` : `q_${index + 1}`
 }
 
-function normalizeStringArray(values: unknown): string[] {
-  if (!Array.isArray(values)) return []
-  const unique = new Set<string>()
-  for (const value of values) {
-    const normalized = toNonEmptyString(value)
-    if (normalized) {
-      unique.add(normalized)
-    }
-  }
-  return Array.from(unique)
-}
-
-interface AskUserQuestionNormalizedQuestion {
-  id: string
-  question: string
-}
-
-function getAskUserQuestionNormalizedQuestions(
-  inputSnapshot: Record<string, unknown>
-): AskUserQuestionNormalizedQuestion[] {
-  const normalizedInput = normalizeAskUserQuestionInput(inputSnapshot)
-  const rawQuestions = normalizedInput.questions
-  if (!Array.isArray(rawQuestions) || rawQuestions.length === 0) {
-    return []
-  }
-
-  return rawQuestions
-    .map((rawQuestion, questionIndex): AskUserQuestionNormalizedQuestion | null => {
-      if (!rawQuestion || typeof rawQuestion !== 'object') return null
-      const record = rawQuestion as Record<string, unknown>
-      const id = toNonEmptyString(record.id) || `q_${questionIndex + 1}`
-      const question =
-        toNonEmptyString(record.question) ||
-        toNonEmptyString(record.prompt) ||
-        toNonEmptyString(record.message) ||
-        toNonEmptyString(record.text)
-      if (!question) return null
-      return { id, question }
-    })
-    .filter((question): question is AskUserQuestionNormalizedQuestion => question !== null)
-}
-
-export function buildAskUserQuestionUpdatedInput(
-  inputSnapshot: Record<string, unknown>,
-  answerInput: AskUserQuestionAnswerInput
-): Record<string, unknown> {
-  const normalizedInput = normalizeAskUserQuestionInput(inputSnapshot)
-  const questions = getAskUserQuestionNormalizedQuestions(normalizedInput)
-  if (questions.length === 0) {
-    throw new Error('AskUserQuestion input has no valid questions')
-  }
-
-  const seenQuestionText = new Set<string>()
-  for (const question of questions) {
-    if (seenQuestionText.has(question.question)) {
-      throw new Error('Duplicate AskUserQuestion question text is not allowed')
-    }
-    seenQuestionText.add(question.question)
-  }
-
-  if (typeof answerInput === 'string') {
-    const trimmed = answerInput.trim()
-    if (!trimmed) {
-      throw new Error('Answer cannot be empty')
-    }
-    if (questions.length > 1) {
-      throw new Error(
-        'Legacy answer string does not support multi-question AskUserQuestion. Please upgrade client.'
-      )
-    }
-
-    return {
-      ...normalizedInput,
-      answers: {
-        [questions[0].question]: trimmed
-      }
-    }
-  }
-
-  const answersByQuestionId: Record<string, string[]> = {}
-  if (
-    answerInput.answersByQuestionId &&
-    typeof answerInput.answersByQuestionId === 'object' &&
-    !Array.isArray(answerInput.answersByQuestionId)
-  ) {
-    for (const [questionId, selectedValues] of Object.entries(answerInput.answersByQuestionId)) {
-      answersByQuestionId[questionId] = normalizeStringArray(selectedValues)
-    }
-  }
-
-  const skippedQuestionIds = normalizeStringArray(answerInput.skippedQuestionIds || [])
-  const skippedSet = new Set(skippedQuestionIds)
-  const sdkAnswers: Record<string, string> = {}
-
-  for (const question of questions) {
-    const selectedValues = answersByQuestionId[question.id] || []
-    if (selectedValues.length > 0) {
-      sdkAnswers[question.question] = selectedValues.join(', ')
-      continue
-    }
-
-    skippedSet.add(question.id)
-  }
-
-  return {
-    ...normalizedInput,
-    answers: sdkAnswers,
-    skippedQuestionIds: Array.from(skippedSet)
-  }
-}
-
 export function normalizeAskUserQuestionInput(
   input: Record<string, unknown>
 ): Record<string, unknown> {
@@ -235,7 +124,7 @@ export function normalizeAskUserQuestionInput(
         multiSelect
       }
     })
-    .filter((item): item is { id: string; header: string; question: string; options: Array<{ label: string; description: string }>; multiSelect: boolean } => item !== null)
+    .filter((item): item is { id: string; header: string; question: string; options: Array<{ label: string; description: string }>; multiSelect?: boolean } => item !== null)
 
   if (questions.length === 0) {
     return {
@@ -333,23 +222,22 @@ export function createCanUseTool(
         return { behavior: 'deny' as const, message: 'Session not found' }
       }
 
-      if (session.pendingAskUserQuestion) {
+      if (session.pendingAskUserQuestionResolve) {
         return {
           behavior: 'deny' as const,
           message: 'Another AskUserQuestion is already pending'
         }
       }
 
-      const normalizedInput = normalizeAskUserQuestionInput(input)
-      const mode: AskUserQuestionMode = 'sdk_allow_updated_input'
-      return new Promise((resolveDecision) => {
-        session.pendingAskUserQuestion = {
-          resolve: resolveDecision,
-          inputSnapshot: normalizedInput,
-          expectedToolCallId: null,
-          runId: session.runId,
-          createdAt: Date.now(),
-          mode
+      return new Promise((resolve) => {
+        session.pendingAskUserQuestionResolve = (answer: string) => {
+          // Return deny with the answer - the answer will be sent via session.send()
+          // This effectively cancels the tool execution and lets the agent receive
+          // the user's answer as a new message
+          resolve({
+            behavior: 'deny' as const,
+            message: `User answered: ${answer}`
+          })
         }
       })
     }

@@ -168,7 +168,7 @@ export interface SessionState {
   toolsById: Map<string, ToolCall>
   askUserQuestionModeByToolCallId: Map<string, AskUserQuestionMode>
   pendingPermissionResolve: ((approved: boolean) => void) | null
-  pendingAskUserQuestion: PendingAskUserQuestionContext | null
+  pendingAskUserQuestionResolve: ((answer: string) => void) | null
   thoughts: Thought[]
 }
 

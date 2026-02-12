@@ -14,7 +14,6 @@ import {
   reconnectMcpServer,
   toggleMcpServer
 } from '../services/agent'
-import type { AskUserQuestionAnswerInput } from '../services/agent'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -101,7 +100,7 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
   })
 
   // Answer AskUserQuestion for a specific conversation
-  ipcMain.handle('agent:answer-question', async (_event, conversationId: string, answer: AskUserQuestionAnswerInput) => {
+  ipcMain.handle('agent:answer-question', async (_event, conversationId: string, answer: string) => {
     try {
       await handleAskUserQuestionResponse(conversationId, answer)
       return { success: true }

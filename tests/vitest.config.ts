@@ -17,7 +17,6 @@ export default defineConfig({
     include: [
       'unit/**/*.test.ts',
       '../src/main/services/agent/__tests__/ask-user-question-flow.test.ts',
-      '../src/main/services/agent/__tests__/message-flow.ask-user-question-status.test.ts',
       '../src/renderer/stores/__tests__/chat.store.ask-user-question.test.ts'
     ],
 

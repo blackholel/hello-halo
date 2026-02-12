@@ -282,7 +282,7 @@ interface ChatState {
   // Tool approval
   approveTool: (conversationId: string) => Promise<void>
   rejectTool: (conversationId: string) => Promise<void>
-  answerQuestion: (conversationId: string, answer: AskUserQuestionAnswerPayload) => Promise<void>
+  answerQuestion: (conversationId: string, answer: string) => Promise<void>
   dismissAskUserQuestion: (conversationId: string) => void
 
   // Event handlers (called from App component) - with session IDs
@@ -916,8 +916,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
               terminalReason: 'stopped',
               isGenerating: false,
               isThinking: false,
-              isStreaming: false,
-              toolStatusById: cancelledTools,
               pendingAskUserQuestion: null,
               failedAskUserQuestion: null
             })
@@ -966,14 +964,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   // Answer AskUserQuestion for a specific conversation
-  answerQuestion: async (conversationId: string, answer: AskUserQuestionAnswerPayload) => {
+  answerQuestion: async (conversationId: string, answer: string) => {
     try {
-      const session = get().sessions.get(conversationId)
-      const payload: AskUserQuestionAnswerPayload = {
-        ...answer,
-        runId: session?.activeRunId || undefined
-      }
-      const response = await api.answerQuestion(conversationId, payload)
+      const response = await api.answerQuestion(conversationId, answer)
       if (!response.success) {
         const reason = response.error || 'Failed to submit answer'
         set((state) => {
@@ -1033,72 +1026,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       })
       return { sessions: newSessions }
     })
-  },
-
-  // Run barrier event - marks a new active run before any run-scoped events are processed
-  handleAgentRunStart: (data) => {
-    const { conversationId, runId, startedAt } = data
-    let replayEvents: PendingRunEvent[] = []
-
-    set((state) => {
-      const newSessions = new Map(state.sessions)
-      const session = newSessions.get(conversationId) || createEmptySessionState()
-      const pendingRunEvents = prunePendingRunEvents(session.pendingRunEvents)
-      replayEvents = pendingRunEvents
-        .filter(event => event.runId === runId)
-        .sort((a, b) => a.receivedAt - b.receivedAt)
-
-      const remainingPending = pendingRunEvents.filter(event => event.runId !== runId)
-      newSessions.set(conversationId, {
-        ...createEmptySessionState(),
-        activeRunId: runId,
-        lifecycle: 'running',
-        terminalReason: null,
-        isGenerating: true,
-        isThinking: true,
-        pendingRunEvents: remainingPending,
-        availableToolsSnapshot: {
-          runId,
-          snapshotVersion: 0,
-          emittedAt: startedAt,
-          tools: [],
-          toolCount: 0
-        }
-      })
-      return { sessions: newSessions }
-    })
-
-    // Replay buffered run events once barrier is established
-    for (const event of replayEvents) {
-      switch (event.kind) {
-        case 'message':
-          get().handleAgentMessage(event.payload as AgentEventBase & { content: string; isComplete: boolean })
-          break
-        case 'tool_call':
-          get().handleAgentToolCall(event.payload as AgentEventBase & ToolCall)
-          break
-        case 'tool_result':
-          get().handleAgentToolResult(event.payload as AgentEventBase & { toolCallId?: string; toolId?: string; result: string; isError: boolean })
-          break
-        case 'thought':
-          get().handleAgentThought(event.payload as AgentEventBase & { thought: Thought })
-          break
-        case 'error':
-          get().handleAgentError(event.payload as AgentEventBase & { error: string })
-          break
-        case 'compact':
-          get().handleAgentCompact(event.payload as AgentEventBase & { trigger: 'manual' | 'auto'; preTokens: number })
-          break
-        case 'tools_available':
-          get().handleAgentToolsAvailable(event.payload as AgentEventBase & { runId: string; snapshotVersion: number; emittedAt: string; tools: string[]; toolCount: number })
-          break
-        case 'complete':
-          void get().handleAgentComplete(event.payload as AgentEventBase & { reason?: TerminalReason; terminalAt?: string })
-          break
-        default:
-          break
-      }
-    }
   },
 
   // Handle agent message - update session-specific streaming content
@@ -1163,19 +1090,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
   handleAgentToolCall: (data) => {
     const { conversationId, runId } = data as AgentEventBase & ToolCall & { runId?: string; toolCallId?: string }
 
-    set((state) => {
-      const newSessions = new Map(state.sessions)
-      const session = newSessions.get(conversationId) || createEmptySessionState()
-
-      if (runId && !session.activeRunId) {
+    // Use case-insensitive comparison for AskUserQuestion tool
+    const isAskUserQuestion = toolCall.name?.toLowerCase() === 'askuserquestion'
+    if (toolCall.requiresApproval || isAskUserQuestion) {
+      set((state) => {
+        const newSessions = new Map(state.sessions)
+        const session = newSessions.get(conversationId) || createEmptySessionState()
         newSessions.set(conversationId, {
           ...session,
-          pendingRunEvents: enqueuePendingRunEvent(session, {
-            kind: 'tool_call',
-            runId,
-            payload: data,
-            receivedAt: Date.now()
-          })
+          pendingToolApproval: toolCall.requiresApproval ? (toolCall as ToolCall) : session.pendingToolApproval,
+          pendingAskUserQuestion: isAskUserQuestion ? (toolCall as ToolCall) : session.pendingAskUserQuestion,
+          failedAskUserQuestion: isAskUserQuestion ? null : session.failedAskUserQuestion
         })
         return { sessions: newSessions }
       }
@@ -1259,86 +1184,34 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   // Handle tool result for a specific conversation
   handleAgentToolResult: (data) => {
-    const { conversationId, runId, result, isError } = data as AgentEventBase & {
-      runId?: string
-      toolCallId?: string
-      toolId?: string
-      result: string
-      isError: boolean
-    }
-    const toolCallId = (data as any).toolCallId || (data as any).toolId
-
-    if (!toolCallId) return
-
+    const { conversationId, toolId, result, isError } = data
     set((state) => {
       const newSessions = new Map(state.sessions)
-      const session = newSessions.get(conversationId) || createEmptySessionState()
+      const session = newSessions.get(conversationId)
+      if (!session) return state
 
-      if (runId && !session.activeRunId) {
-        newSessions.set(conversationId, {
-          ...session,
-          pendingRunEvents: enqueuePendingRunEvent(session, {
-            kind: 'tool_result',
-            runId,
-            payload: data,
-            receivedAt: Date.now()
-          })
-        })
-        return { sessions: newSessions }
-      }
-
-      if (!isEventRunAccepted(session, runId)) {
+      if (session.pendingAskUserQuestion?.id !== toolId) {
         return state
       }
 
-      const toolStatusById = {
-        ...session.toolStatusById,
-        [toolCallId]: isError ? 'error' : 'success'
-      } as Record<string, ToolStatus>
-      const toolCallsById = { ...session.toolCallsById }
-      const existingToolCall = toolCallsById[toolCallId]
-      if (existingToolCall) {
-        toolCallsById[toolCallId] = {
-          ...existingToolCall,
-          status: isError ? 'error' : 'success',
-          output: result,
-          error: isError ? result : undefined
-        }
-      }
-
-      // Out-of-order tool_result arrives before tool_call
-      const orphanToolResults = { ...session.orphanToolResults }
-      if (!existingToolCall) {
-        orphanToolResults[toolCallId] = { result, isError }
-      }
-
-      let pendingAskUserQuestion = session.pendingAskUserQuestion
-      let failedAskUserQuestion = session.failedAskUserQuestion
-      const pendingQuestion = session.pendingAskUserQuestion
-      if (pendingQuestion && pendingQuestion.id === toolCallId) {
-        if (isError) {
-          pendingAskUserQuestion = null
-          failedAskUserQuestion = {
-            ...pendingQuestion,
+      if (isError) {
+        newSessions.set(conversationId, {
+          ...session,
+          pendingAskUserQuestion: null,
+          failedAskUserQuestion: {
+            ...session.pendingAskUserQuestion,
             status: 'error',
             error: result,
             output: result
           }
-        } else {
-          pendingAskUserQuestion = null
-          failedAskUserQuestion = null
-        }
+        })
+        return { sessions: newSessions }
       }
 
       newSessions.set(conversationId, {
         ...session,
-        activeRunId: runId ?? session.activeRunId,
-        lifecycle: 'running',
-        toolStatusById,
-        toolCallsById,
-        orphanToolResults,
-        pendingAskUserQuestion,
-        failedAskUserQuestion
+        pendingAskUserQuestion: null,
+        failedAskUserQuestion: null
       })
       return { sessions: newSessions }
     })
@@ -1390,8 +1263,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         error,
         isGenerating: false,
         isThinking: false,
-        isStreaming: false,
-        toolStatusById,
         pendingAskUserQuestion: null,
         failedAskUserQuestion: null,
         thoughts: [...session.thoughts, errorThought]
@@ -1415,8 +1286,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const reason = (data as any).reason as TerminalReason | undefined
     const terminalReason: TerminalReason = reason ?? 'completed'
 
-    let waitForPendingQuestion = false
-    let shouldFinalizeTasks = false
+    // Check if there's a pending AskUserQuestion - if so, don't clear it
+    // The user needs to see and answer the question first
+    const currentSession = get().sessions.get(conversationId)
+    const hasPendingQuestion = currentSession?.pendingAskUserQuestion != null
+
+    // First, just stop streaming indicator but keep isGenerating=true
+    // This keeps the streaming bubble visible during backend load
+    // IMPORTANT: Don't clear pendingAskUserQuestion - it will be cleared when user answers
     set((state) => {
       const newSessions = new Map(state.sessions)
       const session = newSessions.get(conversationId) || createEmptySessionState()
@@ -1470,20 +1347,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
           isGenerating: false,
           isStreaming: false,
           isThinking: false
+          // Don't clear pendingAskUserQuestion - let user answer first
+          // Keep isGenerating=true and streamingContent until backend loads
         })
       }
       return { sessions: newSessions }
     })
 
-    if (shouldFinalizeTasks) {
-      useTaskStore.getState().finalizeTasksOnTerminal(terminalReason)
-    }
-    if (!shouldFinalizeTasks) {
-      return
-    }
-
-    // Wait for user answer in AskUserQuestion branch
-    if (waitForPendingQuestion) {
+    // If there's a pending AskUserQuestion, don't reload conversation yet
+    // Wait for user to answer, then the answer flow will trigger a new completion
+    if (hasPendingQuestion) {
       return
     }
 
