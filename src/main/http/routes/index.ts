@@ -181,7 +181,7 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
   })
 
   app.delete('/api/spaces/:spaceId/conversations/:conversationId', async (req: Request, res: Response) => {
-    const result = conversationController.deleteConversation(
+    const result = await conversationController.deleteConversation(
       req.params.spaceId,
       req.params.conversationId
     )
@@ -258,7 +258,7 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
 
   app.post('/api/agent/stop', async (req: Request, res: Response) => {
     const { conversationId } = req.body
-    const result = agentController.stopGeneration(conversationId)
+    const result = await agentController.stopGeneration(conversationId)
     res.json(result)
   })
 

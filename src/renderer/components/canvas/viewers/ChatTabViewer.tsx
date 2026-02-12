@@ -40,12 +40,14 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
   const session = useChatStore(state =>
     conversationId ? state.sessions.get(conversationId) : null
   )
-  const isLoadingConversation = useChatStore(state => state.isLoadingConversation)
+  const isLoadingConversation = useChatStore(state =>
+    conversationId ? state.isConversationLoading(conversationId) : false
+  )
 
   // Store actions
   const sendMessageToConversation = useChatStore(state => state.sendMessageToConversation)
   const stopGeneration = useChatStore(state => state.stopGeneration)
-  const selectConversation = useChatStore(state => state.selectConversation)
+  const hydrateConversation = useChatStore(state => state.hydrateConversation)
   const getCachedConversation = useChatStore(state => state.getCachedConversation)
   const changeSets = useChatStore(state => state.changeSets)
   const loadChangeSets = useChatStore(state => state.loadChangeSets)
@@ -55,10 +57,10 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
 
   // Load conversation if not in cache
   useEffect(() => {
-    if (conversationId && !getCachedConversation(conversationId)) {
-      selectConversation(conversationId)
+    if (conversationId && spaceId && !getCachedConversation(conversationId)) {
+      hydrateConversation(spaceId, conversationId)
     }
-  }, [conversationId, getCachedConversation, selectConversation])
+  }, [conversationId, spaceId, getCachedConversation, hydrateConversation])
 
   // Load change sets for this conversation (Canvas tab context)
   useEffect(() => {

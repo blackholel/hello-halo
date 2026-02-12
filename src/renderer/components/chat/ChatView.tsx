@@ -159,7 +159,10 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
 
   // Get current conversation and its session state
   const currentConversation = getCurrentConversation()
-  const { isLoadingConversation } = useChatStore()
+  const currentConversationId = getCurrentConversationId()
+  const isLoadingConversation = useChatStore(state =>
+    currentConversationId ? state.isConversationLoading(currentConversationId) : false
+  )
   const session = getCurrentSession()
   const { isGenerating, streamingContent, isStreaming, thoughts, parallelGroups, isThinking, compactInfo, error, textBlockVersion, planEnabled } = session
 
@@ -287,7 +290,6 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
   const displayIsThinking = isMockThinking || isThinking
   const displayIsStreaming = isStreaming  // Only real streaming (not mock)
   const hasMessages = displayMessages.length > 0 || Boolean(displayStreamingContent) || displayIsThinking
-  const currentConversationId = getCurrentConversationId()
   const currentConversationSpaceId = currentSpaceId
   const currentChangeSets = currentConversationId ? (changeSets.get(currentConversationId) || []) : []
   const activeChangeSet = currentChangeSets[0]

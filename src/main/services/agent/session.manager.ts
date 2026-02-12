@@ -379,3 +379,10 @@ export function getV2SessionInfo(conversationId: string): V2SessionInfo | undefi
 export function getV2SessionsCount(): number {
   return v2Sessions.size
 }
+
+/**
+ * Get all conversation IDs that currently have V2 sessions.
+ */
+export function getV2SessionConversationIds(): string[] {
+  return Array.from(v2Sessions.keys())
+}

@@ -59,7 +59,7 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
   // Stop generation for a specific conversation (or all if not specified)
   ipcMain.handle('agent:stop', async (_event, conversationId?: string) => {
     try {
-      stopGeneration(conversationId)
+      await stopGeneration(conversationId)
       return { success: true }
     } catch (error: unknown) {
       const err = error as Error

@@ -8,10 +8,10 @@ import {
   createConversation,
   getConversation,
   updateConversation,
-  deleteConversation,
   addMessage,
   updateLastMessage
 } from '../services/conversation.service'
+import { deleteConversation as controllerDeleteConversation } from '../controllers/conversation.controller'
 
 export function registerConversationHandlers(): void {
   // List conversations for a space
@@ -64,8 +64,8 @@ export function registerConversationHandlers(): void {
   // Delete a conversation
   ipcMain.handle('conversation:delete', async (_event, spaceId: string, conversationId: string) => {
     try {
-      const result = deleteConversation(spaceId, conversationId)
-      return { success: true, data: result }
+      const result = await controllerDeleteConversation(spaceId, conversationId)
+      return result
     } catch (error: unknown) {
       const err = error as Error
       return { success: false, error: err.message }
