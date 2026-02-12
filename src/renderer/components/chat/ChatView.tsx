@@ -18,6 +18,7 @@ import { useCanvasLifecycle } from '../../hooks/useCanvasLifecycle'
 import { useSmartScroll } from '../../hooks/useSmartScroll'
 import { MessageList } from './MessageList'
 import { InputArea } from './InputArea'
+import { AskUserQuestionPanel } from './AskUserQuestionPanel'
 import { ScrollToBottomButton } from './ScrollToBottomButton'
 import { Sparkles } from '../icons/ToolIcons'
 import { ChangeReviewBar } from '../diff'
@@ -50,6 +51,8 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     sendMessage,
     stopGeneration,
     setPlanEnabled,
+    answerQuestion,
+    dismissAskUserQuestion
   } = useChatStore()
   const { openPlan } = useCanvasLifecycle()
 
@@ -164,7 +167,20 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     currentConversationId ? state.isConversationLoading(currentConversationId) : false
   )
   const session = getCurrentSession()
-  const { isGenerating, streamingContent, isStreaming, thoughts, parallelGroups, isThinking, compactInfo, error, textBlockVersion, planEnabled } = session
+  const {
+    isGenerating,
+    streamingContent,
+    isStreaming,
+    thoughts,
+    parallelGroups,
+    isThinking,
+    compactInfo,
+    error,
+    textBlockVersion,
+    planEnabled,
+    pendingAskUserQuestion,
+    failedAskUserQuestion
+  } = session
 
   // Smart auto-scroll: only scrolls when user is at bottom
   const {
@@ -258,8 +274,8 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
 
   // Handle stop - stops the current conversation's generation
   const handleStop = async () => {
-    if (currentConversation) {
-      await stopGeneration(currentConversation.id)
+    if (currentConversationId) {
+      await stopGeneration(currentConversationId)
     }
   }
 
@@ -383,6 +399,25 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
             filePath,
             force
           })}
+        />
+      )}
+      {pendingAskUserQuestion && currentConversationId && (
+        <AskUserQuestionPanel
+          toolCall={pendingAskUserQuestion}
+          onSubmit={(answer) => answerQuestion(currentConversationId, answer)}
+          isCompact={isCompact}
+        />
+      )}
+      {!isGenerating && !pendingAskUserQuestion && failedAskUserQuestion && currentConversationId && (
+        <AskUserQuestionPanel
+          toolCall={failedAskUserQuestion}
+          failureReason={failedAskUserQuestion.error || failedAskUserQuestion.output}
+          submitLabel={t('Send')}
+          onSubmit={async (answer) => {
+            dismissAskUserQuestion(currentConversationId)
+            await sendMessage(answer, undefined, aiBrowserEnabled, false, undefined, false)
+          }}
+          isCompact={isCompact}
         />
       )}
       <InputArea

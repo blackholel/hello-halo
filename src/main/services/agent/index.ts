@@ -79,4 +79,9 @@ export {
 } from './session.manager'
 
 // Re-export from message-flow.service
-export { sendMessage, stopGeneration, handleToolApproval } from './message-flow.service'
+export {
+  sendMessage,
+  stopGeneration,
+  handleToolApproval,
+  handleAskUserQuestionResponse
+} from './message-flow.service'

@@ -11,6 +11,7 @@ import { getConversation } from '../conversation.service'
 import { getHeadlessElectronPath } from './electron-path'
 import { resolveProvider } from './provider-resolver'
 import { buildSdkOptions, getWorkingDir, getEffectiveSkillsLazyLoad } from './sdk-config.builder'
+import { createCanUseTool } from './renderer-comm'
 import type { V2SDKSession, V2SessionInfo, SessionConfig, SessionState } from './types'
 import { getEnabledPluginMcpHash, getEnabledPluginMcpList } from '../plugin-mcp.service'
 
@@ -55,7 +56,9 @@ function needsSessionRebuild(existing: V2SessionInfo, newConfig: SessionConfig):
     existing.config.aiBrowserEnabled !== newConfig.aiBrowserEnabled ||
     existing.config.skillsLazyLoad !== newConfig.skillsLazyLoad ||
     (existing.config.toolkitHash || '') !== (newConfig.toolkitHash || '') ||
-    (existing.config.enabledPluginMcpsHash || '') !== (newConfig.enabledPluginMcpsHash || '')
+    (existing.config.enabledPluginMcpsHash || '') !== (newConfig.enabledPluginMcpsHash || '') ||
+    // Rebuild if canUseTool presence changed (needed for AskUserQuestion support)
+    (existing.config.hasCanUseTool || false) !== (newConfig.hasCanUseTool || false)
   )
 }
 
@@ -152,6 +155,7 @@ export async function ensureSessionWarm(spaceId: string, conversationId: string)
     aiBrowserEnabled: false,
     thinkingEnabled: false,
     stderrSuffix: ' (warm)',
+    canUseTool: createCanUseTool(workDir, spaceId, conversationId, getActiveSession),
     enabledPluginMcps: getEnabledPluginMcpList(conversationId)
   })
 
@@ -166,7 +170,8 @@ export async function ensureSessionWarm(spaceId: string, conversationId: string)
         aiBrowserEnabled: false,
         skillsLazyLoad,
         toolkitHash,
-        enabledPluginMcpsHash: getEnabledPluginMcpHash(conversationId)
+        enabledPluginMcpsHash: getEnabledPluginMcpHash(conversationId),
+        hasCanUseTool: true // Session has canUseTool callback
       }
     )
     console.log(`[Agent] V2 session warmed up: ${conversationId}`)

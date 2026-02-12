@@ -274,6 +274,12 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
     res.json(result)
   })
 
+  app.post('/api/agent/answer-question', async (req: Request, res: Response) => {
+    const { conversationId, answer } = req.body
+    const result = await agentController.answerQuestion(conversationId, answer)
+    res.json(result)
+  })
+
   app.get('/api/agent/sessions', async (req: Request, res: Response) => {
     const result = agentController.listActiveSessions()
     res.json(result)

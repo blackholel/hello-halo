@@ -18,6 +18,7 @@ import { useSmartScroll } from '../../../hooks/useSmartScroll'
 import { useCanvasLifecycle } from '../../../hooks/useCanvasLifecycle'
 import { MessageList } from '../../chat/MessageList'
 import { InputArea } from '../../chat/InputArea'
+import { AskUserQuestionPanel } from '../../chat/AskUserQuestionPanel'
 import { ScrollToBottomButton } from '../../chat/ScrollToBottomButton'
 import { Sparkles } from '../../icons/ToolIcons'
 import { ChangeReviewBar } from '../../diff'
@@ -74,6 +75,8 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
   const acceptChangeSet = useChatStore(state => state.acceptChangeSet)
   const rollbackChangeSet = useChatStore(state => state.rollbackChangeSet)
   const setPlanEnabled = useChatStore(state => state.setPlanEnabled)
+  const answerQuestion = useChatStore(state => state.answerQuestion)
+  const dismissAskUserQuestion = useChatStore(state => state.dismissAskUserQuestion)
 
   // Load conversation if not in cache
   useEffect(() => {
@@ -101,6 +104,8 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
     error = null,
     textBlockVersion = 0,
     planEnabled = false,
+    pendingAskUserQuestion = null,
+    failedAskUserQuestion = null
   } = session || {}
 
   const currentChangeSets = conversationId ? (changeSets.get(conversationId) || []) : []
@@ -256,6 +261,35 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
             filePath,
             force
           })}
+        />
+      )}
+      {pendingAskUserQuestion && conversationId && (
+        <AskUserQuestionPanel
+          toolCall={pendingAskUserQuestion}
+          onSubmit={(answer) => answerQuestion(conversationId, answer)}
+          isCompact={true}
+        />
+      )}
+      {!isGenerating && !pendingAskUserQuestion && failedAskUserQuestion && conversationId && (
+        <AskUserQuestionPanel
+          toolCall={failedAskUserQuestion}
+          failureReason={failedAskUserQuestion.error || failedAskUserQuestion.output}
+          submitLabel={t('Send')}
+          onSubmit={async (answer) => {
+            dismissAskUserQuestion(conversationId)
+            if (!spaceId) return
+            await sendMessageToConversation(
+              spaceId,
+              conversationId,
+              answer,
+              undefined,
+              false,
+              undefined,
+              false,
+              false
+            )
+          }}
+          isCompact={true}
         />
       )}
       <InputArea

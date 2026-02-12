@@ -43,6 +43,8 @@ interface SessionState {
   thoughts: Thought[]
   isThinking: boolean
   pendingToolApproval: ToolCall | null
+  pendingAskUserQuestion: ToolCall | null
+  failedAskUserQuestion: ToolCall | null
   error: string | null
   // Compact notification
   compactInfo: CompactInfo | null
@@ -67,6 +69,8 @@ function createEmptySessionState(): SessionState {
     thoughts: [],
     isThinking: false,
     pendingToolApproval: null,
+    pendingAskUserQuestion: null,
+    failedAskUserQuestion: null,
     error: null,
     compactInfo: null,
     textBlockVersion: 0,
@@ -150,6 +154,8 @@ interface ChatState {
   // Tool approval
   approveTool: (conversationId: string) => Promise<void>
   rejectTool: (conversationId: string) => Promise<void>
+  answerQuestion: (conversationId: string, answer: string) => Promise<void>
+  dismissAskUserQuestion: (conversationId: string) => void
 
   // Event handlers (called from App component) - with session IDs
   handleAgentMessage: (data: AgentEventBase & { content: string; isComplete: boolean }) => void
@@ -939,7 +945,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
             newSessions.set(targetId, {
               ...session,
               isGenerating: false,
-              isThinking: false
+              isThinking: false,
+              pendingAskUserQuestion: null,
+              failedAskUserQuestion: null
             })
           }
           return { sessions: newSessions }
@@ -984,6 +992,71 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
+  // Answer AskUserQuestion for a specific conversation
+  answerQuestion: async (conversationId: string, answer: string) => {
+    try {
+      const response = await api.answerQuestion(conversationId, answer)
+      if (!response.success) {
+        const reason = response.error || 'Failed to submit answer'
+        set((state) => {
+          const newSessions = new Map(state.sessions)
+          const session = newSessions.get(conversationId)
+          if (!session) return state
+
+          const failedToolCall = session.pendingAskUserQuestion
+            ? {
+                ...session.pendingAskUserQuestion,
+                status: 'error' as const,
+                error: reason,
+                output: reason
+              }
+            : session.failedAskUserQuestion
+
+          newSessions.set(conversationId, {
+            ...session,
+            isGenerating: false,
+            isStreaming: false,
+            pendingAskUserQuestion: null,
+            failedAskUserQuestion: failedToolCall
+          })
+          return { sessions: newSessions }
+        })
+        return
+      }
+
+      set((state) => {
+        const newSessions = new Map(state.sessions)
+        const session = newSessions.get(conversationId)
+        if (session) {
+          newSessions.set(conversationId, {
+            ...session,
+            pendingAskUserQuestion: null,
+            failedAskUserQuestion: null
+          })
+        }
+        return { sessions: newSessions }
+      })
+    } catch (error) {
+      console.error('Failed to answer question:', error)
+      throw error
+    }
+  },
+
+  dismissAskUserQuestion: (conversationId: string) => {
+    set((state) => {
+      const newSessions = new Map(state.sessions)
+      const session = newSessions.get(conversationId)
+      if (!session) return state
+
+      newSessions.set(conversationId, {
+        ...session,
+        pendingAskUserQuestion: null,
+        failedAskUserQuestion: null
+      })
+      return { sessions: newSessions }
+    })
+  },
+
   // Handle agent message - update session-specific streaming content
   // Supports both incremental (delta) and full (content) modes for backward compatibility
   handleAgentMessage: (data) => {
@@ -1025,13 +1098,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
   handleAgentToolCall: (data) => {
     const { conversationId, ...toolCall } = data
 
-    if (toolCall.requiresApproval) {
+    // Use case-insensitive comparison for AskUserQuestion tool
+    const isAskUserQuestion = toolCall.name?.toLowerCase() === 'askuserquestion'
+    if (toolCall.requiresApproval || isAskUserQuestion) {
       set((state) => {
         const newSessions = new Map(state.sessions)
         const session = newSessions.get(conversationId) || createEmptySessionState()
         newSessions.set(conversationId, {
           ...session,
-          pendingToolApproval: toolCall as ToolCall
+          pendingToolApproval: toolCall.requiresApproval ? (toolCall as ToolCall) : session.pendingToolApproval,
+          pendingAskUserQuestion: isAskUserQuestion ? (toolCall as ToolCall) : session.pendingAskUserQuestion,
+          failedAskUserQuestion: isAskUserQuestion ? null : session.failedAskUserQuestion
         })
         return { sessions: newSessions }
       })
@@ -1040,7 +1117,37 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   // Handle tool result for a specific conversation
   handleAgentToolResult: (data) => {
-    // Tool results are tracked in thoughts, no additional state needed
+    const { conversationId, toolId, result, isError } = data
+    set((state) => {
+      const newSessions = new Map(state.sessions)
+      const session = newSessions.get(conversationId)
+      if (!session) return state
+
+      if (session.pendingAskUserQuestion?.id !== toolId) {
+        return state
+      }
+
+      if (isError) {
+        newSessions.set(conversationId, {
+          ...session,
+          pendingAskUserQuestion: null,
+          failedAskUserQuestion: {
+            ...session.pendingAskUserQuestion,
+            status: 'error',
+            error: result,
+            output: result
+          }
+        })
+        return { sessions: newSessions }
+      }
+
+      newSessions.set(conversationId, {
+        ...session,
+        pendingAskUserQuestion: null,
+        failedAskUserQuestion: null
+      })
+      return { sessions: newSessions }
+    })
   },
 
   // Handle error for a specific conversation
@@ -1064,6 +1171,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         error,
         isGenerating: false,
         isThinking: false,
+        pendingAskUserQuestion: null,
+        failedAskUserQuestion: null,
         thoughts: [...session.thoughts, errorThought]
       })
       return { sessions: newSessions }
@@ -1075,8 +1184,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
   handleAgentComplete: async (data: AgentCompleteEvent) => {
     const { spaceId, conversationId } = data
 
+    // Check if there's a pending AskUserQuestion - if so, don't clear it
+    // The user needs to see and answer the question first
+    const currentSession = get().sessions.get(conversationId)
+    const hasPendingQuestion = currentSession?.pendingAskUserQuestion != null
+
     // First, just stop streaming indicator but keep isGenerating=true
     // This keeps the streaming bubble visible during backend load
+    // IMPORTANT: Don't clear pendingAskUserQuestion - it will be cleared when user answers
     set((state) => {
       const newSessions = new Map(state.sessions)
       const session = newSessions.get(conversationId)
@@ -1085,11 +1200,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ...session,
           isStreaming: false,
           isThinking: false
+          // Don't clear pendingAskUserQuestion - let user answer first
           // Keep isGenerating=true and streamingContent until backend loads
         })
       }
       return { sessions: newSessions }
     })
+
+    // If there's a pending AskUserQuestion, don't reload conversation yet
+    // Wait for user to answer, then the answer flow will trigger a new completion
+    if (hasPendingQuestion) {
+      return
+    }
 
     // Reload conversation from backend (Single Source of Truth)
     // Backend has already saved the complete message with thoughts
@@ -1141,6 +1263,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               ...currentSession,
               isGenerating: false,
               streamingContent: '',
+              pendingAskUserQuestion: null,
               compactInfo: null  // Clear temporary compact notification
             })
           }
@@ -1175,6 +1298,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
             ...currentSession,
             isGenerating: false,
             streamingContent: '',
+            pendingAskUserQuestion: null,
+            failedAskUserQuestion: null,
             compactInfo: null  // Clear temporary compact notification
           })
         }

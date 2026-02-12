@@ -14,7 +14,11 @@ export default defineConfig({
     environment: 'node',
 
     // Test file patterns
-    include: ['unit/**/*.test.ts'],
+    include: [
+      'unit/**/*.test.ts',
+      '../src/main/services/agent/__tests__/ask-user-question-flow.test.ts',
+      '../src/renderer/stores/__tests__/chat.store.ask-user-question.test.ts'
+    ],
 
     // Root directory for tests
     root: __dirname,

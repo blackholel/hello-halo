@@ -8,6 +8,7 @@ import {
   sendMessage as agentSendMessage,
   stopGeneration as agentStopGeneration,
   handleToolApproval as agentHandleToolApproval,
+  handleAskUserQuestionResponse as agentHandleAskUserQuestionResponse,
   isGenerating,
   getActiveSessions,
   getSessionState as agentGetSessionState,
@@ -88,6 +89,22 @@ export function approveTool(conversationId: string): ControllerResponse {
 export function rejectTool(conversationId: string): ControllerResponse {
   try {
     agentHandleToolApproval(conversationId, false)
+    return { success: true }
+  } catch (error: unknown) {
+    const err = error as Error
+    return { success: false, error: err.message }
+  }
+}
+
+/**
+ * Answer AskUserQuestion tool for an active conversation
+ */
+export async function answerQuestion(
+  conversationId: string,
+  answer: string
+): Promise<ControllerResponse> {
+  try {
+    await agentHandleAskUserQuestionResponse(conversationId, answer)
     return { success: true }
   } catch (error: unknown) {
     const err = error as Error

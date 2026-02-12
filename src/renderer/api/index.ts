@@ -381,6 +381,13 @@ export const api = {
     return httpRequest('POST', '/api/agent/reject', { conversationId })
   },
 
+  answerQuestion: async (conversationId: string, answer: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.halo.answerQuestion(conversationId, answer)
+    }
+    return httpRequest('POST', '/api/agent/answer-question', { conversationId, answer })
+  },
+
   // Get current session state for recovery after refresh
   getSessionState: async (conversationId: string): Promise<ApiResponse> => {
     if (isElectron()) {
