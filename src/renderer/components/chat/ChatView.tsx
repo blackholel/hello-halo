@@ -17,6 +17,7 @@ import { useAIBrowserStore } from '../../stores/ai-browser.store'
 import { useSmartScroll } from '../../hooks/useSmartScroll'
 import { MessageList } from './MessageList'
 import { InputArea } from './InputArea'
+import { AskUserQuestionPanel } from './AskUserQuestionPanel'
 import { ScrollToBottomButton } from './ScrollToBottomButton'
 import { Sparkles } from '../icons/ToolIcons'
 import { ChangeReviewBar } from '../diff'
@@ -48,6 +49,8 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     rollbackChangeSet,
     sendMessage,
     stopGeneration,
+    answerQuestion,
+    dismissAskUserQuestion,
     addMockMessage
   } = useChatStore()
 
@@ -157,9 +160,22 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
 
   // Get current conversation and its session state
   const currentConversation = getCurrentConversation()
+  const currentConversationId = getCurrentConversationId()
   const { isLoadingConversation } = useChatStore()
   const session = getCurrentSession()
-  const { isGenerating, streamingContent, isStreaming, thoughts, parallelGroups, isThinking, compactInfo, error, textBlockVersion } = session
+  const {
+    isGenerating,
+    streamingContent,
+    isStreaming,
+    thoughts,
+    parallelGroups,
+    isThinking,
+    compactInfo,
+    error,
+    textBlockVersion,
+    pendingAskUserQuestion,
+    failedAskUserQuestion
+  } = session
 
   // Smart auto-scroll: only scrolls when user is at bottom
   const {
@@ -245,8 +261,8 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
 
   // Handle stop - stops the current conversation's generation
   const handleStop = async () => {
-    if (currentConversation) {
-      await stopGeneration(currentConversation.id)
+    if (currentConversationId) {
+      await stopGeneration(currentConversationId)
     }
   }
 
@@ -273,7 +289,6 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
   const displayIsThinking = isMockThinking || isThinking
   const displayIsStreaming = isStreaming  // Only real streaming (not mock)
   const hasMessages = displayMessages.length > 0 || displayStreamingContent || displayIsThinking
-  const currentConversationId = getCurrentConversationId()
   const currentConversationSpaceId = currentSpaceId
   const currentChangeSets = currentConversationId ? (changeSets.get(currentConversationId) || []) : []
   const activeChangeSet = currentChangeSets[0]
@@ -367,6 +382,25 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
             filePath,
             force
           })}
+        />
+      )}
+      {pendingAskUserQuestion && currentConversationId && (
+        <AskUserQuestionPanel
+          toolCall={pendingAskUserQuestion}
+          onSubmit={(answer) => answerQuestion(currentConversationId, answer)}
+          isCompact={isCompact}
+        />
+      )}
+      {!isGenerating && !pendingAskUserQuestion && failedAskUserQuestion && currentConversationId && (
+        <AskUserQuestionPanel
+          toolCall={failedAskUserQuestion}
+          failureReason={failedAskUserQuestion.error || failedAskUserQuestion.output}
+          submitLabel={t('Send')}
+          onSubmit={async (answer) => {
+            dismissAskUserQuestion(currentConversationId)
+            await sendMessage(answer, undefined, aiBrowserEnabled, false, undefined, false)
+          }}
+          isCompact={isCompact}
         />
       )}
       <InputArea

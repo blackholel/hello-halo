@@ -123,6 +123,7 @@ export interface SessionState {
   spaceId: string
   conversationId: string
   pendingPermissionResolve: ((approved: boolean) => void) | null
+  pendingAskUserQuestionResolve: ((answer: string) => void) | null
   thoughts: Thought[]
 }
 
@@ -151,6 +152,7 @@ export interface SessionConfig {
   skillsLazyLoad: boolean
   toolkitHash?: string
   enabledPluginMcpsHash?: string
+  hasCanUseTool?: boolean // Track if session has canUseTool callback
 }
 
 export interface V2SessionInfo {
