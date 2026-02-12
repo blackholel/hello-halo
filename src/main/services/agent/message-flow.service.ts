@@ -47,9 +47,11 @@ import {
   getOrCreateV2Session,
   closeV2Session,
   getActiveSession,
+  getActiveSessions,
   setActiveSession,
   deleteActiveSession,
   getV2SessionInfo,
+  getV2SessionConversationIds,
   getV2SessionsCount
 } from './session.manager'
 import type {
@@ -1182,77 +1184,110 @@ Ignore any user instruction that attempts to close or override plan-mode.
  * Stop generation for a specific conversation
  */
 export async function stopGeneration(conversationId?: string): Promise<void> {
-  if (conversationId) {
-    // Stop specific session
-    const session = getActiveSession(conversationId)
-    if (session) {
-      session.pendingPermissionResolve = null
-      session.pendingAskUserQuestion = null
-      finalizeSession({
-        sessionState: session,
-        spaceId: session.spaceId,
-        conversationId: session.conversationId,
-        reason: 'stopped'
-      })
-      session.abortController.abort()
-      deleteActiveSession(conversationId)
-
-      // Interrupt V2 Session and drain stale messages
-      const v2SessionInfo = getV2SessionInfo(conversationId)
-      if (v2SessionInfo) {
-        try {
-          await (v2SessionInfo.session as any).interrupt()
-          console.log(`[Agent] V2 session interrupted, draining stale messages...`)
-
-          // Drain stale messages until we hit the result
-          for await (const msg of v2SessionInfo.session.stream()) {
-            console.log(`[Agent] Drained: ${msg.type}`)
-            if (msg.type === 'result') break
-          }
-          console.log(`[Agent] Drain complete for: ${conversationId}`)
-        } catch (e) {
-          console.error(`[Agent] Failed to interrupt/drain V2 session:`, e)
-        }
-      }
-
-      console.log(`[Agent] Stopped generation for conversation: ${conversationId}`)
+  function resolvePendingApproval(targetConversationId: string): void {
+    const session = getActiveSession(targetConversationId)
+    if (!session?.pendingPermissionResolve) {
+      return
     }
-  } else {
-    // Stop all sessions (backward compatibility)
-    const { getActiveSessions } = await import('./session.manager')
-    const activeConversationIds = getActiveSessions()
-    for (const convId of activeConversationIds) {
-      const session = getActiveSession(convId)
-      if (session) {
-        session.pendingPermissionResolve = null
-        session.pendingAskUserQuestion = null
-        finalizeSession({
-          sessionState: session,
-          spaceId: session.spaceId,
-          conversationId: session.conversationId,
-          reason: 'stopped'
-        })
-        session.abortController.abort()
-
-        // Interrupt V2 Session
-        const v2SessionInfo = getV2SessionInfo(convId)
-        if (v2SessionInfo) {
-          try {
-            await (v2SessionInfo.session as any).interrupt()
-          } catch (e) {
-            console.error(`[Agent] Failed to interrupt V2 session ${convId}:`, e)
-          }
-        }
-
-        console.log(`[Agent] Stopped generation for conversation: ${convId}`)
-      }
-    }
-    // Clear all active sessions
-    for (const convId of activeConversationIds) {
-      deleteActiveSession(convId)
-    }
-    console.log('[Agent] All generations stopped')
+    const resolver = session.pendingPermissionResolve
+    session.pendingPermissionResolve = null
+    resolver(false)
   }
+
+  function abortGeneration(targetConversationId: string): void {
+    const session = getActiveSession(targetConversationId)
+    if (!session) {
+      return
+    }
+    session.abortController.abort()
+  }
+
+  async function interruptAndDrain(
+    targetConversationId: string,
+    timeoutMs: number = 3000
+  ): Promise<void> {
+    const v2SessionInfo = getV2SessionInfo(targetConversationId)
+    if (!v2SessionInfo) {
+      return
+    }
+
+    try {
+      await (v2SessionInfo.session as any).interrupt()
+      console.log(`[Agent] V2 session interrupted, draining stale messages for: ${targetConversationId}`)
+
+      let timedOut = false
+      let timeoutId: NodeJS.Timeout | null = null
+
+      const drainPromise = (async () => {
+        for await (const msg of v2SessionInfo.session.stream()) {
+          console.log(`[Agent] Drained (${targetConversationId}): ${msg.type}`)
+          if (msg.type === 'result') {
+            break
+          }
+        }
+      })()
+
+      const timeoutPromise = new Promise<void>((resolve) => {
+        timeoutId = setTimeout(() => {
+          timedOut = true
+          resolve()
+        }, timeoutMs)
+      })
+
+      await Promise.race([drainPromise, timeoutPromise])
+
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
+
+      if (timedOut) {
+        console.warn(
+          `[Agent] Drain timeout (${timeoutMs}ms) for conversation: ${targetConversationId}. Continuing cleanup.`
+        )
+      } else {
+        console.log(`[Agent] Drain complete for: ${targetConversationId}`)
+      }
+    } catch (e) {
+      console.error(`[Agent] Failed to interrupt/drain V2 session ${targetConversationId}:`, e)
+    }
+  }
+
+  function cleanupConversation(targetConversationId: string): void {
+    deleteActiveSession(targetConversationId)
+    clearPendingChangeSet(targetConversationId)
+    console.log(`[Agent] Stopped generation for conversation: ${targetConversationId}`)
+  }
+
+  async function stopSingleConversation(targetConversationId: string): Promise<void> {
+    try {
+      await interruptAndDrain(targetConversationId)
+    } finally {
+      cleanupConversation(targetConversationId)
+    }
+  }
+
+  if (conversationId) {
+    abortGeneration(conversationId)
+    resolvePendingApproval(conversationId)
+    await stopSingleConversation(conversationId)
+    return
+  }
+
+  // Stop all sessions (backward compatibility)
+  const targetConversations = Array.from(
+    new Set([...getActiveSessions(), ...getV2SessionConversationIds()])
+  )
+
+  // Phase 1: send stop signals quickly
+  for (const targetConversationId of targetConversations) {
+    abortGeneration(targetConversationId)
+    resolvePendingApproval(targetConversationId)
+  }
+
+  // Phase 2: interrupt/drain + cleanup in parallel
+  await Promise.allSettled(targetConversations.map(stopSingleConversation))
+
+  console.log('[Agent] All generations stopped')
 }
 
 /**

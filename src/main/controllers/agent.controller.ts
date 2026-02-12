@@ -61,9 +61,9 @@ export async function sendMessage(
 /**
  * Stop generation for a specific conversation or all
  */
-export function stopGeneration(conversationId?: string): ControllerResponse {
+export async function stopGeneration(conversationId?: string): Promise<ControllerResponse> {
   try {
-    agentStopGeneration(conversationId)
+    await agentStopGeneration(conversationId)
     return { success: true }
   } catch (error: unknown) {
     const err = error as Error

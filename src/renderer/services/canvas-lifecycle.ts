@@ -186,6 +186,7 @@ class CanvasLifecycle {
 
   // Track which space the current tabs belong to
   private currentSpaceId: string | null = null
+  private enterSpaceSequence: number = 0
 
   // Container bounds getter (set by BrowserViewer)
   private containerBoundsGetter: (() => DOMRect | null) | null = null
@@ -654,11 +655,12 @@ class CanvasLifecycle {
    * Close all tabs
    */
   async closeAll(): Promise<void> {
-    // Destroy all browser views (browser and pdf types)
+    // Phase A: snapshot native view IDs, then clear UI state immediately
+    const browserViewIds: string[] = []
     for (const [, tab] of this.tabs) {
       const hasBrowserView = (tab.type === 'browser' || tab.type === 'pdf') && tab.browserViewId
       if (hasBrowserView) {
-        await this.destroyBrowserView(tab.browserViewId!)
+        browserViewIds.push(tab.browserViewId!)
       }
     }
 
@@ -668,6 +670,13 @@ class CanvasLifecycle {
 
     this.notifyTabsChange()
     this.notifyActiveTabChange()
+
+    // Phase B: destroy BrowserViews asynchronously after UI is already cleared
+    await Promise.allSettled(
+      browserViewIds.map(async (viewId) => {
+        await this.destroyBrowserView(viewId)
+      })
+    )
   }
 
   /**
@@ -1090,16 +1099,23 @@ class CanvasLifecycle {
    * This is the single point of control for Space isolation of Canvas state.
    * Returns true if tabs were cleared
    */
-  enterSpace(spaceId: string): boolean {
+  async enterSpace(spaceId: string): Promise<boolean> {
+    const sequence = ++this.enterSpaceSequence
     const previousSpaceId = this.currentSpaceId
 
     if (previousSpaceId && previousSpaceId !== spaceId && this.tabs.size > 0) {
       // Switching to different space with existing tabs - clear all
-      this.closeAll()
+      await this.closeAll()
+      if (sequence !== this.enterSpaceSequence) {
+        return false
+      }
       this.currentSpaceId = spaceId
       return true
     }
 
+    if (sequence !== this.enterSpaceSequence) {
+      return false
+    }
     this.currentSpaceId = spaceId
     return false
   }

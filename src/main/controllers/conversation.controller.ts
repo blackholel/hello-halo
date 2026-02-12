@@ -12,6 +12,7 @@ import {
   addMessage as serviceAddMessage,
   updateLastMessage as serviceUpdateLastMessage
 } from '../services/conversation.service'
+import { stopGeneration, closeV2Session } from '../services/agent'
 
 export interface ControllerResponse<T = unknown> {
   success: boolean
@@ -84,10 +85,20 @@ export function updateConversation(
 /**
  * Delete a conversation
  */
-export function deleteConversation(spaceId: string, conversationId: string): ControllerResponse {
+export async function deleteConversation(spaceId: string, conversationId: string): Promise<ControllerResponse> {
   try {
-    const result = serviceDeleteConversation(spaceId, conversationId)
-    return { success: result }
+    if (!serviceGetConversation(spaceId, conversationId)) {
+      return { success: false, error: 'Conversation not found' }
+    }
+
+    await stopGeneration(conversationId)
+    closeV2Session(conversationId)
+
+    if (!serviceDeleteConversation(spaceId, conversationId)) {
+      return { success: false, error: 'Conversation not found' }
+    }
+
+    return { success: true }
   } catch (error: unknown) {
     const err = error as Error
     return { success: false, error: err.message }

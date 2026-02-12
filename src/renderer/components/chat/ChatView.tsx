@@ -163,7 +163,9 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
   // Get current conversation and its session state
   const currentConversation = getCurrentConversation()
   const currentConversationId = getCurrentConversationId()
-  const { isLoadingConversation } = useChatStore()
+  const isLoadingConversation = useChatStore(state =>
+    currentConversationId ? state.isConversationLoading(currentConversationId) : false
+  )
   const session = getCurrentSession()
   const {
     isGenerating,

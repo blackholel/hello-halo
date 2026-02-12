@@ -255,7 +255,7 @@ interface ChatState {
 
   // Loading
   isLoading: boolean
-  isLoadingConversation: boolean  // Loading full conversation
+  loadingConversationCounts: Map<string, number>
 
   // Computed getters
   getCurrentSpaceState: () => SpaceState
@@ -270,6 +270,7 @@ interface ChatState {
   getConversations: () => ConversationMeta[]
   getCurrentConversationId: () => string | null
   getCachedConversation: (conversationId: string) => Conversation | null
+  isConversationLoading: (conversationId: string) => boolean
 
   // Space actions
   setCurrentSpace: (spaceId: string) => void
@@ -277,7 +278,13 @@ interface ChatState {
   // Conversation actions
   loadConversations: (spaceId: string) => Promise<void>
   createConversation: (spaceId: string, title?: string) => Promise<Conversation | null>
-  selectConversation: (conversationId: string) => void
+  ensureConversationLoaded: (
+    spaceId: string,
+    conversationId: string,
+    options?: { setCurrent?: boolean; subscribe?: boolean; warmSession?: boolean }
+  ) => Promise<void>
+  selectConversation: (conversationId: string) => Promise<void>
+  hydrateConversation: (spaceId: string, conversationId: string) => Promise<void>
   deleteConversation: (spaceId: string, conversationId: string) => Promise<boolean>
   renameConversation: (spaceId: string, conversationId: string, newTitle: string) => Promise<boolean>
 
@@ -317,6 +324,32 @@ interface ChatState {
 // Default empty states
 const EMPTY_SESSION: SessionState = createEmptySessionState()
 const EMPTY_SPACE_STATE: SpaceState = createEmptySpaceState()
+
+interface EnsureConversationLoadedOptions {
+  setCurrent?: boolean
+  subscribe?: boolean
+  warmSession?: boolean
+}
+
+function setConversationLoadingState(
+  set: (partial: Partial<ChatState> | ((state: ChatState) => Partial<ChatState>)) => void,
+  conversationId: string,
+  loading: boolean
+): void {
+  set((state) => {
+    const nextLoadingCounts = new Map(state.loadingConversationCounts)
+    const currentCount = nextLoadingCounts.get(conversationId) || 0
+    const nextCount = loading ? currentCount + 1 : Math.max(0, currentCount - 1)
+
+    if (nextCount === 0) {
+      nextLoadingCounts.delete(conversationId)
+    } else {
+      nextLoadingCounts.set(conversationId, nextCount)
+    }
+
+    return { loadingConversationCounts: nextLoadingCounts }
+  })
+}
 
 /**
  * Auto-open plan tab in Canvas when the last message is a plan response.
@@ -363,6 +396,112 @@ async function autoOpenPlanTab(
   })
 }
 
+async function ensureConversationLoadedImpl(
+  set: (partial: Partial<ChatState> | ((state: ChatState) => Partial<ChatState>)) => void,
+  get: () => ChatState,
+  spaceId: string,
+  conversationId: string,
+  options: EnsureConversationLoadedOptions = {}
+): Promise<void> {
+  const { setCurrent = true, subscribe = true, warmSession = true } = options
+  const { spaceStates, conversationCache } = get()
+  const spaceState = spaceStates.get(spaceId)
+  if (!spaceState) return
+
+  const conversationMeta = spaceState.conversations.find((c) => c.id === conversationId)
+  if (!conversationMeta) return
+
+  if (subscribe) {
+    api.subscribeToConversation(conversationId)
+  }
+
+  if (setCurrent) {
+    set((state) => {
+      const latest = state.spaceStates.get(spaceId)
+      if (!latest) return {}
+      const newSpaceStates = new Map(state.spaceStates)
+      newSpaceStates.set(spaceId, {
+        ...latest,
+        currentConversationId: conversationId
+      })
+      return { spaceStates: newSpaceStates }
+    })
+  }
+
+  const needsConversationLoad = !conversationCache.has(conversationId)
+  if (needsConversationLoad) {
+    setConversationLoadingState(set, conversationId, true)
+  }
+
+  try {
+    const conversationPromise = needsConversationLoad
+      ? api.getConversation(spaceId, conversationId)
+      : Promise.resolve(null)
+    const sessionStatePromise = api.getSessionState(conversationId)
+    const changeSetsPromise = api.listChangeSets(spaceId, conversationId)
+
+    const [conversationResponse, sessionResponse, changeSetsResponse] = await Promise.all([
+      conversationPromise,
+      sessionStatePromise,
+      changeSetsPromise
+    ])
+
+    if (conversationResponse?.success && conversationResponse.data) {
+      const fullConversation = conversationResponse.data as Conversation
+      set((state) => {
+        const newCache = new Map(state.conversationCache)
+        newCache.set(conversationId, fullConversation)
+        if (newCache.size > CONVERSATION_CACHE_SIZE) {
+          const firstKey = newCache.keys().next().value
+          if (firstKey) newCache.delete(firstKey)
+        }
+        return { conversationCache: newCache }
+      })
+    }
+
+    if (sessionResponse.success && sessionResponse.data) {
+      const sessionState = sessionResponse.data as { isActive: boolean; thoughts: Thought[]; spaceId?: string }
+      if (sessionState.isActive && sessionState.thoughts.length > 0) {
+        set((state) => {
+          const newSessions = new Map(state.sessions)
+          const existingSession = newSessions.get(conversationId) || createEmptySessionState()
+          newSessions.set(conversationId, {
+            ...existingSession,
+            isGenerating: true,
+            isThinking: true,
+            thoughts: sessionState.thoughts
+          })
+          return { sessions: newSessions }
+        })
+      }
+    }
+
+    if (changeSetsResponse.success && changeSetsResponse.data) {
+      const changeSets = changeSetsResponse.data as ChangeSet[]
+      set((state) => {
+        const newChangeSets = new Map(state.changeSets)
+        newChangeSets.set(conversationId, changeSets)
+        return { changeSets: newChangeSets }
+      })
+    }
+  } catch (error) {
+    console.error('[ChatStore] Failed to load conversation or session state:', error)
+  } finally {
+    if (needsConversationLoad) {
+      setConversationLoadingState(set, conversationId, false)
+    }
+  }
+
+  if (warmSession) {
+    try {
+      api.ensureSessionWarm(spaceId, conversationId)
+        .catch((error) => console.error('[ChatStore] Session warm up failed:', error))
+    } catch (error) {
+      console.error('[ChatStore] Failed to trigger session warm up:', error)
+    }
+  }
+}
+
 export const useChatStore = create<ChatState>((set, get) => ({
   // Initial state
   spaceStates: new Map<string, SpaceState>(),
@@ -372,7 +511,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   currentSpaceId: null,
   artifacts: [],
   isLoading: false,
-  isLoadingConversation: false,
+  loadingConversationCounts: new Map<string, number>(),
 
   // Get current space state
   getCurrentSpaceState: () => {
@@ -414,6 +553,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // Get cached conversation by ID
   getCachedConversation: (conversationId: string) => {
     return get().conversationCache.get(conversationId) || null
+  },
+
+  isConversationLoading: (conversationId: string) => {
+    return (get().loadingConversationCounts.get(conversationId) || 0) > 0
   },
 
   // Get current session state (for the currently viewed conversation)
@@ -534,128 +677,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
+  ensureConversationLoaded: async (spaceId, conversationId, options = {}) => {
+    await ensureConversationLoadedImpl(set, get, spaceId, conversationId, options)
+  },
+
   // Select conversation (changes pointer, loads full conversation on-demand)
   selectConversation: async (conversationId) => {
-    const { currentSpaceId, spaceStates, conversationCache } = get()
+    const currentSpaceId = get().currentSpaceId
     if (!currentSpaceId) return
-
-    const spaceState = spaceStates.get(currentSpaceId)
-    if (!spaceState) return
-
-    const conversationMeta = spaceState.conversations.find((c) => c.id === conversationId)
-    if (!conversationMeta) return
-
-    // Subscribe to conversation events (for remote mode)
-    api.subscribeToConversation(conversationId)
-
-    // Update the pointer first
-    set((state) => {
-      const newSpaceStates = new Map(state.spaceStates)
-      newSpaceStates.set(currentSpaceId, {
-        ...spaceState,
-        currentConversationId: conversationId
-      })
-      return { spaceStates: newSpaceStates }
+    await ensureConversationLoadedImpl(set, get, currentSpaceId, conversationId, {
+      setCurrent: true,
+      subscribe: true,
+      warmSession: true
     })
+  },
 
-    // Load full conversation, session state, and change sets in parallel (async-parallel)
-    // These are independent operations that can run concurrently
-    const needsConversationLoad = !conversationCache.has(conversationId)
-
-    if (needsConversationLoad) {
-      set({ isLoadingConversation: true })
-    }
-
-    try {
-      // Start both requests in parallel
-      const conversationPromise = needsConversationLoad
-        ? api.getConversation(currentSpaceId, conversationId)
-        : Promise.resolve(null)
-      const sessionStatePromise = api.getSessionState(conversationId)
-      const changeSetsPromise = api.listChangeSets(currentSpaceId, conversationId)
-
-      const [conversationResponse, sessionResponse, changeSetsResponse] = await Promise.all([
-        conversationPromise,
-        sessionStatePromise,
-        changeSetsPromise
-      ])
-
-      // Handle conversation response
-      if (conversationResponse?.success && conversationResponse.data) {
-        const fullConversation = conversationResponse.data as Conversation
-
-        set((state) => {
-          const newCache = new Map(state.conversationCache)
-          newCache.set(conversationId, fullConversation)
-
-          // LRU eviction
-          if (newCache.size > CONVERSATION_CACHE_SIZE) {
-            const firstKey = newCache.keys().next().value
-            if (firstKey) newCache.delete(firstKey)
-          }
-
-          return { conversationCache: newCache, isLoadingConversation: false }
-        })
-      } else if (needsConversationLoad) {
-        set({ isLoadingConversation: false })
-      }
-
-      // Handle session state response
-      if (sessionResponse.success && sessionResponse.data) {
-        const sessionState = sessionResponse.data as {
-          isActive: boolean
-          thoughts: Thought[]
-          spaceId?: string
-          runId?: string | null
-          lifecycle?: AgentRunLifecycle | 'idle'
-          terminalReason?: TerminalReason | null
-        }
-
-        if (sessionState.isActive && sessionState.thoughts.length > 0) {
-          const normalizedLifecycle = normalizeLifecycle(sessionState.lifecycle)
-          set((state) => {
-            const newSessions = new Map(state.sessions)
-            const existingSession = newSessions.get(conversationId) || createEmptySessionState()
-
-            newSessions.set(conversationId, {
-              ...existingSession,
-              activeRunId: sessionState.runId ?? existingSession.activeRunId,
-              lifecycle: normalizedLifecycle,
-              terminalReason: sessionState.terminalReason ?? null,
-              isGenerating: normalizedLifecycle === 'running',
-              isThinking: normalizedLifecycle === 'running',
-              thoughts: sessionState.thoughts
-            })
-
-            return { sessions: newSessions }
-          })
-        }
-      }
-
-      // Handle change set response
-      if (changeSetsResponse.success && changeSetsResponse.data) {
-        const changeSets = changeSetsResponse.data as ChangeSet[]
-        set((state) => {
-          const newChangeSets = new Map(state.changeSets)
-          newChangeSets.set(conversationId, changeSets)
-          return { changeSets: newChangeSets }
-        })
-      }
-    } catch (error) {
-      console.error('[ChatStore] Failed to load conversation or session state:', error)
-      if (needsConversationLoad) {
-        set({ isLoadingConversation: false })
-      }
-    }
-
-    // Warm up V2 Session in background - non-blocking
-    // When user sends a message, V2 Session is ready to avoid delay
-    try {
-      api.ensureSessionWarm(currentSpaceId, conversationId)
-        .catch((error) => console.error('[ChatStore] Session warm up failed:', error))
-    } catch (error) {
-      console.error('[ChatStore] Failed to trigger session warm up:', error)
-    }
+  // Hydrate conversation state for background tab usage without changing main pointer
+  hydrateConversation: async (spaceId, conversationId) => {
+    await ensureConversationLoadedImpl(set, get, spaceId, conversationId, {
+      setCurrent: false,
+      subscribe: true,
+      warmSession: true
+    })
   },
 
   // Delete conversation
@@ -676,25 +719,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
           // Clean up change sets
           const newChangeSets = new Map(state.changeSets)
           newChangeSets.delete(conversationId)
+          const newLoadingConversationCounts = new Map(state.loadingConversationCounts)
+          newLoadingConversationCounts.delete(conversationId)
 
           // Update space state
           const newSpaceStates = new Map(state.spaceStates)
           const existingState = newSpaceStates.get(spaceId) || createEmptySpaceState()
           const newConversations = existingState.conversations.filter((c) => c.id !== conversationId)
+          const nextCurrentConversationId =
+            existingState.currentConversationId === conversationId
+              ? (newConversations[0]?.id || null)
+              : existingState.currentConversationId
 
           newSpaceStates.set(spaceId, {
             conversations: newConversations,
-            currentConversationId:
-              existingState.currentConversationId === conversationId
-                ? (newConversations[0]?.id || null)
-                : existingState.currentConversationId
+            currentConversationId: nextCurrentConversationId
           })
 
           return {
             spaceStates: newSpaceStates,
             sessions: newSessions,
             conversationCache: newCache,
-            changeSets: newChangeSets
+            changeSets: newChangeSets,
+            loadingConversationCounts: newLoadingConversationCounts
           }
         })
 
@@ -1970,7 +2017,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       changeSets: new Map(),
       currentSpaceId: null,
       artifacts: [],
-      isLoadingConversation: false
+      loadingConversationCounts: new Map()
     })
   },
 
