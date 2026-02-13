@@ -919,6 +919,8 @@ export const api = {
   },
 
   // ===== Event Listeners =====
+  onAgentRunStart: (callback: (data: unknown) => void) =>
+    onEvent('agent:run-start', callback),
   onAgentMessage: (callback: (data: unknown) => void) =>
     onEvent('agent:message', callback),
   onAgentToolCall: (callback: (data: unknown) => void) =>
@@ -931,6 +933,8 @@ export const api = {
     onEvent('agent:complete', callback),
   onAgentThought: (callback: (data: unknown) => void) =>
     onEvent('agent:thought', callback),
+  onAgentToolsAvailable: (callback: (data: unknown) => void) =>
+    onEvent('agent:tools-available', callback),
   onAgentMcpStatus: (callback: (data: unknown) => void) =>
     onEvent('agent:mcp-status', callback),
   onAgentCompact: (callback: (data: unknown) => void) =>

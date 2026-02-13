@@ -76,6 +76,7 @@ function applyTheme(theme: 'light' | 'dark' | 'system') {
 export default function App() {
   const { view, config, initialize, setMcpStatus, setView, setConfig } = useAppStore()
   const {
+    handleAgentRunStart,
     handleAgentMessage,
     handleAgentToolCall,
     handleAgentToolResult,
@@ -83,6 +84,7 @@ export default function App() {
     handleAgentComplete,
     handleAgentThought,
     handleAgentCompact,
+    handleAgentToolsAvailable,
     currentSpaceId,
     setCurrentSpace: setChatCurrentSpace,
     loadConversations,
@@ -151,6 +153,11 @@ export default function App() {
       handleAgentThought(data as AgentEventBase & { thought: Thought })
     })
 
+    const unsubRunStart = api.onAgentRunStart((data) => {
+      console.log('[App] Received agent:run-start event:', data)
+      handleAgentRunStart(data as AgentEventBase & { runId: string; startedAt: string })
+    })
+
     // Message events (with session IDs)
     const unsubMessage = api.onAgentMessage((data) => {
       console.log('[App] Received agent:message event:', data)
@@ -164,7 +171,7 @@ export default function App() {
 
     const unsubToolResult = api.onAgentToolResult((data) => {
       console.log('[App] Received agent:tool-result event:', data)
-      handleAgentToolResult(data as AgentEventBase & { toolId: string; result: string; isError: boolean })
+      handleAgentToolResult(data as AgentEventBase & { toolCallId?: string; toolId?: string; result: string; isError: boolean })
     })
 
     const unsubError = api.onAgentError((data) => {
@@ -183,6 +190,17 @@ export default function App() {
       handleAgentCompact(data as AgentEventBase & { trigger: 'manual' | 'auto'; preTokens: number })
     })
 
+    const unsubToolsAvailable = api.onAgentToolsAvailable((data) => {
+      console.log('[App] Received agent:tools-available event:', data)
+      handleAgentToolsAvailable(data as AgentEventBase & {
+        runId: string
+        snapshotVersion: number
+        emittedAt: string
+        tools: string[]
+        toolCount: number
+      })
+    })
+
     // MCP status updates (global - not per-conversation)
     const unsubMcpStatus = api.onAgentMcpStatus((data) => {
       console.log('[App] Received agent:mcp-status event:', data)
@@ -193,6 +211,7 @@ export default function App() {
     })
 
     return () => {
+      unsubRunStart()
       unsubThought()
       unsubMessage()
       unsubToolCall()
@@ -200,9 +219,11 @@ export default function App() {
       unsubError()
       unsubComplete()
       unsubCompact()
+      unsubToolsAvailable()
       unsubMcpStatus()
     }
   }, [
+    handleAgentRunStart,
     handleAgentMessage,
     handleAgentToolCall,
     handleAgentToolResult,
@@ -211,6 +232,7 @@ export default function App() {
     handleWorkflowAgentComplete,
     handleAgentThought,
     handleAgentCompact,
+    handleAgentToolsAvailable,
     setMcpStatus
   ])
 

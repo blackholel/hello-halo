@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   Loader2,
   Circle,
+  PauseCircle,
 } from 'lucide-react'
 import { TaskItem } from './TaskItem'
 import { useTaskStore } from '../../stores/task.store'
@@ -93,6 +94,12 @@ export const TaskPanel = memo(function TaskPanel({
               <span className="flex items-center gap-1 text-muted-foreground">
                 <Circle size={12} />
                 {progress.pending}
+              </span>
+            )}
+            {progress.paused > 0 && (
+              <span className="flex items-center gap-1 text-amber-500">
+                <PauseCircle size={12} />
+                {progress.paused}
               </span>
             )}
             <span className="text-muted-foreground font-medium">

@@ -178,6 +178,8 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     error,
     textBlockVersion,
     planEnabled,
+    toolStatusById,
+    availableToolsSnapshot,
     pendingAskUserQuestion,
     failedAskUserQuestion
   } = session
@@ -362,6 +364,8 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
                 error={error}
                 isCompact={isCompact}
                 textBlockVersion={textBlockVersion}
+                toolStatusById={toolStatusById}
+                availableToolsSnapshot={availableToolsSnapshot}
                 workDir={currentSpace?.path}
                 onOpenPlanInCanvas={handleOpenPlanInCanvas}
               />

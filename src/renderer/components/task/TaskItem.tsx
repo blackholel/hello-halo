@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   Loader2,
   Bot,
+  PauseCircle,
 } from 'lucide-react'
 import type { TaskItem as TaskItemType } from '../../types'
 
@@ -46,6 +47,20 @@ function getStatusDisplay(status: TaskItemType['status']) {
         iconClass: 'text-green-500',
         bgClass: 'bg-green-500/10',
         textClass: 'text-muted-foreground line-through',
+      }
+    case 'paused':
+      return {
+        Icon: PauseCircle,
+        iconClass: 'text-amber-500',
+        bgClass: 'bg-amber-500/10',
+        textClass: 'text-foreground/80',
+      }
+    default:
+      return {
+        Icon: Circle,
+        iconClass: 'text-muted-foreground/50',
+        bgClass: 'bg-transparent',
+        textClass: 'text-muted-foreground',
       }
   }
 }

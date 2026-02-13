@@ -14,7 +14,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import { getToolIcon } from '../icons/ToolIcons'
-import type { Thought } from '../../types'
+import type { Thought, ToolStatus } from '../../types'
 import { useTranslation } from '../../i18n'
 import {
   truncateText,
@@ -28,6 +28,7 @@ interface SubAgentCardProps {
   description: string
   subagentType?: string
   thoughts: Thought[]
+  toolStatusById?: Record<string, ToolStatus>
   isRunning: boolean
   hasError: boolean
 }
@@ -56,18 +57,30 @@ function getThoughtBrief(thought: Thought): string {
 function CollapsedSummary({
   toolUseThoughts,
   allThoughts,
+  toolStatusById = {},
   hasError,
   t
 }: {
   toolUseThoughts: Thought[]
   allThoughts: Thought[]
+  toolStatusById?: Record<string, ToolStatus>
   hasError: boolean
   t: (key: string, params?: Record<string, unknown>) => string
 }) {
+  const resolveToolStatus = (toolId: string): ToolStatus => {
+    const status = toolStatusById[toolId]
+    if (status) return status
+    const result = allThoughts.find(th => th.type === 'tool_result' && th.id === toolId)
+    if (result) {
+      return result.isError ? 'error' : 'success'
+    }
+    return 'running'
+  }
+
   // Find the last running tool (no result yet)
   const runningTool = [...toolUseThoughts].reverse().find(tool => {
-    const hasResult = allThoughts.some(th => th.type === 'tool_result' && th.id === tool.id)
-    return !hasResult
+    const status = resolveToolStatus(tool.id)
+    return status === 'running' || status === 'pending' || status === 'waiting_approval'
   })
 
   if (runningTool) {
@@ -88,8 +101,7 @@ function CollapsedSummary({
   // Find error tool if hasError
   if (hasError) {
     const errorTool = [...toolUseThoughts].reverse().find(tool => {
-      const result = allThoughts.find(th => th.type === 'tool_result' && th.id === tool.id)
-      return result?.isError
+      return resolveToolStatus(tool.id) === 'error'
     })
     if (errorTool) {
       return (
@@ -122,22 +134,27 @@ function CollapsedSummary({
 // Compact thought item for sub-agent card
 const CompactThoughtItem = memo(function CompactThoughtItem({
   thought,
-  allThoughts
+  allThoughts,
+  toolStatusById = {}
 }: {
   thought: Thought
   allThoughts: Thought[]
+  toolStatusById?: Record<string, ToolStatus>
 }) {
   const Icon = thought.toolName ? getToolIcon(thought.toolName) : Bot
   const brief = getThoughtBrief(thought)
 
-  // Check if this tool has completed
-  const hasResult = allThoughts.some(
-    t => t.type === 'tool_result' && t.id === thought.id
-  )
-  const resultThought = allThoughts.find(
-    t => t.type === 'tool_result' && t.id === thought.id
-  )
-  const hasError = resultThought?.isError
+  const status = toolStatusById[thought.id] || (() => {
+    const resultThought = allThoughts.find(
+      t => t.type === 'tool_result' && t.id === thought.id
+    )
+    if (!resultThought) return 'running'
+    return resultThought.isError ? 'error' : 'success'
+  })()
+  const isRunning = status === 'running' || status === 'pending' || status === 'waiting_approval'
+  const isSuccess = status === 'success'
+  const isError = status === 'error'
+  const isCancelled = status === 'cancelled'
 
   return (
     <div className="flex items-center gap-2 py-1 text-xs">
@@ -148,14 +165,17 @@ const CompactThoughtItem = memo(function CompactThoughtItem({
         )}
         {brief && <span className="ml-1 text-muted-foreground/70">{brief}</span>}
       </span>
-      {!hasResult && thought.status === 'running' && (
+      {isRunning && (
         <Loader2 size={10} className="animate-spin text-primary flex-shrink-0" />
       )}
-      {hasResult && !hasError && (
+      {isSuccess && (
         <CheckCircle2 size={10} className="text-green-500 flex-shrink-0" />
       )}
-      {hasError && (
+      {isError && (
         <XCircle size={10} className="text-destructive flex-shrink-0" />
+      )}
+      {isCancelled && (
+        <XCircle size={10} className="text-muted-foreground/70 flex-shrink-0" />
       )}
     </div>
   )
@@ -166,6 +186,7 @@ export const SubAgentCard = memo(function SubAgentCard({
   description,
   subagentType,
   thoughts,
+  toolStatusById = {},
   isRunning,
   hasError
 }: SubAgentCardProps) {
@@ -250,6 +271,7 @@ export const SubAgentCard = memo(function SubAgentCard({
             <CollapsedSummary
               toolUseThoughts={toolUseThoughts}
               allThoughts={thoughts}
+              toolStatusById={toolStatusById}
               hasError={hasError}
               t={t}
             />
@@ -266,6 +288,7 @@ export const SubAgentCard = memo(function SubAgentCard({
                       key={thought.id}
                       thought={thought}
                       allThoughts={thoughts}
+                      toolStatusById={toolStatusById}
                     />
                   ))}
                   {toolUseThoughts.length > 10 && (

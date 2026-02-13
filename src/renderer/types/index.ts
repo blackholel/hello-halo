@@ -46,7 +46,14 @@ export type ThemeMode = 'light' | 'dark' | 'system';
 export type ConfigSourceMode = 'kite' | 'claude';
 
 // Tool Call Status
-export type ToolStatus = 'pending' | 'running' | 'success' | 'error' | 'waiting_approval';
+export type ToolStatus =
+  | 'pending'
+  | 'running'
+  | 'success'
+  | 'error'
+  | 'waiting_approval'
+  | 'cancelled'
+  | 'unknown';
 
 // Message Role
 export type MessageRole = 'user' | 'assistant' | 'system';
@@ -348,6 +355,7 @@ export interface Message {
   tokenUsage?: TokenUsage;  // Token usage for this assistant message
   fileContexts?: FileContextAttachment[];  // File contexts for context injection (metadata only)
   isPlan?: boolean;  // Whether this message is a plan mode response
+  terminalReason?: 'completed' | 'stopped' | 'error' | 'no_text';
 }
 
 // ============================================
@@ -428,7 +436,7 @@ export type ArtifactViewMode = 'card' | 'tree';
 export type ThoughtType = 'thinking' | 'text' | 'tool_use' | 'tool_result' | 'system' | 'result' | 'error';
 
 // Thought execution status
-export type ThoughtStatus = 'pending' | 'running' | 'success' | 'error';
+export type ThoughtStatus = 'pending' | 'running' | 'success' | 'error' | 'cancelled' | 'unknown';
 
 export interface Thought {
   id: string;
@@ -492,7 +500,7 @@ export interface ThinkingBlock {
 // ============================================
 
 // Task status (same as TodoWrite for compatibility)
-export type TaskStatus = 'pending' | 'in_progress' | 'completed';
+export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'paused';
 
 // Individual task item for global task panel
 export interface TaskItem {
@@ -549,7 +557,10 @@ export interface CanvasContext {
 export interface AgentEventBase {
   spaceId: string;
   conversationId: string;
+  runId?: string;
 }
+
+export type AgentRunLifecycle = 'idle' | 'running' | 'completed' | 'stopped' | 'error';
 
 export interface AgentMessageEvent extends AgentEventBase {
   type: 'message';
@@ -570,7 +581,8 @@ export interface AgentToolCallEvent extends AgentEventBase {
 
 export interface AgentToolResultEvent extends AgentEventBase {
   type: 'tool_result';
-  toolId: string;
+  toolCallId: string;
+  toolId?: string; // Backward compatibility alias
   result: string;
   isError: boolean;
 }
@@ -593,8 +605,26 @@ export interface TokenUsage {
 export interface AgentCompleteEvent extends AgentEventBase {
   type: 'complete';
   duration?: number;
+  durationMs?: number;
+  reason?: 'completed' | 'stopped' | 'error' | 'no_text';
+  terminalAt?: string;
   tokenUsage?: TokenUsage | null;
   isPlan?: boolean;
+}
+
+export interface AgentRunStartEvent extends AgentEventBase {
+  type: 'run_start';
+  runId: string;
+  startedAt: string;
+}
+
+export interface AgentToolsAvailableEvent extends AgentEventBase {
+  type: 'tools_available';
+  runId: string;
+  snapshotVersion: number;
+  emittedAt: string;
+  tools: string[];
+  toolCount: number;
 }
 
 export interface AgentThoughtEvent extends AgentEventBase {
@@ -614,12 +644,14 @@ export interface AgentCompactEvent extends AgentEventBase {
 }
 
 export type AgentEvent =
+  | AgentRunStartEvent
   | AgentMessageEvent
   | AgentToolCallEvent
   | AgentToolResultEvent
   | AgentErrorEvent
   | AgentCompleteEvent
-  | AgentCompactEvent;
+  | AgentCompactEvent
+  | AgentToolsAvailableEvent;
 
 // ============================================
 // App State Types

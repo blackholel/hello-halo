@@ -78,7 +78,13 @@ export interface AgentRequest {
 // Tool and Thought Types
 // ============================================
 
-export type ToolCallStatus = 'pending' | 'running' | 'success' | 'error' | 'waiting_approval'
+export type ToolCallStatus =
+  | 'pending'
+  | 'running'
+  | 'success'
+  | 'error'
+  | 'waiting_approval'
+  | 'cancelled'
 
 export interface ToolCall {
   id: string
@@ -91,6 +97,9 @@ export interface ToolCall {
   requiresApproval?: boolean
   description?: string
 }
+
+export type SessionLifecycle = 'running' | 'terminal'
+export type SessionTerminalReason = 'completed' | 'stopped' | 'error' | 'no_text' | null
 
 export type ThoughtType = 'thinking' | 'text' | 'tool_use' | 'tool_result' | 'system' | 'result' | 'error'
 
@@ -122,6 +131,15 @@ export interface SessionState {
   abortController: AbortController
   spaceId: string
   conversationId: string
+  runId: string
+  startedAt: number
+  latestAssistantContent: string
+  lifecycle: SessionLifecycle
+  terminalReason: SessionTerminalReason
+  terminalAt: string | null
+  finalized: boolean
+  toolCallSeq: number
+  toolsById: Map<string, ToolCall>
   pendingPermissionResolve: ((approved: boolean) => void) | null
   pendingAskUserQuestionResolve: ((answer: string) => void) | null
   thoughts: Thought[]

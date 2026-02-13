@@ -22,7 +22,7 @@ import {
 } from 'lucide-react'
 import { getToolIcon } from '../icons/ToolIcons'
 import { TodoCard, parseTodoInput } from '../tool/TodoCard'
-import type { Thought, ParallelGroup } from '../../types'
+import type { Thought, ParallelGroup, ToolStatus } from '../../types'
 import { useTranslation } from '../../i18n'
 import {
   getThoughtKey,
@@ -36,6 +36,7 @@ import {
 interface ThoughtProcessProps {
   thoughts: Thought[]
   parallelGroups?: Map<string, ParallelGroup>
+  toolStatusById?: Record<string, ToolStatus>
   isThinking: boolean
   /**
    * Display mode:
@@ -156,15 +157,18 @@ function TimerDisplay({ startTime, isThinking }: { startTime: number | null; isT
 // Individual thought item
 const ThoughtItem = memo(function ThoughtItem({
   thought,
-  isLast
+  isLast,
+  toolStatusById = {}
 }: {
   thought: Thought
   isLast: boolean
+  toolStatusById?: Record<string, ToolStatus>
 }) {
   const [isExpanded, setIsExpanded] = useState(false)
   const { t } = useTranslation()
   const color = getThoughtColor(thought.type, thought.isError)
   const Icon = getThoughtIcon(thought.type, thought.toolName)
+  const toolStatus = thought.type === 'tool_use' ? toolStatusById[thought.id] || thought.status : thought.status
 
   const maxPreviewLength = 150
 
@@ -217,8 +221,17 @@ const ThoughtItem = memo(function ThoughtItem({
               {(thought.duration / 1000).toFixed(1)}s
             </span>
           )}
-          {thought.status === 'running' && (
+          {toolStatus === 'running' && (
             <Loader2 size={10} className="animate-spin text-primary" />
+          )}
+          {toolStatus === 'success' && (
+            <CheckCircle2 size={10} className="text-green-500" />
+          )}
+          {toolStatus === 'error' && (
+            <XCircle size={10} className="text-destructive" />
+          )}
+          {toolStatus === 'cancelled' && (
+            <XCircle size={10} className="text-muted-foreground/60" />
           )}
         </div>
 
@@ -258,10 +271,12 @@ const ThoughtItem = memo(function ThoughtItem({
 // Parallel group component (side-by-side display)
 const ParallelGroupView = memo(function ParallelGroupView({
   group,
-  thoughts
+  thoughts,
+  toolStatusById = {}
 }: {
   group: ParallelGroup
   thoughts: Thought[]
+  toolStatusById?: Record<string, ToolStatus>
 }) {
   const { t } = useTranslation()
   const toolUses = group.thoughts.filter(t => t.type === 'tool_use')
@@ -291,9 +306,13 @@ const ParallelGroupView = memo(function ParallelGroupView({
           const result = thoughts.find(
             t => t.type === 'tool_result' && t.id === thought.id
           )
-          const status = result
-            ? (result.isError ? 'error' : 'success')
-            : 'running'
+          const status = toolStatusById[thought.id]
+            ? (toolStatusById[thought.id] === 'pending' || toolStatusById[thought.id] === 'waiting_approval'
+              ? 'running'
+              : toolStatusById[thought.id])
+            : (result
+              ? (result.isError ? 'error' : 'success')
+              : 'running')
           const Icon = getToolIcon(thought.toolName || '')
 
           return (
@@ -304,6 +323,7 @@ const ParallelGroupView = memo(function ParallelGroupView({
                 ${status === 'running' ? 'border-primary/20 bg-primary/[0.04]' : ''}
                 ${status === 'success' ? 'border-kite-success/20 bg-kite-success/[0.04]' : ''}
                 ${status === 'error' ? 'border-destructive/20 bg-destructive/[0.04]' : ''}
+                ${status === 'cancelled' ? 'border-border/20 bg-secondary/[0.05]' : ''}
               `}
             >
               <div className="flex items-center gap-2">
@@ -317,6 +337,9 @@ const ParallelGroupView = memo(function ParallelGroupView({
                 )}
                 {status === 'error' && (
                   <XCircle size={12} className="text-destructive" />
+                )}
+                {status === 'cancelled' && (
+                  <XCircle size={12} className="text-muted-foreground/70" />
                 )}
               </div>
 
@@ -343,6 +366,7 @@ const ParallelGroupView = memo(function ParallelGroupView({
 export function ThoughtProcess({
   thoughts,
   parallelGroups,
+  toolStatusById = {},
   isThinking,
   mode = 'realtime',
   defaultExpanded
@@ -472,7 +496,7 @@ export function ThoughtProcess({
               >
                 {/* Parallel groups first */}
                 {displayParallelGroups.map(group => (
-                  <ParallelGroupView key={group.id} group={group} thoughts={thoughts} />
+                  <ParallelGroupView key={group.id} group={group} thoughts={thoughts} toolStatusById={toolStatusById} />
                 ))}
 
                 {/* Regular thoughts */}
@@ -481,6 +505,7 @@ export function ThoughtProcess({
                     key={getThoughtKey(thought)}
                     thought={thought}
                     isLast={index === nonParallelThoughts.length - 1 && !latestTodos}
+                    toolStatusById={toolStatusById}
                   />
                 ))}
               </div>
@@ -558,7 +583,7 @@ export function ThoughtProcess({
               >
                 {/* Parallel groups first */}
                 {displayParallelGroups.map(group => (
-                  <ParallelGroupView key={group.id} group={group} thoughts={thoughts} />
+                  <ParallelGroupView key={group.id} group={group} thoughts={thoughts} toolStatusById={toolStatusById} />
                 ))}
 
                 {/* Regular thoughts */}
@@ -567,6 +592,7 @@ export function ThoughtProcess({
                     key={getThoughtKey(thought)}
                     thought={thought}
                     isLast={index === nonParallelThoughts.length - 1 && !latestTodos && !isThinking}
+                    toolStatusById={toolStatusById}
                   />
                 ))}
               </div>

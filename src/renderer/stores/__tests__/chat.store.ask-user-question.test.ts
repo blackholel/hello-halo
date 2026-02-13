@@ -1,11 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ToolCall } from '../../types'
+import type { AgentEventBase, ToolCall } from '../../types'
 
 const mockAnswerQuestion = vi.fn()
+const mockGetConversation = vi.fn()
+const mockListChangeSets = vi.fn()
+const mockStopGeneration = vi.fn()
 
 vi.mock('../../api', () => ({
   api: {
-    answerQuestion: (...args: unknown[]) => mockAnswerQuestion(...args)
+    answerQuestion: (...args: unknown[]) => mockAnswerQuestion(...args),
+    getConversation: (...args: unknown[]) => mockGetConversation(...args),
+    listChangeSets: (...args: unknown[]) => mockListChangeSets(...args),
+    stopGeneration: (...args: unknown[]) => mockStopGeneration(...args)
   }
 }))
 
@@ -31,13 +37,19 @@ function seedPendingAskUserQuestion(conversationId: string, toolCallId = 'tool-a
     input: {
       question: 'Pick an option'
     }
-  } as unknown as { conversationId: string } & ToolCall)
+  } as unknown as AgentEventBase & ToolCall)
 }
 
 describe('Chat Store - AskUserQuestion Flow', () => {
   beforeEach(() => {
     useChatStore.getState().reset()
     mockAnswerQuestion.mockReset()
+    mockGetConversation.mockReset()
+    mockListChangeSets.mockReset()
+    mockStopGeneration.mockReset()
+    mockGetConversation.mockResolvedValue({ success: false })
+    mockListChangeSets.mockResolvedValue({ success: false })
+    mockStopGeneration.mockResolvedValue({ success: true })
   })
 
   it('clears pending and failed question on successful answer', async () => {
@@ -123,5 +135,205 @@ describe('Chat Store - AskUserQuestion Flow', () => {
     session = useChatStore.getState().getSession(conversationId)
     expect(session.pendingAskUserQuestion).toBeNull()
     expect(session.failedAskUserQuestion).toBeNull()
+  })
+
+  it('handles out-of-order tool_result before tool_call and converges status', () => {
+    const conversationId = 'conv-out-of-order'
+    const runId = 'run-ooo'
+
+    useChatStore.getState().handleAgentRunStart({
+      spaceId: 'space-1',
+      conversationId,
+      runId,
+      startedAt: new Date().toISOString()
+    })
+
+    useChatStore.getState().handleAgentToolResult({
+      spaceId: 'space-1',
+      conversationId,
+      runId,
+      toolCallId: 'tool-1',
+      result: 'ok',
+      isError: false
+    })
+
+    useChatStore.getState().handleAgentToolCall({
+      spaceId: 'space-1',
+      conversationId,
+      runId,
+      id: 'tool-1',
+      name: 'Read',
+      status: 'running',
+      input: { file_path: '/tmp/a.txt' }
+    } as unknown as AgentEventBase & ToolCall)
+
+    const session = useChatStore.getState().getSession(conversationId)
+    expect(session.toolStatusById['tool-1']).toBe('success')
+    expect(session.orphanToolResults['tool-1']).toBeUndefined()
+  })
+
+  it('does not reopen AskUserQuestion pending state when terminal result arrived first', () => {
+    const conversationId = 'conv-out-of-order-ask'
+    const runId = 'run-ooo-ask'
+
+    useChatStore.getState().handleAgentRunStart({
+      spaceId: 'space-1',
+      conversationId,
+      runId,
+      startedAt: new Date().toISOString()
+    })
+
+    useChatStore.getState().handleAgentToolResult({
+      spaceId: 'space-1',
+      conversationId,
+      runId,
+      toolCallId: 'tool-ask',
+      result: 'User answered: option-a',
+      isError: false
+    })
+
+    useChatStore.getState().handleAgentToolCall({
+      spaceId: 'space-1',
+      conversationId,
+      runId,
+      id: 'tool-ask',
+      name: 'AskUserQuestion',
+      status: 'waiting_approval',
+      input: {
+        question: 'Pick one',
+        options: ['A', 'B']
+      }
+    } as unknown as AgentEventBase & ToolCall)
+
+    const session = useChatStore.getState().getSession(conversationId)
+    expect(session.toolStatusById['tool-ask']).toBe('success')
+    expect(session.pendingAskUserQuestion).toBeNull()
+    expect(session.failedAskUserQuestion).toBeNull()
+  })
+
+  it('drops stale events from previous run after new run starts', () => {
+    const conversationId = 'conv-multi-run'
+    const runA = 'run-a'
+    const runB = 'run-b'
+
+    useChatStore.getState().handleAgentRunStart({
+      spaceId: 'space-1',
+      conversationId,
+      runId: runA,
+      startedAt: new Date().toISOString()
+    })
+
+    useChatStore.getState().handleAgentRunStart({
+      spaceId: 'space-1',
+      conversationId,
+      runId: runB,
+      startedAt: new Date().toISOString()
+    })
+
+    useChatStore.getState().handleAgentThought({
+      spaceId: 'space-1',
+      conversationId,
+      runId: runA,
+      thought: {
+        id: 'stale-thought',
+        type: 'thinking',
+        content: 'old',
+        timestamp: new Date().toISOString()
+      }
+    })
+
+    const session = useChatStore.getState().getSession(conversationId)
+    expect(session.activeRunId).toBe(runB)
+    expect(session.thoughts.find(t => t.id === 'stale-thought')).toBeUndefined()
+  })
+
+  it('terminal completion cancels remaining running tools and closes generating state', async () => {
+    const conversationId = 'conv-terminal'
+    const runId = 'run-terminal'
+
+    useChatStore.getState().handleAgentRunStart({
+      spaceId: 'space-1',
+      conversationId,
+      runId,
+      startedAt: new Date().toISOString()
+    })
+
+    useChatStore.getState().handleAgentToolCall({
+      spaceId: 'space-1',
+      conversationId,
+      runId,
+      id: 'tool-running',
+      name: 'Edit',
+      status: 'running',
+      input: { file_path: '/tmp/a.txt' }
+    } as unknown as AgentEventBase & ToolCall)
+
+    await useChatStore.getState().handleAgentComplete({
+      spaceId: 'space-1',
+      conversationId,
+      runId,
+      reason: 'stopped'
+    })
+
+    const session = useChatStore.getState().getSession(conversationId)
+    expect(session.isGenerating).toBe(false)
+    expect(session.isThinking).toBe(false)
+    expect(session.toolStatusById['tool-running']).toBe('cancelled')
+    expect(session.lifecycle).toBe('stopped')
+  })
+
+  it('ignores late thought after stop and keeps terminal state', async () => {
+    const conversationId = 'conv-stop-late'
+    const runId = 'run-stop-late'
+
+    useChatStore.getState().handleAgentRunStart({
+      spaceId: 'space-1',
+      conversationId,
+      runId,
+      startedAt: new Date().toISOString()
+    })
+
+    await useChatStore.getState().stopGeneration(conversationId)
+
+    useChatStore.getState().handleAgentThought({
+      spaceId: 'space-1',
+      conversationId,
+      runId,
+      thought: {
+        id: 'late-thought',
+        type: 'thinking',
+        content: 'late',
+        timestamp: new Date().toISOString()
+      }
+    })
+
+    const session = useChatStore.getState().getSession(conversationId)
+    expect(session.isGenerating).toBe(false)
+    expect(session.lifecycle).toBe('stopped')
+    expect(session.thoughts.find(t => t.id === 'late-thought')).toBeUndefined()
+  })
+
+  it('closes generation on no_text terminal event', async () => {
+    const conversationId = 'conv-no-text'
+    const runId = 'run-no-text'
+
+    useChatStore.getState().handleAgentRunStart({
+      spaceId: 'space-1',
+      conversationId,
+      runId,
+      startedAt: new Date().toISOString()
+    })
+
+    await useChatStore.getState().handleAgentComplete({
+      spaceId: 'space-1',
+      conversationId,
+      runId,
+      reason: 'no_text'
+    })
+
+    const session = useChatStore.getState().getSession(conversationId)
+    expect(session.isGenerating).toBe(false)
+    expect(session.lifecycle).toBe('completed')
+    expect(session.terminalReason).toBe('no_text')
   })
 })

@@ -68,12 +68,13 @@ interface Message {
   tokenUsage?: TokenUsage  // Optional token usage stats for assistant messages
   fileContexts?: FileContextAttachment[]  // File contexts for context injection (metadata only)
   isPlan?: boolean  // Whether this message is a plan mode response
+  terminalReason?: 'completed' | 'stopped' | 'error' | 'no_text'
 }
 
 interface ToolCall {
   id: string
   name: string
-  status: 'pending' | 'running' | 'success' | 'error' | 'waiting_approval'
+  status: 'pending' | 'running' | 'success' | 'error' | 'waiting_approval' | 'cancelled'
   input: Record<string, unknown>
   output?: string
   error?: string

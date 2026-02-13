@@ -110,6 +110,7 @@ export interface KiteAPI {
   toggleMcpServer: (conversationId: string, serverName: string, enabled: boolean) => Promise<{ success: boolean; error?: string }>
 
   // Event listeners
+  onAgentRunStart: (callback: (data: unknown) => void) => () => void
   onAgentMessage: (callback: (data: unknown) => void) => () => void
   onAgentToolCall: (callback: (data: unknown) => void) => () => void
   onAgentToolResult: (callback: (data: unknown) => void) => () => void
@@ -117,6 +118,7 @@ export interface KiteAPI {
   onAgentComplete: (callback: (data: unknown) => void) => () => void
   onAgentThinking: (callback: (data: unknown) => void) => () => void
   onAgentThought: (callback: (data: unknown) => void) => () => void
+  onAgentToolsAvailable: (callback: (data: unknown) => void) => () => void
   onAgentMcpStatus: (callback: (data: unknown) => void) => () => void
   onAgentCompact: (callback: (data: unknown) => void) => () => void
   onSkillsChanged: (callback: (data: unknown) => void) => () => void
@@ -465,6 +467,7 @@ const api: KiteAPI = {
   toggleMcpServer: (conversationId, serverName, enabled) => ipcRenderer.invoke('agent:toggle-mcp', conversationId, serverName, enabled),
 
   // Event listeners
+  onAgentRunStart: (callback) => createEventListener('agent:run-start', callback),
   onAgentMessage: (callback) => createEventListener('agent:message', callback),
   onAgentToolCall: (callback) => createEventListener('agent:tool-call', callback),
   onAgentToolResult: (callback) => createEventListener('agent:tool-result', callback),
@@ -472,6 +475,7 @@ const api: KiteAPI = {
   onAgentComplete: (callback) => createEventListener('agent:complete', callback),
   onAgentThinking: (callback) => createEventListener('agent:thinking', callback),
   onAgentThought: (callback) => createEventListener('agent:thought', callback),
+  onAgentToolsAvailable: (callback) => createEventListener('agent:tools-available', callback),
   onAgentMcpStatus: (callback) => createEventListener('agent:mcp-status', callback),
   onAgentCompact: (callback) => createEventListener('agent:compact', callback),
   onSkillsChanged: (callback) => createEventListener('skills:changed', callback),

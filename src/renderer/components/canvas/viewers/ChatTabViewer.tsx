@@ -104,6 +104,8 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
     error = null,
     textBlockVersion = 0,
     planEnabled = false,
+    toolStatusById = {},
+    availableToolsSnapshot,
     pendingAskUserQuestion = null,
     failedAskUserQuestion = null
   } = session || {}
@@ -226,6 +228,8 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
                 isCompact={true}
                 textBlockVersion={textBlockVersion}
                 onOpenPlanInCanvas={handleOpenPlanInCanvas}
+                toolStatusById={toolStatusById}
+                availableToolsSnapshot={availableToolsSnapshot}
               />
               <div ref={bottomRef} />
             </>

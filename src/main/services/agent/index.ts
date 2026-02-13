@@ -34,7 +34,7 @@ export { resolveProvider, inferOpenAIWireApi } from './provider-resolver'
 export type { ApiConfig, ResolvedProvider } from './provider-resolver'
 
 // Re-export from message-parser
-export { parseSDKMessage, formatCanvasContext, buildMessageContent } from './message-parser'
+export { parseSDKMessage, parseSDKMessages, formatCanvasContext, buildMessageContent } from './message-parser'
 
 // Re-export from renderer-comm
 export { setMainWindow, getMainWindow, sendToRenderer, createCanUseTool } from './renderer-comm'
