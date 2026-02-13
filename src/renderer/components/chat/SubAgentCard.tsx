@@ -200,13 +200,13 @@ export const SubAgentCard = memo(function SubAgentCard({
   function getStatusColor(): string {
     if (isRunning) return 'border-primary/20 bg-primary/[0.03]'
     if (hasError) return 'border-destructive/20 bg-destructive/[0.03]'
-    return 'border-halo-success/20 bg-halo-success/[0.03]'
+    return 'border-kite-success/20 bg-kite-success/[0.03]'
   }
 
   function getLeftBorderColor(): string {
     if (isRunning) return 'bg-primary/70'
     if (hasError) return 'bg-destructive/70'
-    return 'bg-halo-success/70'
+    return 'bg-kite-success/70'
   }
 
   const statusColor = getStatusColor()

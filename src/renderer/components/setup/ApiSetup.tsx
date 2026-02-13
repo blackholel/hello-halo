@@ -147,7 +147,7 @@ export function ApiSetup() {
             </div>
             <div className="absolute -inset-4 rounded-[2rem] bg-primary/5 blur-xl -z-10" />
           </div>
-          <h1 className="mt-5 text-2xl font-semibold tracking-tight">Halo</h1>
+          <h1 className="mt-5 text-2xl font-semibold tracking-tight">Kite</h1>
           <p className="mt-1.5 text-sm text-muted-foreground">{t('Before you start, configure your AI')}</p>
         </div>
 

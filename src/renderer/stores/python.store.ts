@@ -131,7 +131,7 @@ export const usePythonStore = create<PythonState>((set, get) => ({
   detectPython: async () => {
     set({ isDetecting: true, detectionError: null })
     try {
-      const result = await window.halo.pythonDetect()
+      const result = await window.kite.pythonDetect()
       if (result.success && result.data) {
         set({
           isAvailable: result.data.found,
@@ -160,7 +160,7 @@ export const usePythonStore = create<PythonState>((set, get) => ({
   loadGlobalPackages: async () => {
     set({ isLoadingGlobalPackages: true })
     try {
-      const result = await window.halo.pythonListPackages()
+      const result = await window.kite.pythonListPackages()
       if (result.success && result.data?.packages) {
         set({
           globalPackages: result.data.packages,
@@ -180,7 +180,7 @@ export const usePythonStore = create<PythonState>((set, get) => ({
     updateSpaceState(get, set, spaceId, { isLoadingPackages: true })
 
     try {
-      const result = await window.halo.pythonListPackages(spaceId)
+      const result = await window.kite.pythonListPackages(spaceId)
       updateSpaceState(get, set, spaceId, {
         packages: result.success && result.data?.packages ? result.data.packages : [],
         isLoadingPackages: false
@@ -195,7 +195,7 @@ export const usePythonStore = create<PythonState>((set, get) => ({
     set({ isExecuting: true, executionOutput: '' })
 
     try {
-      const result = await window.halo.pythonExecute({
+      const result = await window.kite.pythonExecute({
         code,
         spaceId
       })
@@ -236,7 +236,7 @@ export const usePythonStore = create<PythonState>((set, get) => ({
     set({ isInstallingPackage: true, installProgress: null })
 
     try {
-      const result = await window.halo.pythonInstallPackage(
+      const result = await window.kite.pythonInstallPackage(
         packageName,
         { spaceId, version },
         (progress) => {
@@ -274,7 +274,7 @@ export const usePythonStore = create<PythonState>((set, get) => ({
 
   uninstallPackage: async (packageName: string, spaceId?: string): Promise<boolean> => {
     try {
-      const result = await window.halo.pythonUninstallPackage(packageName, { spaceId })
+      const result = await window.kite.pythonUninstallPackage(packageName, { spaceId })
 
       if (result.success) {
         // Reload packages after uninstallation
@@ -296,7 +296,7 @@ export const usePythonStore = create<PythonState>((set, get) => ({
     set({ isCreatingVenv: true, venvProgress: null })
 
     try {
-      const result = await window.halo.pythonCreateVenv(spaceId, (progress) => {
+      const result = await window.kite.pythonCreateVenv(spaceId, (progress) => {
         set({ venvProgress: progress })
       })
 
@@ -328,7 +328,7 @@ export const usePythonStore = create<PythonState>((set, get) => ({
 
   deleteVenv: async (spaceId: string): Promise<boolean> => {
     try {
-      const result = await window.halo.pythonDeleteVenv(spaceId)
+      const result = await window.kite.pythonDeleteVenv(spaceId)
 
       if (result.success) {
         // Update space state
@@ -348,7 +348,7 @@ export const usePythonStore = create<PythonState>((set, get) => ({
 
   checkSpaceVenv: async (spaceId: string): Promise<boolean> => {
     try {
-      const result = await window.halo.pythonHasVenv(spaceId)
+      const result = await window.kite.pythonHasVenv(spaceId)
       const hasVenv = result.success && result.data === true
 
       // Update space state
@@ -363,7 +363,7 @@ export const usePythonStore = create<PythonState>((set, get) => ({
 
   getSpaceEnvironment: async (spaceId: string): Promise<PythonEnvironment | null> => {
     try {
-      const result = await window.halo.pythonGetEnvironment(spaceId)
+      const result = await window.kite.pythonGetEnvironment(spaceId)
       const environment = result.success ? result.data : null
 
       // Update space state

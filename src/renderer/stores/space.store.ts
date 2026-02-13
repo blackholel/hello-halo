@@ -8,7 +8,7 @@ import type { Space, CreateSpaceInput, SpacePreferences } from '../types'
 
 interface SpaceState {
   // Spaces data
-  haloSpace: Space | null
+  kiteSpace: Space | null
   spaces: Space[]
   currentSpace: Space | null
 
@@ -18,7 +18,7 @@ interface SpaceState {
 
   // Actions
   loadSpaces: () => Promise<void>
-  loadHaloSpace: () => Promise<void>
+  loadKiteSpace: () => Promise<void>
   setCurrentSpace: (space: Space | null) => void
   createSpace: (input: CreateSpaceInput) => Promise<Space | null>
   updateSpace: (spaceId: string, updates: { name?: string; icon?: string }) => Promise<Space | null>
@@ -33,22 +33,22 @@ interface SpaceState {
 
 export const useSpaceStore = create<SpaceState>((set, get) => ({
   // Initial state
-  haloSpace: null,
+  kiteSpace: null,
   spaces: [],
   currentSpace: null,
   isLoading: false,
   error: null,
 
-  // Load Halo temp space
-  loadHaloSpace: async () => {
+  // Load Kite temp space
+  loadKiteSpace: async () => {
     try {
-      const response = await api.getHaloSpace()
+      const response = await api.getKiteSpace()
 
       if (response.success && response.data) {
-        set({ haloSpace: response.data as Space })
+        set({ kiteSpace: response.data as Space })
       }
     } catch (error) {
-      console.error('Failed to load Halo space:', error)
+      console.error('Failed to load Kite space:', error)
     }
   },
 
@@ -57,9 +57,9 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     try {
       set({ isLoading: true, error: null })
 
-      // Load both Halo space and user spaces in parallel (async-parallel)
+      // Load both Kite space and user spaces in parallel (async-parallel)
       const [, response] = await Promise.all([
-        get().loadHaloSpace(),
+        get().loadKiteSpace(),
         api.listSpaces()
       ])
 
@@ -195,7 +195,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
             )
           }))
         } else {
-          set({ haloSpace: response.data as Space })
+          set({ kiteSpace: response.data as Space })
         }
       }
     } catch (error) {
@@ -217,9 +217,9 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
           set({ currentSpace: updatedSpace })
         }
 
-        // Update in spaces list or halo space
+        // Update in spaces list or kite space
         if (updatedSpace.isTemp) {
-          set({ haloSpace: updatedSpace })
+          set({ kiteSpace: updatedSpace })
         } else {
           set((state) => ({
             spaces: state.spaces.map((s) =>
@@ -235,16 +235,16 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
 
   // Get space preferences from state (sync, for UI reads)
   getSpacePreferences: (spaceId) => {
-    const { haloSpace, spaces, currentSpace } = get()
+    const { kiteSpace, spaces, currentSpace } = get()
 
     // Check current space first (most likely case)
     if (currentSpace?.id === spaceId) {
       return currentSpace.preferences
     }
 
-    // Check halo space
-    if (haloSpace?.id === spaceId) {
-      return haloSpace.preferences
+    // Check kite space
+    if (kiteSpace?.id === spaceId) {
+      return kiteSpace.preferences
     }
 
     // Search in spaces list

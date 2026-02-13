@@ -1,5 +1,5 @@
 /**
- * Halo API - Unified interface for both IPC and HTTP modes
+ * Kite API - Unified interface for both IPC and HTTP modes
  * Automatically selects the appropriate transport
  */
 
@@ -31,7 +31,7 @@ interface AskUserQuestionAnswerPayload {
 }
 
 /**
- * API object - drop-in replacement for window.halo
+ * API object - drop-in replacement for window.kite
  * Works in both Electron and remote web mode
  */
 export const api = {
@@ -60,14 +60,14 @@ export const api = {
   // ===== Config =====
   getConfig: async (): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.getConfig()
+      return window.kite.getConfig()
     }
     return httpRequest('GET', '/api/config')
   },
 
   setConfig: async (updates: Record<string, unknown>): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.setConfig(updates)
+      return window.kite.setConfig(updates)
     }
     return httpRequest('POST', '/api/config', updates)
   },
@@ -78,22 +78,22 @@ export const api = {
     provider: string
   ): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.validateApi(apiKey, apiUrl, provider)
+      return window.kite.validateApi(apiKey, apiUrl, provider)
     }
     return httpRequest('POST', '/api/config/validate', { apiKey, apiUrl, provider })
   },
 
   // ===== Space =====
-  getHaloSpace: async (): Promise<ApiResponse> => {
+  getKiteSpace: async (): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.getHaloSpace()
+      return window.kite.getKiteSpace()
     }
-    return httpRequest('GET', '/api/spaces/halo')
+    return httpRequest('GET', '/api/spaces/kite')
   },
 
   listSpaces: async (): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.listSpaces()
+      return window.kite.listSpaces()
     }
     return httpRequest('GET', '/api/spaces')
   },
@@ -104,28 +104,28 @@ export const api = {
     customPath?: string
   }): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.createSpace(input)
+      return window.kite.createSpace(input)
     }
     return httpRequest('POST', '/api/spaces', input)
   },
 
   deleteSpace: async (spaceId: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.deleteSpace(spaceId)
+      return window.kite.deleteSpace(spaceId)
     }
     return httpRequest('DELETE', `/api/spaces/${spaceId}`)
   },
 
   getSpace: async (spaceId: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.getSpace(spaceId)
+      return window.kite.getSpace(spaceId)
     }
     return httpRequest('GET', `/api/spaces/${spaceId}`)
   },
 
   openSpaceFolder: async (spaceId: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.openSpaceFolder(spaceId)
+      return window.kite.openSpaceFolder(spaceId)
     }
     // In remote mode, just return the path (can't open folder remotely)
     return httpRequest('POST', `/api/spaces/${spaceId}/open`)
@@ -133,7 +133,7 @@ export const api = {
 
   getDefaultSpacePath: async (): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.getDefaultSpacePath()
+      return window.kite.getDefaultSpacePath()
     }
     // In remote mode, get default path from server
     return httpRequest('GET', '/api/spaces/default-path')
@@ -141,7 +141,7 @@ export const api = {
 
   selectFolder: async (): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.selectFolder()
+      return window.kite.selectFolder()
     }
     // Cannot select folder in remote mode
     return { success: false, error: 'Cannot select folder in remote mode' }
@@ -152,7 +152,7 @@ export const api = {
     updates: { name?: string; icon?: string }
   ): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.updateSpace(spaceId, updates)
+      return window.kite.updateSpace(spaceId, updates)
     }
     return httpRequest('PUT', `/api/spaces/${spaceId}`, updates)
   },
@@ -177,7 +177,7 @@ export const api = {
     }
   ): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.updateSpacePreferences(spaceId, preferences)
+      return window.kite.updateSpacePreferences(spaceId, preferences)
     }
     return httpRequest('PUT', `/api/spaces/${spaceId}/preferences`, preferences)
   },
@@ -185,7 +185,7 @@ export const api = {
   // Get space preferences
   getSpacePreferences: async (spaceId: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.getSpacePreferences(spaceId)
+      return window.kite.getSpacePreferences(spaceId)
     }
     return httpRequest('GET', `/api/spaces/${spaceId}/preferences`)
   },
@@ -193,14 +193,14 @@ export const api = {
   // ===== Conversation =====
   listConversations: async (spaceId: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.listConversations(spaceId)
+      return window.kite.listConversations(spaceId)
     }
     return httpRequest('GET', `/api/spaces/${spaceId}/conversations`)
   },
 
   createConversation: async (spaceId: string, title?: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.createConversation(spaceId, title)
+      return window.kite.createConversation(spaceId, title)
     }
     return httpRequest('POST', `/api/spaces/${spaceId}/conversations`, { title })
   },
@@ -210,7 +210,7 @@ export const api = {
     conversationId: string
   ): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.getConversation(spaceId, conversationId)
+      return window.kite.getConversation(spaceId, conversationId)
     }
     return httpRequest('GET', `/api/spaces/${spaceId}/conversations/${conversationId}`)
   },
@@ -221,7 +221,7 @@ export const api = {
     updates: Record<string, unknown>
   ): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.updateConversation(spaceId, conversationId, updates)
+      return window.kite.updateConversation(spaceId, conversationId, updates)
     }
     return httpRequest(
       'PUT',
@@ -235,7 +235,7 @@ export const api = {
     conversationId: string
   ): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.deleteConversation(spaceId, conversationId)
+      return window.kite.deleteConversation(spaceId, conversationId)
     }
     return httpRequest(
       'DELETE',
@@ -249,7 +249,7 @@ export const api = {
     message: { role: string; content: string }
   ): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.addMessage(spaceId, conversationId, message)
+      return window.kite.addMessage(spaceId, conversationId, message)
     }
     return httpRequest(
       'POST',
@@ -264,7 +264,7 @@ export const api = {
     updates: Record<string, unknown>
   ): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.updateLastMessage(spaceId, conversationId, updates)
+      return window.kite.updateLastMessage(spaceId, conversationId, updates)
     }
     return httpRequest(
       'PUT',
@@ -276,7 +276,7 @@ export const api = {
   // ===== Change Sets =====
   listChangeSets: async (spaceId: string, conversationId: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.listChangeSets(spaceId, conversationId)
+      return window.kite.listChangeSets(spaceId, conversationId)
     }
     return httpRequest('GET', `/api/spaces/${spaceId}/conversations/${conversationId}/change-sets`)
   },
@@ -288,7 +288,7 @@ export const api = {
     filePath?: string
   }): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.acceptChangeSet(params)
+      return window.kite.acceptChangeSet(params)
     }
     return httpRequest(
       'POST',
@@ -305,7 +305,7 @@ export const api = {
     force?: boolean
   }): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.rollbackChangeSet(params)
+      return window.kite.rollbackChangeSet(params)
     }
     return httpRequest(
       'POST',
@@ -362,28 +362,28 @@ export const api = {
     }
 
     if (isElectron()) {
-      return window.halo.sendMessage(request)
+      return window.kite.sendMessage(request)
     }
     return httpRequest('POST', '/api/agent/message', request)
   },
 
   stopGeneration: async (conversationId?: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.stopGeneration(conversationId)
+      return window.kite.stopGeneration(conversationId)
     }
     return httpRequest('POST', '/api/agent/stop', { conversationId })
   },
 
   approveTool: async (conversationId: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.approveTool(conversationId)
+      return window.kite.approveTool(conversationId)
     }
     return httpRequest('POST', '/api/agent/approve', { conversationId })
   },
 
   rejectTool: async (conversationId: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.rejectTool(conversationId)
+      return window.kite.rejectTool(conversationId)
     }
     return httpRequest('POST', '/api/agent/reject', { conversationId })
   },
@@ -404,7 +404,7 @@ export const api = {
   // Get current session state for recovery after refresh
   getSessionState: async (conversationId: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.getSessionState(conversationId)
+      return window.kite.getSessionState(conversationId)
     }
     return httpRequest('GET', `/api/agent/session/${conversationId}`)
   },
@@ -413,7 +413,7 @@ export const api = {
   ensureSessionWarm: async (spaceId: string, conversationId: string): Promise<ApiResponse> => {
     if (isElectron()) {
       // No need to wait, initialize in background
-      window.halo.ensureSessionWarm(spaceId, conversationId).catch((error: unknown) => {
+      window.kite.ensureSessionWarm(spaceId, conversationId).catch((error: unknown) => {
         console.error('[API] ensureSessionWarm error:', error)
       })
       return { success: true }
@@ -427,7 +427,7 @@ export const api = {
   // Test MCP server connections
   testMcpConnections: async (): Promise<{ success: boolean; servers: unknown[]; error?: string }> => {
     if (isElectron()) {
-      return window.halo.testMcpConnections()
+      return window.kite.testMcpConnections()
     }
     // HTTP mode: call backend endpoint
     const result = await httpRequest('POST', '/api/agent/test-mcp')
@@ -437,21 +437,21 @@ export const api = {
   // ===== Artifact =====
   listArtifacts: async (spaceId: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.listArtifacts(spaceId)
+      return window.kite.listArtifacts(spaceId)
     }
     return httpRequest('GET', `/api/spaces/${spaceId}/artifacts`)
   },
 
   listArtifactsTree: async (spaceId: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.listArtifactsTree(spaceId)
+      return window.kite.listArtifactsTree(spaceId)
     }
     return httpRequest('GET', `/api/spaces/${spaceId}/artifacts/tree`)
   },
 
   openArtifact: async (filePath: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.openArtifact(filePath)
+      return window.kite.openArtifact(filePath)
     }
     // Can't open files remotely
     return { success: false, error: 'Cannot open files in remote mode' }
@@ -459,7 +459,7 @@ export const api = {
 
   showArtifactInFolder: async (filePath: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.showArtifactInFolder(filePath)
+      return window.kite.showArtifactInFolder(filePath)
     }
     // Can't open folder remotely
     return { success: false, error: 'Cannot open folder in remote mode' }
@@ -469,7 +469,7 @@ export const api = {
   downloadArtifact: (filePath: string): void => {
     if (isElectron()) {
       // In Electron, just open the file
-      window.halo.openArtifact(filePath)
+      window.kite.openArtifact(filePath)
       return
     }
     // In remote mode, trigger download via browser with token in URL
@@ -492,7 +492,7 @@ export const api = {
   // Read artifact content for Content Canvas
   readArtifactContent: async (filePath: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.readArtifactContent(filePath)
+      return window.kite.readArtifactContent(filePath)
     }
     // In remote mode, fetch content via API
     return httpRequest('GET', `/api/artifacts/content?path=${encodeURIComponent(filePath)}`)
@@ -501,7 +501,7 @@ export const api = {
   // Write artifact content for Content Canvas editing
   writeArtifactContent: async (filePath: string, content: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.writeArtifactContent(filePath, content)
+      return window.kite.writeArtifactContent(filePath, content)
     }
     // In remote mode, write content via API
     return httpRequest('POST', '/api/artifacts/content', { path: filePath, content })
@@ -510,7 +510,7 @@ export const api = {
   // Create a new folder
   createFolder: async (folderPath: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.createFolder(folderPath)
+      return window.kite.createFolder(folderPath)
     }
     return httpRequest('POST', '/api/artifacts/folder', { path: folderPath })
   },
@@ -518,7 +518,7 @@ export const api = {
   // Create a new file
   createFile: async (filePath: string, content?: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.createFile(filePath, content)
+      return window.kite.createFile(filePath, content)
     }
     return httpRequest('POST', '/api/artifacts/file', { path: filePath, content })
   },
@@ -526,7 +526,7 @@ export const api = {
   // Rename a file or folder
   renameArtifact: async (oldPath: string, newName: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.renameArtifact(oldPath, newName)
+      return window.kite.renameArtifact(oldPath, newName)
     }
     return httpRequest('POST', '/api/artifacts/rename', { oldPath, newName })
   },
@@ -534,7 +534,7 @@ export const api = {
   // Delete a file or folder
   deleteArtifact: async (filePath: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.deleteArtifact(filePath)
+      return window.kite.deleteArtifact(filePath)
     }
     return httpRequest('DELETE', `/api/artifacts?path=${encodeURIComponent(filePath)}`)
   },
@@ -542,7 +542,7 @@ export const api = {
   // Move a file or folder
   moveArtifact: async (sourcePath: string, targetDir: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.moveArtifact(sourcePath, targetDir)
+      return window.kite.moveArtifact(sourcePath, targetDir)
     }
     return httpRequest('POST', '/api/artifacts/move', { sourcePath, targetDir })
   },
@@ -550,7 +550,7 @@ export const api = {
   // Copy a file or folder
   copyArtifact: async (sourcePath: string, targetDir: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.copyArtifact(sourcePath, targetDir)
+      return window.kite.copyArtifact(sourcePath, targetDir)
     }
     return httpRequest('POST', '/api/artifacts/copy', { sourcePath, targetDir })
   },
@@ -562,7 +562,7 @@ export const api = {
     content: string
   ): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.writeOnboardingArtifact(spaceId, fileName, content)
+      return window.kite.writeOnboardingArtifact(spaceId, fileName, content)
     }
     return httpRequest('POST', `/api/spaces/${spaceId}/onboarding/artifact`, { fileName, content })
   },
@@ -573,7 +573,7 @@ export const api = {
     aiResponse: string
   ): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.saveOnboardingConversation(spaceId, userMessage, aiResponse)
+      return window.kite.saveOnboardingConversation(spaceId, userMessage, aiResponse)
     }
     return httpRequest('POST', `/api/spaces/${spaceId}/onboarding/conversation`, { userMessage, aiResponse })
   },
@@ -581,14 +581,14 @@ export const api = {
   // ===== Skills =====
   listSkills: async (workDir?: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.listSkills(workDir)
+      return window.kite.listSkills(workDir)
     }
     return httpRequest('GET', `/api/skills${workDir ? `?workDir=${encodeURIComponent(workDir)}` : ''}`)
   },
 
   getSkillContent: async (name: string, workDir?: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.getSkillContent(name, workDir)
+      return window.kite.getSkillContent(name, workDir)
     }
     const params = new URLSearchParams({ name })
     if (workDir) params.append('workDir', workDir)
@@ -597,35 +597,35 @@ export const api = {
 
   createSkill: async (workDir: string, name: string, content: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.createSkill(workDir, name, content)
+      return window.kite.createSkill(workDir, name, content)
     }
     return httpRequest('POST', '/api/skills', { workDir, name, content })
   },
 
   updateSkill: async (skillPath: string, content: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.updateSkill(skillPath, content)
+      return window.kite.updateSkill(skillPath, content)
     }
     return httpRequest('PUT', '/api/skills', { skillPath, content })
   },
 
   deleteSkill: async (skillPath: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.deleteSkill(skillPath)
+      return window.kite.deleteSkill(skillPath)
     }
     return httpRequest('DELETE', `/api/skills?path=${encodeURIComponent(skillPath)}`)
   },
 
   copySkillToSpace: async (skillName: string, workDir: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.copySkillToSpace(skillName, workDir)
+      return window.kite.copySkillToSpace(skillName, workDir)
     }
     return httpRequest('POST', '/api/skills/copy', { skillName, workDir })
   },
 
   clearSkillsCache: async (): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.clearSkillsCache()
+      return window.kite.clearSkillsCache()
     }
     return httpRequest('POST', '/api/skills/clear-cache')
   },
@@ -633,14 +633,14 @@ export const api = {
   // ===== Commands =====
   listCommands: async (workDir?: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.listCommands(workDir)
+      return window.kite.listCommands(workDir)
     }
     return httpRequest('GET', `/api/commands${workDir ? `?workDir=${encodeURIComponent(workDir)}` : ''}`)
   },
 
   getCommandContent: async (name: string, workDir?: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.getCommandContent(name, workDir)
+      return window.kite.getCommandContent(name, workDir)
     }
     const params = new URLSearchParams({ name })
     if (workDir) params.append('workDir', workDir)
@@ -649,35 +649,35 @@ export const api = {
 
   createCommand: async (workDir: string, name: string, content: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.createCommand(workDir, name, content)
+      return window.kite.createCommand(workDir, name, content)
     }
     return httpRequest('POST', '/api/commands', { workDir, name, content })
   },
 
   updateCommand: async (commandPath: string, content: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.updateCommand(commandPath, content)
+      return window.kite.updateCommand(commandPath, content)
     }
     return httpRequest('PUT', '/api/commands', { commandPath, content })
   },
 
   deleteCommand: async (commandPath: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.deleteCommand(commandPath)
+      return window.kite.deleteCommand(commandPath)
     }
     return httpRequest('DELETE', `/api/commands?path=${encodeURIComponent(commandPath)}`)
   },
 
   copyCommandToSpace: async (commandName: string, workDir: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.copyCommandToSpace(commandName, workDir)
+      return window.kite.copyCommandToSpace(commandName, workDir)
     }
     return httpRequest('POST', '/api/commands/copy', { commandName, workDir })
   },
 
   clearCommandsCache: async (): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.clearCommandsCache()
+      return window.kite.clearCommandsCache()
     }
     return httpRequest('POST', '/api/commands/clear-cache')
   },
@@ -685,14 +685,14 @@ export const api = {
   // ===== Agents =====
   listAgents: async (workDir?: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.listAgents(workDir)
+      return window.kite.listAgents(workDir)
     }
     return httpRequest('GET', `/api/agents${workDir ? `?workDir=${encodeURIComponent(workDir)}` : ''}`)
   },
 
   getAgentContent: async (name: string, workDir?: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.getAgentContent(name, workDir)
+      return window.kite.getAgentContent(name, workDir)
     }
     const params = new URLSearchParams({ name })
     if (workDir) params.append('workDir', workDir)
@@ -701,35 +701,35 @@ export const api = {
 
   createAgent: async (workDir: string, name: string, content: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.createAgent(workDir, name, content)
+      return window.kite.createAgent(workDir, name, content)
     }
     return httpRequest('POST', '/api/agents', { workDir, name, content })
   },
 
   updateAgent: async (agentPath: string, content: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.updateAgent(agentPath, content)
+      return window.kite.updateAgent(agentPath, content)
     }
     return httpRequest('PUT', '/api/agents', { agentPath, content })
   },
 
   deleteAgent: async (agentPath: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.deleteAgent(agentPath)
+      return window.kite.deleteAgent(agentPath)
     }
     return httpRequest('DELETE', `/api/agents?path=${encodeURIComponent(agentPath)}`)
   },
 
   copyAgentToSpace: async (agentName: string, workDir: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.copyAgentToSpace(agentName, workDir)
+      return window.kite.copyAgentToSpace(agentName, workDir)
     }
     return httpRequest('POST', '/api/agents/copy', { agentName, workDir })
   },
 
   clearAgentsCache: async (): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.clearAgentsCache()
+      return window.kite.clearAgentsCache()
     }
     return httpRequest('POST', '/api/agents/clear-cache')
   },
@@ -737,28 +737,28 @@ export const api = {
   // ===== Toolkit =====
   getToolkit: async (spaceId: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.getToolkit(spaceId)
+      return window.kite.getToolkit(spaceId)
     }
     return httpRequest('GET', `/api/toolkit/${encodeURIComponent(spaceId)}`)
   },
 
   addToolkitResource: async (spaceId: string, directive: Record<string, unknown>): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.addToolkitResource(spaceId, directive)
+      return window.kite.addToolkitResource(spaceId, directive)
     }
     return httpRequest('POST', `/api/toolkit/${encodeURIComponent(spaceId)}/add`, directive)
   },
 
   removeToolkitResource: async (spaceId: string, directive: Record<string, unknown>): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.removeToolkitResource(spaceId, directive)
+      return window.kite.removeToolkitResource(spaceId, directive)
     }
     return httpRequest('POST', `/api/toolkit/${encodeURIComponent(spaceId)}/remove`, directive)
   },
 
   clearToolkit: async (spaceId: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.clearToolkit(spaceId)
+      return window.kite.clearToolkit(spaceId)
     }
     return httpRequest('DELETE', `/api/toolkit/${encodeURIComponent(spaceId)}`)
   },
@@ -769,7 +769,7 @@ export const api = {
     agents: string[]
   ): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.migrateToToolkit(spaceId, skills, agents)
+      return window.kite.migrateToToolkit(spaceId, skills, agents)
     }
     return httpRequest('POST', `/api/toolkit/${encodeURIComponent(spaceId)}/migrate`, {
       skills,
@@ -780,35 +780,35 @@ export const api = {
   // ===== Workflows =====
   listWorkflows: async (spaceId: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.listWorkflows(spaceId)
+      return window.kite.listWorkflows(spaceId)
     }
     return httpRequest('GET', `/api/workflows?spaceId=${encodeURIComponent(spaceId)}`)
   },
 
   getWorkflow: async (spaceId: string, workflowId: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.getWorkflow(spaceId, workflowId)
+      return window.kite.getWorkflow(spaceId, workflowId)
     }
     return httpRequest('GET', `/api/workflows/${encodeURIComponent(workflowId)}?spaceId=${encodeURIComponent(spaceId)}`)
   },
 
   createWorkflow: async (spaceId: string, input: Record<string, unknown>): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.createWorkflow(spaceId, input)
+      return window.kite.createWorkflow(spaceId, input)
     }
     return httpRequest('POST', '/api/workflows', { spaceId, input })
   },
 
   updateWorkflow: async (spaceId: string, workflowId: string, updates: Record<string, unknown>): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.updateWorkflow(spaceId, workflowId, updates)
+      return window.kite.updateWorkflow(spaceId, workflowId, updates)
     }
     return httpRequest('PUT', `/api/workflows/${encodeURIComponent(workflowId)}`, { spaceId, updates })
   },
 
   deleteWorkflow: async (spaceId: string, workflowId: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.deleteWorkflow(spaceId, workflowId)
+      return window.kite.deleteWorkflow(spaceId, workflowId)
     }
     return httpRequest('DELETE', `/api/workflows/${encodeURIComponent(workflowId)}?spaceId=${encodeURIComponent(spaceId)}`)
   },
@@ -818,42 +818,42 @@ export const api = {
     if (!isElectron()) {
       return { success: false, error: 'Only available in desktop app' }
     }
-    return window.halo.enableRemoteAccess(port)
+    return window.kite.enableRemoteAccess(port)
   },
 
   disableRemoteAccess: async (): Promise<ApiResponse> => {
     if (!isElectron()) {
       return { success: false, error: 'Only available in desktop app' }
     }
-    return window.halo.disableRemoteAccess()
+    return window.kite.disableRemoteAccess()
   },
 
   enableTunnel: async (): Promise<ApiResponse> => {
     if (!isElectron()) {
       return { success: false, error: 'Only available in desktop app' }
     }
-    return window.halo.enableTunnel()
+    return window.kite.enableTunnel()
   },
 
   disableTunnel: async (): Promise<ApiResponse> => {
     if (!isElectron()) {
       return { success: false, error: 'Only available in desktop app' }
     }
-    return window.halo.disableTunnel()
+    return window.kite.disableTunnel()
   },
 
   getRemoteStatus: async (): Promise<ApiResponse> => {
     if (!isElectron()) {
       return { success: false, error: 'Only available in desktop app' }
     }
-    return window.halo.getRemoteStatus()
+    return window.kite.getRemoteStatus()
   },
 
   getRemoteQRCode: async (includeToken?: boolean): Promise<ApiResponse> => {
     if (!isElectron()) {
       return { success: false, error: 'Only available in desktop app' }
     }
-    return window.halo.getRemoteQRCode(includeToken)
+    return window.kite.getRemoteQRCode(includeToken)
   },
 
   // ===== System Settings (Electron only) =====
@@ -861,28 +861,28 @@ export const api = {
     if (!isElectron()) {
       return { success: false, error: 'Only available in desktop app' }
     }
-    return window.halo.getAutoLaunch()
+    return window.kite.getAutoLaunch()
   },
 
   setAutoLaunch: async (enabled: boolean): Promise<ApiResponse> => {
     if (!isElectron()) {
       return { success: false, error: 'Only available in desktop app' }
     }
-    return window.halo.setAutoLaunch(enabled)
+    return window.kite.setAutoLaunch(enabled)
   },
 
   getMinimizeToTray: async (): Promise<ApiResponse> => {
     if (!isElectron()) {
       return { success: false, error: 'Only available in desktop app' }
     }
-    return window.halo.getMinimizeToTray()
+    return window.kite.getMinimizeToTray()
   },
 
   setMinimizeToTray: async (enabled: boolean): Promise<ApiResponse> => {
     if (!isElectron()) {
       return { success: false, error: 'Only available in desktop app' }
     }
-    return window.halo.setMinimizeToTray(enabled)
+    return window.kite.setMinimizeToTray(enabled)
   },
 
   // ===== Window (Electron only) =====
@@ -893,42 +893,42 @@ export const api = {
     if (!isElectron()) {
       return { success: true } // No-op in remote mode
     }
-    return window.halo.setTitleBarOverlay(options)
+    return window.kite.setTitleBarOverlay(options)
   },
 
   maximizeWindow: async (): Promise<ApiResponse> => {
     if (!isElectron()) {
       return { success: false, error: 'Only available in desktop app' }
     }
-    return window.halo.maximizeWindow()
+    return window.kite.maximizeWindow()
   },
 
   unmaximizeWindow: async (): Promise<ApiResponse> => {
     if (!isElectron()) {
       return { success: false, error: 'Only available in desktop app' }
     }
-    return window.halo.unmaximizeWindow()
+    return window.kite.unmaximizeWindow()
   },
 
   isWindowMaximized: async (): Promise<ApiResponse<boolean>> => {
     if (!isElectron()) {
       return { success: false, error: 'Only available in desktop app' }
     }
-    return window.halo.isWindowMaximized()
+    return window.kite.isWindowMaximized()
   },
 
   toggleMaximizeWindow: async (): Promise<ApiResponse<boolean>> => {
     if (!isElectron()) {
       return { success: false, error: 'Only available in desktop app' }
     }
-    return window.halo.toggleMaximizeWindow()
+    return window.kite.toggleMaximizeWindow()
   },
 
   onWindowMaximizeChange: (callback: (isMaximized: boolean) => void) => {
     if (!isElectron()) {
       return () => {} // No-op in remote mode
     }
-    return window.halo.onWindowMaximizeChange(callback)
+    return window.kite.onWindowMaximizeChange(callback)
   },
 
   // ===== Event Listeners =====
@@ -972,14 +972,14 @@ export const api = {
 
   createBrowserView: async (viewId: string, url?: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.createBrowserView(viewId, url)
+      return window.kite.createBrowserView(viewId, url)
     }
     return { success: false, error: 'Browser views only available in desktop app' }
   },
 
   destroyBrowserView: async (viewId: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.destroyBrowserView(viewId)
+      return window.kite.destroyBrowserView(viewId)
     }
     return { success: false, error: 'Browser views only available in desktop app' }
   },
@@ -989,14 +989,14 @@ export const api = {
     bounds: { x: number; y: number; width: number; height: number }
   ): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.showBrowserView(viewId, bounds)
+      return window.kite.showBrowserView(viewId, bounds)
     }
     return { success: false, error: 'Browser views only available in desktop app' }
   },
 
   hideBrowserView: async (viewId: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.hideBrowserView(viewId)
+      return window.kite.hideBrowserView(viewId)
     }
     return { success: false, error: 'Browser views only available in desktop app' }
   },
@@ -1006,84 +1006,84 @@ export const api = {
     bounds: { x: number; y: number; width: number; height: number }
   ): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.resizeBrowserView(viewId, bounds)
+      return window.kite.resizeBrowserView(viewId, bounds)
     }
     return { success: false, error: 'Browser views only available in desktop app' }
   },
 
   navigateBrowserView: async (viewId: string, url: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.navigateBrowserView(viewId, url)
+      return window.kite.navigateBrowserView(viewId, url)
     }
     return { success: false, error: 'Browser views only available in desktop app' }
   },
 
   browserGoBack: async (viewId: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.browserGoBack(viewId)
+      return window.kite.browserGoBack(viewId)
     }
     return { success: false, error: 'Browser views only available in desktop app' }
   },
 
   browserGoForward: async (viewId: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.browserGoForward(viewId)
+      return window.kite.browserGoForward(viewId)
     }
     return { success: false, error: 'Browser views only available in desktop app' }
   },
 
   browserReload: async (viewId: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.browserReload(viewId)
+      return window.kite.browserReload(viewId)
     }
     return { success: false, error: 'Browser views only available in desktop app' }
   },
 
   browserStop: async (viewId: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.browserStop(viewId)
+      return window.kite.browserStop(viewId)
     }
     return { success: false, error: 'Browser views only available in desktop app' }
   },
 
   getBrowserState: async (viewId: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.getBrowserState(viewId)
+      return window.kite.getBrowserState(viewId)
     }
     return { success: false, error: 'Browser views only available in desktop app' }
   },
 
   captureBrowserView: async (viewId: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.captureBrowserView(viewId)
+      return window.kite.captureBrowserView(viewId)
     }
     return { success: false, error: 'Browser views only available in desktop app' }
   },
 
   executeBrowserJS: async (viewId: string, code: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.executeBrowserJS(viewId, code)
+      return window.kite.executeBrowserJS(viewId, code)
     }
     return { success: false, error: 'Browser views only available in desktop app' }
   },
 
   setBrowserZoom: async (viewId: string, level: number): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.setBrowserZoom(viewId, level)
+      return window.kite.setBrowserZoom(viewId, level)
     }
     return { success: false, error: 'Browser views only available in desktop app' }
   },
 
   toggleBrowserDevTools: async (viewId: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.toggleBrowserDevTools(viewId)
+      return window.kite.toggleBrowserDevTools(viewId)
     }
     return { success: false, error: 'Browser views only available in desktop app' }
   },
 
   showBrowserContextMenu: async (options: { viewId: string; url?: string; zoomLevel: number }): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.showBrowserContextMenu(options)
+      return window.kite.showBrowserContextMenu(options)
     }
     return { success: false, error: 'Browser views only available in desktop app' }
   },
@@ -1104,7 +1104,7 @@ export const api = {
     hasTabsToRight: boolean
   }): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.showCanvasTabContextMenu(options)
+      return window.kite.showCanvasTabContextMenu(options)
     }
     return { success: false, error: 'Native menu only available in desktop app' }
   },
@@ -1130,7 +1130,7 @@ export const api = {
     spaceId?: string
   ): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.search(query, scope, conversationId, spaceId)
+      return window.kite.search(query, scope, conversationId, spaceId)
     }
     return httpRequest('POST', '/api/search', {
       query,
@@ -1142,7 +1142,7 @@ export const api = {
 
   cancelSearch: async (): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.halo.cancelSearch()
+      return window.kite.cancelSearch()
     }
     return httpRequest('POST', '/api/search/cancel')
   },
@@ -1158,21 +1158,21 @@ export const api = {
     if (!isElectron()) {
       return { success: false, error: 'Only available in desktop app' }
     }
-    return window.halo.checkForUpdates()
+    return window.kite.checkForUpdates()
   },
 
   installUpdate: async (): Promise<ApiResponse> => {
     if (!isElectron()) {
       return { success: false, error: 'Only available in desktop app' }
     }
-    return window.halo.installUpdate()
+    return window.kite.installUpdate()
   },
 
   getVersion: async (): Promise<ApiResponse<string>> => {
     if (!isElectron()) {
       return { success: false, error: 'Only available in desktop app' }
     }
-    return window.halo.getVersion()
+    return window.kite.getVersion()
   },
 
   onUpdaterStatus: (callback: (data: {
@@ -1185,7 +1185,7 @@ export const api = {
     if (!isElectron()) {
       return () => {} // No-op in remote mode
     }
-    return window.halo.onUpdaterStatus(callback)
+    return window.kite.onUpdaterStatus(callback)
   },
 
   // ===== Overlay (Electron only) =====
@@ -1194,21 +1194,21 @@ export const api = {
     if (!isElectron()) {
       return { success: false, error: 'Only available in desktop app' }
     }
-    return window.halo.showChatCapsuleOverlay()
+    return window.kite.showChatCapsuleOverlay()
   },
 
   hideChatCapsuleOverlay: async (): Promise<ApiResponse> => {
     if (!isElectron()) {
       return { success: false, error: 'Only available in desktop app' }
     }
-    return window.halo.hideChatCapsuleOverlay()
+    return window.kite.hideChatCapsuleOverlay()
   },
 
   onCanvasExitMaximized: (callback: () => void) => {
     if (!isElectron()) {
       return () => {} // No-op in remote mode
     }
-    return window.halo.onCanvasExitMaximized(callback)
+    return window.kite.onCanvasExitMaximized(callback)
   },
 
   // ===== Performance Monitoring (Electron only, Developer Tools) =====
@@ -1216,49 +1216,49 @@ export const api = {
     if (!isElectron()) {
       return { success: false, error: 'Only available in desktop app' }
     }
-    return window.halo.perfStart(config)
+    return window.kite.perfStart(config)
   },
 
   perfStop: async (): Promise<ApiResponse> => {
     if (!isElectron()) {
       return { success: false, error: 'Only available in desktop app' }
     }
-    return window.halo.perfStop()
+    return window.kite.perfStop()
   },
 
   perfGetState: async (): Promise<ApiResponse> => {
     if (!isElectron()) {
       return { success: false, error: 'Only available in desktop app' }
     }
-    return window.halo.perfGetState()
+    return window.kite.perfGetState()
   },
 
   perfGetHistory: async (): Promise<ApiResponse> => {
     if (!isElectron()) {
       return { success: false, error: 'Only available in desktop app' }
     }
-    return window.halo.perfGetHistory()
+    return window.kite.perfGetHistory()
   },
 
   perfClearHistory: async (): Promise<ApiResponse> => {
     if (!isElectron()) {
       return { success: false, error: 'Only available in desktop app' }
     }
-    return window.halo.perfClearHistory()
+    return window.kite.perfClearHistory()
   },
 
   perfSetConfig: async (config: { enabled?: boolean; sampleInterval?: number; warnOnThreshold?: boolean }): Promise<ApiResponse> => {
     if (!isElectron()) {
       return { success: false, error: 'Only available in desktop app' }
     }
-    return window.halo.perfSetConfig(config)
+    return window.kite.perfSetConfig(config)
   },
 
   perfExport: async (): Promise<ApiResponse<string>> => {
     if (!isElectron()) {
       return { success: false, error: 'Only available in desktop app' }
     }
-    return window.halo.perfExport()
+    return window.kite.perfExport()
   },
 
   onPerfSnapshot: (callback: (data: unknown) => void) =>
@@ -1279,7 +1279,7 @@ export const api = {
     longTasks: number
   }): void => {
     if (isElectron()) {
-      window.halo.perfReportRendererMetrics(metrics)
+      window.kite.perfReportRendererMetrics(metrics)
     }
   },
 
@@ -1293,7 +1293,7 @@ export const api = {
       // In remote mode, assume Git Bash is available (server handles it)
       return { success: true, data: { found: true, path: null, source: null } }
     }
-    return window.halo.getGitBashStatus()
+    return window.kite.getGitBashStatus()
   },
 
   installGitBash: async (onProgress: (progress: {
@@ -1305,7 +1305,7 @@ export const api = {
     if (!isElectron()) {
       return { success: false, error: 'Only available in desktop app' }
     }
-    return window.halo.installGitBash(onProgress)
+    return window.kite.installGitBash(onProgress)
   },
 
   openExternal: async (url: string): Promise<void> => {
@@ -1314,9 +1314,9 @@ export const api = {
       window.open(url, '_blank')
       return
     }
-    return window.halo.openExternal(url)
+    return window.kite.openExternal(url)
   },
 }
 
 // Export type for the API
-export type HaloApi = typeof api
+export type KiteApi = typeof api

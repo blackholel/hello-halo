@@ -54,11 +54,11 @@
   --glass-border: 0 0% 100% / 0.08;
   --glass-highlight: 0 0% 100% / 0.04;
 
-  /* Halo brand colors */
-  --halo-glow: 217 91% 60%;
-  --halo-success: 152 69% 45%;
-  --halo-warning: 38 92% 50%;
-  --halo-error: 0 62% 50%;
+  /* Kite brand colors */
+  --kite-glow: 217 91% 60%;
+  --kite-success: 152 69% 45%;
+  --kite-warning: 38 92% 50%;
+  --kite-error: 0 62% 50%;
 }
 
 /* Light theme - Apple-inspired */
@@ -88,11 +88,11 @@
   --glass-border: 0 0% 100% / 0.6;
   --glass-highlight: 0 0% 100% / 0.3;
 
-  /* Halo brand colors (adjusted for light) */
-  --halo-glow: 217 91% 55%;
-  --halo-success: 152 69% 38%;
-  --halo-warning: 38 92% 45%;
-  --halo-error: 0 72% 51%;
+  /* Kite brand colors (adjusted for light) */
+  --kite-glow: 217 91% 55%;
+  --kite-success: 152 69% 38%;
+  --kite-warning: 38 92% 45%;
+  --kite-error: 0 72% 51%;
 }
 
 * {
@@ -164,17 +164,17 @@ body {
    Shared Keyframes & Animations
    ============================================ */
 
-/* Halo glow animation */
-@keyframes halo-pulse {
+/* Kite glow animation */
+@keyframes kite-pulse {
   0%, 100% {
-    box-shadow: 0 0 20px hsl(var(--halo-glow) / 0.3);
+    box-shadow: 0 0 20px hsl(var(--kite-glow) / 0.3);
   }
   50% {
-    box-shadow: 0 0 40px hsl(var(--halo-glow) / 0.5);
+    box-shadow: 0 0 40px hsl(var(--kite-glow) / 0.5);
   }
 }
 
-@keyframes halo-breathe {
+@keyframes kite-breathe {
   0%, 100% {
     opacity: 0.6;
     transform: scale(1);
@@ -185,7 +185,7 @@ body {
   }
 }
 
-@keyframes halo-spin {
+@keyframes kite-spin {
   from {
     transform: rotate(0deg);
   }
@@ -194,16 +194,16 @@ body {
   }
 }
 
-.halo-glow {
-  animation: halo-pulse 3s ease-in-out infinite;
+.kite-glow {
+  animation: kite-pulse 3s ease-in-out infinite;
 }
 
-.halo-breathe {
-  animation: halo-breathe 3s ease-in-out infinite;
+.kite-breathe {
+  animation: kite-breathe 3s ease-in-out infinite;
 }
 
-.halo-spin {
-  animation: halo-spin 2s linear infinite;
+.kite-spin {
+  animation: kite-spin 2s linear infinite;
 }
 
 /* Fade in animation */
@@ -577,20 +577,20 @@ body {
 }
 
 .tool-running {
-  border-color: hsl(var(--halo-glow));
-  animation: halo-pulse 1.5s ease-in-out infinite;
+  border-color: hsl(var(--kite-glow));
+  animation: kite-pulse 1.5s ease-in-out infinite;
 }
 
 .tool-success {
-  border-color: hsl(var(--halo-success));
+  border-color: hsl(var(--kite-success));
 }
 
 .tool-error {
-  border-color: hsl(var(--halo-error));
+  border-color: hsl(var(--kite-error));
 }
 
 .tool-waiting {
-  border-color: hsl(var(--halo-warning));
+  border-color: hsl(var(--kite-warning));
 }
 
 /* ============================================
@@ -812,15 +812,15 @@ body {
   transition-duration: 0.1s;
 }
 
-/* Halo space special style - premium glass */
-.halo-space-card {
+/* Kite space special style - premium glass */
+.kite-space-card {
   background: linear-gradient(135deg, hsl(var(--primary) / 0.12), hsl(var(--primary) / 0.04));
   border: 1px solid hsl(var(--primary) / 0.2);
   position: relative;
   overflow: hidden;
 }
 
-.halo-space-card::before {
+.kite-space-card::before {
   content: '';
   position: absolute;
   top: 0;
@@ -830,7 +830,7 @@ body {
   background: linear-gradient(90deg, transparent, hsl(var(--primary) / 0.3), transparent);
 }
 
-.halo-space-card::after {
+.kite-space-card::after {
   content: '';
   position: absolute;
   top: -50%;
@@ -841,7 +841,7 @@ body {
   pointer-events: none;
 }
 
-.halo-space-card:hover {
+.kite-space-card:hover {
   border-color: hsl(var(--primary) / 0.35);
   box-shadow: 
     0 12px 40px hsl(var(--primary) / 0.1),
@@ -849,7 +849,7 @@ body {
   transform: translateY(-3px);
 }
 
-.halo-space-card:active {
+.kite-space-card:active {
   transform: translateY(-1px);
   transition-duration: 0.1s;
 }
@@ -892,7 +892,7 @@ body {
 .ambient-orb-3 {
   width: 200px;
   height: 200px;
-  background: hsl(var(--halo-success) / 0.08);
+  background: hsl(var(--kite-success) / 0.08);
   top: 40%;
   left: 30%;
   animation-delay: -14s;
@@ -918,7 +918,7 @@ body {
 }
 
 .light .ambient-orb-3 {
-  background: hsl(var(--halo-success) / 0.1);
+  background: hsl(var(--kite-success) / 0.1);
 }
 
 /* Glass dialog overlay */

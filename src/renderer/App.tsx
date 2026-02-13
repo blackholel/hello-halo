@@ -1,5 +1,5 @@
 /**
- * Halo - Main App Component
+ * Kite - Main App Component
  */
 
 import { useEffect, useRef, Suspense, lazy } from 'react'
@@ -54,7 +54,7 @@ function applyTheme(theme: 'light' | 'dark' | 'system') {
 
   // Save to localStorage for anti-flash script
   try {
-    localStorage.setItem('halo-theme', theme)
+    localStorage.setItem('kite-theme', theme)
   } catch (e) { /* ignore */ }
 
   let isDark: boolean
@@ -95,7 +95,7 @@ export default function App() {
   const { isSearchOpen, closeSearch, isHighlightBarVisible, hideHighlightBar, goToPreviousResult, goToNextResult, openSearch } = useSearchStore()
 
   // For search result navigation
-  const { spaces, haloSpace, setCurrentSpace: setSpaceStoreCurrentSpace } = useSpaceStore()
+  const { spaces, kiteSpace, setCurrentSpace: setSpaceStoreCurrentSpace } = useSpaceStore()
 
   // Initialize app on mount
   useEffect(() => {
@@ -332,8 +332,8 @@ export default function App() {
 
           // Find the space object
           let targetSpace = null
-          if (spaceId === 'halo-temp' && haloSpace) {
-            targetSpace = haloSpace
+          if (spaceId === 'kite-temp' && kiteSpace) {
+            targetSpace = kiteSpace
           } else {
             targetSpace = spaces.find(s => s.id === spaceId)
           }
@@ -401,7 +401,7 @@ export default function App() {
 
     window.addEventListener('search:navigate-to-result', handleNavigateToResult)
     return () => window.removeEventListener('search:navigate-to-result', handleNavigateToResult)
-  }, [currentSpaceId, spaces, haloSpace, setSpaceStoreCurrentSpace, setChatCurrentSpace, loadConversations, selectConversation])
+  }, [currentSpaceId, spaces, kiteSpace, setSpaceStoreCurrentSpace, setChatCurrentSpace, loadConversations, selectConversation])
 
   // Handle Git Bash setup completion
   const handleGitBashSetupComplete = async (installed: boolean) => {

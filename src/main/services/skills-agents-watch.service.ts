@@ -7,7 +7,7 @@
 import type { BrowserWindow } from 'electron'
 import { watch, existsSync, readdirSync, statSync } from 'fs'
 import { join, relative, isAbsolute } from 'path'
-import { getConfig, getHaloDir, getSpacesDir } from './config.service'
+import { getConfig, getKiteDir, getSpacesDir } from './config.service'
 import { listEnabledPlugins } from './plugins.service'
 import { invalidateSkillsCache } from './skills.service'
 import { invalidateAgentsCache } from './agents.service'
@@ -110,12 +110,12 @@ function resolveGlobalPath(globalPath: string): string {
  */
 function getResourceDirs(kind: ResourceKind): DirEntry[] {
   const dirs: DirEntry[] = []
-  const haloDir = getHaloDir()
+  const kiteDir = getKiteDir()
   const config = getConfig()
 
   // App-level directory
-  if (haloDir) {
-    dirs.push({ path: join(haloDir, kind) })
+  if (kiteDir) {
+    dirs.push({ path: join(kiteDir, kind) })
   }
 
   // Config-driven global paths (skills use plugins.globalPaths + /skills subdir, agents use agents.paths directly)

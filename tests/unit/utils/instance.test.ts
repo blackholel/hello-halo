@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import fs from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
 import {
@@ -19,27 +20,27 @@ describe('instance utilities', () => {
 
   beforeEach(() => {
     // Save original values
-    originalEnv.HALO_INSTANCE_ID = process.env.HALO_INSTANCE_ID
-    originalEnv.HALO_CONFIG_DIR = process.env.HALO_CONFIG_DIR
+    originalEnv.KITE_INSTANCE_ID = process.env.KITE_INSTANCE_ID
+    originalEnv.KITE_CONFIG_DIR = process.env.KITE_CONFIG_DIR
     originalEnv.VITE_PORT = process.env.VITE_PORT
 
     // Clear env vars for clean test state
-    delete process.env.HALO_INSTANCE_ID
-    delete process.env.HALO_CONFIG_DIR
+    delete process.env.KITE_INSTANCE_ID
+    delete process.env.KITE_CONFIG_DIR
     delete process.env.VITE_PORT
   })
 
   afterEach(() => {
     // Restore original values
-    if (originalEnv.HALO_INSTANCE_ID !== undefined) {
-      process.env.HALO_INSTANCE_ID = originalEnv.HALO_INSTANCE_ID
+    if (originalEnv.KITE_INSTANCE_ID !== undefined) {
+      process.env.KITE_INSTANCE_ID = originalEnv.KITE_INSTANCE_ID
     } else {
-      delete process.env.HALO_INSTANCE_ID
+      delete process.env.KITE_INSTANCE_ID
     }
-    if (originalEnv.HALO_CONFIG_DIR !== undefined) {
-      process.env.HALO_CONFIG_DIR = originalEnv.HALO_CONFIG_DIR
+    if (originalEnv.KITE_CONFIG_DIR !== undefined) {
+      process.env.KITE_CONFIG_DIR = originalEnv.KITE_CONFIG_DIR
     } else {
-      delete process.env.HALO_CONFIG_DIR
+      delete process.env.KITE_CONFIG_DIR
     }
     if (originalEnv.VITE_PORT !== undefined) {
       process.env.VITE_PORT = originalEnv.VITE_PORT
@@ -50,39 +51,47 @@ describe('instance utilities', () => {
 
   // Helper to get expected default config dir (uses mocked homedir)
   function getExpectedDefaultConfigDir(): string {
-    return join(homedir(), '.halo')
+    return join(homedir(), '.kite')
   }
 
   describe('getInstanceId', () => {
-    it('should return "default" when HALO_INSTANCE_ID is not set', () => {
+    it('should return "default" when KITE_INSTANCE_ID is not set', () => {
       expect(getInstanceId()).toBe('default')
     })
 
-    it('should return custom instance ID when HALO_INSTANCE_ID is set', () => {
-      process.env.HALO_INSTANCE_ID = 'ai-sandbox'
+    it('should return custom instance ID when KITE_INSTANCE_ID is set', () => {
+      process.env.KITE_INSTANCE_ID = 'ai-sandbox'
       expect(getInstanceId()).toBe('ai-sandbox')
     })
 
-    it('should return empty string if HALO_INSTANCE_ID is empty', () => {
-      process.env.HALO_INSTANCE_ID = ''
+    it('should return empty string if KITE_INSTANCE_ID is empty', () => {
+      process.env.KITE_INSTANCE_ID = ''
       expect(getInstanceId()).toBe('default')
     })
   })
 
   describe('getConfigDir', () => {
-    it('should return ~/.halo when HALO_CONFIG_DIR is not set', () => {
+    it('should return ~/.kite when KITE_CONFIG_DIR is not set', () => {
       // Uses mocked homedir from test setup
       expect(getConfigDir()).toBe(getExpectedDefaultConfigDir())
     })
 
-    it('should return custom path when HALO_CONFIG_DIR is set', () => {
-      process.env.HALO_CONFIG_DIR = '/tmp/halo-test'
-      expect(getConfigDir()).toBe('/tmp/halo-test')
+    it('should return custom path when KITE_CONFIG_DIR is set', () => {
+      process.env.KITE_CONFIG_DIR = '/tmp/kite-test'
+      expect(getConfigDir()).toBe('/tmp/kite-test')
     })
 
     it('should handle path with spaces', () => {
-      process.env.HALO_CONFIG_DIR = '/Users/test/My Documents/.halo-ai'
-      expect(getConfigDir()).toBe('/Users/test/My Documents/.halo-ai')
+      process.env.KITE_CONFIG_DIR = '/Users/test/My Documents/.kite-ai'
+      expect(getConfigDir()).toBe('/Users/test/My Documents/.kite-ai')
+    })
+
+    it('should not fallback to ~/.halo even when legacy directory exists', () => {
+      const legacyHaloDir = join(homedir(), '.halo')
+      fs.mkdirSync(legacyHaloDir, { recursive: true })
+
+      expect(getConfigDir()).toBe(getExpectedDefaultConfigDir())
+      expect(getConfigDir()).not.toBe(legacyHaloDir)
     })
   })
 
@@ -133,14 +142,14 @@ describe('instance utilities', () => {
     })
 
     it('should return custom config when all env vars set', () => {
-      process.env.HALO_INSTANCE_ID = 'worktree-1'
-      process.env.HALO_CONFIG_DIR = '/tmp/halo-wt1'
+      process.env.KITE_INSTANCE_ID = 'worktree-1'
+      process.env.KITE_CONFIG_DIR = '/tmp/kite-wt1'
       process.env.VITE_PORT = '5200'
 
       const config = getInstanceConfig()
       expect(config).toEqual({
         instanceId: 'worktree-1',
-        configDir: '/tmp/halo-wt1',
+        configDir: '/tmp/kite-wt1',
         vitePort: 5200
       })
     })
@@ -152,7 +161,7 @@ describe('instance utilities', () => {
     })
 
     it('should return true when using custom instance ID', () => {
-      process.env.HALO_INSTANCE_ID = 'custom'
+      process.env.KITE_INSTANCE_ID = 'custom'
       expect(isCustomInstance()).toBe(true)
     })
   })

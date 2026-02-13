@@ -8,7 +8,7 @@
 import { join } from 'path'
 import { existsSync, mkdirSync } from 'fs'
 import { homedir } from 'os'
-import { getConfig, getTempSpacePath, getHaloDir } from '../config.service'
+import { getConfig, getTempSpacePath, getKiteDir } from '../config.service'
 import { getSpaceConfig, type SpaceToolkit } from '../space-config.service'
 import { buildHooksConfig } from '../hooks.service'
 import { listEnabledPlugins } from '../plugins.service'
@@ -30,7 +30,7 @@ export type { PluginConfig, SettingSource }
 export function getWorkingDir(spaceId: string): string {
   console.log(`[Agent] getWorkingDir called with spaceId: ${spaceId}`)
 
-  if (spaceId === 'halo-temp') {
+  if (spaceId === 'kite-temp') {
     const artifactsDir = join(getTempSpacePath(), 'artifacts')
     if (!existsSync(artifactsDir)) {
       mkdirSync(artifactsDir, { recursive: true })
@@ -146,13 +146,13 @@ export function buildPluginsConfig(workDir: string): PluginConfig[] {
       addIfValid(resolvedPath)
     }
 
-    // 3. App config directory (default: ~/.halo/)
-    // This loads skills/, commands/, hooks/, agents/ from ~/.halo/
+    // 3. App config directory (default: ~/.kite/)
+    // This loads skills/, commands/, hooks/, agents/ from ~/.kite/
     if (claudeCodeConfig?.plugins?.loadDefaultPaths !== false) {
-      const haloDir = getHaloDir()
-      if (haloDir) {
-        // Load ~/.halo/ as a plugin directory (SDK will scan skills/, commands/, etc.)
-        addIfValid(haloDir)
+      const kiteDir = getKiteDir()
+      if (kiteDir) {
+        // Load ~/.kite/ as a plugin directory (SDK will scan skills/, commands/, etc.)
+        addIfValid(kiteDir)
       }
     }
   }
@@ -298,7 +298,7 @@ export function buildSystemPromptAppend(workDir: string, toolkit?: SpaceToolkit 
   console.log(`[Agent] System prompt Python executable: ${pythonExecutable}`)
 
   const base = `
-You are Halo, an AI assistant that helps users accomplish real work.
+You are Kite, an AI assistant that helps users accomplish real work.
 All created files will be saved in the user's workspace. Current workspace: ${workDir}.
 
 ## Built-in Python Environment
@@ -392,7 +392,7 @@ export function buildSdkOptions(params: BuildSdkOptionsParams): Record<string, a
       }
       return isolated
     }
-    return getHaloDir()
+    return getKiteDir()
   })()
 
   const sdkOptions: Record<string, any> = {
@@ -472,7 +472,7 @@ export function buildSdkOptions(params: BuildSdkOptionsParams): Record<string, a
  */
 export function _testBuildSdkOptionsEnv(): Record<string, any> {
   return {
-    CLAUDE_CONFIG_DIR: getHaloDir(),
+    CLAUDE_CONFIG_DIR: getKiteDir(),
     PATH: getPythonEnhancedPath(),
     ELECTRON_RUN_AS_NODE: 1,
     ELECTRON_NO_ATTACH_CONSOLE: 1,

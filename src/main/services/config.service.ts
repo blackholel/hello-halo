@@ -44,7 +44,7 @@ export function onApiConfigChange(handler: ApiConfigChangeHandler): () => void {
 // - 'zhipu': ZhipuAI (智谱) - Anthropic-compatible, direct connection
 // - 'minimax': MiniMax - Anthropic-compatible, direct connection
 // - 'custom': Legacy custom provider (treated as anthropic-compat)
-interface HaloConfig {
+interface KiteConfig {
   api: {
     provider: 'anthropic' | 'anthropic-compat' | 'openai' | 'zhipu' | 'minimax' | 'custom'
     apiKey: string
@@ -96,21 +96,21 @@ interface McpStdioServerConfig {
   args?: string[]
   env?: Record<string, string>
   timeout?: number
-  disabled?: boolean  // Halo extension: temporarily disable this server
+  disabled?: boolean  // Kite extension: temporarily disable this server
 }
 
 interface McpHttpServerConfig {
   type: 'http'
   url: string
   headers?: Record<string, string>
-  disabled?: boolean  // Halo extension: temporarily disable this server
+  disabled?: boolean  // Kite extension: temporarily disable this server
 }
 
 interface McpSseServerConfig {
   type: 'sse'
   url: string
   headers?: Record<string, string>
-  disabled?: boolean  // Halo extension: temporarily disable this server
+  disabled?: boolean  // Kite extension: temporarily disable this server
 }
 
 // ============================================
@@ -130,29 +130,29 @@ export type {
 import type { ClaudeCodeConfig } from '../../shared/types/claude-code'
 
 // Paths
-// Use getConfigDir() from instance utils to support HALO_CONFIG_DIR environment variable
-// This enables running multiple Halo instances in parallel (e.g., different git worktrees)
-export function getHaloDir(): string {
+// Use getConfigDir() from instance utils to support KITE_CONFIG_DIR environment variable
+// This enables running multiple Kite instances in parallel (e.g., different git worktrees)
+export function getKiteDir(): string {
   return getConfigDir()
 }
 
 export function getConfigPath(): string {
-  return join(getHaloDir(), 'config.json')
+  return join(getKiteDir(), 'config.json')
 }
 
 export function getTempSpacePath(): string {
-  return join(getHaloDir(), 'temp')
+  return join(getKiteDir(), 'temp')
 }
 
 export function getSpacesDir(): string {
-  return join(getHaloDir(), 'spaces')
+  return join(getKiteDir(), 'spaces')
 }
 
 // Default model (Opus 4.5)
 const DEFAULT_MODEL = 'claude-opus-4-5-20251101'
 
 // Default configuration
-const DEFAULT_CONFIG: HaloConfig = {
+const DEFAULT_CONFIG: KiteConfig = {
   api: {
     provider: 'anthropic',
     apiKey: '',
@@ -185,14 +185,14 @@ const DEFAULT_CONFIG: HaloConfig = {
 
 // Initialize app directories
 export async function initializeApp(): Promise<void> {
-  const haloDir = getHaloDir()
+  const kiteDir = getKiteDir()
   const tempDir = getTempSpacePath()
   const spacesDir = getSpacesDir()
   const tempArtifactsDir = join(tempDir, 'artifacts')
   const tempConversationsDir = join(tempDir, 'conversations')
 
   // Create directories if they don't exist
-  const dirs = [haloDir, tempDir, spacesDir, tempArtifactsDir, tempConversationsDir]
+  const dirs = [kiteDir, tempDir, spacesDir, tempArtifactsDir, tempConversationsDir]
   for (const dir of dirs) {
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true })
@@ -207,7 +207,7 @@ export async function initializeApp(): Promise<void> {
 }
 
 // Get configuration
-export function getConfig(): HaloConfig {
+export function getConfig(): KiteConfig {
   const configPath = getConfigPath()
 
   if (!existsSync(configPath)) {
@@ -238,7 +238,7 @@ export function getConfig(): HaloConfig {
 }
 
 // Save configuration
-export function saveConfig(config: Partial<HaloConfig>): HaloConfig {
+export function saveConfig(config: Partial<KiteConfig>): KiteConfig {
   const currentConfig = getConfig()
   const newConfig = { ...currentConfig, ...config }
 

@@ -1,5 +1,5 @@
 /**
- * Halo Auto-Updater Service
+ * Kite Auto-Updater Service
  * Handles automatic updates via GitHub Releases
  */
 

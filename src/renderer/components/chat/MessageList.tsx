@@ -231,7 +231,7 @@ function StreamingBubble({
     <div className="rounded-xl px-3 py-2 message-assistant message-working w-full overflow-hidden">
       {/* Working indicator */}
       <div className="flex items-center gap-1 mb-1.5 pb-1.5 border-b border-border/20 working-indicator-fade">
-        <span className="text-[11px] text-muted-foreground/60">{t('Halo is working')}</span>
+        <span className="text-[11px] text-muted-foreground/60">{t('Kite is working')}</span>
       </div>
 
       {/* Viewport - height matches current content only */}

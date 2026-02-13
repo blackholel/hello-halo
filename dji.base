@@ -110,7 +110,7 @@ Claude Agent SDK 全面解析
       ↓                                                                                         
   优先级 2: globalPaths（用户配置的全局路径）                                                   
       ↓                                                                                         
-  优先级 3: ~/.halo/plugins/ 和 ~/.halo/skills/（应用级默认路径）                               
+  优先级 3: ~/.kite/plugins/ 和 ~/.kite/skills/（应用级默认路径）                               
       ↓                                                                                         
   优先级 4: Space 自定义 paths（space-config.json 中配置）                                      
       ↓                                                                                         
@@ -243,7 +243,7 @@ Claude Agent SDK 全面解析
                                                                                                 
   6.2 加载优先级（低 → 高）                                                                     
                                                                                                 
-  ~/.halo/agents/              (source: 'app')                                                  
+  ~/.kite/agents/              (source: 'app')                                                  
       ↓                                                                                         
   config.claudeCode.agents.paths  (source: 'global')                                            
       ↓                                                                                         
@@ -344,8 +344,8 @@ Claude Agent SDK 全面解析
   ┌─────────────────────────────────────────────────────────────────────┐                       
   │                        主 Session 启动                               │                      
   ├─────────────────────────────────────┤                                                       
-  │  1. 加载全局配置 (~/.halo/config.json)                              │                       
-  │  2. 加载 Space 配置 ({workDir}/.halo/space-config.json)             │                       
+  │  1. 加载全局配置 (~/.kite/config.json)                              │                       
+  │  2. 加载 Space 配置 ({workDir}/.kite/space-config.json)             │                       
   │  3. 合并 Plugins 路径（按优先级）                                    │                      
   │  4. 合并 Hooks（追加模式）                                          │                       
   │  5. 合并 MCP Servers（覆盖模式）                                    │                       
@@ -387,19 +387,19 @@ Claude Agent SDK 全面解析
   }                                                                                             
                                                                                                 
   ---                                                                                           
-  九、配置隔离机制（Halo 实现）                                                                 
+  九、配置隔离机制（Kite 实现）                                                                 
                                                                                                 
-  Halo 通过环境变量实现与系统 Claude Code 的配置隔离：                                          
+  Kite 通过环境变量实现与系统 Claude Code 的配置隔离：                                          
                                                                                                 
   // sdk-config.builder.ts                                                                      
   const sdkOptions = {                                                                          
     env: {                                                                                      
-      CLAUDE_CONFIG_DIR: getHaloDir(),  // ~/.halo/ 而非 ~/.claude/                             
+      CLAUDE_CONFIG_DIR: getKiteDir(),  // ~/.kite/ 而非 ~/.claude/                             
       // ...                                                                                    
     }                                                                                           
   }                                                                                             
                                                                                                 
-  这样 SDK 会从 ~/.halo/ 读取配置，而不是系统的 ~/.claude/。                                    
+  这样 SDK 会从 ~/.kite/ 读取配置，而不是系统的 ~/.claude/。                                    
                                                                                                 
   ---                                                                                           
   十、总结：配置加载全景图                                                                      
@@ -409,7 +409,7 @@ Claude Agent SDK 全面解析
   ├─────────────────────────────────────────┤                                                   
   │                                                                          │                  
   │   系统级 (可选)          应用级              Space级                     │                  
-  │   ~/.claude/            ~/.halo/            {workDir}/.halo/            │                   
+  │   ~/.claude/            ~/.kite/            {workDir}/.kite/            │                   
   │        │                    │                    │                       │                  
   │        ▼                    ▼                    ▼                       │                  
   │   ┌─────────┐          ┌─────────┐          ┌─────────┐                 │                   

@@ -597,7 +597,7 @@ function TreeNodeComponent({ node, style, dragHandle }: NodeRendererProps<TreeNo
     if (isFolder) return
 
     // Set data for external drop targets (like Content Canvas)
-    e.dataTransfer.setData('application/x-halo-file', JSON.stringify({
+    e.dataTransfer.setData('application/x-kite-file', JSON.stringify({
       path: data.path,
       name: data.name,
       extension: data.extension

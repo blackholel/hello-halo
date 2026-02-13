@@ -3,7 +3,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { HaloLogo } from '../brand/HaloLogo'
+import { KiteLogo } from '../brand/KiteLogo'
 import { useTranslation } from '../../i18n'
 
 export function SplashScreen() {
@@ -18,13 +18,13 @@ export function SplashScreen() {
 
   return (
     <div className="h-full w-full flex flex-col items-center justify-center bg-background">
-      {/* Halo Logo */}
+      {/* Kite Logo */}
       <div
         className={`transition-all duration-1000 ${
           animate ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
         }`}
       >
-        <HaloLogo size="lg" />
+        <KiteLogo size="lg" />
       </div>
 
       {/* Brand Name */}
@@ -33,7 +33,7 @@ export function SplashScreen() {
           animate ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
         }`}
       >
-        Halo
+        Kite
       </h1>
 
       {/* Tagline */}

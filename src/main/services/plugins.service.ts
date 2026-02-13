@@ -1,18 +1,18 @@
 /**
  * Plugins Service - Manages installed plugins from plugin registries
  *
- * This service reads installed plugins from both ~/.halo/ and ~/.claude/ registries
+ * This service reads installed plugins from both ~/.kite/ and ~/.claude/ registries
  * and provides their paths to the SDK for loading skills, commands, hooks, and agents.
  *
- * Registry loading order (Halo takes precedence for deduplication):
- * 1. ~/.halo/plugins/installed_plugins.json
+ * Registry loading order (Kite takes precedence for deduplication):
+ * 1. ~/.kite/plugins/installed_plugins.json
  * 2. ~/.claude/plugins/installed_plugins.json
  */
 
 import { join } from 'path'
 import { homedir } from 'os'
 import { existsSync, readFileSync, statSync } from 'fs'
-import { getHaloDir } from './config.service'
+import { getKiteDir } from './config.service'
 import { isValidDirectoryPath } from '../utils/path-validation'
 import { FileCache } from '../utils/file-cache'
 
@@ -53,8 +53,8 @@ interface EnabledPluginsSettings {
   enabledPlugins?: Record<string, boolean>
 }
 
-function getSettingsPathInHalo(): string {
-  return join(getHaloDir(), 'settings.json')
+function getSettingsPathInKite(): string {
+  return join(getKiteDir(), 'settings.json')
 }
 
 function getSettingsPathInClaude(): string {
@@ -77,9 +77,9 @@ function loadEnabledPluginsFromSettings(settingsPath: string): Record<string, bo
 }
 
 function getMergedEnabledPlugins(): { map: Record<string, boolean>; hasConfig: boolean } {
-  const haloEnabled = loadEnabledPluginsFromSettings(getSettingsPathInHalo()) || {}
+  const kiteEnabled = loadEnabledPluginsFromSettings(getSettingsPathInKite()) || {}
   const claudeEnabled = loadEnabledPluginsFromSettings(getSettingsPathInClaude()) || {}
-  const merged = { ...claudeEnabled, ...haloEnabled }
+  const merged = { ...claudeEnabled, ...kiteEnabled }
   const hasConfig = Object.keys(merged).length > 0
   return { map: merged, hasConfig }
 }
@@ -90,9 +90,9 @@ function getMergedEnabledPlugins(): { map: Record<string, boolean>; hasConfig: b
 function getInstalledPluginsPaths(): string[] {
   const paths: string[] = []
 
-  const haloPath = join(getHaloDir(), 'plugins', 'installed_plugins.json')
-  if (existsSync(haloPath)) {
-    paths.push(haloPath)
+  const kitePath = join(getKiteDir(), 'plugins', 'installed_plugins.json')
+  if (existsSync(kitePath)) {
+    paths.push(kitePath)
   }
 
   const claudePath = join(homedir(), '.claude', 'plugins', 'installed_plugins.json')
@@ -200,8 +200,8 @@ export function loadInstalledPlugins(): PluginInfo[] {
 }
 
 /**
- * Get enabled plugin full names from settings.json (Halo + Claude)
- * - Halo settings take precedence over Claude settings.
+ * Get enabled plugin full names from settings.json (Kite + Claude)
+ * - Kite settings take precedence over Claude settings.
  * - If no enabledPlugins configured, default to all installed plugins.
  */
 export function getEnabledPluginFullNames(): Set<string> {

@@ -529,7 +529,7 @@ export function AgentsPanel({
                 <p className="text-[10px] text-muted-foreground/60 mt-1">
                   {localSearchQuery
                     ? t('Try a different search term')
-                    : t('Add .md files in ~/.halo/agents or .claude/agents')}
+                    : t('Add .md files in ~/.kite/agents or .claude/agents')}
                 </p>
               </div>
             ) : (

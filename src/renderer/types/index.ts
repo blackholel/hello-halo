@@ -1,5 +1,5 @@
 // ============================================
-// Halo Type Definitions
+// Kite Type Definitions
 // ============================================
 
 // API Provider Configuration
@@ -104,7 +104,7 @@ export interface McpStdioServerConfig {
   args?: string[];
   env?: Record<string, string>;
   timeout?: number;  // milliseconds
-  disabled?: boolean;  // Halo extension: temporarily disable this server
+  disabled?: boolean;  // Kite extension: temporarily disable this server
 }
 
 // MCP HTTP server (REST API)
@@ -112,7 +112,7 @@ export interface McpHttpServerConfig {
   type: 'http';
   url: string;
   headers?: Record<string, string>;
-  disabled?: boolean;  // Halo extension: temporarily disable this server
+  disabled?: boolean;  // Kite extension: temporarily disable this server
 }
 
 // MCP SSE server (Server-Sent Events)
@@ -120,7 +120,7 @@ export interface McpSseServerConfig {
   type: 'sse';
   url: string;
   headers?: Record<string, string>;
-  disabled?: boolean;  // Halo extension: temporarily disable this server
+  disabled?: boolean;  // Kite extension: temporarily disable this server
 }
 
 // Union type for all MCP server configs
@@ -156,7 +156,7 @@ export type {
   ClaudeCodeConfig
 } from '../../shared/types/claude-code';
 
-export interface HaloConfig {
+export interface KiteConfig {
   api: ApiConfig;
   permissions: PermissionConfig;
   appearance: AppearanceConfig;
@@ -668,7 +668,7 @@ export interface AppState {
   view: AppView;
   isLoading: boolean;
   error: string | null;
-  config: HaloConfig | null;
+  config: KiteConfig | null;
 }
 
 // ============================================
@@ -692,7 +692,7 @@ export interface ValidationResult {
 }
 
 // Default values
-export const DEFAULT_CONFIG: HaloConfig = {
+export const DEFAULT_CONFIG: KiteConfig = {
   api: {
     provider: 'anthropic',
     apiKey: '',

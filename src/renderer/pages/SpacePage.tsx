@@ -166,13 +166,13 @@ export function SpacePage() {
   // Layout mode: 'split' = 分栏布局 (左侧固定 ChatView), 'tabs-only' = 纯标签页模式
   const [layoutMode, setLayoutMode] = useState<'split' | 'tabs-only'>(() => {
     // Restore from localStorage, default to 'tabs-only'
-    const saved = localStorage.getItem('halo-layout-mode')
+    const saved = localStorage.getItem('kite-layout-mode')
     return (saved === 'split') ? 'split' : 'tabs-only'
   })
 
   // Persist layout mode
   useEffect(() => {
-    localStorage.setItem('halo-layout-mode', layoutMode)
+    localStorage.setItem('kite-layout-mode', layoutMode)
   }, [layoutMode])
 
   // Canvas state - use precise selectors to minimize re-renders
@@ -488,7 +488,7 @@ export function SpacePage() {
             <div className="flex items-center gap-2">
               <SpaceIcon iconId={currentSpace.icon} size={20} />
               <span className="font-semibold text-sm tracking-tight">
-                {currentSpace.isTemp ? 'Halo' : currentSpace.name}
+                {currentSpace.isTemp ? 'Kite' : currentSpace.name}
               </span>
             </div>
 
@@ -504,7 +504,7 @@ export function SpacePage() {
                   onNew={handleNewConversation}
                   onDelete={handleDeleteConversation}
                   onRename={handleRenameConversation}
-                  spaceName={currentSpace.isTemp ? t('Halo Space') : currentSpace.name}
+                  spaceName={currentSpace.isTemp ? t('Kite Space') : currentSpace.name}
                 />
               </div>
             )}

@@ -199,7 +199,7 @@ export function MessageItem({ message, previousCost = 0, hideThoughts = false, i
       {isWorking && !isUser && (
         <div className="flex items-center gap-2 mb-2.5 pb-2 border-b border-border/20 working-indicator-fade">
           <Sparkles size={12} className="text-primary/50 animate-pulse-gentle" />
-          <span className="text-[11px] text-muted-foreground/60 font-medium tracking-wide">{t('Halo is working')}</span>
+          <span className="text-[11px] text-muted-foreground/60 font-medium tracking-wide">{t('Kite is working')}</span>
         </div>
       )}
 
@@ -260,8 +260,8 @@ export function MessageItem({ message, previousCost = 0, hideThoughts = false, i
           >
             {copied ? (
               <>
-                <Check size={12} className="text-halo-success" />
-                <span className="text-halo-success">{t('Copied')}</span>
+                <Check size={12} className="text-kite-success" />
+                <span className="text-kite-success">{t('Copied')}</span>
               </>
             ) : (
               <Copy size={12} />

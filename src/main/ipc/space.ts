@@ -4,7 +4,7 @@
 
 import { ipcMain, dialog } from 'electron'
 import {
-  getHaloSpace,
+  getKiteSpace,
   listSpaces,
   createSpace,
   deleteSpace,
@@ -40,10 +40,10 @@ interface SpacePreferences {
 }
 
 export function registerSpaceHandlers(): void {
-  // Get Halo temp space
-  ipcMain.handle('space:get-halo', async () => {
+  // Get Kite temp space
+  ipcMain.handle('space:get-kite', async () => {
     try {
-      const space = getHaloSpace()
+      const space = getKiteSpace()
       return { success: true, data: space }
     } catch (error: unknown) {
       const err = error as Error

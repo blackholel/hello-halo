@@ -1,6 +1,6 @@
-# Halo Test Suite
+# Kite Test Suite
 
-This directory contains the automated test infrastructure for Halo.
+This directory contains the automated test infrastructure for Kite.
 
 ## Test Layers
 

@@ -321,7 +321,7 @@ const ParallelGroupView = memo(function ParallelGroupView({
               className={`
                 p-2.5 rounded-xl border text-xs transition-all duration-200
                 ${status === 'running' ? 'border-primary/20 bg-primary/[0.04]' : ''}
-                ${status === 'success' ? 'border-halo-success/20 bg-halo-success/[0.04]' : ''}
+                ${status === 'success' ? 'border-kite-success/20 bg-kite-success/[0.04]' : ''}
                 ${status === 'error' ? 'border-destructive/20 bg-destructive/[0.04]' : ''}
                 ${status === 'cancelled' ? 'border-border/20 bg-secondary/[0.05]' : ''}
               `}
@@ -548,7 +548,7 @@ export function ThoughtProcess({
           ) : (
             <CheckCircle2
               size={14}
-              className={errorCount > 0 ? 'text-destructive/70' : 'text-halo-success/70'}
+              className={errorCount > 0 ? 'text-destructive/70' : 'text-kite-success/70'}
             />
           )}
 

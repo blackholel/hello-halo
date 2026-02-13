@@ -437,7 +437,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
         onSend={handleSend}
         onStop={handleStop}
         isGenerating={isGenerating}
-        placeholder={isCompact ? t('Continue conversation...') : (currentSpace?.isTemp ? t('Say something to Halo...') : t('Continue conversation...'))}
+        placeholder={isCompact ? t('Continue conversation...') : (currentSpace?.isTemp ? t('Say something to Kite...') : t('Continue conversation...'))}
         isCompact={isCompact}
         workDir={currentSpace?.path}
         planEnabled={planEnabled}
@@ -516,14 +516,14 @@ function EmptyState({ isTemp, isCompact = false }: { isTemp: boolean; isCompact?
 
       {/* Title */}
       <h2 className="text-2xl font-semibold tracking-tight stagger-item" style={{ animationDelay: '60ms' }}>
-        {isTemp ? 'Halo' : t('Ready to start')}
+        {isTemp ? 'Kite' : t('Ready to start')}
       </h2>
 
       {/* Subtitle */}
       <p className="mt-2 text-sm text-muted-foreground max-w-sm leading-relaxed stagger-item" style={{ animationDelay: '100ms' }}>
         {isTemp
           ? t('Aimless time, ideas will crystallize here')
-          : t('Halo, not just chat, can help you get things done')
+          : t('Kite, not just chat, can help you get things done')
         }
       </p>
 
@@ -544,7 +544,7 @@ function EmptyState({ isTemp, isCompact = false }: { isTemp: boolean; isCompact?
       {/* Powered by badge */}
       <div className="mt-8 stagger-item" style={{ animationDelay: '220ms' }}>
         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-secondary/50 border border-border/50">
-          <div className="w-1.5 h-1.5 rounded-full bg-halo-success animate-pulse" />
+          <div className="w-1.5 h-1.5 rounded-full bg-kite-success animate-pulse" />
           <span className="text-xs text-muted-foreground">
             {t('Powered by Claude Code with full Agent capabilities')}
           </span>
@@ -553,7 +553,7 @@ function EmptyState({ isTemp, isCompact = false }: { isTemp: boolean; isCompact?
 
       {/* Permission hint */}
       <p className="mt-3 text-[11px] text-muted-foreground/40 stagger-item" style={{ animationDelay: '260ms' }}>
-        {t('Halo has full access to the current space')}
+        {t('Kite has full access to the current space')}
       </p>
     </div>
   )

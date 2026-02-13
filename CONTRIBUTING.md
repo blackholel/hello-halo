@@ -1,6 +1,6 @@
-# Contributing to Halo
+# Contributing to Kite
 
-Thanks for your interest in contributing to Halo! This guide will help you get started.
+Thanks for your interest in contributing to Kite! This guide will help you get started.
 
 ## Development Setup
 
@@ -72,7 +72,7 @@ Run `npm run i18n` before committing to extract new strings.
 
 When adding a new IPC event, update these 3 files:
 
-1. `src/preload/index.ts` - Expose to `window.halo`
+1. `src/preload/index.ts` - Expose to `window.kite`
 2. `src/renderer/api/transport.ts` - Add to `methodMap`
 3. `src/renderer/api/index.ts` - Export unified API
 

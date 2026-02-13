@@ -10,7 +10,7 @@ import fs from 'fs'
 import path from 'path'
 
 import {
-  getHaloSpace,
+  getKiteSpace,
   listSpaces,
   createSpace,
   getSpace,
@@ -24,29 +24,29 @@ describe('Space Service', () => {
     await initializeApp()
   })
 
-  describe('getHaloSpace', () => {
-    it('should return the Halo temp space', () => {
-      const haloSpace = getHaloSpace()
+  describe('getKiteSpace', () => {
+    it('should return the Kite temp space', () => {
+      const kiteSpace = getKiteSpace()
 
-      expect(haloSpace.id).toBe('halo-temp')
-      expect(haloSpace.name).toBe('Halo')
-      expect(haloSpace.isTemp).toBe(true)
-      expect(haloSpace.icon).toBe('sparkles')
+      expect(kiteSpace.id).toBe('kite-temp')
+      expect(kiteSpace.name).toBe('Kite')
+      expect(kiteSpace.isTemp).toBe(true)
+      expect(kiteSpace.icon).toBe('sparkles')
     })
 
     it('should have valid path', () => {
-      const haloSpace = getHaloSpace()
+      const kiteSpace = getKiteSpace()
 
-      expect(haloSpace.path).toBeTruthy()
-      expect(fs.existsSync(haloSpace.path)).toBe(true)
+      expect(kiteSpace.path).toBeTruthy()
+      expect(fs.existsSync(kiteSpace.path)).toBe(true)
     })
 
     it('should include stats', () => {
-      const haloSpace = getHaloSpace()
+      const kiteSpace = getKiteSpace()
 
-      expect(haloSpace.stats).toBeDefined()
-      expect(typeof haloSpace.stats.artifactCount).toBe('number')
-      expect(typeof haloSpace.stats.conversationCount).toBe('number')
+      expect(kiteSpace.stats).toBeDefined()
+      expect(typeof kiteSpace.stats.artifactCount).toBe('number')
+      expect(typeof kiteSpace.stats.conversationCount).toBe('number')
     })
   })
 
@@ -70,6 +70,24 @@ describe('Space Service', () => {
       expect(spaces.length).toBe(1)
       expect(spaces[0].name).toBe('Test Project')
     })
+
+    it('should ignore legacy .halo meta directories', () => {
+      const legacySpacePath = path.join(getSpacesDir(), 'legacy-halo-space')
+      const legacyMetaPath = path.join(legacySpacePath, '.halo', 'meta.json')
+
+      fs.mkdirSync(path.dirname(legacyMetaPath), { recursive: true })
+      fs.writeFileSync(legacyMetaPath, JSON.stringify({
+        id: 'legacy-halo-space-id',
+        name: 'Legacy Halo Space',
+        icon: 'folder',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }))
+
+      const spaces = listSpaces()
+      expect(spaces).toHaveLength(0)
+      expect(getSpace('legacy-halo-space-id')).toBeFalsy()
+    })
   })
 
   describe('createSpace', () => {
@@ -86,14 +104,14 @@ describe('Space Service', () => {
       expect(fs.existsSync(space.path)).toBe(true)
     })
 
-    it('should create .halo directory inside space', async () => {
+    it('should create .kite directory inside space', async () => {
       const space = await createSpace({
         name: 'Test Space',
         icon: 'folder'
       })
 
-      const haloDir = path.join(space.path, '.halo')
-      expect(fs.existsSync(haloDir)).toBe(true)
+      const kiteDir = path.join(space.path, '.kite')
+      expect(fs.existsSync(kiteDir)).toBe(true)
     })
 
     it('should create meta.json with space info', async () => {
@@ -102,7 +120,7 @@ describe('Space Service', () => {
         icon: 'star'
       })
 
-      const metaPath = path.join(space.path, '.halo', 'meta.json')
+      const metaPath = path.join(space.path, '.kite', 'meta.json')
       expect(fs.existsSync(metaPath)).toBe(true)
 
       const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
@@ -122,7 +140,7 @@ describe('Space Service', () => {
       })
 
       expect(space.path).toBe(customPath)
-      expect(fs.existsSync(path.join(customPath, '.halo', 'meta.json'))).toBe(true)
+      expect(fs.existsSync(path.join(customPath, '.kite', 'meta.json'))).toBe(true)
     })
   })
 
@@ -145,35 +163,35 @@ describe('Space Service', () => {
       expect(space).toBeFalsy() // null or undefined
     })
 
-    it('should return Halo space for halo-temp id', () => {
-      const space = getSpace('halo-temp')
+    it('should return Kite space for kite-temp id', () => {
+      const space = getSpace('kite-temp')
 
       expect(space).toBeDefined()
-      expect(space?.id).toBe('halo-temp')
+      expect(space?.id).toBe('kite-temp')
       expect(space?.isTemp).toBe(true)
     })
   })
 
   describe('deleteSpace', () => {
-    it('should delete space and its .halo directory', async () => {
+    it('should delete space and its .kite directory', async () => {
       const space = await createSpace({
         name: 'Delete Test',
         icon: 'folder'
       })
 
-      const haloDir = path.join(space.path, '.halo')
-      expect(fs.existsSync(haloDir)).toBe(true)
+      const kiteDir = path.join(space.path, '.kite')
+      expect(fs.existsSync(kiteDir)).toBe(true)
 
       await deleteSpace(space.id)
 
-      // .halo should be deleted, but space directory may remain (for custom paths)
-      expect(fs.existsSync(haloDir)).toBe(false)
+      // .kite should be deleted, but space directory may remain (for custom paths)
+      expect(fs.existsSync(kiteDir)).toBe(false)
     })
 
-    it('should not allow deleting Halo temp space', async () => {
+    it('should not allow deleting Kite temp space', async () => {
       // deleteSpace may return false or throw for temp space
       try {
-        const result = await deleteSpace('halo-temp')
+        const result = await deleteSpace('kite-temp')
         // If it returns without throwing, result should be false
         expect(result).toBeFalsy()
       } catch {

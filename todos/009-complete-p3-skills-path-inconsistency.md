@@ -11,7 +11,7 @@ dependencies: []
 ## Problem Statement
 
 应用级和 Space 级的 Skills 路径设计不一致：
-- 应用级：`~/.halo/skills/` (专门的 skills 目录)
+- 应用级：`~/.kite/skills/` (专门的 skills 目录)
 - Space 级：`{workDir}/.claude/` (整个 .claude 目录)
 
 这意味着 Space 级会加载整个 `.claude` 目录作为 plugin，而不仅仅是 skills。
@@ -22,7 +22,7 @@ dependencies: []
 
 **证据**:
 ```typescript
-const appSkillsPath = join(getHaloDir(), 'skills')  // ~/.halo/skills/
+const appSkillsPath = join(getKiteDir(), 'skills')  // ~/.kite/skills/
 const spaceSkillsPath = join(workDir, '.claude')     // {workDir}/.claude/
 ```
 

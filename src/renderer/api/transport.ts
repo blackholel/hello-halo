@@ -3,9 +3,9 @@
  * Automatically selects the appropriate transport based on environment
  */
 
-// Detect if running in Electron (has window.halo via preload)
+// Detect if running in Electron (supports both window.kite and legacy window.halo)
 export function isElectron(): boolean {
-  return typeof window !== 'undefined' && 'halo' in window
+  return typeof window !== 'undefined' && ('kite' in window || 'halo' in window)
 }
 
 // Detect if running as remote web client
@@ -22,7 +22,7 @@ export function getRemoteServerUrl(): string {
 // Get stored auth token
 export function getAuthToken(): string | null {
   if (typeof localStorage !== 'undefined') {
-    return localStorage.getItem('halo_remote_token')
+    return localStorage.getItem('kite_remote_token')
   }
   return null
 }
@@ -30,14 +30,14 @@ export function getAuthToken(): string | null {
 // Set auth token
 export function setAuthToken(token: string): void {
   if (typeof localStorage !== 'undefined') {
-    localStorage.setItem('halo_remote_token', token)
+    localStorage.setItem('kite_remote_token', token)
   }
 }
 
 // Clear auth token
 export function clearAuthToken(): void {
   if (typeof localStorage !== 'undefined') {
-    localStorage.removeItem('halo_remote_token')
+    localStorage.removeItem('kite_remote_token')
   }
 }
 
@@ -69,7 +69,7 @@ export async function httpRequest<T>(
       console.warn(`[HTTP] ${method} ${path} - 401 Unauthorized, clearing token and redirecting to login`)
       clearAuthToken()
       // Clear the auth cookie
-      document.cookie = 'halo_authenticated=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+      document.cookie = 'kite_authenticated=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
       // Reload page - server will show login page
       window.location.reload()
       return { success: false, error: 'Token expired, please login again' }
@@ -198,7 +198,7 @@ export function unsubscribeFromConversation(conversationId: string): void {
 export function onEvent(channel: string, callback: (data: unknown) => void): () => void {
   if (isElectron()) {
     // Use IPC in Electron
-    const methodMap: Record<string, keyof typeof window.halo> = {
+    const methodMap: Record<string, string> = {
       'agent:run-start': 'onAgentRunStart',
       'agent:message': 'onAgentMessage',
       'agent:tool-call': 'onAgentToolCall',
@@ -222,8 +222,9 @@ export function onEvent(channel: string, callback: (data: unknown) => void): () 
     }
 
     const method = methodMap[channel]
-    if (method && typeof window.halo[method] === 'function') {
-      return (window.halo[method] as (cb: (data: unknown) => void) => () => void)(callback)
+    const ipcApi = ((window as any).kite ?? (window as any).halo) as Record<string, unknown> | undefined
+    if (method && ipcApi && typeof ipcApi[method] === 'function') {
+      return (ipcApi[method] as (cb: (data: unknown) => void) => () => void)(callback)
     }
 
     return () => {}

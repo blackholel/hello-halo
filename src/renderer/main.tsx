@@ -1,5 +1,5 @@
 /**
- * Halo - React Entry Point
+ * Kite - React Entry Point
  */
 
 import React from 'react'
