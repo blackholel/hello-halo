@@ -124,7 +124,7 @@ export function normalizeAskUserQuestionInput(
         multiSelect
       }
     })
-    .filter((item): item is { id: string; header: string; question: string; options: Array<{ label: string; description: string }>; multiSelect?: boolean } => item !== null)
+    .filter((item): item is { id: string; header: string; question: string; options: Array<{ label: string; description: string }>; multiSelect: boolean } => item !== null)
 
   if (questions.length === 0) {
     return {
@@ -229,18 +229,17 @@ export function createCanUseTool(
         }
       }
 
-      return new Promise((resolve) => {
-        session.pendingAskUserQuestionResolve = (answer: string) => {
-          // Return deny with the answer - the answer will be sent via session.send()
-          // This effectively cancels the tool execution and lets the agent receive
-          // the user's answer as a new message
-          resolve({
-            behavior: 'deny' as const,
-            message: `User answered: ${answer}`
-          })
-        }
-      })
-    }
+        return new Promise((resolve) => {
+          session.pendingAskUserQuestionResolve = (answer: string) => {
+            // AskUserQuestion is handled by Halo UI; the actual answer is delivered
+            // through session.send(answer) to avoid duplicate semantic channels.
+            resolve({
+              behavior: 'deny' as const,
+              message: 'AskUserQuestion handled by Halo UI. Continue with the latest user message answer.'
+            })
+          }
+        })
+      }
 
     // Check file path tools - restrict to working directory
     const fileTools = ['Read', 'Write', 'Edit', 'Grep', 'Glob']

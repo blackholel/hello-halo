@@ -30,6 +30,7 @@ import type {
   Artifact,
   Thought,
   AgentEventBase,
+  AgentCompleteEvent,
   ImageAttachment,
   CompactInfo,
   CanvasContext,
@@ -37,8 +38,7 @@ import type {
   ParallelGroup,
   ChangeSet,
   AgentRunLifecycle,
-  ToolStatus,
-  AskUserQuestionAnswerPayload
+  ToolStatus
 } from '../types'
 import { canvasLifecycle } from '../services/canvas-lifecycle'
 import { buildParallelGroups, getThoughtKey } from '../utils/thought-utils'
@@ -916,6 +916,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
               terminalReason: 'stopped',
               isGenerating: false,
               isThinking: false,
+              isStreaming: false,
+              toolStatusById: cancelledTools,
               pendingAskUserQuestion: null,
               failedAskUserQuestion: null
             })
@@ -1028,6 +1030,72 @@ export const useChatStore = create<ChatState>((set, get) => ({
     })
   },
 
+  // Run barrier event - marks a new active run before any run-scoped events are processed
+  handleAgentRunStart: (data) => {
+    const { conversationId, runId, startedAt } = data
+    let replayEvents: PendingRunEvent[] = []
+
+    set((state) => {
+      const newSessions = new Map(state.sessions)
+      const session = newSessions.get(conversationId) || createEmptySessionState()
+      const pendingRunEvents = prunePendingRunEvents(session.pendingRunEvents)
+      replayEvents = pendingRunEvents
+        .filter(event => event.runId === runId)
+        .sort((a, b) => a.receivedAt - b.receivedAt)
+
+      const remainingPending = pendingRunEvents.filter(event => event.runId !== runId)
+      newSessions.set(conversationId, {
+        ...createEmptySessionState(),
+        activeRunId: runId,
+        lifecycle: 'running',
+        terminalReason: null,
+        isGenerating: true,
+        isThinking: true,
+        pendingRunEvents: remainingPending,
+        availableToolsSnapshot: {
+          runId,
+          snapshotVersion: 0,
+          emittedAt: startedAt,
+          tools: [],
+          toolCount: 0
+        }
+      })
+      return { sessions: newSessions }
+    })
+
+    // Replay buffered run events once barrier is established
+    for (const event of replayEvents) {
+      switch (event.kind) {
+        case 'message':
+          get().handleAgentMessage(event.payload as AgentEventBase & { content: string; isComplete: boolean })
+          break
+        case 'tool_call':
+          get().handleAgentToolCall(event.payload as AgentEventBase & ToolCall)
+          break
+        case 'tool_result':
+          get().handleAgentToolResult(event.payload as AgentEventBase & { toolCallId?: string; toolId?: string; result: string; isError: boolean })
+          break
+        case 'thought':
+          get().handleAgentThought(event.payload as AgentEventBase & { thought: Thought })
+          break
+        case 'error':
+          get().handleAgentError(event.payload as AgentEventBase & { error: string })
+          break
+        case 'compact':
+          get().handleAgentCompact(event.payload as AgentEventBase & { trigger: 'manual' | 'auto'; preTokens: number })
+          break
+        case 'tools_available':
+          get().handleAgentToolsAvailable(event.payload as AgentEventBase & { runId: string; snapshotVersion: number; emittedAt: string; tools: string[]; toolCount: number })
+          break
+        case 'complete':
+          void get().handleAgentComplete(event.payload as AgentEventBase & { reason?: TerminalReason; terminalAt?: string })
+          break
+        default:
+          break
+      }
+    }
+  },
+
   // Handle agent message - update session-specific streaming content
   // Supports both incremental (delta) and full (content) modes for backward compatibility
   handleAgentMessage: (data) => {
@@ -1090,17 +1158,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
   handleAgentToolCall: (data) => {
     const { conversationId, runId } = data as AgentEventBase & ToolCall & { runId?: string; toolCallId?: string }
 
-    // Use case-insensitive comparison for AskUserQuestion tool
-    const isAskUserQuestion = toolCall.name?.toLowerCase() === 'askuserquestion'
-    if (toolCall.requiresApproval || isAskUserQuestion) {
-      set((state) => {
-        const newSessions = new Map(state.sessions)
-        const session = newSessions.get(conversationId) || createEmptySessionState()
+    set((state) => {
+      const newSessions = new Map(state.sessions)
+      const session = newSessions.get(conversationId) || createEmptySessionState()
+
+      if (runId && !session.activeRunId) {
         newSessions.set(conversationId, {
           ...session,
-          pendingToolApproval: toolCall.requiresApproval ? (toolCall as ToolCall) : session.pendingToolApproval,
-          pendingAskUserQuestion: isAskUserQuestion ? (toolCall as ToolCall) : session.pendingAskUserQuestion,
-          failedAskUserQuestion: isAskUserQuestion ? null : session.failedAskUserQuestion
+          pendingRunEvents: enqueuePendingRunEvent(session, {
+            kind: 'tool_call',
+            runId,
+            payload: data,
+            receivedAt: Date.now()
+          })
         })
         return { sessions: newSessions }
       }
@@ -1184,34 +1254,86 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   // Handle tool result for a specific conversation
   handleAgentToolResult: (data) => {
-    const { conversationId, toolId, result, isError } = data
+    const { conversationId, runId, result, isError } = data as AgentEventBase & {
+      runId?: string
+      toolCallId?: string
+      toolId?: string
+      result: string
+      isError: boolean
+    }
+    const toolCallId = (data as any).toolCallId || (data as any).toolId
+
+    if (!toolCallId) return
+
     set((state) => {
       const newSessions = new Map(state.sessions)
-      const session = newSessions.get(conversationId)
-      if (!session) return state
+      const session = newSessions.get(conversationId) || createEmptySessionState()
 
-      if (session.pendingAskUserQuestion?.id !== toolId) {
-        return state
-      }
-
-      if (isError) {
+      if (runId && !session.activeRunId) {
         newSessions.set(conversationId, {
           ...session,
-          pendingAskUserQuestion: null,
-          failedAskUserQuestion: {
-            ...session.pendingAskUserQuestion,
-            status: 'error',
-            error: result,
-            output: result
-          }
+          pendingRunEvents: enqueuePendingRunEvent(session, {
+            kind: 'tool_result',
+            runId,
+            payload: data,
+            receivedAt: Date.now()
+          })
         })
         return { sessions: newSessions }
       }
 
+      if (!isEventRunAccepted(session, runId)) {
+        return state
+      }
+
+      const toolStatusById = {
+        ...session.toolStatusById,
+        [toolCallId]: isError ? 'error' : 'success'
+      } as Record<string, ToolStatus>
+      const toolCallsById = { ...session.toolCallsById }
+      const existingToolCall = toolCallsById[toolCallId]
+      if (existingToolCall) {
+        toolCallsById[toolCallId] = {
+          ...existingToolCall,
+          status: isError ? 'error' : 'success',
+          output: result,
+          error: isError ? result : undefined
+        }
+      }
+
+      // Out-of-order tool_result arrives before tool_call
+      const orphanToolResults = { ...session.orphanToolResults }
+      if (!existingToolCall) {
+        orphanToolResults[toolCallId] = { result, isError }
+      }
+
+      let pendingAskUserQuestion = session.pendingAskUserQuestion
+      let failedAskUserQuestion = session.failedAskUserQuestion
+      const pendingQuestion = session.pendingAskUserQuestion
+      if (pendingQuestion && pendingQuestion.id === toolCallId) {
+        if (isError) {
+          pendingAskUserQuestion = null
+          failedAskUserQuestion = {
+            ...pendingQuestion,
+            status: 'error',
+            error: result,
+            output: result
+          }
+        } else {
+          pendingAskUserQuestion = null
+          failedAskUserQuestion = null
+        }
+      }
+
       newSessions.set(conversationId, {
         ...session,
-        pendingAskUserQuestion: null,
-        failedAskUserQuestion: null
+        activeRunId: runId ?? session.activeRunId,
+        lifecycle: 'running',
+        toolStatusById,
+        toolCallsById,
+        orphanToolResults,
+        pendingAskUserQuestion,
+        failedAskUserQuestion
       })
       return { sessions: newSessions }
     })
@@ -1263,6 +1385,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         error,
         isGenerating: false,
         isThinking: false,
+        isStreaming: false,
+        toolStatusById,
         pendingAskUserQuestion: null,
         failedAskUserQuestion: null,
         thoughts: [...session.thoughts, errorThought]
@@ -1275,25 +1399,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  // Handle complete - reload conversation from backend (Single Source of Truth)
   // Terminal event for a run
-  handleAgentComplete: async (data) => {
-    const { spaceId, conversationId, runId } = data as AgentEventBase & {
-      runId?: string
-      reason?: TerminalReason
-      terminalAt?: string
-    }
-    const reason = (data as any).reason as TerminalReason | undefined
+  handleAgentComplete: async (data: AgentCompleteEvent) => {
+    const { spaceId, conversationId, runId, reason } = data
     const terminalReason: TerminalReason = reason ?? 'completed'
 
-    // Check if there's a pending AskUserQuestion - if so, don't clear it
-    // The user needs to see and answer the question first
-    const currentSession = get().sessions.get(conversationId)
-    const hasPendingQuestion = currentSession?.pendingAskUserQuestion != null
-
-    // First, just stop streaming indicator but keep isGenerating=true
-    // This keeps the streaming bubble visible during backend load
-    // IMPORTANT: Don't clear pendingAskUserQuestion - it will be cleared when user answers
+    let waitForPendingQuestion = false
+    let shouldFinalizeTasks = false
     set((state) => {
       const newSessions = new Map(state.sessions)
       const session = newSessions.get(conversationId) || createEmptySessionState()
@@ -1347,16 +1459,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
           isGenerating: false,
           isStreaming: false,
           isThinking: false
-          // Don't clear pendingAskUserQuestion - let user answer first
-          // Keep isGenerating=true and streamingContent until backend loads
         })
       }
       return { sessions: newSessions }
     })
 
-    // If there's a pending AskUserQuestion, don't reload conversation yet
-    // Wait for user to answer, then the answer flow will trigger a new completion
-    if (hasPendingQuestion) {
+    if (shouldFinalizeTasks) {
+      useTaskStore.getState().finalizeTasksOnTerminal(terminalReason)
+    }
+    if (!shouldFinalizeTasks) {
+      return
+    }
+
+    // Wait for user answer in AskUserQuestion branch
+    if (waitForPendingQuestion) {
       return
     }
 

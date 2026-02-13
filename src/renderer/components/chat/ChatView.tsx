@@ -174,6 +174,8 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     error,
     textBlockVersion,
     planEnabled,
+    toolStatusById,
+    availableToolsSnapshot,
     pendingAskUserQuestion,
     failedAskUserQuestion
   } = session

@@ -609,11 +609,26 @@ export interface TokenUsage {
 
 export interface AgentCompleteEvent extends AgentEventBase {
   type: 'complete';
-  duration: number;
+  duration?: number;
   durationMs?: number;
   reason?: 'completed' | 'stopped' | 'error' | 'no_text';
   terminalAt?: string;
   tokenUsage?: TokenUsage | null;
+}
+
+export interface AgentRunStartEvent extends AgentEventBase {
+  type: 'run_start';
+  runId: string;
+  startedAt: string;
+}
+
+export interface AgentToolsAvailableEvent extends AgentEventBase {
+  type: 'tools_available';
+  runId: string;
+  snapshotVersion: number;
+  emittedAt: string;
+  tools: string[];
+  toolCount: number;
 }
 
 export interface AgentRunStartEvent extends AgentEventBase {

@@ -198,7 +198,7 @@ export function unsubscribeFromConversation(conversationId: string): void {
 export function onEvent(channel: string, callback: (data: unknown) => void): () => void {
   if (isElectron()) {
     // Use IPC in Electron
-    const methodMap: Record<string, keyof typeof window.halo> = {
+    const methodMap: Record<string, keyof typeof window.kite> = {
       'agent:run-start': 'onAgentRunStart',
       'agent:message': 'onAgentMessage',
       'agent:tool-call': 'onAgentToolCall',

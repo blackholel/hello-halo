@@ -47,6 +47,7 @@ interface MessageListProps {
   isCompact?: boolean  // Compact mode when Canvas is open
   textBlockVersion?: number  // Increments on each new text block (for StreamingBubble reset)
   workDir?: string  // For skill suggestion card creation
+  onOpenPlanInCanvas?: (planContent: string) => void
   onExecutePlan?: (planContent: string) => void  // Callback when "Execute Plan" button is clicked
   toolStatusById?: Record<string, ToolStatus>
   availableToolsSnapshot?: AvailableToolsSnapshot
@@ -282,6 +283,7 @@ export function MessageList({
   isCompact = false,
   textBlockVersion = 0,
   workDir,
+  onOpenPlanInCanvas
   onExecutePlan,
   toolStatusById = {},
   availableToolsSnapshot

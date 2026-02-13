@@ -58,9 +58,7 @@ import type {
   ToolCall,
   Thought,
   SessionTerminalReason,
-  ToolCallStatus,
-  AskUserQuestionAnswerInput,
-  AskUserQuestionMode
+  ToolCallStatus
 } from './types'
 
 function trackChangeFileFromToolUse(
@@ -104,14 +102,13 @@ function isAskUserQuestionTool(name?: string): boolean {
 
 export function normalizeAskUserQuestionToolResultThought(
   thought: Thought,
-  isAskUserQuestionResult: boolean,
-  mode: AskUserQuestionMode | null
+  isAskUserQuestionResult: boolean
 ): Thought {
   if (thought.type !== 'tool_result') {
     return thought
   }
 
-  if (!isAskUserQuestionResult || !thought.isError || mode !== 'legacy_deny_send') {
+  if (!isAskUserQuestionResult || !thought.isError) {
     return thought
   }
 
@@ -178,7 +175,7 @@ function finalizeSession(params: FinalizeSessionParams): boolean {
   sessionState.terminalReason = reason
   sessionState.terminalAt = new Date().toISOString()
   sessionState.pendingPermissionResolve = null
-  sessionState.pendingAskUserQuestion = null
+  sessionState.pendingAskUserQuestionResolve = null
   const resolvedFinalContent =
     typeof finalContent === 'string' ? finalContent : sessionState.latestAssistantContent || undefined
 
@@ -350,7 +347,6 @@ export async function sendMessage(
     finalized: false,
     toolCallSeq: 0,
     toolsById: new Map<string, ToolCall>(),
-    askUserQuestionModeByToolCallId: new Map<string, AskUserQuestionMode>(),
     pendingPermissionResolve: null,
     pendingAskUserQuestionResolve: null,
     thoughts: [] // Initialize thoughts array for this session
@@ -788,17 +784,12 @@ export async function sendMessage(
               existingThought.id === thought.id &&
               isAskUserQuestionTool(existingThought.toolName)
             )
-          const askUserQuestionMode =
-            thought.type === 'tool_result'
-              ? (sessionState.askUserQuestionModeByToolCallId.get(thought.id) || null)
-              : null
           const normalizedThought = normalizeAskUserQuestionToolResultThought(
             thought,
             Boolean(
               (thought.type === 'tool_result' && isAskUserQuestionTool(existingToolForThought?.name)) ||
               askUserQuestionFromHistory
-            ),
-            askUserQuestionMode
+            )
           )
 
           // Accumulate thought in backend session (Single Source of Truth)
@@ -842,25 +833,6 @@ export async function sendMessage(
               description: isAskUserQuestion ? 'Waiting for user response' : undefined
             }
             sessionState.toolsById.set(toolCallId, toolCall)
-            if (isAskUserQuestion) {
-              const pendingAskUserQuestion = sessionState.pendingAskUserQuestion
-              if (
-                pendingAskUserQuestion &&
-                pendingAskUserQuestion.runId === runId &&
-                pendingAskUserQuestion.expectedToolCallId === null
-              ) {
-                pendingAskUserQuestion.expectedToolCallId = toolCallId
-                sessionState.askUserQuestionModeByToolCallId.set(
-                  toolCallId,
-                  pendingAskUserQuestion.mode
-                )
-              } else {
-                sessionState.askUserQuestionModeByToolCallId.set(
-                  toolCallId,
-                  'sdk_allow_updated_input'
-                )
-              }
-            }
             sendToRenderer('agent:tool-call', spaceId, conversationId, {
               runId,
               toolCallId,
@@ -881,14 +853,7 @@ export async function sendMessage(
                 existingThought.id === toolCallId &&
                 isAskUserQuestionTool(existingThought.toolName)
               )
-            const askUserQuestionModeForResult = isAskUserQuestionResult
-              ? (sessionState.askUserQuestionModeByToolCallId.get(toolCallId) || null)
-              : null
-            const shouldNormalizeAskUserQuestionError =
-              isAskUserQuestionResult && askUserQuestionModeForResult === 'legacy_deny_send'
-            const isError = shouldNormalizeAskUserQuestionError
-              ? false
-              : (normalizedThought.isError || false)
+            const isError = isAskUserQuestionResult ? false : (normalizedThought.isError || false)
             const toolOutput = normalizedThought.toolOutput || ''
             sessionState.toolsById.set(toolCallId, {
               id: toolCallId,
@@ -901,9 +866,6 @@ export async function sendMessage(
               requiresApproval: existingToolCall?.requiresApproval,
               description: existingToolCall?.description
             })
-            if (isAskUserQuestionResult) {
-              sessionState.askUserQuestionModeByToolCallId.delete(toolCallId)
-            }
 
             if (isAskUserQuestionResult) {
               console.log(
@@ -935,68 +897,6 @@ export async function sendMessage(
               `[Agent][${conversationId}] Result thought received, ${sessionState.thoughts.length} thoughts accumulated`
             )
           }
-        } else if (thought.type === 'tool_use') {
-          trackChangeFileFromToolUse(
-            conversationId,
-            thought.toolName,
-            thought.toolInput as { file_path?: string } | undefined
-          )
-          const isAskUserQuestion = thought.toolName?.toLowerCase() === 'askuserquestion'
-          const toolCall: ToolCall = {
-            id: thought.id,
-            name: thought.toolName || '',
-            status: isAskUserQuestion ? 'waiting_approval' : 'running',
-            input: isAskUserQuestion
-              ? normalizeAskUserQuestionInput(thought.toolInput || {})
-              : (thought.toolInput || {}),
-            requiresApproval: isAskUserQuestion ? false : undefined,
-            description: isAskUserQuestion ? 'Waiting for user response' : undefined
-          }
-          sendToRenderer(
-            'agent:tool-call',
-            spaceId,
-            conversationId,
-            toolCall as unknown as Record<string, unknown>
-          )
-          if (isAskUserQuestion) {
-            console.log(
-              `[Agent][${conversationId}] AskUserQuestion tool-call sent: toolId=${thought.id}`
-            )
-          }
-        } else if (thought.type === 'tool_result') {
-          const isAskUserQuestionResult = sessionState.thoughts.some((existingThought) =>
-            existingThought.type === 'tool_use' &&
-            existingThought.id === thought.id &&
-            existingThought.toolName?.toLowerCase() === 'askuserquestion'
-          )
-          if (isAskUserQuestionResult) {
-            console.log(
-              `[Agent][${conversationId}] AskUserQuestion tool-result received: toolId=${thought.id}, isError=${thought.isError || false}`
-            )
-          }
-          // Send tool result event
-          sendToRenderer('agent:tool-result', spaceId, conversationId, {
-            type: 'tool_result',
-            toolId: thought.id,
-            result: thought.toolOutput || '',
-            isError: thought.isError || false
-          })
-        } else if (thought.type === 'result') {
-          // Final result - use accumulated text as the final reply
-          const finalContent = accumulatedTextContent || thought.content
-          sendToRenderer('agent:message', spaceId, conversationId, {
-            type: 'message',
-            content: finalContent,
-            isComplete: true
-          })
-          // Fallback: if no text block was received, use result content for persistence
-          if (!accumulatedTextContent && thought.content) {
-            accumulatedTextContent = thought.content
-          }
-          // Note: updateLastMessage is called after loop to include tokenUsage
-          console.log(
-            `[Agent][${conversationId}] Result thought received, ${sessionState.thoughts.length} thoughts accumulated`
-          )
         }
       }
 
@@ -1241,6 +1141,12 @@ export async function stopGeneration(conversationId?: string): Promise<void> {
     if (session.pendingAskUserQuestionResolve) {
       session.pendingAskUserQuestionResolve = null
     }
+    finalizeSession({
+      sessionState: session,
+      spaceId: session.spaceId,
+      conversationId: session.conversationId,
+      reason: 'stopped'
+    })
   }
 
         // Interrupt V2 Session
