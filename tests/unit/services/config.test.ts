@@ -13,16 +13,16 @@ import path from 'path'
 import {
   getConfig,
   saveConfig,
-  getHaloDir,
+  getKiteDir,
   getConfigPath,
   initializeApp
 } from '../../../src/main/services/config.service'
 
 describe('Config Service', () => {
-  describe('getHaloDir', () => {
-    it('should return path to .halo directory in home', () => {
-      const haloDir = getHaloDir()
-      expect(haloDir).toContain('.halo')
+  describe('getKiteDir', () => {
+    it('should return path to .kite directory in home', () => {
+      const kiteDir = getKiteDir()
+      expect(kiteDir).toContain('.kite')
     })
   })
 
@@ -30,7 +30,7 @@ describe('Config Service', () => {
     it('should return path to config.json', () => {
       const configPath = getConfigPath()
       expect(configPath).toContain('config.json')
-      expect(configPath).toContain('.halo')
+      expect(configPath).toContain('.kite')
     })
   })
 
@@ -38,10 +38,10 @@ describe('Config Service', () => {
     it('should create necessary directories', async () => {
       await initializeApp()
 
-      const haloDir = getHaloDir()
-      expect(fs.existsSync(haloDir)).toBe(true)
-      expect(fs.existsSync(path.join(haloDir, 'temp'))).toBe(true)
-      expect(fs.existsSync(path.join(haloDir, 'spaces'))).toBe(true)
+      const kiteDir = getKiteDir()
+      expect(fs.existsSync(kiteDir)).toBe(true)
+      expect(fs.existsSync(path.join(kiteDir, 'temp'))).toBe(true)
+      expect(fs.existsSync(path.join(kiteDir, 'spaces'))).toBe(true)
     })
 
     it('should create default config if not exists', async () => {

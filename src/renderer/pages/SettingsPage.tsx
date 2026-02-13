@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAppStore } from '../stores/app.store'
 import { usePythonStore } from '../stores/python.store'
 import { api } from '../api'
-import type { HaloConfig, ThemeMode, McpServersConfig } from '../types'
+import type { KiteConfig, ThemeMode, McpServersConfig } from '../types'
 import { AVAILABLE_MODELS, DEFAULT_MODEL } from '../types'
 import { CheckCircle2, XCircle, ArrowLeft, Eye, EyeOff, ChevronDown, ChevronRight, Package, Trash2, Loader2 } from '../components/icons/ToolIcons'
 import { Header } from '../components/layout/Header'
@@ -285,8 +285,8 @@ export function SettingsPage() {
   }
 
   // Auto-save helper for appearance settings
-  const autoSave = useCallback(async (partialConfig: Partial<HaloConfig>) => {
-    const newConfig = { ...config, ...partialConfig } as HaloConfig
+  const autoSave = useCallback(async (partialConfig: Partial<KiteConfig>) => {
+    const newConfig = { ...config, ...partialConfig } as KiteConfig
     await api.setConfig(partialConfig)
     setConfig(newConfig)
   }, [config, setConfig])
@@ -296,7 +296,7 @@ export function SettingsPage() {
     setTheme(value)
     // Sync to localStorage immediately (for anti-flash on reload)
     try {
-      localStorage.setItem('halo-theme', value)
+      localStorage.setItem('kite-theme', value)
     } catch (e) { /* ignore */ }
     await autoSave({
       appearance: { theme: value }
@@ -328,7 +328,7 @@ export function SettingsPage() {
   // Handle MCP servers save
   const handleMcpServersSave = async (servers: McpServersConfig) => {
     await api.setConfig({ mcpServers: servers })
-    setConfig({ ...config, mcpServers: servers } as HaloConfig)
+    setConfig({ ...config, mcpServers: servers } as KiteConfig)
   }
 
   // Handle Python package install
@@ -361,7 +361,7 @@ export function SettingsPage() {
         }
       }
       await api.setConfig(apiConfig)
-      setConfig({ ...config, ...apiConfig } as HaloConfig)
+      setConfig({ ...config, ...apiConfig } as KiteConfig)
       setValidationResult({ valid: true, message: t('Saved') })
     } catch (error) {
       setValidationResult({ valid: false, message: t('Save failed') })
@@ -619,7 +619,7 @@ export function SettingsPage() {
           <section className="settings-section">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-medium">{t('Permissions')}</h2>
-              <span className="text-xs px-2.5 py-1 rounded-lg bg-halo-success/15 text-halo-success font-medium">
+              <span className="text-xs px-2.5 py-1 rounded-lg bg-kite-success/15 text-kite-success font-medium">
                 {t('Full Permission Mode')}
               </span>
             </div>
@@ -636,7 +636,7 @@ export function SettingsPage() {
                   <p className="font-medium">{t('File Read/Write')}</p>
                   <p className="text-sm text-muted-foreground">{t('Allow AI to read and create files')}</p>
                 </div>
-                <span className="text-xs px-2.5 py-1 rounded-lg bg-halo-success/15 text-halo-success font-medium">
+                <span className="text-xs px-2.5 py-1 rounded-lg bg-kite-success/15 text-kite-success font-medium">
                   {t('Allow')}
                 </span>
               </div>
@@ -647,7 +647,7 @@ export function SettingsPage() {
                   <p className="font-medium">{t('Execute Commands')}</p>
                   <p className="text-sm text-muted-foreground">{t('Allow AI to execute terminal commands')}</p>
                 </div>
-                <span className="text-xs px-2.5 py-1 rounded-lg bg-halo-success/15 text-halo-success font-medium">
+                <span className="text-xs px-2.5 py-1 rounded-lg bg-kite-success/15 text-kite-success font-medium">
                   {t('Allow')}
                 </span>
               </div>
@@ -872,13 +872,13 @@ export function SettingsPage() {
                       <p className="font-medium">{t('Auto Launch on Startup')}</p>
                       <span
                         className="inline-flex items-center justify-center w-4 h-4 text-xs rounded-full bg-muted text-muted-foreground cursor-help"
-                        title={t('Automatically run Halo when system starts')}
+                        title={t('Automatically run Kite when system starts')}
                       >
                         ?
                       </span>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      {t('Automatically run Halo when system starts')}
+                      {t('Automatically run Kite when system starts')}
                     </p>
                   </div>
                   <AppleToggle checked={autoLaunch} onChange={handleAutoLaunchChange} />
@@ -956,7 +956,7 @@ export function SettingsPage() {
                 <div>
                   <p className="font-medium">{t('Enable Remote Access')}</p>
                   <p className="text-sm text-muted-foreground">
-                    {t('Allow access to Halo from other devices')}
+                    {t('Allow access to Kite from other devices')}
                   </p>
                 </div>
                 <AppleToggle

@@ -40,7 +40,7 @@ export function HomePage(): JSX.Element {
   const { t } = useTranslation()
   const { setView } = useAppStore()
   const {
-    haloSpace,
+    kiteSpace,
     spaces,
     loadSpaces,
     setCurrentSpace,
@@ -74,7 +74,7 @@ export function HomePage(): JSX.Element {
   // Path selection state
   const [useCustomPath, setUseCustomPath] = useState(false)
   const [customPath, setCustomPath] = useState<string | null>(null)
-  const [defaultPath, setDefaultPath] = useState<string>('~/.halo/spaces')
+  const [defaultPath, setDefaultPath] = useState<string>('~/.kite/spaces')
   const [activeTab, setActiveTab] = useState<'spaces' | 'extensions'>('spaces')
 
   // Close dialogs on Escape key
@@ -227,10 +227,10 @@ export function HomePage(): JSX.Element {
     const space = spaces.find(s => s.id === spaceId)
     if (!space) return
 
-    const isCustomPath = !space.path.includes('/.halo/spaces/')
+    const isCustomPath = !space.path.includes('/.kite/spaces/')
 
     const message = isCustomPath
-      ? t('Are you sure you want to delete this space?\n\nOnly Halo data (conversation history) will be deleted, your project files will be kept.')
+      ? t('Are you sure you want to delete this space?\n\nOnly Kite data (conversation history) will be deleted, your project files will be kept.')
       : t('Are you sure you want to delete this space?\n\nAll conversations and files in the space will be deleted.')
 
     if (confirm(message)) {
@@ -335,7 +335,7 @@ export function HomePage(): JSX.Element {
             <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary/50 to-primary/20 flex items-center justify-center">
               <div className="w-2.5 h-2.5 rounded-full bg-primary/80" />
             </div>
-            <span className="text-sm font-semibold tracking-tight">Halo</span>
+            <span className="text-sm font-semibold tracking-tight">Kite</span>
           </>
         }
         right={
@@ -386,12 +386,12 @@ export function HomePage(): JSX.Element {
             {activeTab === 'spaces' ? (
               <div className="max-w-2xl mx-auto px-6 py-8">
 
-                {/* Hero - Halo Space Card */}
-                {haloSpace && (
+                {/* Hero - Kite Space Card */}
+                {kiteSpace && (
                   <div
-                    data-onboarding="halo-space"
-                    onClick={() => handleSpaceClick(haloSpace)}
-                    className="halo-space-card rounded-2xl p-7 cursor-pointer mb-10 stagger-item"
+                    data-onboarding="kite-space"
+                    onClick={() => handleSpaceClick(kiteSpace)}
+                    className="kite-space-card rounded-2xl p-7 cursor-pointer mb-10 stagger-item"
                     style={{ animationDelay: '0ms' }}
                   >
                     <div className="flex items-center justify-between relative z-10">
@@ -400,7 +400,7 @@ export function HomePage(): JSX.Element {
                           <Sparkles className="w-5 h-5 text-primary" />
                         </div>
                         <div>
-                          <h2 className="text-lg font-semibold tracking-tight">{t('Enter Halo')}</h2>
+                          <h2 className="text-lg font-semibold tracking-tight">{t('Enter Kite')}</h2>
                           <p className="text-sm text-muted-foreground mt-0.5 leading-relaxed">
                             {t('Aimless time, ideas will crystallize here')}
                           </p>
@@ -408,12 +408,12 @@ export function HomePage(): JSX.Element {
                       </div>
                       <ArrowRight className="w-5 h-5 text-primary/50" />
                     </div>
-                    {(haloSpace.stats.artifactCount > 0 || haloSpace.stats.conversationCount > 0) && (
+                    {(kiteSpace.stats.artifactCount > 0 || kiteSpace.stats.conversationCount > 0) && (
                       <div className="mt-4 pt-4 border-t border-primary/10 relative z-10">
                         <p className="text-xs text-muted-foreground">
                           {t('{{count}} artifacts · {{conversations}} conversations', {
-                            count: haloSpace.stats.artifactCount,
-                            conversations: haloSpace.stats.conversationCount
+                            count: kiteSpace.stats.artifactCount,
+                            conversations: kiteSpace.stats.conversationCount
                           })}
                         </p>
                       </div>

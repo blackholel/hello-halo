@@ -47,6 +47,6 @@ Please provide a complete endpoint URL ending with:
  * Check if stream should be forced on (from environment variable)
  */
 export function shouldForceStream(): boolean {
-  const envValue = process.env.HALO_OPENAI_FORCE_STREAM
+  const envValue = process.env.KITE_OPENAI_FORCE_STREAM
   return envValue === '1' || envValue === 'true' || envValue === 'yes'
 }

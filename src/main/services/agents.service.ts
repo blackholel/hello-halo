@@ -2,7 +2,7 @@
  * Agents Service - Manages Claude Code agents configuration
  *
  * Agents are loaded from multiple sources:
- * 1. ~/.halo/agents/ - Default app-level agents directory
+ * 1. ~/.kite/agents/ - Default app-level agents directory
  * 2. config.claudeCode.agents.paths - Custom global paths
  * 3. {workDir}/.claude/agents/ - Space-level agents (Claude Code compatible)
  *
@@ -11,7 +11,7 @@
 
 import { join, dirname } from 'path'
 import { readdirSync, readFileSync, statSync, existsSync, mkdirSync, writeFileSync, rmSync, copyFileSync } from 'fs'
-import { getConfig, getHaloDir } from './config.service'
+import { getConfig, getKiteDir } from './config.service'
 import { getAllSpacePaths } from './space.service'
 import { isPathWithinBasePaths, isValidDirectoryPath, isFileNotFoundError } from '../utils/path-validation'
 import { listEnabledPlugins } from './plugins.service'
@@ -130,10 +130,10 @@ function buildGlobalAgents(): AgentDefinition[] {
     addAgents(scanAgentDir(join(plugin.installPath, 'agents'), 'plugin', plugin.installPath, plugin.name))
   }
 
-  // 1. App-level agents (~/.halo/agents/)
-  const haloDir = getHaloDir()
-  if (haloDir) {
-    addAgents(scanAgentDir(join(haloDir, 'agents'), 'app'))
+  // 1. App-level agents (~/.kite/agents/)
+  const kiteDir = getKiteDir()
+  if (kiteDir) {
+    addAgents(scanAgentDir(join(kiteDir, 'agents'), 'app'))
   }
 
   // 2. Global custom paths from config.claudeCode.agents.paths

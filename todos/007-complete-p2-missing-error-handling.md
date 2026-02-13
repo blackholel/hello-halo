@@ -10,9 +10,9 @@ dependencies: []
 
 ## Problem Statement
 
-`buildPluginsConfig()` 函数假设 `workDir` 和 `getHaloDir()` 总是返回有效路径，但没有处理：
+`buildPluginsConfig()` 函数假设 `workDir` 和 `getKiteDir()` 总是返回有效路径，但没有处理：
 1. `workDir` 为空字符串或 undefined 的情况
-2. `getHaloDir()` 返回无效路径的情况
+2. `getKiteDir()` 返回无效路径的情况
 3. `existsSync` 可能抛出的异常（如权限问题）
 
 ## Findings
@@ -21,7 +21,7 @@ dependencies: []
 
 **证据**:
 ```typescript
-const appSkillsPath = join(getHaloDir(), 'skills')
+const appSkillsPath = join(getKiteDir(), 'skills')
 if (existsSync(appSkillsPath)) {
   // 没有 try-catch
 ```
@@ -38,9 +38,9 @@ function buildPluginsConfig(workDir: string): PluginConfig[] {
 
   // App-level skills
   try {
-    const haloDir = getHaloDir()
-    if (haloDir) {
-      const appSkillsPath = join(haloDir, 'skills')
+    const kiteDir = getKiteDir()
+    if (kiteDir) {
+      const appSkillsPath = join(kiteDir, 'skills')
       if (existsSync(appSkillsPath)) {
         plugins.push({ type: 'local', path: appSkillsPath })
       }

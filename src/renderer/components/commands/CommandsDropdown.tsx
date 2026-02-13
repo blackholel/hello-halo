@@ -114,7 +114,7 @@ export function CommandsDropdown({ workDir, onInsertCommand }: CommandsDropdownP
                 {search ? t('No commands found') : t('No commands available')}
               </p>
               <p className="text-[10px] text-muted-foreground/60 mt-1">
-                {t('Add .md files in ~/.halo/commands/')}
+                {t('Add .md files in ~/.kite/commands/')}
               </p>
             </div>
           ) : (

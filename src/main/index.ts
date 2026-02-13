@@ -1,5 +1,5 @@
 /**
- * Halo - Electron Main Process
+ * Kite - Electron Main Process
  * The main entry point for the Electron application
  */
 
@@ -246,7 +246,7 @@ function createWindow(): void {
     mainWindow?.show()
     // Set window title with instance identifier for custom instances
     if (isCustomInstance()) {
-      mainWindow?.setTitle(`Halo [${getInstanceId()}]`)
+      mainWindow?.setTitle(`Kite [${getInstanceId()}]`)
     }
   })
 
@@ -302,9 +302,9 @@ function createWindow(): void {
 // Initialize application
 app.whenReady().then(async () => {
   // Set app user model id for windows
-  electronApp.setAppUserModelId('com.halo.app')
+  electronApp.setAppUserModelId('com.kite.app')
 
-  // Register custom protocols (halo-file://, etc.)
+  // Register custom protocols (kite-file://, etc.)
   registerProtocols()
 
   // Default open or close DevTools by F12 in development

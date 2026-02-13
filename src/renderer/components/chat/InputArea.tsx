@@ -224,11 +224,11 @@ export function InputArea({
     setIsDragOver(false)
 
     // Check for file context from file tree drag
-    const haloFileData = e.dataTransfer.getData('application/x-halo-file')
+    const kiteFileData = e.dataTransfer.getData('application/x-kite-file')
 
-    if (haloFileData) {
+    if (kiteFileData) {
       try {
-        const fileData = JSON.parse(haloFileData) as { path: string; name: string; extension: string }
+        const fileData = JSON.parse(kiteFileData) as { path: string; name: string; extension: string }
         // Check if file already exists in fileContexts
         const exists = fileContexts.some(f => f.path === fileData.path)
         if (!exists) {
@@ -243,7 +243,7 @@ export function InputArea({
         }
         return
       } catch (err) {
-        console.error('Failed to parse halo file data:', err)
+        console.error('Failed to parse kite file data:', err)
       }
     }
 
@@ -452,7 +452,7 @@ export function InputArea({
               onPaste={handlePaste}
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
-              placeholder={placeholder || t('Type a message, let Halo help you...')}
+              placeholder={placeholder || t('Type a message, let Kite help you...')}
               disabled={isGenerating}
               readOnly={isOnboardingSendStep}
               rows={1}

@@ -18,7 +18,7 @@ import {
 } from 'lucide-react'
 import { useTranslation } from '../../i18n'
 
-const GUIDE_STATE_KEY = 'halo-space-guide-expanded'
+const GUIDE_STATE_KEY = 'kite-space-guide-expanded'
 
 export function SpaceGuide() {
   const { t } = useTranslation()
@@ -55,7 +55,7 @@ export function SpaceGuide() {
       iconBg: 'bg-primary/10',
       title: t('What can AI do?'),
       lines: [
-        t('Halo is not just chat, it can help you do things'),
+        t('Kite is not just chat, it can help you do things'),
         t('Use natural language to have it write documents, create spreadsheets, search the web, write code...'),
       ]
     },
@@ -75,7 +75,7 @@ export function SpaceGuide() {
       iconBg: 'bg-emerald-500/10',
       title: t('When do you need to create one?'),
       hints: [
-        { label: t('Casual chat, asking questions'), value: t('Use Halo space') },
+        { label: t('Casual chat, asking questions'), value: t('Use Kite space') },
         { label: t('Projects, long-term tasks'), value: t('Recommend creating a dedicated space') },
       ]
     }
@@ -145,9 +145,9 @@ export function SpaceGuide() {
             {/* Warning */}
             <div className="mt-5 pt-4 border-t border-border/50">
               <div className="flex items-center gap-2.5">
-                <ShieldAlert className="w-3.5 h-3.5 text-halo-warning flex-shrink-0" />
+                <ShieldAlert className="w-3.5 h-3.5 text-kite-warning flex-shrink-0" />
                 <p className="text-xs text-muted-foreground">
-                  <span className="text-halo-warning font-medium">{t('AI has delete permissions')}</span>
+                  <span className="text-kite-warning font-medium">{t('AI has delete permissions')}</span>
                   {t(', be mindful of backing up important files')}
                 </p>
               </div>

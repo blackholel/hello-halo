@@ -58,10 +58,10 @@ function normalizeSteps(steps: WorkflowStep[]): WorkflowStep[] {
 
 export function WorkflowEditorModal({ spaceId, workflow, onClose, onSaved }: WorkflowEditorModalProps) {
   const { t } = useTranslation()
-  const { currentSpace, spaces, haloSpace } = useSpaceStore((state) => ({
+  const { currentSpace, spaces, kiteSpace } = useSpaceStore((state) => ({
     currentSpace: state.currentSpace,
     spaces: state.spaces,
-    haloSpace: state.haloSpace
+    kiteSpace: state.kiteSpace
   }))
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -100,9 +100,9 @@ export function WorkflowEditorModal({ spaceId, workflow, onClose, onSaved }: Wor
     if (currentSpace?.id === spaceId) return currentSpace
     const matched = spaces.find(space => space.id === spaceId)
     if (matched) return matched
-    if (haloSpace?.id === spaceId) return haloSpace
+    if (kiteSpace?.id === spaceId) return kiteSpace
     return null
-  }, [currentSpace, spaces, haloSpace, spaceId])
+  }, [currentSpace, spaces, kiteSpace, spaceId])
   const workDir = activeSpace?.path
   const toolkitLoaded = !!activeSpace && isToolkitLoaded(activeSpace.id)
   const toolkit = activeSpace ? getToolkit(activeSpace.id) : null

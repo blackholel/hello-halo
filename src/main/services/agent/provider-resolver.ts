@@ -30,7 +30,7 @@ export interface ResolvedProvider {
  * Infer OpenAI wire API type from URL or environment
  */
 export function inferOpenAIWireApi(apiUrl: string): 'responses' | 'chat_completions' {
-  const envApiType = process.env.HALO_OPENAI_API_TYPE || process.env.HALO_OPENAI_WIRE_API
+  const envApiType = process.env.KITE_OPENAI_API_TYPE || process.env.KITE_OPENAI_WIRE_API
   if (envApiType) {
     const v = envApiType.toLowerCase()
     if (v.includes('response')) return 'responses'

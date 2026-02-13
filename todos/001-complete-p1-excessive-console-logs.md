@@ -43,7 +43,7 @@ dependencies: []
 ### Solution 2: 条件日志
 **描述**: 使用环境变量控制日志输出
 ```typescript
-const DEBUG = process.env.NODE_ENV === 'development' || process.env.HALO_DEBUG
+const DEBUG = process.env.NODE_ENV === 'development' || process.env.KITE_DEBUG
 DEBUG && console.log(...)
 ```
 **优点**: 简单快速

@@ -196,7 +196,7 @@ function scanDirectory(
 
 // Get working directory for a space
 function getWorkingDir(spaceId: string): string {
-  if (spaceId === 'halo-temp') {
+  if (spaceId === 'kite-temp') {
     const artifactsDir = join(getTempSpacePath(), 'artifacts')
     return artifactsDir
   }

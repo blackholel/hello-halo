@@ -11,7 +11,7 @@ dependencies: []
 ## Problem Statement
 
 代码使用 `existsSync()` 检查路径是否存在，但没有检查路径是否为符号链接。攻击者可以：
-1. 在 `~/.halo/skills/` 或 `{workDir}/.claude/` 中创建指向敏感目录的符号链接
+1. 在 `~/.kite/skills/` 或 `{workDir}/.claude/` 中创建指向敏感目录的符号链接
 2. 通过符号链接让 Claude Agent SDK 加载任意位置的"插件"
 
 ## Findings

@@ -106,7 +106,7 @@ export const useAIBrowserStore = create<AIBrowserState>()(
       },
     }),
     {
-      name: 'halo-ai-browser',
+      name: 'kite-ai-browser',
       // Only persist the default preference
       partialize: (state) => ({
         defaultEnabled: state.defaultEnabled,

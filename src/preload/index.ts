@@ -5,14 +5,14 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
 // Type definitions for exposed API
-export interface HaloAPI {
+export interface KiteAPI {
   // Config
   getConfig: () => Promise<IpcResponse>
   setConfig: (updates: Record<string, unknown>) => Promise<IpcResponse>
   validateApi: (apiKey: string, apiUrl: string, provider: string) => Promise<IpcResponse>
 
   // Space
-  getHaloSpace: () => Promise<IpcResponse>
+  getKiteSpace: () => Promise<IpcResponse>
   listSpaces: () => Promise<IpcResponse>
   createSpace: (input: { name: string; icon: string; customPath?: string }) => Promise<IpcResponse>
   deleteSpace: (spaceId: string) => Promise<IpcResponse>
@@ -410,7 +410,7 @@ async function invokeWithProgress<TResult, TProgress>(
 }
 
 // Expose API to renderer
-const api: HaloAPI = {
+const api: KiteAPI = {
   // Config
   getConfig: () => ipcRenderer.invoke('config:get'),
   setConfig: (updates) => ipcRenderer.invoke('config:set', updates),
@@ -418,7 +418,7 @@ const api: HaloAPI = {
     ipcRenderer.invoke('config:validate-api', apiKey, apiUrl, provider),
 
   // Space
-  getHaloSpace: () => ipcRenderer.invoke('space:get-halo'),
+  getKiteSpace: () => ipcRenderer.invoke('space:get-kite'),
   listSpaces: () => ipcRenderer.invoke('space:list'),
   createSpace: (input) => ipcRenderer.invoke('space:create', input),
   deleteSpace: (spaceId) => ipcRenderer.invoke('space:delete', spaceId),
@@ -649,7 +649,7 @@ const api: HaloAPI = {
   onPythonStderr: (callback) => createEventListener('python:stderr', callback as (data: unknown) => void),
 }
 
-contextBridge.exposeInMainWorld('halo', api)
+contextBridge.exposeInMainWorld('kite', api)
 
 // Analytics: Listen for tracking events from main process
 // Baidu Tongji SDK is loaded in index.html, we just need to call _hmt.push()
@@ -694,7 +694,7 @@ const platformInfo = {
 contextBridge.exposeInMainWorld('platform', platformInfo)
 
 // Expose basic electron IPC for overlay SPA
-// This is used by the overlay window which doesn't need the full halo API
+// This is used by the overlay window which doesn't need the full kite API
 const electronAPI = {
   ipcRenderer: {
     on: (channel: string, callback: (...args: unknown[]) => void) => {
@@ -711,10 +711,10 @@ const electronAPI = {
 
 contextBridge.exposeInMainWorld('electron', electronAPI)
 
-// TypeScript declaration for window.halo and window.platform
+// TypeScript declaration for window.kite and window.platform
 declare global {
   interface Window {
-    halo: HaloAPI
+    kite: KiteAPI
     platform: {
       platform: 'darwin' | 'win32' | 'linux'
       isMac: boolean

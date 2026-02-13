@@ -348,7 +348,7 @@ export async function executePythonCode(
 
   // Create temp file for code
   const tempDir = app.getPath('temp')
-  const tempFile = join(tempDir, `halo-python-${Date.now()}-${Math.random().toString(36).slice(2)}.py`)
+  const tempFile = join(tempDir, `kite-python-${Date.now()}-${Math.random().toString(36).slice(2)}.py`)
 
   try {
     writeFileSync(tempFile, code, 'utf8')

@@ -7,7 +7,7 @@
 
 import { join } from 'path'
 import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync } from 'fs'
-import { getHaloDir } from './config.service'
+import { getKiteDir } from './config.service'
 import type { DirectiveRef } from './agent/types'
 import type { SpaceToolkit } from './space-config.service'
 
@@ -65,11 +65,11 @@ const BUILTIN_PRESETS: ToolkitPreset[] = [
 ]
 
 // ============================================
-// Custom Presets (stored in ~/.halo/toolkit-presets/)
+// Custom Presets (stored in ~/.kite/toolkit-presets/)
 // ============================================
 
 function getPresetsDir(): string {
-  return join(getHaloDir(), 'toolkit-presets')
+  return join(getKiteDir(), 'toolkit-presets')
 }
 
 function loadCustomPresets(): ToolkitPreset[] {

@@ -291,8 +291,8 @@ export function CommandsPanel({
               </p>
               <p className="text-[10px] text-muted-foreground/70 mt-1">
                 {workDir
-                  ? t('Manage files in ~/.halo/commands/ and {{path}}/.claude/commands/', { path: workDir })
-                  : t('Manage files in ~/.halo/commands/')}
+                  ? t('Manage files in ~/.kite/commands/ and {{path}}/.claude/commands/', { path: workDir })
+                  : t('Manage files in ~/.kite/commands/')}
               </p>
             </div>
             {workDir && onCreateCommand && (
@@ -355,7 +355,7 @@ export function CommandsPanel({
                 <p className="text-[10px] text-muted-foreground/60 mt-1">
                   {localSearchQuery
                     ? t('Try a different search term')
-                    : t('Add .md files in ~/.halo/commands or .claude/commands')}
+                    : t('Add .md files in ~/.kite/commands or .claude/commands')}
                 </p>
               </div>
             ) : (

@@ -2,7 +2,7 @@
  * Skills Service - Manages Claude Code skills configuration
  *
  * Skills are loaded from multiple sources:
- * 1. ~/.halo/skills/ - Default app-level skills directory
+ * 1. ~/.kite/skills/ - Default app-level skills directory
  * 2. config.claudeCode.plugins.globalPaths - Custom global paths (skills/ subdirectory)
  * 3. Installed plugins - Skills from installed plugins
  * 4. {workDir}/.claude/skills/ - Space-level skills (Claude Code compatible)
@@ -12,7 +12,7 @@
 
 import { join, dirname } from 'path'
 import { readdirSync, readFileSync, statSync, existsSync, mkdirSync, writeFileSync, rmSync, copyFileSync } from 'fs'
-import { getConfig, getHaloDir } from './config.service'
+import { getConfig, getKiteDir } from './config.service'
 import { listEnabledPlugins } from './plugins.service'
 import { getAllSpacePaths } from './space.service'
 import { isPathWithinBasePaths, isValidDirectoryPath, isFileNotFoundError } from '../utils/path-validation'
@@ -211,10 +211,10 @@ function buildGlobalSkills(): SkillDefinition[] {
     }
   }
 
-  // 1. App-level skills (~/.halo/skills/)
-  const haloDir = getHaloDir()
-  if (haloDir) {
-    addSkills(scanSkillDir(join(haloDir, 'skills'), 'app'))
+  // 1. App-level skills (~/.kite/skills/)
+  const kiteDir = getKiteDir()
+  if (kiteDir) {
+    addSkills(scanSkillDir(join(kiteDir, 'skills'), 'app'))
   }
 
   // 2. Global custom paths from config.claudeCode.plugins.globalPaths

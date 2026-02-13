@@ -175,7 +175,7 @@ export function ToolCard({ toolCall, conversationId }: ToolCardProps) {
 
       {/* Approval buttons */}
       {toolCall.status === 'waiting_approval' && (
-        <div className="px-3.5 py-3 border-t border-border/15 bg-halo-warning/[0.04]">
+        <div className="px-3.5 py-3 border-t border-border/15 bg-kite-warning/[0.04]">
           <p className="text-xs text-muted-foreground mb-3">
             {t('This action requires your confirmation to continue')}
           </p>
@@ -184,8 +184,8 @@ export function ToolCard({ toolCall, conversationId }: ToolCardProps) {
               onClick={() => conversationId && approveTool(conversationId)}
               disabled={!conversationId}
               className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-medium
-                bg-halo-success/15 text-halo-success rounded-xl
-                hover:bg-halo-success/25 active:bg-halo-success/35
+                bg-kite-success/15 text-kite-success rounded-xl
+                hover:bg-kite-success/25 active:bg-kite-success/35
                 transition-all duration-200
                 disabled:opacity-50 disabled:cursor-not-allowed"
             >

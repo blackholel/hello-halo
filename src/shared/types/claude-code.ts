@@ -46,7 +46,7 @@ export interface HookCommand {
 export interface PluginsConfig {
   enabled?: boolean           // Default: true
   globalPaths?: string[]      // Additional global plugin paths
-  loadDefaultPaths?: boolean  // Load default paths (~/.halo/plugins/, ~/.halo/skills/) - Default: true
+  loadDefaultPaths?: boolean  // Load default paths (~/.kite/plugins/, ~/.kite/skills/) - Default: true
 }
 
 // ============================================
@@ -76,12 +76,12 @@ export interface ClaudeCodeConfig {
   skillsLazyLoad?: boolean
   enableSystemSkills?: boolean    // Load ~/.claude/skills/ - Default: false
   /**
-   * @deprecated No longer needed. CLAUDE_CONFIG_DIR=~/.halo/ provides isolation.
+   * @deprecated No longer needed. CLAUDE_CONFIG_DIR=~/.kite/ provides isolation.
    * Kept for backward compatibility but ignored.
    */
   enableUserSettings?: boolean
   /**
-   * @deprecated No longer needed. CLAUDE_CONFIG_DIR=~/.halo/ provides isolation.
+   * @deprecated No longer needed. CLAUDE_CONFIG_DIR=~/.kite/ provides isolation.
    * Kept for backward compatibility but ignored.
    */
   enableProjectSettings?: boolean

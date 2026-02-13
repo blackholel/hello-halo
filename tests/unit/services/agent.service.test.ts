@@ -2,10 +2,10 @@
  * Agent Service Tests - CLAUDE_CONFIG_DIR and settingSources
  *
  * Tests for the configuration isolation mechanism:
- * - CLAUDE_CONFIG_DIR should be set to ~/.halo/ in SDK env
+ * - CLAUDE_CONFIG_DIR should be set to ~/.kite/ in SDK env
  * - settingSources should return ['user', 'project'] by default
  *
- * These tests verify that Halo uses ~/.halo/ as its config directory
+ * These tests verify that Kite uses ~/.kite/ as its config directory
  * instead of ~/.claude/, providing complete isolation from system Claude Code.
  */
 
@@ -47,7 +47,7 @@ vi.mock('../../../src/main/services/config.service', () => ({
     onboarding: { completed: true },
     isFirstLaunch: false
   })),
-  getHaloDir: vi.fn(() => join(homedir(), '.halo')),
+  getKiteDir: vi.fn(() => join(homedir(), '.kite')),
   getTempSpacePath: vi.fn(() => '/mock/temp'),
   onApiConfigChange: vi.fn(() => () => {})
 }))
@@ -121,14 +121,14 @@ describe('Agent Service - CLAUDE_CONFIG_DIR', () => {
   })
 
   describe('buildSdkOptions env.CLAUDE_CONFIG_DIR', () => {
-    it('should set CLAUDE_CONFIG_DIR to ~/.halo/ in env', () => {
+    it('should set CLAUDE_CONFIG_DIR to ~/.kite/ in env', () => {
       // This test verifies that the SDK options include CLAUDE_CONFIG_DIR
-      // pointing to ~/.halo/ so SDK loads config from there instead of ~/.claude/
+      // pointing to ~/.kite/ so SDK loads config from there instead of ~/.claude/
 
       const env = _testBuildSdkOptionsEnv()
 
       expect(env.CLAUDE_CONFIG_DIR).toBeDefined()
-      expect(env.CLAUDE_CONFIG_DIR).toBe(join(homedir(), '.halo'))
+      expect(env.CLAUDE_CONFIG_DIR).toBe(join(homedir(), '.kite'))
     })
 
     it('should NOT point CLAUDE_CONFIG_DIR to ~/.claude/', () => {
@@ -140,8 +140,8 @@ describe('Agent Service - CLAUDE_CONFIG_DIR', () => {
 
   describe('buildSettingSources', () => {
     it('should return ["user", "project"] by default', () => {
-      // When CLAUDE_CONFIG_DIR is set to ~/.halo/:
-      // - 'user' loads from ~/.halo/ (skills, commands, agents, settings)
+      // When CLAUDE_CONFIG_DIR is set to ~/.kite/:
+      // - 'user' loads from ~/.kite/ (skills, commands, agents, settings)
       // - 'project' loads from {workDir}/.claude/ (project-level config)
 
       const sources = _testBuildSettingSources('/test/workspace')
@@ -166,8 +166,8 @@ describe('Agent Service - CLAUDE_CONFIG_DIR', () => {
       expect(sources).toEqual(['user'])
     })
 
-    it('should always include "user" source (for ~/.halo/ loading)', () => {
-      // 'user' source is always included because it now points to ~/.halo/
+    it('should always include "user" source (for ~/.kite/ loading)', () => {
+      // 'user' source is always included because it now points to ~/.kite/
       // via CLAUDE_CONFIG_DIR environment variable
 
       const sources = _testBuildSettingSources('/test/workspace')
@@ -178,16 +178,16 @@ describe('Agent Service - CLAUDE_CONFIG_DIR', () => {
 })
 
 describe('Agent Service - Configuration Isolation', () => {
-  it('should use ~/.halo/ as the config directory via CLAUDE_CONFIG_DIR', () => {
+  it('should use ~/.kite/ as the config directory via CLAUDE_CONFIG_DIR', () => {
     const env = _testBuildSdkOptionsEnv()
 
-    // Should point to ~/.halo/, not ~/.claude/
+    // Should point to ~/.kite/, not ~/.claude/
     expect(env.CLAUDE_CONFIG_DIR).not.toContain('.claude')
-    expect(env.CLAUDE_CONFIG_DIR).toContain('.halo')
+    expect(env.CLAUDE_CONFIG_DIR).toContain('.kite')
   })
 
   it('should enable user and project settings by default', () => {
-    // With CLAUDE_CONFIG_DIR=~/.halo/, enabling 'user' source loads from ~/.halo/
+    // With CLAUDE_CONFIG_DIR=~/.kite/, enabling 'user' source loads from ~/.kite/
     // This is the key change: we no longer need enableUserSettings flag
 
     const sources = _testBuildSettingSources('/test/workspace')

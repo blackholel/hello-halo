@@ -15,7 +15,7 @@ import {
   getInstalledPluginPaths,
   clearPluginsCache
 } from '../../../src/main/services/plugins.service'
-import { getHaloDir } from '../../../src/main/services/config.service'
+import { getKiteDir } from '../../../src/main/services/config.service'
 
 describe('plugins.service', () => {
   beforeEach(() => {
@@ -23,10 +23,10 @@ describe('plugins.service', () => {
   })
 
   describe('getInstalledPluginPaths', () => {
-    it('should return plugin paths from ~/.halo/plugins/installed_plugins.json', () => {
+    it('should return plugin paths from ~/.kite/plugins/installed_plugins.json', () => {
       const testDir = getTestDir()
-      const haloDir = join(testDir, '.halo')
-      const pluginsDir = join(haloDir, 'plugins')
+      const kiteDir = join(testDir, '.kite')
+      const pluginsDir = join(kiteDir, 'plugins')
       const cacheDir = join(pluginsDir, 'cache', 'test-marketplace', 'test-plugin', '1.0.0')
 
       // Create directories
@@ -53,30 +53,30 @@ describe('plugins.service', () => {
       expect(paths).toContain(cacheDir)
     })
 
-    it('should merge plugins from both ~/.halo/ and ~/.claude/ registries', () => {
+    it('should merge plugins from both ~/.kite/ and ~/.claude/ registries', () => {
       // This test verifies that plugins from BOTH registries are loaded
       const testDir = getTestDir()
 
-      // Setup Halo registry
-      const haloDir = join(testDir, '.halo')
-      const haloPluginsDir = join(haloDir, 'plugins')
-      const haloCacheDir = join(haloPluginsDir, 'cache', 'halo-marketplace', 'halo-plugin', '1.0.0')
-      fs.mkdirSync(haloPluginsDir, { recursive: true })
-      fs.mkdirSync(haloCacheDir, { recursive: true })
+      // Setup Kite registry
+      const kiteDir = join(testDir, '.kite')
+      const kitePluginsDir = join(kiteDir, 'plugins')
+      const kiteCacheDir = join(kitePluginsDir, 'cache', 'kite-marketplace', 'kite-plugin', '1.0.0')
+      fs.mkdirSync(kitePluginsDir, { recursive: true })
+      fs.mkdirSync(kiteCacheDir, { recursive: true })
 
-      const haloRegistry = {
+      const kiteRegistry = {
         version: 2,
         plugins: {
-          'halo-plugin@halo-marketplace': [{
+          'kite-plugin@kite-marketplace': [{
             scope: 'user',
-            installPath: haloCacheDir,
+            installPath: kiteCacheDir,
             version: '1.0.0',
             installedAt: '2024-01-01T00:00:00Z',
             lastUpdated: '2024-01-01T00:00:00Z'
           }]
         }
       }
-      fs.writeFileSync(join(haloPluginsDir, 'installed_plugins.json'), JSON.stringify(haloRegistry))
+      fs.writeFileSync(join(kitePluginsDir, 'installed_plugins.json'), JSON.stringify(kiteRegistry))
 
       // Setup Claude registry
       const claudeDir = join(testDir, '.claude')
@@ -102,14 +102,14 @@ describe('plugins.service', () => {
       const paths = getInstalledPluginPaths()
 
       // Should contain plugins from BOTH registries
-      expect(paths).toContain(haloCacheDir)
+      expect(paths).toContain(kiteCacheDir)
       expect(paths).toContain(claudeCacheDir)
       expect(paths).toHaveLength(2)
     })
 
     it('should deduplicate plugins that exist in both registries', () => {
       // Same plugin in both registries should only appear once
-      // Halo registry takes precedence
+      // Kite registry takes precedence
       const testDir = getTestDir()
 
       // Shared plugin path (in claude directory, but referenced by both)
@@ -125,18 +125,18 @@ describe('plugins.service', () => {
         lastUpdated: '2024-01-01T00:00:00Z'
       }
 
-      // Setup Halo registry with shared plugin
-      const haloDir = join(testDir, '.halo')
-      const haloPluginsDir = join(haloDir, 'plugins')
-      fs.mkdirSync(haloPluginsDir, { recursive: true })
+      // Setup Kite registry with shared plugin
+      const kiteDir = join(testDir, '.kite')
+      const kitePluginsDir = join(kiteDir, 'plugins')
+      fs.mkdirSync(kitePluginsDir, { recursive: true })
 
-      const haloRegistry = {
+      const kiteRegistry = {
         version: 2,
         plugins: {
           'shared-plugin@shared-market': [sharedPlugin]
         }
       }
-      fs.writeFileSync(join(haloPluginsDir, 'installed_plugins.json'), JSON.stringify(haloRegistry))
+      fs.writeFileSync(join(kitePluginsDir, 'installed_plugins.json'), JSON.stringify(kiteRegistry))
 
       // Setup Claude registry with same shared plugin
       const claudePluginsDir = join(claudeDir, 'plugins')
@@ -156,10 +156,10 @@ describe('plugins.service', () => {
       expect(paths).toContain(sharedCacheDir)
     })
 
-    it('should fallback to ~/.claude/ registry when ~/.halo/ registry does not exist', () => {
+    it('should fallback to ~/.claude/ registry when ~/.kite/ registry does not exist', () => {
       const testDir = getTestDir()
 
-      // Only setup Claude registry (no Halo registry)
+      // Only setup Claude registry (no Kite registry)
       const claudeDir = join(testDir, '.claude')
       const claudePluginsDir = join(claudeDir, 'plugins')
       const claudeCacheDir = join(claudePluginsDir, 'cache', 'claude-marketplace', 'claude-only-plugin', '1.0.0')
@@ -187,8 +187,8 @@ describe('plugins.service', () => {
 
     it('should reject symlink plugin paths for security', () => {
       const testDir = getTestDir()
-      const haloDir = join(testDir, '.halo')
-      const pluginsDir = join(haloDir, 'plugins')
+      const kiteDir = join(testDir, '.kite')
+      const pluginsDir = join(kiteDir, 'plugins')
 
       // Create a real directory and a symlink to it
       const realDir = join(testDir, 'real-plugin')
@@ -230,8 +230,8 @@ describe('plugins.service', () => {
   describe('loadInstalledPlugins', () => {
     it('should parse plugin full name correctly', () => {
       const testDir = getTestDir()
-      const haloDir = join(testDir, '.halo')
-      const pluginsDir = join(haloDir, 'plugins')
+      const kiteDir = join(testDir, '.kite')
+      const pluginsDir = join(kiteDir, 'plugins')
       const cacheDir = join(pluginsDir, 'cache', 'my-marketplace', 'my-plugin', '1.0.0')
 
       fs.mkdirSync(pluginsDir, { recursive: true })

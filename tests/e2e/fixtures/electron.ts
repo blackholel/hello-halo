@@ -2,12 +2,12 @@
  * Electron App Fixture
  *
  * Provides a reusable fixture for launching and interacting with
- * the Halo Electron application in E2E tests.
+ * the Kite Electron application in E2E tests.
  *
  * Environment Variables:
- *   HALO_TEST_API_KEY   - API key for testing (required for chat tests)
- *   HALO_TEST_API_URL   - API URL (default: https://api.anthropic.com)
- *   HALO_TEST_MODEL     - Model to use (default: claude-haiku-4-5-20251001)
+ *   KITE_TEST_API_KEY   - API key for testing (required for chat tests)
+ *   KITE_TEST_API_URL   - API URL (default: https://api.anthropic.com)
+ *   KITE_TEST_MODEL     - Model to use (default: claude-haiku-4-5-20251001)
  */
 
 import { test as base, ElectronApplication, Page } from '@playwright/test'
@@ -15,15 +15,16 @@ import { _electron as electron } from 'playwright'
 import path from 'path'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
+import { createRequire } from 'module'
 
 // ESM compatibility: __dirname is not available in ES modules
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 // Test configuration from environment variables
-const TEST_API_KEY = process.env.HALO_TEST_API_KEY || ''
-const TEST_API_URL = process.env.HALO_TEST_API_URL || 'https://api.anthropic.com'
-const TEST_MODEL = process.env.HALO_TEST_MODEL || 'claude-haiku-4-5-20251001'
+const TEST_API_KEY = process.env.KITE_TEST_API_KEY || ''
+const TEST_API_URL = process.env.KITE_TEST_API_URL || 'https://api.anthropic.com'
+const TEST_MODEL = process.env.KITE_TEST_MODEL || 'claude-haiku-4-5-20251001'
 
 // Types for the fixture
 interface ElectronFixtures {
@@ -31,37 +32,53 @@ interface ElectronFixtures {
   window: Page
 }
 
+interface LaunchTarget {
+  executablePath: string
+  args: string[]
+  source: 'packaged' | 'local-electron'
+}
+
 /**
  * Get the path to the built application
  */
-function getAppPath(): string {
+function getAppPath(): LaunchTarget {
   const projectRoot = path.resolve(__dirname, '../../..')
 
   if (process.platform === 'darwin') {
     // macOS: Check for arm64 first
-    const arm64Path = path.join(projectRoot, 'dist/mac-arm64/Halo.app/Contents/MacOS/Halo')
-    const x64Path = path.join(projectRoot, 'dist/mac/Halo.app/Contents/MacOS/Halo')
+    const arm64Path = path.join(projectRoot, 'dist/mac-arm64/Kite.app/Contents/MacOS/Kite')
+    const x64Path = path.join(projectRoot, 'dist/mac/Kite.app/Contents/MacOS/Kite')
 
     if (fs.existsSync(arm64Path)) {
-      return arm64Path
+      return { executablePath: arm64Path, args: [], source: 'packaged' }
     }
     if (fs.existsSync(x64Path)) {
-      return x64Path
+      return { executablePath: x64Path, args: [], source: 'packaged' }
     }
-
-    throw new Error('Built app not found. Run "npm run build && npm run build:mac" first.')
   } else if (process.platform === 'win32') {
-    const winPath = path.join(projectRoot, 'dist/win-unpacked/Halo.exe')
+    const winPath = path.join(projectRoot, 'dist/win-unpacked/Kite.exe')
     if (fs.existsSync(winPath)) {
-      return winPath
+      return { executablePath: winPath, args: [], source: 'packaged' }
     }
-    throw new Error('Built app not found. Run "npm run build && npm run build:win" first.')
   } else {
-    const linuxPath = path.join(projectRoot, 'dist/linux-unpacked/halo')
+    const linuxPath = path.join(projectRoot, 'dist/linux-unpacked/kite')
     if (fs.existsSync(linuxPath)) {
-      return linuxPath
+      return { executablePath: linuxPath, args: [], source: 'packaged' }
     }
-    throw new Error('Built app not found. Run "npm run build && npm run build:linux" first.')
+  }
+
+  // Fallback: use local Electron binary with project root as app entry.
+  // This keeps E2E runnable in environments that don't produce packaged artifacts.
+  const require = createRequire(import.meta.url)
+  const electronBinary = require('electron') as string
+  if (!electronBinary || !fs.existsSync(electronBinary)) {
+    throw new Error('Electron binary not found. Run "npm install" first.')
+  }
+
+  return {
+    executablePath: electronBinary,
+    args: [projectRoot],
+    source: 'local-electron'
   }
 }
 
@@ -75,16 +92,16 @@ function getAppPath(): string {
 function createTestConfigDir(appPath: string): string {
   const testDir = path.join(
     process.env.TMPDIR || '/tmp',
-    `halo-e2e-test-${Date.now()}`
+    `kite-e2e-test-${Date.now()}`
   )
 
   // Create directory structure
-  const haloDir = path.join(testDir, '.halo')
-  const tempDir = path.join(haloDir, 'temp')
-  const spacesDir = path.join(haloDir, 'spaces')
+  const kiteDir = path.join(testDir, '.kite')
+  const tempDir = path.join(kiteDir, 'temp')
+  const spacesDir = path.join(kiteDir, 'spaces')
 
   fs.mkdirSync(testDir, { recursive: true })
-  fs.mkdirSync(haloDir, { recursive: true })
+  fs.mkdirSync(kiteDir, { recursive: true })
   fs.mkdirSync(tempDir, { recursive: true })
   fs.mkdirSync(spacesDir, { recursive: true })
   fs.mkdirSync(path.join(tempDir, 'artifacts'), { recursive: true })
@@ -123,15 +140,15 @@ function createTestConfigDir(appPath: string): string {
   }
 
   fs.writeFileSync(
-    path.join(haloDir, 'config.json'),
+    path.join(kiteDir, 'config.json'),
     JSON.stringify(config, null, 2)
   )
 
   // Create headless-electron symlink for Claude Agent SDK
   // SDK uses this to spawn child processes without Dock icon on macOS
-  // Path: ~/Library/Application Support/Halo/headless-electron/electron-node
+  // Path: ~/Library/Application Support/Kite/headless-electron/electron-node
   if (process.platform === 'darwin') {
-    const userDataDir = path.join(testDir, 'Library', 'Application Support', 'Halo')
+    const userDataDir = path.join(testDir, 'Library', 'Application Support', 'Kite')
     const headlessDir = path.join(userDataDir, 'headless-electron')
 
     fs.mkdirSync(headlessDir, { recursive: true })
@@ -167,16 +184,17 @@ function cleanupTestConfigDir(testDir: string): void {
 export const test = base.extend<ElectronFixtures>({
   // Electron application instance
   electronApp: async ({}, use) => {
-    const appPath = getAppPath()
-    const testConfigDir = createTestConfigDir(appPath)
+    const launchTarget = getAppPath()
+    const testConfigDir = createTestConfigDir(launchTarget.executablePath)
 
-    console.log(`[E2E] Launching app: ${appPath}`)
+    console.log(`[E2E] Launch source: ${launchTarget.source}`)
+    console.log(`[E2E] Launching app: ${launchTarget.executablePath}`)
     console.log(`[E2E] Test config dir: ${testConfigDir}`)
 
     // Launch Electron app with test environment
     const app = await electron.launch({
-      executablePath: appPath,
-      args: [],
+      executablePath: launchTarget.executablePath,
+      args: launchTarget.args,
       env: {
         ...process.env,
         // Use test-specific config directory
@@ -185,7 +203,7 @@ export const test = base.extend<ElectronFixtures>({
         // Disable hardware acceleration for CI
         ELECTRON_DISABLE_GPU: '1',
         // Mark as E2E test
-        HALO_E2E_TEST: '1'
+        KITE_E2E_TEST: '1'
       }
     })
 

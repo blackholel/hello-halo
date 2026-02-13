@@ -2,28 +2,28 @@
  * Hooks Service - Manages Claude Code hooks configuration
  *
  * Hooks are loaded from multiple sources and merged:
- * 1. ~/.halo/settings.json (Claude Code compatible format)
- * 2. config.claudeCode.hooks (Halo global config)
+ * 1. ~/.kite/settings.json (Claude Code compatible format)
+ * 2. config.claudeCode.hooks (Kite global config)
  * 3. space-config.json claudeCode.hooks (Space-level config)
  */
 
 import { join } from 'path'
 import { existsSync, readFileSync } from 'fs'
-import { getConfig, getHaloDir, type HooksConfig } from './config.service'
+import { getConfig, getKiteDir, type HooksConfig } from './config.service'
 import { getSpaceConfig } from './space-config.service'
 import { FileCache } from '../utils/file-cache'
 import { listEnabledPlugins } from './plugins.service'
 
 // ============================================
-// Halo Settings Types (Claude Code compatible)
+// Kite Settings Types (Claude Code compatible)
 // ============================================
 
-interface HaloSettings {
+interface KiteSettings {
   hooks?: HooksConfig
 }
 
 // File cache for settings (mtime-based invalidation)
-const settingsCache = new FileCache<HaloSettings | null>()
+const settingsCache = new FileCache<KiteSettings | null>()
 
 const HOOK_EVENT_TYPES: (keyof HooksConfig)[] = [
   'PreToolUse',
@@ -42,16 +42,16 @@ const HOOK_EVENT_TYPES: (keyof HooksConfig)[] = [
 ]
 
 /**
- * Get the path to Halo settings file
+ * Get the path to Kite settings file
  */
 function getSettingsPath(): string {
-  return join(getHaloDir(), 'settings.json')
+  return join(getKiteDir(), 'settings.json')
 }
 
 /**
- * Load hooks from ~/.halo/settings.json
+ * Load hooks from ~/.kite/settings.json
  */
-function loadHaloSettingsHooks(): HooksConfig | undefined {
+function loadKiteSettingsHooks(): HooksConfig | undefined {
   const settingsPath = getSettingsPath()
 
   const settings = settingsCache.get(settingsPath, () => {
@@ -61,7 +61,7 @@ function loadHaloSettingsHooks(): HooksConfig | undefined {
 
     try {
       const content = readFileSync(settingsPath, 'utf-8')
-      const parsed = JSON.parse(content) as HaloSettings
+      const parsed = JSON.parse(content) as KiteSettings
       if (parsed.hooks) {
         console.log('[Hooks] Loaded hooks from settings.json')
       }
@@ -183,7 +183,7 @@ export function buildHooksConfig(workDir: string): HooksConfig | undefined {
     return undefined
   }
 
-  const settingsHooks = loadHaloSettingsHooks()
+  const settingsHooks = loadKiteSettingsHooks()
   const globalHooks = config.claudeCode?.hooks
   const spaceHooks = spaceConfig?.claudeCode?.hooks
   const pluginHooks = loadPluginHooks()
@@ -201,7 +201,7 @@ export function buildHooksConfig(workDir: string): HooksConfig | undefined {
 }
 
 /**
- * Convert Halo hooks config to SDK format
+ * Convert Kite hooks config to SDK format
  */
 export function convertToSdkHooksFormat(hooks: HooksConfig | undefined): Record<string, unknown> | undefined {
   if (!hooks) return undefined
@@ -234,7 +234,7 @@ export function getAllHooks(workDir?: string): {
   space: HooksConfig | undefined
   merged: HooksConfig | undefined
 } {
-  const settingsHooks = loadHaloSettingsHooks()
+  const settingsHooks = loadKiteSettingsHooks()
   const config = getConfig()
   const globalHooks = config.claudeCode?.hooks
   const spaceHooks = workDir ? getSpaceConfig(workDir)?.claudeCode?.hooks : undefined

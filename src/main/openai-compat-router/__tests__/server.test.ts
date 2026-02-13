@@ -64,7 +64,7 @@ describe('API Type Resolution', () => {
 
     beforeEach(() => {
       process.env = { ...originalEnv }
-      delete process.env.HALO_OPENAI_FORCE_STREAM
+      delete process.env.KITE_OPENAI_FORCE_STREAM
     })
 
     afterEach(() => {
@@ -76,22 +76,22 @@ describe('API Type Resolution', () => {
     })
 
     it('should return true for "1"', () => {
-      process.env.HALO_OPENAI_FORCE_STREAM = '1'
+      process.env.KITE_OPENAI_FORCE_STREAM = '1'
       expect(shouldForceStream()).toBe(true)
     })
 
     it('should return true for "true"', () => {
-      process.env.HALO_OPENAI_FORCE_STREAM = 'true'
+      process.env.KITE_OPENAI_FORCE_STREAM = 'true'
       expect(shouldForceStream()).toBe(true)
     })
 
     it('should return true for "yes"', () => {
-      process.env.HALO_OPENAI_FORCE_STREAM = 'yes'
+      process.env.KITE_OPENAI_FORCE_STREAM = 'yes'
       expect(shouldForceStream()).toBe(true)
     })
 
     it('should return false for other values', () => {
-      process.env.HALO_OPENAI_FORCE_STREAM = 'false'
+      process.env.KITE_OPENAI_FORCE_STREAM = 'false'
       expect(shouldForceStream()).toBe(false)
     })
   })

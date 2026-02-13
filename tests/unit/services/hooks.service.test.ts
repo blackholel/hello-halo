@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // Mock config.service
 vi.mock('../../../src/main/services/config.service', () => ({
   getConfig: vi.fn(),
-  getHaloDir: vi.fn(() => '/home/user/.halo')
+  getKiteDir: vi.fn(() => '/home/user/.kite')
 }))
 
 // Mock space-config.service
@@ -189,7 +189,7 @@ describe('hooks.service', () => {
       expect(result).toBeUndefined()
     })
 
-    it('should convert Halo hooks to SDK format', () => {
+    it('should convert Kite hooks to SDK format', () => {
       const hooks: HooksConfig = {
         PreToolUse: [{
           matcher: 'Bash',

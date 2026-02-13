@@ -1,7 +1,7 @@
 /**
  * Performance Monitoring Module
  *
- * Developer tool for diagnosing performance issues in Halo.
+ * Developer tool for diagnosing performance issues in Kite.
  *
  * Usage in main process:
  *   import { perfService } from './services/perf'

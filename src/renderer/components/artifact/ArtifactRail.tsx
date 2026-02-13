@@ -25,7 +25,7 @@ import { useTranslation } from '../../i18n'
 const isWebMode = api.isRemoteMode()
 
 // Storage keys
-const VIEW_MODE_STORAGE_KEY = 'halo:artifact-view-mode'
+const VIEW_MODE_STORAGE_KEY = 'kite:artifact-view-mode'
 
 // Width constraints (in pixels) - Desktop only
 const MIN_WIDTH = 180
@@ -258,7 +258,7 @@ export function ArtifactRail({
             </div>
           ) : artifacts.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center px-2">
-              <div className="w-12 h-12 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center mb-3 halo-breathe">
+              <div className="w-12 h-12 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center mb-3 kite-breathe">
                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-transparent" />
               </div>
               <p className="text-xs text-muted-foreground">

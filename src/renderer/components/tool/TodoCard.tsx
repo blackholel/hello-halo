@@ -136,7 +136,7 @@ export function TodoCard({ todos }: TodoCardProps) {
         {stats.total > 0 && (
           <div className="h-0.5 bg-secondary/20">
             <div
-              className="h-full bg-halo-success/70 transition-all duration-500 ease-out rounded-full"
+              className="h-full bg-kite-success/70 transition-all duration-500 ease-out rounded-full"
               style={{ width: `${stats.progress}%` }}
             />
           </div>
