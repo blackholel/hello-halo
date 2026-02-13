@@ -63,9 +63,21 @@ export function ToolCard({ toolCall, conversationId }: ToolCardProps) {
       className: 'tool-waiting',
       color: 'text-yellow-500',
     },
+    cancelled: {
+      icon: AlertTriangle,
+      text: t('Cancelled'),
+      className: 'tool-pending',
+      color: 'text-muted-foreground',
+    },
+    unknown: {
+      icon: AlertTriangle,
+      text: t('Unknown'),
+      className: 'tool-pending',
+      color: 'text-muted-foreground',
+    },
   } as const
 
-  const status = statusConfig[toolCall.status] || statusConfig.pending
+  const status = statusConfig[toolCall.status] || statusConfig.unknown
   const StatusIcon = status.icon
 
   // Tool name to display label mapping

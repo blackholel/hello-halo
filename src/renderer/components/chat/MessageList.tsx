@@ -22,9 +22,17 @@ import { SubAgentCard } from './SubAgentCard'
 import { SkillCard } from './SkillCard'
 import { TaskPanel } from '../task'
 import { useTaskStore } from '../../stores/task.store'
-import type { Message, Thought, CompactInfo, ParallelGroup } from '../../types'
+import type { Message, Thought, CompactInfo, ParallelGroup, ToolStatus } from '../../types'
 import { useTranslation } from '../../i18n'
 import { buildTimelineSegments, type TimelineSegment } from '../../utils/thought-utils'
+
+interface AvailableToolsSnapshot {
+  runId: string | null
+  snapshotVersion: number
+  emittedAt: string | null
+  tools: string[]
+  toolCount: number
+}
 
 interface MessageListProps {
   messages: Message[]
@@ -40,6 +48,8 @@ interface MessageListProps {
   textBlockVersion?: number  // Increments on each new text block (for StreamingBubble reset)
   workDir?: string  // For skill suggestion card creation
   onExecutePlan?: (planContent: string) => void  // Callback when "Execute Plan" button is clicked
+  toolStatusById?: Record<string, ToolStatus>
+  availableToolsSnapshot?: AvailableToolsSnapshot
 }
 
 /**
@@ -272,9 +282,15 @@ export function MessageList({
   isCompact = false,
   textBlockVersion = 0,
   workDir,
-  onExecutePlan
+  onExecutePlan,
+  toolStatusById = {},
+  availableToolsSnapshot
 }: MessageListProps) {
   const { t } = useTranslation()
+
+  const isRunningLikeStatus = (status?: ToolStatus): boolean => {
+    return status === 'pending' || status === 'running' || status === 'waiting_approval'
+  }
 
   // Filter out empty assistant placeholder message during generation
   // (Backend adds empty assistant message as placeholder, we show streaming content instead)
@@ -305,8 +321,13 @@ export function MessageList({
 
   // Check if any sub-agent is currently running (for isThinking state)
   const hasRunningSubAgent = useMemo(() => {
-    return timelineSegments.some(seg => seg.type === 'subagent' && seg.isRunning)
-  }, [timelineSegments])
+    return timelineSegments.some((seg) => {
+      if (seg.type !== 'subagent') return false
+      const status = toolStatusById[seg.agentId]
+      if (status) return isRunningLikeStatus(status)
+      return seg.isRunning
+    })
+  }, [timelineSegments, toolStatusById])
 
   // Extract real-time browser tool calls from streaming thoughts
   // This enables BrowserTaskCard to show operations as they happen
@@ -320,7 +341,7 @@ export function MessageList({
       }
     }
 
-    const calls: Array<{id: string; name: string; status: 'success' | 'running'; input: Record<string, unknown>}> = []
+    const calls: Array<{id: string; name: string; status: ToolStatus; input: Record<string, unknown>}> = []
     for (const t of thoughts) {
       // Skip sub-agent thoughts
       if (t.parentToolUseId != null) continue
@@ -332,12 +353,59 @@ export function MessageList({
       calls.push({
         id: t.id,
         name: t.toolName,
-        status: resultIds.has(t.id) ? 'success' : 'running',
+        status: toolStatusById[t.id] || (resultIds.has(t.id) ? 'success' : 'running'),
         input: t.toolInput || {},
       })
     }
     return calls
-  }, [thoughts])
+  }, [thoughts, toolStatusById])
+
+  const runSummary = useMemo(() => {
+    const statuses = Object.values(toolStatusById)
+    if (statuses.length === 0 && !availableToolsSnapshot) {
+      return null
+    }
+
+    let running = 0
+    let success = 0
+    let error = 0
+    let cancelled = 0
+    let unknown = 0
+    for (const status of statuses) {
+      switch (status) {
+        case 'pending':
+        case 'running':
+        case 'waiting_approval':
+          running += 1
+          break
+        case 'success':
+          success += 1
+          break
+        case 'error':
+          error += 1
+          break
+        case 'cancelled':
+          cancelled += 1
+          break
+        case 'unknown':
+          unknown += 1
+          break
+        default:
+          unknown += 1
+          break
+      }
+    }
+
+    return {
+      availableTools: availableToolsSnapshot?.toolCount ?? 0,
+      totalCalls: statuses.length,
+      running,
+      success,
+      error,
+      cancelled,
+      unknown
+    }
+  }, [toolStatusById, availableToolsSnapshot])
 
   // Update global task store when thoughts change (for TaskPanel)
   const updateTasksFromThoughts = useTaskStore(state => state.updateTasksFromThoughts)
@@ -360,6 +428,9 @@ export function MessageList({
         const previousCost = getPreviousCost(index)
         // Show collapsed thoughts ABOVE assistant messages, in same container for consistent width
         if (message.role === 'assistant' && message.thoughts && message.thoughts.length > 0) {
+          const messageToolStatusById = Object.fromEntries(
+            (message.toolCalls || []).map((toolCall) => [toolCall.id, toolCall.status])
+          ) as Record<string, ToolStatus>
           return (
             <div key={message.id} className="flex justify-start">
               {/* Fixed width container - prevents width jumping when content changes */}
@@ -367,6 +438,7 @@ export function MessageList({
                 {/* Thought process above the message (completed mode = collapsed by default) */}
                 <ThoughtProcess
                   thoughts={message.thoughts}
+                  toolStatusById={messageToolStatusById}
                   isThinking={false}
                   mode="completed"
                   defaultExpanded={false}
@@ -386,6 +458,22 @@ export function MessageList({
         <div className="flex justify-start animate-fade-in">
           {/* Fixed width - same as completed messages */}
           <div className="w-[85%] relative">
+            {runSummary && (
+              <div className="mb-2 rounded-xl border border-border/30 bg-secondary/10 px-3 py-2">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                  <span>{t('Available tools')}: {runSummary.availableTools}</span>
+                  <span>{t('Calls')}: {runSummary.totalCalls}</span>
+                  <span>{t('Running')}: {runSummary.running}</span>
+                  <span>{t('Success')}: {runSummary.success}</span>
+                  <span>{t('Error')}: {runSummary.error}</span>
+                  <span>{t('Cancelled')}: {runSummary.cancelled}</span>
+                  {runSummary.unknown > 0 && (
+                    <span>{t('Unknown')}: {runSummary.unknown}</span>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Render timeline segments in order (thoughts, skills, sub-agents interleaved) */}
             {timelineSegments.map((segment, index) => {
               const isLastSegment = index === timelineSegments.length - 1
@@ -402,6 +490,7 @@ export function MessageList({
                       key={segment.id}
                       thoughts={segment.thoughts}
                       parallelGroups={parallelGroups}
+                      toolStatusById={toolStatusById}
                       isThinking={showThinking}
                       mode="realtime"
                     />
@@ -428,8 +517,19 @@ export function MessageList({
                       description={segment.description}
                       subagentType={segment.subagentType}
                       thoughts={segment.thoughts}
-                      isRunning={segment.isRunning}
-                      hasError={segment.hasError}
+                      toolStatusById={toolStatusById}
+                      isRunning={
+                        toolStatusById[segment.agentId]
+                          ? (toolStatusById[segment.agentId] === 'pending'
+                            || toolStatusById[segment.agentId] === 'running'
+                            || toolStatusById[segment.agentId] === 'waiting_approval')
+                          : segment.isRunning
+                      }
+                      hasError={
+                        toolStatusById[segment.agentId]
+                          ? toolStatusById[segment.agentId] === 'error'
+                          : segment.hasError
+                      }
                     />
                   )
 
@@ -443,6 +543,7 @@ export function MessageList({
               <ThoughtProcess
                 thoughts={[]}
                 parallelGroups={parallelGroups}
+                toolStatusById={toolStatusById}
                 isThinking={true}
                 mode="realtime"
               />
@@ -486,7 +587,42 @@ export function MessageList({
       {!isGenerating && hasTasks && (
         <div className="flex justify-start animate-fade-in">
           <div className="w-[85%]">
+            {runSummary && (
+              <div className="mb-2 rounded-xl border border-border/30 bg-secondary/10 px-3 py-2">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                  <span>{t('Available tools')}: {runSummary.availableTools}</span>
+                  <span>{t('Calls')}: {runSummary.totalCalls}</span>
+                  <span>{t('Running')}: {runSummary.running}</span>
+                  <span>{t('Success')}: {runSummary.success}</span>
+                  <span>{t('Error')}: {runSummary.error}</span>
+                  <span>{t('Cancelled')}: {runSummary.cancelled}</span>
+                  {runSummary.unknown > 0 && (
+                    <span>{t('Unknown')}: {runSummary.unknown}</span>
+                  )}
+                </div>
+              </div>
+            )}
             <TaskPanel defaultExpanded={true} />
+          </div>
+        </div>
+      )}
+
+      {!isGenerating && !hasTasks && runSummary && (
+        <div className="flex justify-start animate-fade-in">
+          <div className="w-[85%]">
+            <div className="mb-2 rounded-xl border border-border/30 bg-secondary/10 px-3 py-2">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                <span>{t('Available tools')}: {runSummary.availableTools}</span>
+                <span>{t('Calls')}: {runSummary.totalCalls}</span>
+                <span>{t('Running')}: {runSummary.running}</span>
+                <span>{t('Success')}: {runSummary.success}</span>
+                <span>{t('Error')}: {runSummary.error}</span>
+                <span>{t('Cancelled')}: {runSummary.cancelled}</span>
+                {runSummary.unknown > 0 && (
+                  <span>{t('Unknown')}: {runSummary.unknown}</span>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

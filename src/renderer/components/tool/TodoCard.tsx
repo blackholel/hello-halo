@@ -14,13 +14,14 @@ import {
   CheckCircle2,
   Loader2,
   ListTodo,
+  PauseCircle,
 } from 'lucide-react'
 import { useTranslation } from '../../i18n'
 
 // Note: Loader2 is used for in_progress task icon animation
 
 // Todo item status from Claude Code SDK
-type TodoStatus = 'pending' | 'in_progress' | 'completed'
+type TodoStatus = 'pending' | 'in_progress' | 'completed' | 'paused'
 
 interface TodoItem {
   content: string
@@ -30,6 +31,19 @@ interface TodoItem {
 
 interface TodoCardProps {
   todos: TodoItem[]
+}
+
+function normalizeTodoStatus(status: unknown): TodoStatus {
+  switch (status) {
+    case 'pending':
+    case 'in_progress':
+    case 'completed':
+    case 'paused':
+      return status
+    default:
+      console.warn('[TodoCard] Unknown todo status, fallback to pending:', status)
+      return 'pending'
+  }
 }
 
 // Get icon and style for todo status
@@ -56,6 +70,20 @@ function getTodoStatusDisplay(status: TodoStatus) {
         color: 'text-green-500',
         bgColor: 'bg-green-500/10',
         textStyle: 'text-muted-foreground line-through',
+      }
+    case 'paused':
+      return {
+        Icon: PauseCircle,
+        color: 'text-amber-500',
+        bgColor: 'bg-amber-500/10',
+        textStyle: 'text-foreground/80',
+      }
+    default:
+      return {
+        Icon: Circle,
+        color: 'text-muted-foreground/50',
+        bgColor: 'bg-transparent',
+        textStyle: 'text-muted-foreground',
       }
   }
 }
@@ -101,9 +129,10 @@ export function TodoCard({ todos }: TodoCardProps) {
     const completed = todos.filter(t => t.status === 'completed').length
     const inProgress = todos.filter(t => t.status === 'in_progress').length
     const pending = todos.filter(t => t.status === 'pending').length
+    const paused = todos.filter(t => t.status === 'paused').length
     const progress = total > 0 ? Math.round((completed / total) * 100) : 0
 
-    return { total, completed, inProgress, pending, progress }
+    return { total, completed, inProgress, pending, paused, progress }
   }, [todos])
 
   if (todos.length === 0) {
@@ -128,6 +157,9 @@ export function TodoCard({ todos }: TodoCardProps) {
             )}
             {stats.pending > 0 && (
               <span>{t('{{count}} pending', { count: stats.pending })}</span>
+            )}
+            {stats.paused > 0 && (
+              <span className="text-amber-500">{t('{{count}} paused', { count: stats.paused })}</span>
             )}
           </div>
         </div>
@@ -168,7 +200,7 @@ export function parseTodoInput(input: Record<string, unknown>): TodoItem[] {
 
   return todos.map(t => ({
     content: t.content || '',
-    status: (t.status as TodoStatus) || 'pending',
+    status: normalizeTodoStatus(t.status),
     activeForm: t.activeForm,
   }))
 }

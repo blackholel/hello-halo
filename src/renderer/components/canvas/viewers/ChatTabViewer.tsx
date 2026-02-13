@@ -78,6 +78,8 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
     compactInfo = null,
     error = null,
     textBlockVersion = 0,
+    toolStatusById = {},
+    availableToolsSnapshot,
     pendingAskUserQuestion = null,
     failedAskUserQuestion = null
   } = session || {}
@@ -119,7 +121,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
   }, [conversationId, stopGeneration])
 
   const messages = conversation?.messages || []
-  const hasMessages = messages.length > 0 || streamingContent || isThinking
+  const hasMessages = messages.length > 0 || Boolean(streamingContent) || isThinking
 
   // Loading state
   if (!conversation && isLoadingConversation) {
@@ -173,6 +175,8 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
                 error={error}
                 isCompact={true}
                 textBlockVersion={textBlockVersion}
+                toolStatusById={toolStatusById}
+                availableToolsSnapshot={availableToolsSnapshot}
               />
               <div ref={bottomRef} />
             </>

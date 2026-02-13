@@ -7,6 +7,10 @@
 
 import type { Thought, ThoughtType, CanvasContext, ImageAttachment } from './types'
 
+interface ParseSDKMessageOptions {
+  nextLocalToolCallId?: () => string
+}
+
 /**
  * Generate a unique thought ID
  */
@@ -86,8 +90,26 @@ export function buildMessageContent(
  * Parse SDK message into a Thought object
  * Extracts parent_tool_use_id for sub-agent nesting support
  */
-export function parseSDKMessage(message: any): Thought | null {
+function resolveToolCallId(
+  rawId: unknown,
+  options?: ParseSDKMessageOptions
+): string {
+  if (typeof rawId === 'string' && rawId.trim().length > 0) {
+    return rawId
+  }
+  if (options?.nextLocalToolCallId) {
+    return options.nextLocalToolCallId()
+  }
+  return generateId()
+}
+
+/**
+ * Parse SDK message into Thought objects.
+ * Some SDK messages contain multiple content blocks, all blocks are preserved in order.
+ */
+export function parseSDKMessages(message: any, options?: ParseSDKMessageOptions): Thought[] {
   const timestamp = new Date().toISOString()
+  const thoughts: Thought[] = []
 
   // Extract parent_tool_use_id for sub-agent nesting (all message types may have this)
   const parentToolUseId = message.parent_tool_use_id ?? null
@@ -95,67 +117,73 @@ export function parseSDKMessage(message: any): Thought | null {
   // System initialization and new message types (SDK 0.2.22+)
   if (message.type === 'system') {
     if (message.subtype === 'init') {
-      return {
+      thoughts.push({
         id: generateId(),
         type: 'system',
         content: `Connected | Model: ${message.model || 'claude'}`,
         timestamp,
         parentToolUseId
-      }
+      })
+      return thoughts
     }
     // Hook started (new in 0.2.22)
     if (message.subtype === 'hook_started') {
-      return {
+      thoughts.push({
         id: `${message.hook_id || generateId()}-started`,
         type: 'system',
         content: `Hook started: ${message.hook_name} (${message.hook_event})`,
         timestamp,
         parentToolUseId
-      }
+      })
+      return thoughts
     }
     // Hook progress (new in 0.2.22)
     if (message.subtype === 'hook_progress') {
-      return {
+      thoughts.push({
         id: `${message.hook_id || generateId()}-progress`,
         type: 'system',
         content: message.output || message.stdout || `Hook progress: ${message.hook_name}`,
         timestamp,
         parentToolUseId
-      }
+      })
+      return thoughts
     }
     // Hook response (new in 0.2.22, includes outcome field)
     if (message.subtype === 'hook_response') {
       const outcome = message.outcome || 'success'
-      return {
+      thoughts.push({
         id: `${message.hook_id || generateId()}-response`,
         type: 'system',
         content: `Hook ${outcome}: ${message.hook_name}${message.output ? ` - ${message.output}` : ''}`,
         timestamp,
         parentToolUseId
-      }
+      })
+      return thoughts
     }
     // Task notification (new in 0.2.22) - background task status
     if (message.subtype === 'task_notification') {
-      return {
+      thoughts.push({
         id: `${message.task_id || generateId()}-${message.status}`,
         type: 'system',
         content: `Task ${message.status}: ${message.summary || message.task_id}`,
         timestamp,
         parentToolUseId
-      }
+      })
+      return thoughts
     }
-    return null
+    return thoughts
   }
 
   // Tool use summary (new in 0.2.22)
   if (message.type === 'tool_use_summary') {
-    return {
+    thoughts.push({
       id: generateId(),
       type: 'system',
       content: message.summary || 'Tool execution summary',
       timestamp,
       parentToolUseId
-    }
+    })
+    return thoughts
   }
 
   // Assistant messages (thinking, tool_use, text blocks)
@@ -165,19 +193,20 @@ export function parseSDKMessage(message: any): Thought | null {
       for (const block of content) {
         // Thinking blocks
         if (block.type === 'thinking') {
-          return {
+          thoughts.push({
             id: generateId(),
             type: 'thinking',
             content: block.thinking || '',
             timestamp,
             parentToolUseId
-          }
+          })
+          continue
         }
         // Tool use blocks
         if (block.type === 'tool_use') {
           const isTaskTool = block.name === 'Task'
-          const toolUseId = block.id || generateId()
-          return {
+          const toolUseId = resolveToolCallId(block.id, options)
+          thoughts.push({
             id: toolUseId,
             type: 'tool_use',
             content: isTaskTool
@@ -196,21 +225,22 @@ export function parseSDKMessage(message: any): Thought | null {
                 subagentType: block.input?.subagent_type
               }
             })
-          }
+          })
+          continue
         }
         // Text blocks
         if (block.type === 'text') {
-          return {
+          thoughts.push({
             id: generateId(),
             type: 'text',
             content: block.text || '',
             timestamp,
             parentToolUseId
-          }
+          })
         }
       }
     }
-    return null
+    return thoughts
   }
 
   // User messages (tool results or command output)
@@ -222,14 +252,15 @@ export function parseSDKMessage(message: any): Thought | null {
     if (typeof content === 'string') {
       const match = content.match(/<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/)
       if (match) {
-        return {
+        thoughts.push({
           id: generateId(),
           type: 'text', // Render as text block (will show in assistant bubble)
           content: match[1].trim(),
           timestamp,
           parentToolUseId
-        }
+        })
       }
+      return thoughts
     }
 
     // Handle tool results (array content)
@@ -239,8 +270,8 @@ export function parseSDKMessage(message: any): Thought | null {
           const isError = block.is_error || false
           const resultContent =
             typeof block.content === 'string' ? block.content : JSON.stringify(block.content)
-          const toolResultId = block.tool_use_id || generateId()
-          return {
+          const toolResultId = resolveToolCallId(block.tool_use_id, options)
+          thoughts.push({
             id: toolResultId,
             type: 'tool_result',
             content: isError ? `Tool execution failed` : `Tool execution succeeded`,
@@ -249,24 +280,33 @@ export function parseSDKMessage(message: any): Thought | null {
             isError,
             parentToolUseId,
             status: isError ? 'error' : 'success'
-          }
+          })
         }
       }
     }
-    return null
+    return thoughts
   }
 
   // Final result
   if (message.type === 'result') {
-    return {
+    thoughts.push({
       id: generateId(),
       type: 'result',
       content: message.message?.result || message.result || '',
       timestamp,
       duration: message.duration_ms,
       parentToolUseId
-    }
+    })
+    return thoughts
   }
 
-  return null
+  return thoughts
+}
+
+/**
+ * Backward-compatible single-thought parser.
+ */
+export function parseSDKMessage(message: any, options?: ParseSDKMessageOptions): Thought | null {
+  const thoughts = parseSDKMessages(message, options)
+  return thoughts.length > 0 ? thoughts[0] : null
 }

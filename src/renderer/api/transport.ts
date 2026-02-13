@@ -199,12 +199,14 @@ export function onEvent(channel: string, callback: (data: unknown) => void): () 
   if (isElectron()) {
     // Use IPC in Electron
     const methodMap: Record<string, keyof typeof window.halo> = {
+      'agent:run-start': 'onAgentRunStart',
       'agent:message': 'onAgentMessage',
       'agent:tool-call': 'onAgentToolCall',
       'agent:tool-result': 'onAgentToolResult',
       'agent:error': 'onAgentError',
       'agent:complete': 'onAgentComplete',
       'agent:thought': 'onAgentThought',
+      'agent:tools-available': 'onAgentToolsAvailable',
       'agent:mcp-status': 'onAgentMcpStatus',
       'agent:compact': 'onAgentCompact',
       'skills:changed': 'onSkillsChanged',

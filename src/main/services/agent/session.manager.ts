@@ -359,15 +359,21 @@ export function getSessionState(conversationId: string): {
   isActive: boolean
   thoughts: import('./types').Thought[]
   spaceId?: string
+  runId?: string | null
+  lifecycle?: import('./types').SessionLifecycle | 'idle'
+  terminalReason?: import('./types').SessionTerminalReason
 } {
   const session = activeSessions.get(conversationId)
   if (!session) {
-    return { isActive: false, thoughts: [] }
+    return { isActive: false, thoughts: [], runId: null, lifecycle: 'idle', terminalReason: null }
   }
   return {
     isActive: true,
     thoughts: [...session.thoughts],
-    spaceId: session.spaceId
+    spaceId: session.spaceId,
+    runId: session.runId,
+    lifecycle: session.lifecycle,
+    terminalReason: session.terminalReason
   }
 }
 

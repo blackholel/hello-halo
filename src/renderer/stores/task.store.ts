@@ -14,12 +14,26 @@
 import { create } from 'zustand'
 import type { Thought, TaskItem, TaskStatus, TaskState } from '../types'
 
+function normalizeTaskStatus(status: unknown): TaskStatus {
+  switch (status) {
+    case 'pending':
+    case 'in_progress':
+    case 'completed':
+    case 'paused':
+      return status
+    default:
+      console.warn('[TaskStore] Unknown task status, fallback to pending:', status)
+      return 'pending'
+  }
+}
+
 // Progress statistics
 export interface TaskProgress {
   total: number
   completed: number
   inProgress: number
   pending: number
+  paused: number
   percentage: number
 }
 
@@ -27,6 +41,7 @@ export interface TaskProgress {
 interface TaskStore extends TaskState {
   // Actions
   updateTasksFromThoughts: (thoughts: Thought[]) => void
+  finalizeTasksOnTerminal: (reason: 'completed' | 'stopped' | 'error' | 'no_text') => void
   linkTaskToAgent: (taskId: string, agentId: string) => void
   reset: () => void
 
@@ -78,7 +93,7 @@ export function extractTasksFromThoughts(thoughts: Thought[]): TaskItem[] {
   return input.todos.map((todo, index) => ({
     id: `${latestTodoWrite.id}-${index}`,
     content: todo.content || '',
-    status: (todo.status as TaskStatus) || 'pending',
+    status: normalizeTaskStatus(todo.status),
     activeForm: todo.activeForm,
     createdAt: now,
     updatedAt: now,
@@ -105,6 +120,31 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     })
   },
 
+  finalizeTasksOnTerminal: (reason) => {
+    if (reason !== 'stopped' && reason !== 'error' && reason !== 'no_text') {
+      return
+    }
+
+    set((state) => {
+      const tasks = state.tasks.map((task) =>
+        task.status === 'in_progress'
+          ? {
+              ...task,
+              status: 'paused' as const,
+              updatedAt: new Date().toISOString()
+            }
+          : task
+      )
+
+      const activeTask = tasks.find((task) => task.status === 'in_progress')
+      return {
+        tasks,
+        activeTaskId: activeTask?.id ?? null,
+        lastUpdated: new Date().toISOString()
+      }
+    })
+  },
+
   linkTaskToAgent: (taskId: string, agentId: string) => {
     set(state => ({
       tasks: state.tasks.map(task =>
@@ -127,6 +167,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     let completed = 0
     let inProgress = 0
     let pending = 0
+    let paused = 0
 
     for (const task of tasks) {
       switch (task.status) {
@@ -139,11 +180,14 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
         case 'pending':
           pending++
           break
+        case 'paused':
+          paused++
+          break
       }
     }
 
     const percentage = total > 0 ? Math.round((completed / total) * 100) : 0
 
-    return { total, completed, inProgress, pending, percentage }
+    return { total, completed, inProgress, pending, paused, percentage }
   }
 }))

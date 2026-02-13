@@ -50,8 +50,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     sendMessage,
     stopGeneration,
     answerQuestion,
-    dismissAskUserQuestion,
-    addMockMessage
+    dismissAskUserQuestion
   } = useChatStore()
 
   // Onboarding state
@@ -173,6 +172,8 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     compactInfo,
     error,
     textBlockVersion,
+    toolStatusById,
+    availableToolsSnapshot,
     pendingAskUserQuestion,
     failedAskUserQuestion
   } = session
@@ -288,7 +289,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
   const displayIsGenerating = isMockAnimating || isGenerating
   const displayIsThinking = isMockThinking || isThinking
   const displayIsStreaming = isStreaming  // Only real streaming (not mock)
-  const hasMessages = displayMessages.length > 0 || displayStreamingContent || displayIsThinking
+  const hasMessages = displayMessages.length > 0 || Boolean(displayStreamingContent) || displayIsThinking
   const currentConversationSpaceId = currentSpaceId
   const currentChangeSets = currentConversationId ? (changeSets.get(currentConversationId) || []) : []
   const activeChangeSet = currentChangeSets[0]
@@ -345,6 +346,8 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
                 error={error}
                 isCompact={isCompact}
                 textBlockVersion={textBlockVersion}
+                toolStatusById={toolStatusById}
+                availableToolsSnapshot={availableToolsSnapshot}
                 workDir={currentSpace?.path}
                 onExecutePlan={handleExecutePlan}
               />
