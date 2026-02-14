@@ -4,6 +4,13 @@
 
 import { contextBridge, ipcRenderer } from 'electron'
 
+interface AskUserQuestionAnswerPayload {
+  toolCallId: string
+  answersByQuestionId: Record<string, string[]>
+  skippedQuestionIds: string[]
+  runId?: string
+}
+
 // Type definitions for exposed API
 export interface HaloAPI {
   // Config
@@ -102,7 +109,10 @@ export interface HaloAPI {
   stopGeneration: (conversationId?: string) => Promise<IpcResponse>
   approveTool: (conversationId: string) => Promise<IpcResponse>
   rejectTool: (conversationId: string) => Promise<IpcResponse>
-  answerQuestion: (conversationId: string, answer: string) => Promise<IpcResponse>
+  answerQuestion: (
+    conversationId: string,
+    answer: string | AskUserQuestionAnswerPayload
+  ) => Promise<IpcResponse>
   getSessionState: (conversationId: string) => Promise<IpcResponse>
   ensureSessionWarm: (spaceId: string, conversationId: string) => Promise<IpcResponse>
   testMcpConnections: () => Promise<{ success: boolean; servers: unknown[]; error?: string }>
@@ -459,7 +469,8 @@ const api: HaloAPI = {
   stopGeneration: (conversationId) => ipcRenderer.invoke('agent:stop', conversationId),
   approveTool: (conversationId) => ipcRenderer.invoke('agent:approve-tool', conversationId),
   rejectTool: (conversationId) => ipcRenderer.invoke('agent:reject-tool', conversationId),
-  answerQuestion: (conversationId, answer) => ipcRenderer.invoke('agent:answer-question', conversationId, answer),
+  answerQuestion: (conversationId, answer) =>
+    ipcRenderer.invoke('agent:answer-question', conversationId, answer),
   getSessionState: (conversationId) => ipcRenderer.invoke('agent:get-session-state', conversationId),
   ensureSessionWarm: (spaceId, conversationId) => ipcRenderer.invoke('agent:ensure-session-warm', spaceId, conversationId),
   testMcpConnections: () => ipcRenderer.invoke('agent:test-mcp'),

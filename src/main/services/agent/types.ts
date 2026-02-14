@@ -98,6 +98,32 @@ export interface ToolCall {
   description?: string
 }
 
+export type AskUserQuestionMode = 'sdk_allow_updated_input' | 'legacy_deny_send'
+
+export interface AskUserQuestionAnswerPayload {
+  toolCallId: string
+  answersByQuestionId: Record<string, string[]>
+  skippedQuestionIds: string[]
+  runId?: string
+}
+
+export type AskUserQuestionAnswerInput = AskUserQuestionAnswerPayload | string
+
+export interface CanUseToolDecision {
+  behavior: 'allow' | 'deny'
+  updatedInput?: Record<string, unknown>
+  message?: string
+}
+
+export interface PendingAskUserQuestionContext {
+  resolve: (decision: CanUseToolDecision) => void
+  inputSnapshot: Record<string, unknown>
+  expectedToolCallId: string | null
+  runId: string
+  createdAt: number
+  mode: AskUserQuestionMode
+}
+
 export type SessionLifecycle = 'running' | 'terminal'
 export type SessionTerminalReason = 'completed' | 'stopped' | 'error' | 'no_text' | null
 
@@ -140,8 +166,9 @@ export interface SessionState {
   finalized: boolean
   toolCallSeq: number
   toolsById: Map<string, ToolCall>
+  askUserQuestionModeByToolCallId: Map<string, AskUserQuestionMode>
   pendingPermissionResolve: ((approved: boolean) => void) | null
-  pendingAskUserQuestionResolve: ((answer: string) => void) | null
+  pendingAskUserQuestion: PendingAskUserQuestionContext | null
   thoughts: Thought[]
 }
 

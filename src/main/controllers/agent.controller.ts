@@ -14,6 +14,7 @@ import {
   getSessionState as agentGetSessionState,
   testMcpConnections as agentTestMcpConnections
 } from '../services/agent'
+import type { AskUserQuestionAnswerInput } from '../services/agent'
 
 // Image attachment type for multi-modal messages
 interface ImageAttachment {
@@ -101,7 +102,7 @@ export function rejectTool(conversationId: string): ControllerResponse {
  */
 export async function answerQuestion(
   conversationId: string,
-  answer: string
+  answer: AskUserQuestionAnswerInput
 ): Promise<ControllerResponse> {
   try {
     await agentHandleAskUserQuestionResponse(conversationId, answer)

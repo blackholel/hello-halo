@@ -15,7 +15,8 @@ import {
   setMainWindow,
   sendToRenderer,
   createCanUseTool,
-  normalizeAskUserQuestionInput
+  normalizeAskUserQuestionInput,
+  buildAskUserQuestionUpdatedInput
 } from './renderer-comm'
 import { getHeadlessElectronPath } from './electron-path'
 import { resolveProvider } from './provider-resolver'
@@ -58,7 +59,9 @@ import type {
   ToolCall,
   Thought,
   SessionTerminalReason,
-  ToolCallStatus
+  ToolCallStatus,
+  AskUserQuestionAnswerInput,
+  AskUserQuestionMode
 } from './types'
 
 function trackChangeFileFromToolUse(
@@ -102,13 +105,14 @@ function isAskUserQuestionTool(name?: string): boolean {
 
 export function normalizeAskUserQuestionToolResultThought(
   thought: Thought,
-  isAskUserQuestionResult: boolean
+  isAskUserQuestionResult: boolean,
+  mode: AskUserQuestionMode | null
 ): Thought {
   if (thought.type !== 'tool_result') {
     return thought
   }
 
-  if (!isAskUserQuestionResult || !thought.isError) {
+  if (!isAskUserQuestionResult || !thought.isError || mode !== 'legacy_deny_send') {
     return thought
   }
 
@@ -175,7 +179,7 @@ function finalizeSession(params: FinalizeSessionParams): boolean {
   sessionState.terminalReason = reason
   sessionState.terminalAt = new Date().toISOString()
   sessionState.pendingPermissionResolve = null
-  sessionState.pendingAskUserQuestionResolve = null
+  sessionState.pendingAskUserQuestion = null
   const resolvedFinalContent =
     typeof finalContent === 'string' ? finalContent : sessionState.latestAssistantContent || undefined
 
@@ -347,8 +351,9 @@ export async function sendMessage(
     finalized: false,
     toolCallSeq: 0,
     toolsById: new Map<string, ToolCall>(),
+    askUserQuestionModeByToolCallId: new Map<string, AskUserQuestionMode>(),
     pendingPermissionResolve: null,
-    pendingAskUserQuestionResolve: null,
+    pendingAskUserQuestion: null,
     thoughts: [] // Initialize thoughts array for this session
   }
   setActiveSession(conversationId, sessionState)
@@ -784,12 +789,17 @@ export async function sendMessage(
               existingThought.id === thought.id &&
               isAskUserQuestionTool(existingThought.toolName)
             )
+          const askUserQuestionMode =
+            thought.type === 'tool_result'
+              ? (sessionState.askUserQuestionModeByToolCallId.get(thought.id) || null)
+              : null
           const normalizedThought = normalizeAskUserQuestionToolResultThought(
             thought,
             Boolean(
               (thought.type === 'tool_result' && isAskUserQuestionTool(existingToolForThought?.name)) ||
               askUserQuestionFromHistory
-            )
+            ),
+            askUserQuestionMode
           )
 
           // Accumulate thought in backend session (Single Source of Truth)
@@ -833,6 +843,25 @@ export async function sendMessage(
               description: isAskUserQuestion ? 'Waiting for user response' : undefined
             }
             sessionState.toolsById.set(toolCallId, toolCall)
+            if (isAskUserQuestion) {
+              const pendingAskUserQuestion = sessionState.pendingAskUserQuestion
+              if (
+                pendingAskUserQuestion &&
+                pendingAskUserQuestion.runId === runId &&
+                pendingAskUserQuestion.expectedToolCallId === null
+              ) {
+                pendingAskUserQuestion.expectedToolCallId = toolCallId
+                sessionState.askUserQuestionModeByToolCallId.set(
+                  toolCallId,
+                  pendingAskUserQuestion.mode
+                )
+              } else {
+                sessionState.askUserQuestionModeByToolCallId.set(
+                  toolCallId,
+                  'sdk_allow_updated_input'
+                )
+              }
+            }
             sendToRenderer('agent:tool-call', spaceId, conversationId, {
               runId,
               toolCallId,
@@ -853,7 +882,14 @@ export async function sendMessage(
                 existingThought.id === toolCallId &&
                 isAskUserQuestionTool(existingThought.toolName)
               )
-            const isError = isAskUserQuestionResult ? false : (normalizedThought.isError || false)
+            const askUserQuestionModeForResult = isAskUserQuestionResult
+              ? (sessionState.askUserQuestionModeByToolCallId.get(toolCallId) || null)
+              : null
+            const shouldNormalizeAskUserQuestionError =
+              isAskUserQuestionResult && askUserQuestionModeForResult === 'legacy_deny_send'
+            const isError = shouldNormalizeAskUserQuestionError
+              ? false
+              : (normalizedThought.isError || false)
             const toolOutput = normalizedThought.toolOutput || ''
             sessionState.toolsById.set(toolCallId, {
               id: toolCallId,
@@ -866,6 +902,9 @@ export async function sendMessage(
               requiresApproval: existingToolCall?.requiresApproval,
               description: existingToolCall?.description
             })
+            if (isAskUserQuestionResult) {
+              sessionState.askUserQuestionModeByToolCallId.delete(toolCallId)
+            }
 
             if (isAskUserQuestionResult) {
               console.log(
@@ -1133,7 +1172,7 @@ export async function stopGeneration(conversationId?: string): Promise<void> {
     const session = getActiveSession(conversationId)
     if (session) {
       session.pendingPermissionResolve = null
-      session.pendingAskUserQuestionResolve = null
+      session.pendingAskUserQuestion = null
       finalizeSession({
         sessionState: session,
         spaceId: session.spaceId,
@@ -1171,7 +1210,7 @@ export async function stopGeneration(conversationId?: string): Promise<void> {
       const session = getActiveSession(convId)
       if (session) {
         session.pendingPermissionResolve = null
-        session.pendingAskUserQuestionResolve = null
+        session.pendingAskUserQuestion = null
         finalizeSession({
           sessionState: session,
           spaceId: session.spaceId,
@@ -1213,16 +1252,19 @@ export function handleToolApproval(conversationId: string, approved: boolean): v
 }
 
 /**
- * Submit user answer for AskUserQuestion tool while the current turn is still running.
- * The SDK session consumes this as a normal user turn input and continues streaming.
+ * Submit user answer for AskUserQuestion while the current turn is still running.
+ * Main path resolves canUseTool with allow+updatedInput (SDK-native format).
+ * Legacy path (deny+session.send) is retained for backward compatibility only.
  */
 export async function handleAskUserQuestionResponse(
   conversationId: string,
-  answer: string
+  answerInput: AskUserQuestionAnswerInput
 ): Promise<void> {
-  const trimmedAnswer = answer.trim()
-  if (!trimmedAnswer) {
-    throw new Error('Answer cannot be empty')
+  if (
+    typeof answerInput !== 'string' &&
+    (answerInput == null || typeof answerInput !== 'object')
+  ) {
+    throw new Error('Invalid AskUserQuestion answer payload')
   }
 
   const sessionState = getActiveSession(conversationId)
@@ -1232,17 +1274,73 @@ export async function handleAskUserQuestionResponse(
     throw new Error('No active session found for this conversation')
   }
 
-  if (!sessionState.pendingAskUserQuestionResolve) {
+  if (sessionState.conversationId !== conversationId) {
+    throw new Error('Conversation mismatch for AskUserQuestion response')
+  }
+
+  if (!sessionState.pendingAskUserQuestion) {
     throw new Error('No pending AskUserQuestion found for this conversation')
   }
 
-  const resolvePendingQuestion = sessionState.pendingAskUserQuestionResolve
-  sessionState.pendingAskUserQuestionResolve = null
-  resolvePendingQuestion(trimmedAnswer)
+  const pendingAskUserQuestion = sessionState.pendingAskUserQuestion
+  if (pendingAskUserQuestion.runId !== sessionState.runId) {
+    throw new Error('Stale AskUserQuestion context for current run')
+  }
 
-  // Send the answer to the session as a new message
-  v2SessionInfo.session.send(trimmedAnswer)
+  if (typeof answerInput !== 'string') {
+    const payloadRunId = typeof answerInput.runId === 'string' ? answerInput.runId.trim() : ''
+    if (!payloadRunId) {
+      throw new Error('AskUserQuestion response must include runId')
+    }
+    if (payloadRunId !== pendingAskUserQuestion.runId) {
+      throw new Error('Run mismatch for AskUserQuestion response')
+    }
+
+    const payloadToolCallId = answerInput.toolCallId?.trim()
+    if (!payloadToolCallId) {
+      throw new Error('AskUserQuestion response must include toolCallId')
+    }
+
+    if (
+      pendingAskUserQuestion.expectedToolCallId &&
+      payloadToolCallId !== pendingAskUserQuestion.expectedToolCallId
+    ) {
+      throw new Error('toolCallId mismatch for AskUserQuestion response')
+    }
+
+    if (!pendingAskUserQuestion.expectedToolCallId) {
+      pendingAskUserQuestion.expectedToolCallId = payloadToolCallId
+      sessionState.askUserQuestionModeByToolCallId.set(payloadToolCallId, pendingAskUserQuestion.mode)
+    }
+  }
+
+  const updatedInput = buildAskUserQuestionUpdatedInput(
+    pendingAskUserQuestion.inputSnapshot,
+    answerInput
+  )
+
+  const resolvePendingQuestion = pendingAskUserQuestion.resolve
+  sessionState.pendingAskUserQuestion = null
+
+  if (pendingAskUserQuestion.mode === 'legacy_deny_send') {
+    const legacyAnswer = typeof answerInput === 'string' ? answerInput.trim() : ''
+    resolvePendingQuestion({
+      behavior: 'deny',
+      message: 'AskUserQuestion handled by Halo UI. Continue with the latest user message answer.'
+    })
+    if (legacyAnswer) {
+      v2SessionInfo.session.send(legacyAnswer)
+    }
+    return
+  }
+
+  resolvePendingQuestion({
+    behavior: 'allow',
+    updatedInput
+  })
+
+  const answers = updatedInput.answers as Record<string, string> | undefined
   console.log(
-    `[Agent][${conversationId}] AskUserQuestion answered (length=${trimmedAnswer.length})`
+    `[Agent][${conversationId}] AskUserQuestion answered via updatedInput (answers=${Object.keys(answers || {}).length})`
   )
 }

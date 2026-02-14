@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   Loader2,
   MessageSquare,
@@ -9,15 +9,16 @@ import {
   X,
   SkipForward
 } from 'lucide-react'
-import type { ToolCall } from '../../types'
+import type { AskUserQuestionAnswerPayload, ToolCall } from '../../types'
 import { useTranslation } from '../../i18n'
 
 interface AskUserQuestionPanelProps {
   toolCall: ToolCall
-  onSubmit: (answer: string) => Promise<void> | void
+  onSubmit: (answer: AskUserQuestionAnswerPayload | string) => Promise<void> | void
   isCompact?: boolean
   failureReason?: string
   submitLabel?: string
+  submitAsText?: boolean
 }
 
 interface QuestionOption {
@@ -116,7 +117,8 @@ export function AskUserQuestionPanel({
   onSubmit,
   isCompact = false,
   failureReason,
-  submitLabel
+  submitLabel,
+  submitAsText = false
 }: AskUserQuestionPanelProps) {
   const { t } = useTranslation()
   const input = toolCall.input as Record<string, unknown>
@@ -125,6 +127,7 @@ export function AskUserQuestionPanel({
   // State for multi-question navigation
   const [currentIndex, setCurrentIndex] = useState(0)
   const [selectedOptions, setSelectedOptions] = useState<Map<string, Set<string>>>(new Map())
+  const [skippedQuestionIds, setSkippedQuestionIds] = useState<Set<string>>(new Set())
   const [expandedOther, setExpandedOther] = useState<string | null>(null)
   const [otherInputs, setOtherInputs] = useState<Map<string, string>>(new Map())
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -145,8 +148,45 @@ export function AskUserQuestionPanel({
   const isOtherExpanded = expandedOther === currentQuestion?.id
   const otherInputValue = otherInputs.get(currentQuestion?.id) || ''
 
+  const clearSkippedForQuestion = (questionId: string) => {
+    setSkippedQuestionIds((prev) => {
+      if (!prev.has(questionId)) return prev
+      const next = new Set(prev)
+      next.delete(questionId)
+      return next
+    })
+  }
+
+  const normalizeAnswersForQuestion = (questionId: string): string[] => {
+    const selected = selectedOptions.get(questionId)
+    if (!selected || selected.size === 0) {
+      return []
+    }
+
+    const otherInput = (otherInputs.get(questionId) || '').trim()
+    const normalized: string[] = []
+    for (const value of Array.from(selected)) {
+      if (value === 'Other') {
+        if (otherInput) {
+          normalized.push(otherInput)
+        }
+        continue
+      }
+      const trimmedValue = value.trim()
+      if (trimmedValue) {
+        normalized.push(trimmedValue)
+      }
+    }
+    return Array.from(new Set(normalized))
+  }
+
+  const hasCurrentAnswer = currentQuestion
+    ? normalizeAnswersForQuestion(currentQuestion.id).length > 0
+    : false
+
   // Handle option click
   const handleOptionClick = (optionLabel: string) => {
+    clearSkippedForQuestion(currentQuestion.id)
     if (isMultiSelect) {
       // Toggle for multi-select
       setSelectedOptions((prev) => {
@@ -186,6 +226,7 @@ export function AskUserQuestionPanel({
       })
     } else {
       setExpandedOther(currentQuestion.id)
+      clearSkippedForQuestion(currentQuestion.id)
       // Add "Other" to selected if multi-select
       if (isMultiSelect) {
         setSelectedOptions((prev) => {
@@ -207,6 +248,7 @@ export function AskUserQuestionPanel({
 
   // Handle other input change
   const handleOtherInputChange = (value: string) => {
+    clearSkippedForQuestion(currentQuestion.id)
     setOtherInputs((prev) => {
       const newMap = new Map(prev)
       newMap.set(currentQuestion.id, value)
@@ -230,38 +272,64 @@ export function AskUserQuestionPanel({
     }
   }
 
-  // Build answer string for all questions
-  const buildAnswerString = (): string => {
-    const answers: string[] = []
-    questions.forEach((q) => {
-      const selected = selectedOptions.get(q.id)
-      if (selected && selected.size > 0) {
-        const otherText = otherInputs.get(q.id)
-        if (otherText && selected.has('Other')) {
-          // Replace "Other" with actual text
-          const labels = Array.from(selected).filter((s) => s !== 'Other')
-          if (labels.length > 0) {
-            answers.push(`${labels.join(', ')}, ${otherText}`)
-          } else {
-            answers.push(otherText)
-          }
-        } else {
-          answers.push(Array.from(selected).join(', '))
-        }
+  const buildSubmissionPayload = (): AskUserQuestionAnswerPayload => {
+    const answersByQuestionId: Record<string, string[]> = {}
+    const skipped = new Set(skippedQuestionIds)
+
+    for (const question of questions) {
+      const answers = normalizeAnswersForQuestion(question.id)
+      if (answers.length > 0) {
+        answersByQuestionId[question.id] = answers
+        skipped.delete(question.id)
+      } else {
+        skipped.add(question.id)
       }
-    })
-    return answers.join('\n')
+    }
+
+    return {
+      toolCallId: toolCall.id,
+      answersByQuestionId,
+      skippedQuestionIds: Array.from(skipped)
+    }
+  }
+
+  const buildManualAnswerText = (payload: AskUserQuestionAnswerPayload): string => {
+    const lines: string[] = []
+    for (const question of questions) {
+      const answers = payload.answersByQuestionId[question.id]
+      if (answers && answers.length > 0) {
+        lines.push(`${question.question}: ${answers.join(', ')}`)
+      } else if (payload.skippedQuestionIds.includes(question.id)) {
+        lines.push(`${question.question}: [Skipped]`)
+      }
+    }
+    return lines.join('\n')
   }
 
   // Submit all answers
-  const submit = async () => {
-    const answer = buildAnswerString()
-    if (!answer.trim() || isSubmitting) return
+  const submit = async (extraSkippedQuestionIds: string[] = []) => {
+    if (isSubmitting) return
 
     setIsSubmitting(true)
     setError(null)
     try {
-      await onSubmit(answer.trim())
+      const payload = buildSubmissionPayload()
+      if (extraSkippedQuestionIds.length > 0) {
+        const mergedSkipped = new Set([
+          ...payload.skippedQuestionIds,
+          ...extraSkippedQuestionIds
+        ])
+        for (const skippedQuestionId of extraSkippedQuestionIds) {
+          delete payload.answersByQuestionId[skippedQuestionId]
+        }
+        payload.skippedQuestionIds = Array.from(mergedSkipped)
+      }
+      if (submitAsText) {
+        const manualAnswer = buildManualAnswerText(payload).trim() || 'Skipped all questions.'
+        await onSubmit(manualAnswer)
+      } else {
+        await onSubmit(payload)
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to submit answer'
       setError(message)
@@ -272,12 +340,29 @@ export function AskUserQuestionPanel({
 
   // Skip current question or all
   const handleSkip = async () => {
+    setSkippedQuestionIds((prev) => {
+      const next = new Set(prev)
+      next.add(currentQuestion.id)
+      return next
+    })
+    setSelectedOptions((prev) => {
+      const next = new Map(prev)
+      next.delete(currentQuestion.id)
+      return next
+    })
+    setOtherInputs((prev) => {
+      const next = new Map(prev)
+      next.delete(currentQuestion.id)
+      return next
+    })
+    if (expandedOther === currentQuestion.id) {
+      setExpandedOther(null)
+    }
+
     if (hasMultipleQuestions && !isLastQuestion) {
-      // Skip to next question
       goToNext()
     } else {
-      // Submit with whatever we have
-      await submit()
+      await submit([currentQuestion.id])
     }
   }
 
@@ -291,9 +376,7 @@ export function AskUserQuestionPanel({
   }
 
   // Check if can continue
-  const canContinue = isMultiSelect
-    ? currentSelected.size > 0 || isOtherExpanded
-    : currentSelected.size > 0
+  const canContinue = hasCurrentAnswer
 
   // Submit other input
   const submitOtherInput = async () => {
@@ -333,13 +416,6 @@ export function AskUserQuestionPanel({
                 <span className="text-xs text-muted-foreground px-1.5">
                   {currentIndex + 1} / {questions.length}
                 </span>
-                <button
-                  onClick={goToNext}
-                  disabled={isLastQuestion}
-                  className="p-1 rounded hover:bg-secondary/50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronRight size={16} />
-                </button>
               </div>
             )}
           </div>

@@ -16,9 +16,9 @@ function createToolResultThought(overrides: Partial<Thought> = {}): Thought {
 }
 
 describe('message-flow AskUserQuestion tool_result normalization', () => {
-  it('normalizes AskUserQuestion denied tool_result to success state', () => {
+  it('normalizes AskUserQuestion denied tool_result to success state on legacy mode', () => {
     const rawThought = createToolResultThought()
-    const normalized = normalizeAskUserQuestionToolResultThought(rawThought, true)
+    const normalized = normalizeAskUserQuestionToolResultThought(rawThought, true, 'legacy_deny_send')
 
     expect(normalized.isError).toBe(false)
     expect(normalized.status).toBe('success')
@@ -31,7 +31,7 @@ describe('message-flow AskUserQuestion tool_result normalization', () => {
       id: 'tool-read-1',
       toolOutput: 'ENOENT'
     })
-    const normalized = normalizeAskUserQuestionToolResultThought(rawThought, false)
+    const normalized = normalizeAskUserQuestionToolResultThought(rawThought, false, null)
 
     expect(normalized).toEqual(rawThought)
   })
@@ -42,9 +42,19 @@ describe('message-flow AskUserQuestion tool_result normalization', () => {
       status: 'success',
       content: 'Tool execution succeeded'
     })
-    const normalized = normalizeAskUserQuestionToolResultThought(rawThought, true)
+    const normalized = normalizeAskUserQuestionToolResultThought(rawThought, true, 'legacy_deny_send')
+
+    expect(normalized).toEqual(rawThought)
+  })
+
+  it('keeps AskUserQuestion error unchanged on sdk_allow_updated_input mode', () => {
+    const rawThought = createToolResultThought()
+    const normalized = normalizeAskUserQuestionToolResultThought(
+      rawThought,
+      true,
+      'sdk_allow_updated_input'
+    )
 
     expect(normalized).toEqual(rawThought)
   })
 })
-

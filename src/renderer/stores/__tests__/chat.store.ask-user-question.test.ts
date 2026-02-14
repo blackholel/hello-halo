@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AgentEventBase, ToolCall } from '../../types'
+import type { AgentEventBase, AskUserQuestionAnswerPayload, ToolCall } from '../../types'
 
 const mockAnswerQuestion = vi.fn()
 const mockGetConversation = vi.fn()
@@ -40,6 +40,16 @@ function seedPendingAskUserQuestion(conversationId: string, toolCallId = 'tool-a
   } as unknown as AgentEventBase & ToolCall)
 }
 
+function createAskUserQuestionPayload(toolCallId = 'tool-ask-1'): AskUserQuestionAnswerPayload {
+  return {
+    toolCallId,
+    answersByQuestionId: {
+      q_1: ['Yes']
+    },
+    skippedQuestionIds: []
+  }
+}
+
 describe('Chat Store - AskUserQuestion Flow', () => {
   beforeEach(() => {
     useChatStore.getState().reset()
@@ -57,11 +67,45 @@ describe('Chat Store - AskUserQuestion Flow', () => {
     seedPendingAskUserQuestion(conversationId)
 
     mockAnswerQuestion.mockResolvedValue({ success: true })
-    await useChatStore.getState().answerQuestion(conversationId, 'Yes')
+    await useChatStore.getState().answerQuestion(conversationId, createAskUserQuestionPayload())
+    expect(mockAnswerQuestion).toHaveBeenCalledWith(
+      conversationId,
+      expect.objectContaining({
+        toolCallId: 'tool-ask-1',
+        answersByQuestionId: { q_1: ['Yes'] }
+      })
+    )
 
     const session = useChatStore.getState().getSession(conversationId)
     expect(session.pendingAskUserQuestion).toBeNull()
     expect(session.failedAskUserQuestion).toBeNull()
+  })
+
+  it('injects active runId into AskUserQuestion answer payload', async () => {
+    const conversationId = 'conv-with-run'
+    const runId = 'run-ask-1'
+    useChatStore.getState().handleAgentRunStart({
+      spaceId: 'space-1',
+      conversationId,
+      runId,
+      startedAt: new Date().toISOString()
+    })
+    seedPendingAskUserQuestion(conversationId, 'tool-run-aware')
+
+    mockAnswerQuestion.mockResolvedValue({ success: true })
+    await useChatStore.getState().answerQuestion(conversationId, {
+      toolCallId: 'tool-run-aware',
+      answersByQuestionId: { q_1: ['Yes'] },
+      skippedQuestionIds: []
+    })
+
+    expect(mockAnswerQuestion).toHaveBeenCalledWith(
+      conversationId,
+      expect.objectContaining({
+        toolCallId: 'tool-run-aware',
+        runId
+      })
+    )
   })
 
   it('moves pending question to failed state when API returns success:false', async () => {
@@ -81,7 +125,7 @@ describe('Chat Store - AskUserQuestion Flow', () => {
     useChatStore.setState({ sessions: sessionsBefore })
 
     mockAnswerQuestion.mockResolvedValue({ success: false, error: 'No active session found' })
-    await useChatStore.getState().answerQuestion(conversationId, 'Yes')
+    await useChatStore.getState().answerQuestion(conversationId, createAskUserQuestionPayload())
 
     const session = useChatStore.getState().getSession(conversationId)
     expect(session.pendingAskUserQuestion).toBeNull()
@@ -98,7 +142,10 @@ describe('Chat Store - AskUserQuestion Flow', () => {
     mockAnswerQuestion.mockRejectedValue(new Error('Network unavailable'))
 
     await expect(
-      useChatStore.getState().answerQuestion(conversationId, 'Yes')
+      useChatStore.getState().answerQuestion(
+        conversationId,
+        createAskUserQuestionPayload('tool-transport')
+      )
     ).rejects.toThrow('Network unavailable')
 
     const session = useChatStore.getState().getSession(conversationId)
