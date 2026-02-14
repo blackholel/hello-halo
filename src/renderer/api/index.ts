@@ -23,6 +23,13 @@ interface ApiResponse<T = unknown> {
   error?: string
 }
 
+interface AskUserQuestionAnswerPayload {
+  toolCallId: string
+  answersByQuestionId: Record<string, string[]>
+  skippedQuestionIds: string[]
+  runId?: string
+}
+
 /**
  * API object - drop-in replacement for window.kite
  * Works in both Electron and remote web mode
@@ -381,11 +388,17 @@ export const api = {
     return httpRequest('POST', '/api/agent/reject', { conversationId })
   },
 
-  answerQuestion: async (conversationId: string, answer: string): Promise<ApiResponse> => {
+  answerQuestion: async (
+    conversationId: string,
+    answer: string | AskUserQuestionAnswerPayload
+  ): Promise<ApiResponse> => {
     if (isElectron()) {
       return window.halo.answerQuestion(conversationId, answer)
     }
-    return httpRequest('POST', '/api/agent/answer-question', { conversationId, answer })
+    if (typeof answer === 'string') {
+      return httpRequest('POST', '/api/agent/answer-question', { conversationId, answer })
+    }
+    return httpRequest('POST', '/api/agent/answer-question', { conversationId, payload: answer })
   },
 
   // Get current session state for recovery after refresh

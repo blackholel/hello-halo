@@ -408,7 +408,12 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
       {pendingAskUserQuestion && currentConversationId && (
         <AskUserQuestionPanel
           toolCall={pendingAskUserQuestion}
-          onSubmit={(answer) => answerQuestion(currentConversationId, answer)}
+          onSubmit={(answer) => {
+            if (typeof answer === 'string') {
+              throw new Error('Expected structured AskUserQuestion payload')
+            }
+            return answerQuestion(currentConversationId, answer)
+          }}
           isCompact={isCompact}
         />
       )}
@@ -417,7 +422,11 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
           toolCall={failedAskUserQuestion}
           failureReason={failedAskUserQuestion.error || failedAskUserQuestion.output}
           submitLabel={t('Send')}
+          submitAsText={true}
           onSubmit={async (answer) => {
+            if (typeof answer !== 'string') {
+              throw new Error('Expected manual answer text')
+            }
             dismissAskUserQuestion(currentConversationId)
             await sendMessage(answer, undefined, aiBrowserEnabled, false, undefined, false)
           }}

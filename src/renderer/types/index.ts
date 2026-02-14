@@ -301,6 +301,13 @@ export interface ToolCall {
   description?: string;
 }
 
+export interface AskUserQuestionAnswerPayload {
+  toolCallId: string;
+  answersByQuestionId: Record<string, string[]>;
+  skippedQuestionIds: string[];
+  runId?: string;
+}
+
 // ============================================
 // Image Attachment Types (for multi-modal messages)
 // ============================================
