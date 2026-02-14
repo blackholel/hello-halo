@@ -275,8 +275,8 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
   })
 
   app.post('/api/agent/answer-question', async (req: Request, res: Response) => {
-    const { conversationId, answer } = req.body
-    const result = await agentController.answerQuestion(conversationId, answer)
+    const { conversationId, answer, payload } = req.body
+    const result = await agentController.answerQuestion(conversationId, payload ?? answer)
     res.json(result)
   })
 

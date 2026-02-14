@@ -102,7 +102,7 @@ export function rejectTool(conversationId: string): ControllerResponse {
  */
 export async function answerQuestion(
   conversationId: string,
-  answer: string
+  answer: AskUserQuestionAnswerInput
 ): Promise<ControllerResponse> {
   try {
     await agentHandleAskUserQuestionResponse(conversationId, answer)

@@ -38,7 +38,8 @@ import type {
   ParallelGroup,
   ChangeSet,
   AgentRunLifecycle,
-  ToolStatus
+  ToolStatus,
+  AskUserQuestionAnswerPayload
 } from '../types'
 import { canvasLifecycle } from '../services/canvas-lifecycle'
 import { buildParallelGroups, getThoughtKey } from '../utils/thought-utils'
@@ -282,7 +283,7 @@ interface ChatState {
   // Tool approval
   approveTool: (conversationId: string) => Promise<void>
   rejectTool: (conversationId: string) => Promise<void>
-  answerQuestion: (conversationId: string, answer: string) => Promise<void>
+  answerQuestion: (conversationId: string, answer: AskUserQuestionAnswerPayload) => Promise<void>
   dismissAskUserQuestion: (conversationId: string) => void
 
   // Event handlers (called from App component) - with session IDs
@@ -966,9 +967,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   // Answer AskUserQuestion for a specific conversation
-  answerQuestion: async (conversationId: string, answer: string) => {
+  answerQuestion: async (conversationId: string, answer: AskUserQuestionAnswerPayload) => {
     try {
-      const response = await api.answerQuestion(conversationId, answer)
+      const session = get().sessions.get(conversationId)
+      const payload: AskUserQuestionAnswerPayload = {
+        ...answer,
+        runId: session?.activeRunId || undefined
+      }
+      const response = await api.answerQuestion(conversationId, payload)
       if (!response.success) {
         const reason = response.error || 'Failed to submit answer'
         set((state) => {
