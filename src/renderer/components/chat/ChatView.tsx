@@ -288,7 +288,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
       return
     }
 
-    await openPlan(planContent, t('Plan'), currentSpaceId, conversationId)
+    await openPlan(planContent, t('Plan'), currentSpaceId, conversationId, currentSpace?.path)
   }
 
   // Combine real messages with mock onboarding messages
@@ -439,6 +439,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
         isGenerating={isGenerating}
         placeholder={isCompact ? t('Continue conversation...') : (currentSpace?.isTemp ? t('Say something to Kite...') : t('Continue conversation...'))}
         isCompact={isCompact}
+        spaceId={currentSpaceId}
         workDir={currentSpace?.path}
         planEnabled={planEnabled}
         onPlanEnabledChange={handlePlanEnabledChange}

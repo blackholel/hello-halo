@@ -73,6 +73,7 @@ export interface TabState {
   // Session-bound tab fields (used by chat tabs and plan tabs)
   conversationId?: string
   spaceId?: string
+  workDir?: string
 }
 
 // Callback types
@@ -535,7 +536,8 @@ class CanvasLifecycle {
     content: string,
     title: string,
     spaceId: string,
-    conversationId: string
+    conversationId: string,
+    workDir?: string
   ): Promise<string> {
     // Find existing plan tab for this conversation in this space
     for (const [tabId, tab] of this.tabs) {
@@ -554,6 +556,7 @@ class CanvasLifecycle {
           content,
           title,
           language: 'markdown',
+          workDir: workDir ?? tab.workDir,
           isDirty: false,
           error: undefined,
         })
@@ -565,17 +568,18 @@ class CanvasLifecycle {
 
     // Create new plan tab
     const tabId = generateTabId()
-    const tab: TabState = {
-      id: tabId,
-      type: 'plan',
-      title,
-      content,
-      language: 'markdown',
-      conversationId,
-      spaceId,
-      isDirty: false,
-      isLoading: false,
-    }
+      const tab: TabState = {
+        id: tabId,
+        type: 'plan',
+        title,
+        content,
+        language: 'markdown',
+        conversationId,
+        spaceId,
+        workDir,
+        isDirty: false,
+        isLoading: false,
+      }
 
     this.tabs.set(tabId, tab)
     this.setOpen(true)
@@ -590,10 +594,23 @@ class CanvasLifecycle {
    * Open a chat conversation in a tab
    * Allows multiple conversations to be open simultaneously
    */
-  async openChat(spaceId: string, conversationId: string, title: string): Promise<string> {
+  async openChat(
+    spaceId: string,
+    conversationId: string,
+    title: string,
+    workDir?: string
+  ): Promise<string> {
     // Check if this conversation is already open
     for (const [tabId, tab] of this.tabs) {
       if (tab.type === 'chat' && tab.conversationId === conversationId) {
+        if (tab.spaceId !== spaceId || (workDir && tab.workDir !== workDir)) {
+          this.tabs.set(tabId, {
+            ...tab,
+            spaceId,
+            workDir: workDir ?? tab.workDir
+          })
+          this.notifyTabsChange()
+        }
         await this.switchTab(tabId)
         return tabId
       }
@@ -607,6 +624,7 @@ class CanvasLifecycle {
       title,
       conversationId,
       spaceId,
+      workDir,
       isDirty: false,
       isLoading: false,
     }

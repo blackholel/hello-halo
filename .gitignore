@@ -6,6 +6,7 @@ out
 # TypeScript build cache
 *.tsbuildinfo
 .kite
+.halo
 
 # Release notes temp file
 .release-notes-current.md

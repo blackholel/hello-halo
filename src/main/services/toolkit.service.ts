@@ -60,8 +60,30 @@ function matchesRef(
   return true
 }
 
-function makeRef(type: DirectiveType, name: string): DirectiveRef {
-  return normalizeDirective({ id: '', type, name })
+interface ParsedDirectiveName {
+  name: string
+  namespace?: string
+}
+
+/**
+ * Parse namespaced resource key using the first ":" as separator.
+ * Keeps behavior aligned with services that resolve "namespace:name" via split(':', 2).
+ */
+export function parseDirectiveName(raw: string): ParsedDirectiveName | null {
+  const value = raw.trim()
+  if (!value) return null
+
+  if (!value.includes(':')) {
+    return { name: value }
+  }
+
+  const [namespace, name] = value.split(':', 2)
+  if (!namespace || !name) return null
+  return { namespace, name }
+}
+
+function makeRef(type: DirectiveType, parsed: ParsedDirectiveName): DirectiveRef {
+  return normalizeDirective({ id: '', type, name: parsed.name, namespace: parsed.namespace })
 }
 
 /**
@@ -152,12 +174,20 @@ export function migrateToToolkit(
   enabledSkills: string[],
   enabledAgents: string[]
 ): SpaceToolkit | null {
+  const parsedSkills = enabledSkills
+    .map(parseDirectiveName)
+    .filter((item): item is ParsedDirectiveName => item !== null)
+
+  const parsedAgents = enabledAgents
+    .map(parseDirectiveName)
+    .filter((item): item is ParsedDirectiveName => item !== null)
+
   const updated = updateSpaceConfig(workDir, (config) => ({
     ...config,
     toolkit: {
-      skills: dedupe(enabledSkills.map(name => makeRef('skill', name))),
+      skills: dedupe(parsedSkills.map(parsed => makeRef('skill', parsed))),
       commands: [],
-      agents: dedupe(enabledAgents.map(name => makeRef('agent', name)))
+      agents: dedupe(parsedAgents.map(parsed => makeRef('agent', parsed)))
     }
   }))
   return updated?.toolkit ?? null

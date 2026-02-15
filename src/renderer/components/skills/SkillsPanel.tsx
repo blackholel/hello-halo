@@ -10,6 +10,11 @@ import { useSkillsStore, type SkillDefinition } from '../../stores/skills.store'
 import { useSpaceStore } from '../../stores/space.store'
 import { useToolkitStore } from '../../stores/toolkit.store'
 import { buildDirective } from '../../utils/directive-helpers'
+import {
+  canonicalizeEnabledForResources,
+  isResourceEnabled,
+  toggleEnabledForResource
+} from '../../utils/resource-key'
 
 interface SkillsPanelProps {
   workDir?: string
@@ -102,8 +107,21 @@ export function SkillsPanel({
     setShowAllInToolkitMode(false)
   }, [currentSpace?.id])
 
+  useEffect(() => {
+    if (!currentSpace || enabledSkills.length === 0 || skills.length === 0) return
+
+    const canonical = canonicalizeEnabledForResources(enabledSkills, skills)
+    const sameLength = canonical.length === enabledSkills.length
+    const unchanged = sameLength && canonical.every((value, index) => value === enabledSkills[index])
+    if (unchanged) return
+
+    void updateSpacePreferences(currentSpace.id, {
+      skills: { enabled: canonical }
+    })
+  }, [currentSpace?.id, enabledSkills, skills, updateSpacePreferences])
+
   // Filter skills based on search query
-  const isEnabled = (skillName: string) => enabledSkills.includes(skillName)
+  const isEnabled = (skill: SkillDefinition) => isResourceEnabled(enabledSkills, skill)
 
   const toolkitSkills = useMemo(() => {
     if (!isToolkitMode || !currentSpace) return [] as SkillDefinition[]
@@ -120,7 +138,7 @@ export function SkillsPanel({
     if (isToolkitMode && !showAllInToolkitMode) {
       base = toolkitSkills
     } else if (!isToolkitMode && showOnlyEnabled) {
-      base = skills.filter(skill => isEnabled(skill.name))
+      base = skills.filter(skill => isEnabled(skill))
     }
     if (!localSearchQuery.trim()) {
       return base
@@ -178,12 +196,10 @@ export function SkillsPanel({
     })
   }
 
-  const toggleEnabled = async (skillName: string, e: React.MouseEvent) => {
+  const toggleEnabled = async (skill: SkillDefinition, e: React.MouseEvent) => {
     e.stopPropagation()
     if (!currentSpace) return
-    const newEnabled = isEnabled(skillName)
-      ? enabledSkills.filter(s => s !== skillName)
-      : [...enabledSkills, skillName]
+    const newEnabled = toggleEnabledForResource(enabledSkills, skill, skills)
     await updateSpacePreferences(currentSpace.id, {
       skills: { enabled: newEnabled }
     })
@@ -324,11 +340,11 @@ export function SkillsPanel({
             <div className="flex items-center gap-2">
               {!isToolkitMode && (
                 <button
-                  onClick={(e) => toggleEnabled(skill.name, e)}
+                  onClick={(e) => toggleEnabled(skill, e)}
                   className={`flex-shrink-0 transition-colors ${
-                    isEnabled(skill.name) ? 'text-green-500' : 'text-muted-foreground/40 hover:text-green-500/60'
+                    isEnabled(skill) ? 'text-green-500' : 'text-muted-foreground/40 hover:text-green-500/60'
                   }`}
-                  title={isEnabled(skill.name) ? t('Disable skill') : t('Enable skill')}
+                  title={isEnabled(skill) ? t('Disable skill') : t('Enable skill')}
                 >
                   <Power size={12} />
                 </button>
