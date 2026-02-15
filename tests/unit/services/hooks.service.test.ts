@@ -16,17 +16,29 @@ vi.mock('../../../src/main/services/space-config.service', () => ({
   getSpaceConfig: vi.fn()
 }))
 
+vi.mock('../../../src/main/services/config-source-mode.service', () => ({
+  getLockedConfigSourceMode: vi.fn(() => 'kite'),
+  getLockedUserConfigRootDir: vi.fn(() => '/home/user/.kite')
+}))
+
+vi.mock('../../../src/main/services/plugins.service', () => ({
+  listEnabledPlugins: vi.fn(() => [])
+}))
+
 import {
+  buildHooksConfig,
   mergeHooksConfigs,
   convertToSdkHooksFormat,
   clearSettingsCache
 } from '../../../src/main/services/hooks.service'
 import { getConfig } from '../../../src/main/services/config.service'
 import { getSpaceConfig } from '../../../src/main/services/space-config.service'
+import { getLockedConfigSourceMode } from '../../../src/main/services/config-source-mode.service'
 import type { HooksConfig, HookDefinition } from '../../../src/main/services/config.service'
 
 const mockGetConfig = vi.mocked(getConfig)
 const mockGetSpaceConfig = vi.mocked(getSpaceConfig)
+const mockGetLockedConfigSourceMode = vi.mocked(getLockedConfigSourceMode)
 
 // Helper to create hook definitions
 function createHookDef(matcher: string, command: string): HookDefinition {
@@ -46,6 +58,7 @@ describe('hooks.service', () => {
       claudeCode: {}
     } as ReturnType<typeof getConfig>)
     mockGetSpaceConfig.mockReturnValue(null)
+    mockGetLockedConfigSourceMode.mockReturnValue('kite')
   })
 
   describe('mergeHooksConfigs', () => {
@@ -175,6 +188,52 @@ describe('hooks.service', () => {
       const result = mergeHooksConfigs(config1)
 
       expect(result?.UserPromptSubmit).toHaveLength(1)
+    })
+  })
+
+  describe('buildHooksConfig mode boundaries', () => {
+    it('should merge global and space hooks in kite mode', () => {
+      mockGetLockedConfigSourceMode.mockReturnValue('kite')
+      mockGetConfig.mockReturnValue({
+        claudeCode: {
+          hooks: {
+            PreToolUse: [createHookDef('global', 'echo global')]
+          }
+        }
+      } as ReturnType<typeof getConfig>)
+      mockGetSpaceConfig.mockReturnValue({
+        claudeCode: {
+          hooks: {
+            PreToolUse: [createHookDef('space', 'echo space')]
+          }
+        }
+      } as any)
+
+      const result = buildHooksConfig('/test/workdir')
+      expect(result?.PreToolUse).toHaveLength(2)
+      expect(result?.PreToolUse?.[0].matcher).toBe('global')
+      expect(result?.PreToolUse?.[1].matcher).toBe('space')
+    })
+
+    it('should ignore global and space hooks in claude mode', () => {
+      mockGetLockedConfigSourceMode.mockReturnValue('claude')
+      mockGetConfig.mockReturnValue({
+        claudeCode: {
+          hooks: {
+            PreToolUse: [createHookDef('global', 'echo global')]
+          }
+        }
+      } as ReturnType<typeof getConfig>)
+      mockGetSpaceConfig.mockReturnValue({
+        claudeCode: {
+          hooks: {
+            PreToolUse: [createHookDef('space', 'echo space')]
+          }
+        }
+      } as any)
+
+      const result = buildHooksConfig('/test/workdir')
+      expect(result).toBeUndefined()
     })
   })
 

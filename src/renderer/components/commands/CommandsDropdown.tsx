@@ -7,6 +7,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { Terminal, ChevronDown } from 'lucide-react'
 import { useTranslation } from '../../i18n'
 import { useCommandsStore, type CommandDefinition } from '../../stores/commands.store'
+import { useAppStore } from '../../stores/app.store'
 
 interface CommandsDropdownProps {
   workDir?: string
@@ -18,6 +19,8 @@ export function CommandsDropdown({ workDir, onInsertCommand }: CommandsDropdownP
   const dropdownRef = useRef<HTMLDivElement>(null)
   const [isOpen, setIsOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const configSourceMode = useAppStore((state) => state.config?.configSourceMode || 'kite')
+  const userConfigRoot = configSourceMode === 'claude' ? '~/.claude' : '~/.kite'
 
   const { commands, loadedWorkDir, isLoading, loadCommands } = useCommandsStore()
 
@@ -114,7 +117,7 @@ export function CommandsDropdown({ workDir, onInsertCommand }: CommandsDropdownP
                 {search ? t('No commands found') : t('No commands available')}
               </p>
               <p className="text-[10px] text-muted-foreground/60 mt-1">
-                {t('Add .md files in ~/.kite/commands/')}
+                {t('Add .md files in {{root}}/commands/', { root: userConfigRoot })}
               </p>
             </div>
           ) : (

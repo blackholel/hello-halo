@@ -64,6 +64,11 @@ vi.mock('../../../src/main/services/plugins.service', () => ({
   getInstalledPluginPaths: vi.fn(() => [])
 }))
 
+vi.mock('../../../src/main/services/config-source-mode.service', () => ({
+  getLockedConfigSourceMode: vi.fn(() => 'kite'),
+  getLockedUserConfigRootDir: vi.fn(() => join(homedir(), '.kite'))
+}))
+
 vi.mock('../../../src/main/services/conversation.service', () => ({
   getConversation: vi.fn(() => null),
   saveSessionId: vi.fn(),
@@ -104,6 +109,7 @@ vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
 // Import after mocks are set up
 import { getConfig } from '../../../src/main/services/config.service'
 import { getSpaceConfig } from '../../../src/main/services/space-config.service'
+import { getLockedUserConfigRootDir } from '../../../src/main/services/config-source-mode.service'
 
 // Import the exported test helpers
 import {
@@ -114,6 +120,7 @@ import {
 describe('Agent Service - CLAUDE_CONFIG_DIR', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(getLockedUserConfigRootDir).mockReturnValue(join(homedir(), '.kite'))
   })
 
   afterEach(() => {
@@ -135,6 +142,12 @@ describe('Agent Service - CLAUDE_CONFIG_DIR', () => {
       const env = _testBuildSdkOptionsEnv()
 
       expect(env.CLAUDE_CONFIG_DIR).not.toContain('.claude')
+    })
+
+    it('should switch to ~/.claude/ when locked mode is claude', () => {
+      vi.mocked(getLockedUserConfigRootDir).mockReturnValue(join(homedir(), '.claude'))
+      const env = _testBuildSdkOptionsEnv()
+      expect(env.CLAUDE_CONFIG_DIR).toBe(join(homedir(), '.claude'))
     })
   })
 

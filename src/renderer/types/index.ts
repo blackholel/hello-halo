@@ -43,6 +43,7 @@ export type PermissionLevel = 'allow' | 'ask' | 'deny';
 
 // Theme Mode
 export type ThemeMode = 'light' | 'dark' | 'system';
+export type ConfigSourceMode = 'kite' | 'claude';
 
 // Tool Call Status
 export type ToolStatus = 'pending' | 'running' | 'success' | 'error' | 'waiting_approval';
@@ -157,6 +158,7 @@ export interface KiteConfig {
   remoteAccess: RemoteAccessConfig;
   mcpServers: McpServersConfig;  // MCP servers configuration
   isFirstLaunch: boolean;
+  configSourceMode: ConfigSourceMode;
   claudeCode?: ClaudeCodeConfig;  // Claude Code configuration (plugins, hooks, agents)
 }
 
@@ -678,7 +680,8 @@ export const DEFAULT_CONFIG: KiteConfig = {
     port: 3456
   },
   mcpServers: {},  // Empty by default
-  isFirstLaunch: true
+  isFirstLaunch: true,
+  configSourceMode: 'kite'
 };
 
 // Icon options for spaces (using icon IDs that map to Lucide icons)

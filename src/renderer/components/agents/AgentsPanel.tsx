@@ -9,6 +9,7 @@ import { useAgentsStore, type AgentDefinition } from '../../stores/agents.store'
 import { useSpaceStore } from '../../stores/space.store'
 import { useToolkitStore } from '../../stores/toolkit.store'
 import { buildDirective } from '../../utils/directive-helpers'
+import { useAppStore } from '../../stores/app.store'
 
 interface AgentsPanelProps {
   workDir?: string
@@ -52,6 +53,8 @@ export function AgentsPanel({
   const [openMenuAgent, setOpenMenuAgent] = useState<string | null>(null)
   const [showAllInToolkitMode, setShowAllInToolkitMode] = useState(false)
   const [updatingToolkitAgent, setUpdatingToolkitAgent] = useState<string | null>(null)
+  const configSourceMode = useAppStore((state) => state.config?.configSourceMode || 'kite')
+  const userConfigRoot = configSourceMode === 'claude' ? '~/.claude' : '~/.kite'
 
   const { agents, loadedWorkDir, isLoading, loadAgents, copyToSpace, deleteAgent } = useAgentsStore()
   const { currentSpace, updateSpacePreferences } = useSpaceStore()
@@ -529,7 +532,7 @@ export function AgentsPanel({
                 <p className="text-[10px] text-muted-foreground/60 mt-1">
                   {localSearchQuery
                     ? t('Try a different search term')
-                    : t('Add .md files in ~/.kite/agents or .claude/agents')}
+                    : t('Add .md files in {{root}}/agents or .claude/agents', { root: userConfigRoot })}
                 </p>
               </div>
             ) : (
