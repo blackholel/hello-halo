@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect } from 'react'
 import { useChatStore } from '../../../stores/chat.store'
+import { useSpaceStore } from '../../../stores/space.store'
 import { useSmartScroll } from '../../../hooks/useSmartScroll'
 import { MessageList } from '../../chat/MessageList'
 import { InputArea } from '../../chat/InputArea'
@@ -30,7 +31,27 @@ interface ChatTabViewerProps {
 
 export function ChatTabViewer({ tab }: ChatTabViewerProps) {
   const { t } = useTranslation()
-  const { conversationId, spaceId } = tab
+  const { conversationId, spaceId, workDir: tabWorkDir } = tab
+  const { openPlan } = useCanvasLifecycle()
+  const { currentSpace, spaces, haloSpace } = useSpaceStore((state) => ({
+    currentSpace: state.currentSpace,
+    spaces: state.spaces,
+    haloSpace: state.haloSpace
+  }))
+
+  const resolvedWorkDir = tabWorkDir ?? (() => {
+    if (!spaceId) return undefined
+    if (currentSpace?.id === spaceId) return currentSpace.path
+    const matched = spaces.find(space => space.id === spaceId)
+    if (matched) return matched.path
+    if (haloSpace?.id === spaceId) return haloSpace.path
+    return undefined
+  })()
+
+  useEffect(() => {
+    if (!spaceId || resolvedWorkDir) return
+    console.warn(`[ChatTabViewer] Missing workDir for space ${spaceId}, composer suggestions may be empty`)
+  }, [resolvedWorkDir, spaceId])
 
   // Get conversation and session from store
   const conversation = useChatStore(state =>
@@ -122,6 +143,22 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
 
   const messages = conversation?.messages || []
   const hasMessages = messages.length > 0 || Boolean(streamingContent) || isThinking
+
+  const handlePlanEnabledChange = useCallback((enabled: boolean) => {
+    if (!conversationId) {
+      return
+    }
+    setPlanEnabled(conversationId, enabled)
+  }, [conversationId, setPlanEnabled])
+
+  const handleOpenPlanInCanvas = useCallback(async (planContent: string) => {
+    if (!spaceId || !conversationId) {
+      console.error('[ChatTabViewer] Missing conversation binding for plan tab')
+      return
+    }
+
+    await openPlan(planContent, t('Plan'), spaceId, conversationId, resolvedWorkDir)
+  }, [conversationId, openPlan, resolvedWorkDir, spaceId, t])
 
   // Loading state
   if (!conversation && isLoadingConversation) {
@@ -258,6 +295,10 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
         isGenerating={isGenerating}
         placeholder={t('Continue conversation...')}
         isCompact={true}
+        spaceId={spaceId ?? null}
+        workDir={resolvedWorkDir}
+        planEnabled={planEnabled}
+        onPlanEnabledChange={handlePlanEnabledChange}
       />
     </div>
   )

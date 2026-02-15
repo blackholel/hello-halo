@@ -267,10 +267,14 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     }
   }
 
-  // Handle "Execute Plan" - sends the plan content as a follow-up message in normal mode
-  const handleExecutePlan = async (planContent: string) => {
-    const executePrompt = `${t('Execute according to the following plan')}:\n\n${planContent}`
-    await sendMessage(executePrompt, undefined, aiBrowserEnabled, false, undefined, false)
+  const handleOpenPlanInCanvas = async (planContent: string) => {
+    const conversationId = getCurrentConversationId()
+    if (!currentSpaceId || !conversationId) {
+      console.error('[ChatView] No active conversation to open plan in canvas')
+      return
+    }
+
+    await openPlan(planContent, t('Plan'), currentSpaceId, conversationId, currentSpace?.path)
   }
 
   // Combine real messages with mock onboarding messages
@@ -421,6 +425,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
         isGenerating={isGenerating}
         placeholder={isCompact ? t('Continue conversation...') : (currentSpace?.isTemp ? t('Say something to Halo...') : t('Continue conversation...'))}
         isCompact={isCompact}
+        spaceId={currentSpaceId}
         workDir={currentSpace?.path}
       />
     </div>

@@ -70,9 +70,15 @@ export function useCanvasLifecycle() {
     []
   )
 
+  const openPlan = useCallback(
+    (content: string, title: string, spaceId: string, conversationId: string, workDir?: string) =>
+      canvasLifecycle.openPlan(content, title, spaceId, conversationId, workDir),
+    []
+  )
+
   const openChat = useCallback(
-    (spaceId: string, conversationId: string, title: string) =>
-      canvasLifecycle.openChat(spaceId, conversationId, title),
+    (spaceId: string, conversationId: string, title: string, workDir?: string) =>
+      canvasLifecycle.openChat(spaceId, conversationId, title, workDir),
     []
   )
 

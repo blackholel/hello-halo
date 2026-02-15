@@ -9,6 +9,12 @@ import { useAgentsStore, type AgentDefinition } from '../../stores/agents.store'
 import { useSpaceStore } from '../../stores/space.store'
 import { useToolkitStore } from '../../stores/toolkit.store'
 import { buildDirective } from '../../utils/directive-helpers'
+import { useAppStore } from '../../stores/app.store'
+import {
+  canonicalizeEnabledForResources,
+  isResourceEnabled,
+  toggleEnabledForResource
+} from '../../utils/resource-key'
 
 interface AgentsPanelProps {
   workDir?: string
@@ -86,7 +92,20 @@ export function AgentsPanel({
     setShowAllInToolkitMode(false)
   }, [currentSpace?.id])
 
-  const isEnabled = (agentName: string) => enabledAgents.includes(agentName)
+  useEffect(() => {
+    if (!currentSpace || enabledAgents.length === 0 || agents.length === 0) return
+
+    const canonical = canonicalizeEnabledForResources(enabledAgents, agents)
+    const sameLength = canonical.length === enabledAgents.length
+    const unchanged = sameLength && canonical.every((value, index) => value === enabledAgents[index])
+    if (unchanged) return
+
+    void updateSpacePreferences(currentSpace.id, {
+      agents: { enabled: canonical }
+    })
+  }, [currentSpace?.id, enabledAgents, agents, updateSpacePreferences])
+
+  const isEnabled = (agent: AgentDefinition) => isResourceEnabled(enabledAgents, agent)
 
   const toolkitAgents = useMemo(() => {
     if (!isToolkitMode || !currentSpace) return [] as AgentDefinition[]
@@ -103,7 +122,7 @@ export function AgentsPanel({
     if (isToolkitMode && !showAllInToolkitMode) {
       base = toolkitAgents
     } else if (!isToolkitMode && showOnlyEnabled) {
-      base = agents.filter(agent => isEnabled(agent.name))
+      base = agents.filter(agent => isEnabled(agent))
     }
     if (!localSearchQuery.trim()) return base
     const query = localSearchQuery.toLowerCase()
@@ -183,12 +202,10 @@ export function AgentsPanel({
     setOpenMenuAgent(prev => prev === agentName ? null : agentName)
   }
 
-  const handleToggleEnabled = async (agentName: string, e: React.MouseEvent) => {
+  const handleToggleEnabled = async (agent: AgentDefinition, e: React.MouseEvent) => {
     e.stopPropagation()
     if (!currentSpace) return
-    const newEnabled = isEnabled(agentName)
-      ? enabledAgents.filter(a => a !== agentName)
-      : [...enabledAgents, agentName]
+    const newEnabled = toggleEnabledForResource(enabledAgents, agent, agents)
     await updateSpacePreferences(currentSpace.id, {
       agents: { enabled: newEnabled }
     })
@@ -281,11 +298,11 @@ export function AgentsPanel({
             <div className="flex items-center gap-2">
               {!isToolkitMode && (
                 <button
-                  onClick={(e) => handleToggleEnabled(agent.name, e)}
+                  onClick={(e) => handleToggleEnabled(agent, e)}
                   className={`flex-shrink-0 transition-colors ${
-                    isEnabled(agent.name) ? 'text-green-500' : 'text-muted-foreground/40 hover:text-green-500/60'
+                    isEnabled(agent) ? 'text-green-500' : 'text-muted-foreground/40 hover:text-green-500/60'
                   }`}
-                  title={isEnabled(agent.name) ? t('Disable agent') : t('Enable agent')}
+                  title={isEnabled(agent) ? t('Disable agent') : t('Enable agent')}
                 >
                   <Power size={12} />
                 </button>

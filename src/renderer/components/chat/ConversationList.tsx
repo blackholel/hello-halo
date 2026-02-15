@@ -250,7 +250,7 @@ export function ConversationList({
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
-                            openChat(spaceId, conversation.id, conversation.title)
+                            openChat(spaceId, conversation.id, conversation.title, workDir)
                           }}
                           className="p-1 hover:bg-secondary rounded-md transition-colors"
                           title={t('Open in tab')}

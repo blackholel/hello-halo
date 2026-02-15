@@ -12,11 +12,43 @@
 import { getSkillContent } from '../skills.service'
 import { getCommandContent } from '../commands.service'
 import { getAgentContent } from '../agents.service'
-import { buildDirectiveId, toolkitContains } from '../toolkit.service'
+import { toolkitContains } from '../toolkit.service'
 import type { SpaceToolkit } from '../space-config.service'
 
 const SLASH_LINE_RE = /^\/([A-Za-z0-9._:-]+)(?:\s+(.+))?$/
 const AT_LINE_RE = /^@([A-Za-z0-9._:-]+)(?:\s+(.+))?$/
+const TOKEN_CHAR_RE = /[A-Za-z0-9._:-]/
+
+interface ParsedDirectiveToken {
+  raw: string
+  name: string
+  namespace?: string
+}
+
+interface ExpansionState {
+  expanded: LazyExpansionResult['expanded']
+  missing: LazyExpansionResult['missing']
+  expandedSeen: {
+    skills: Set<string>
+    commands: Set<string>
+    agents: Set<string>
+  }
+  missingSeen: {
+    skills: Set<string>
+    commands: Set<string>
+    agents: Set<string>
+  }
+}
+
+interface InlineTokenMatch {
+  type: 'slash' | 'at'
+  token: ParsedDirectiveToken
+}
+
+interface CodeRange {
+  start: number
+  end: number
+}
 
 export interface LazyExpansionResult {
   text: string
@@ -50,6 +82,54 @@ function escapeHtml(str: string): string {
 function buildArgsAttr(args?: string): string {
   if (!args) return ''
   return ` args="${escapeHtml(args)}"`
+}
+
+/**
+ * Parse token using first ":" separator (split(':', 2)).
+ * This MUST stay aligned with skills/commands/agents service lookup behavior.
+ */
+export function parseDirectiveToken(raw: string): ParsedDirectiveToken | null {
+  const value = raw.trim()
+  if (!value) return null
+
+  if (!value.includes(':')) {
+    return { raw: value, name: value }
+  }
+
+  const [namespace, name] = value.split(':', 2)
+  if (!namespace || !name) return null
+
+  return {
+    raw: value,
+    namespace,
+    name
+  }
+}
+
+function pushUnique(
+  list: string[],
+  seen: Set<string>,
+  value: string
+): void {
+  if (seen.has(value)) return
+  seen.add(value)
+  list.push(value)
+}
+
+function pushExpanded(
+  state: ExpansionState,
+  type: 'skills' | 'commands' | 'agents',
+  value: string
+): void {
+  pushUnique(state.expanded[type], state.expandedSeen[type], value)
+}
+
+function pushMissing(
+  state: ExpansionState,
+  type: 'skills' | 'commands' | 'agents',
+  value: string
+): void {
+  pushUnique(state.missing[type], state.missingSeen[type], value)
 }
 
 /**
@@ -91,13 +171,215 @@ function findReferencedSkill(commandContent: string): string | null {
 function canUseFromToolkit(
   toolkit: SpaceToolkit | null | undefined,
   type: 'skill' | 'command' | 'agent',
-  name: string
+  token: ParsedDirectiveToken
 ): boolean {
   if (!toolkit) return true
   return toolkitContains(toolkit, type, {
-    id: buildDirectiveId({ type, name }),
-    name
+    name: token.name,
+    namespace: token.namespace
   })
+}
+
+function expandAgentDirective(
+  token: ParsedDirectiveToken,
+  state: ExpansionState,
+  workDir?: string,
+  toolkit?: SpaceToolkit | null,
+  args?: string
+): string | null {
+  if (!canUseFromToolkit(toolkit, 'agent', token)) {
+    pushMissing(state, 'agents', token.raw)
+    return null
+  }
+
+  const agentContent = getAgentContent(token.raw, workDir)
+  if (!agentContent) {
+    pushMissing(state, 'agents', token.raw)
+    return null
+  }
+
+  pushExpanded(state, 'agents', token.raw)
+  const argsAttr = buildArgsAttr(args)
+  return [
+    '<!-- injected: agent -->',
+    `<task-request name="${token.raw}"${argsAttr}>`,
+    agentContent.trimEnd(),
+    '</task-request>'
+  ].join('\n')
+}
+
+function expandSlashDirective(
+  token: ParsedDirectiveToken,
+  state: ExpansionState,
+  workDir?: string,
+  toolkit?: SpaceToolkit | null,
+  args?: string
+): string | null {
+  const argsAttr = buildArgsAttr(args)
+  const command = getCommandContent(token.raw, workDir, { silent: true })
+
+  if (command) {
+    if (!canUseFromToolkit(toolkit, 'command', token)) {
+      pushMissing(state, 'commands', token.raw)
+      return null
+    }
+
+    const referencedSkillRaw = findReferencedSkill(command)
+    if (referencedSkillRaw) {
+      const referencedSkillToken = parseDirectiveToken(referencedSkillRaw)
+      if (referencedSkillToken) {
+        if (!canUseFromToolkit(toolkit, 'skill', referencedSkillToken)) {
+          pushMissing(state, 'skills', referencedSkillToken.raw)
+          return null
+        }
+
+        const skill = getSkillContent(referencedSkillToken.raw, workDir)
+        if (skill) {
+          pushExpanded(state, 'skills', referencedSkillToken.raw)
+          return [
+            '<!-- injected: command-skill -->',
+            `<skill name="${referencedSkillToken.raw}"${argsAttr}>`,
+            skill.content.trimEnd(),
+            '</skill>'
+          ].join('\n')
+        }
+      }
+    }
+
+    pushExpanded(state, 'commands', token.raw)
+    return [
+      '<!-- injected: command -->',
+      `<command name="${token.raw}"${argsAttr}>`,
+      command.trimEnd(),
+      '</command>'
+    ].join('\n')
+  }
+
+  if (!canUseFromToolkit(toolkit, 'skill', token)) {
+    pushMissing(state, 'skills', token.raw)
+    return null
+  }
+
+  const skill = getSkillContent(token.raw, workDir)
+  if (!skill) {
+    pushMissing(state, 'skills', token.raw)
+    return null
+  }
+
+  pushExpanded(state, 'skills', token.raw)
+  return [
+    '<!-- injected: skill -->',
+    `<skill name="${token.raw}"${argsAttr}>`,
+    skill.content.trimEnd(),
+    '</skill>'
+  ].join('\n')
+}
+
+function isSlashBoundary(prev: string | undefined): boolean {
+  if (!prev) return true
+  return !/[A-Za-z0-9_/:.@-]/.test(prev)
+}
+
+function isAtBoundary(prev: string | undefined): boolean {
+  if (!prev) return true
+  return !/[A-Za-z0-9_.+-]/.test(prev)
+}
+
+function getInlineCodeRanges(line: string): CodeRange[] {
+  const ranges: CodeRange[] = []
+  let i = 0
+
+  while (i < line.length) {
+    if (line[i] !== '`') {
+      i += 1
+      continue
+    }
+
+    let tickCount = 1
+    while (i + tickCount < line.length && line[i + tickCount] === '`') {
+      tickCount += 1
+    }
+
+    const marker = '`'.repeat(tickCount)
+    const closeIndex = line.indexOf(marker, i + tickCount)
+    if (closeIndex === -1) {
+      break
+    }
+
+    ranges.push({
+      start: i,
+      end: closeIndex + tickCount
+    })
+
+    i = closeIndex + tickCount
+  }
+
+  return ranges
+}
+
+function collectInlineDirectiveTokens(line: string): InlineTokenMatch[] {
+  const ranges = getInlineCodeRanges(line)
+  const matches: InlineTokenMatch[] = []
+  let i = 0
+  let rangeIdx = 0
+
+  while (i < line.length) {
+    const currentRange = ranges[rangeIdx]
+    if (currentRange && i >= currentRange.start && i < currentRange.end) {
+      i = currentRange.end
+      rangeIdx += 1
+      continue
+    }
+
+    const ch = line[i]
+    if (ch !== '/' && ch !== '@') {
+      i += 1
+      continue
+    }
+
+    if (i > 0 && line[i - 1] === '\\') {
+      i += 1
+      continue
+    }
+
+    const prev = i > 0 ? line[i - 1] : undefined
+    if (ch === '/' && !isSlashBoundary(prev)) {
+      i += 1
+      continue
+    }
+    if (ch === '@' && !isAtBoundary(prev)) {
+      i += 1
+      continue
+    }
+
+    let j = i + 1
+    while (j < line.length && TOKEN_CHAR_RE.test(line[j])) {
+      j += 1
+    }
+
+    if (j === i + 1) {
+      i += 1
+      continue
+    }
+
+    // Skip path-like fragments such as "/alpha/log.txt".
+    if (ch === '/' && j < line.length && line[j] === '/') {
+      i = j
+      continue
+    }
+
+    const token = parseDirectiveToken(line.slice(i + 1, j))
+    if (token) {
+      matches.push({
+        type: ch === '/' ? 'slash' : 'at',
+        token
+      })
+    }
+
+    i = j
+  }
+
+  return matches
 }
 
 export function expandLazyDirectives(
@@ -105,101 +387,79 @@ export function expandLazyDirectives(
   workDir?: string,
   toolkit?: SpaceToolkit | null
 ): LazyExpansionResult {
+  const state: ExpansionState = {
+    expanded: { skills: [], commands: [], agents: [] },
+    missing: { skills: [], commands: [], agents: [] },
+    expandedSeen: {
+      skills: new Set<string>(),
+      commands: new Set<string>(),
+      agents: new Set<string>()
+    },
+    missingSeen: {
+      skills: new Set<string>(),
+      commands: new Set<string>(),
+      agents: new Set<string>()
+    }
+  }
+
   const lines = input.split(/\r?\n/)
-  const expanded = { skills: [] as string[], commands: [] as string[], agents: [] as string[] }
-  const missing = { skills: [] as string[], commands: [] as string[], agents: [] as string[] }
+  const inlineInjectionBlocks: string[] = []
+  const seenInlineTokenKeys = new Set<string>()
   let inFence = false
 
   const outLines = lines.map((line) => {
     const trimmed = line.trim()
+
     if (trimmed.startsWith('```')) {
       inFence = !inFence
       return line
     }
+
     if (inFence) return line
 
     const agentMatch = trimmed.match(AT_LINE_RE)
     if (agentMatch) {
-      const name = agentMatch[1]
-      const args = agentMatch[2]
-      if (!canUseFromToolkit(toolkit, 'agent', name)) {
-        missing.agents.push(name)
-        return line
-      }
-      const agentContent = getAgentContent(name, workDir)
-      if (!agentContent) {
-        missing.agents.push(name)
-        return line
-      }
-      expanded.agents.push(name)
-      const argsAttr = buildArgsAttr(args)
-      return [
-        '<!-- injected: agent -->',
-        `<task-request name="${name}"${argsAttr}>`,
-        agentContent.trimEnd(),
-        '</task-request>'
-      ].join('\n')
+      const token = parseDirectiveToken(agentMatch[1])
+      if (!token) return line
+      const expanded = expandAgentDirective(token, state, workDir, toolkit, agentMatch[2])
+      return expanded ?? line
     }
 
     const slashMatch = trimmed.match(SLASH_LINE_RE)
-    if (!slashMatch) return line
-
-    const name = slashMatch[1]
-    const args = slashMatch[2]
-    const argsAttr = buildArgsAttr(args)
-
-    const command = getCommandContent(name, workDir, { silent: true })
-    if (command) {
-      if (!canUseFromToolkit(toolkit, 'command', name)) {
-        missing.commands.push(name)
-        return line
-      }
-      const referencedSkill = findReferencedSkill(command)
-      if (referencedSkill) {
-        if (!canUseFromToolkit(toolkit, 'skill', referencedSkill)) {
-          missing.skills.push(referencedSkill)
-          return line
-        }
-        const skill = getSkillContent(referencedSkill, workDir)
-        if (skill) {
-          expanded.skills.push(referencedSkill)
-          return [
-            '<!-- injected: command-skill -->',
-            `<skill name="${referencedSkill}"${argsAttr}>`,
-            skill.content.trimEnd(),
-            '</skill>'
-          ].join('\n')
-        }
-      }
-
-      expanded.commands.push(name)
-      return [
-        '<!-- injected: command -->',
-        `<command name="${name}"${argsAttr}>`,
-        command.trimEnd(),
-        '</command>'
-      ].join('\n')
+    if (slashMatch) {
+      const token = parseDirectiveToken(slashMatch[1])
+      if (!token) return line
+      const expanded = expandSlashDirective(token, state, workDir, toolkit, slashMatch[2])
+      return expanded ?? line
     }
 
-    if (!canUseFromToolkit(toolkit, 'skill', name)) {
-      missing.skills.push(name)
-      return line
+    const inlineTokens = collectInlineDirectiveTokens(line)
+    for (const match of inlineTokens) {
+      const tokenKey = `${match.type}:${match.token.raw}`
+      if (seenInlineTokenKeys.has(tokenKey)) continue
+
+      const block = match.type === 'at'
+        ? expandAgentDirective(match.token, state, workDir, toolkit)
+        : expandSlashDirective(match.token, state, workDir, toolkit)
+
+      if (!block) continue
+      seenInlineTokenKeys.add(tokenKey)
+      inlineInjectionBlocks.push(block)
     }
 
-    const skill = getSkillContent(name, workDir)
-    if (!skill) {
-      missing.skills.push(name)
-      return line
-    }
-
-    expanded.skills.push(name)
-    return [
-      '<!-- injected: skill -->',
-      `<skill name="${name}"${argsAttr}>`,
-      skill.content.trimEnd(),
-      '</skill>'
-    ].join('\n')
+    return line
   })
 
-  return { text: outLines.join('\n'), expanded, missing }
+  const outText = outLines.join('\n')
+  const prefixedText = inlineInjectionBlocks.length > 0
+    ? (outText.trim().length > 0
+      ? `${inlineInjectionBlocks.join('\n\n')}\n\n${outText}`
+      : inlineInjectionBlocks.join('\n\n'))
+    : outText
+
+  return {
+    text: prefixedText,
+    expanded: state.expanded,
+    missing: state.missing
+  }
 }
