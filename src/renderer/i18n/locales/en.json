@@ -556,5 +556,18 @@
   "Failed to update toolkit": "Failed to update toolkit",
   "Import from Preferences": "Import from Preferences",
   "Confirm": "Confirm",
-  "Plugin": "Plugin"
+  "Plugin": "Plugin",
+  "Configuration Source": "Configuration Source",
+  "Choose which user configuration directory Kite uses": "Choose which user configuration directory Kite uses",
+  "Source Mode": "Source Mode",
+  "Kite (~/.kite)": "Kite (~/.kite)",
+  "Claude (~/.claude)": "Claude (~/.claude)",
+  "Changing configuration source requires restart. Current session keeps existing sources until restart.": "Changing configuration source requires restart. Current session keeps existing sources until restart.",
+  "Configuration source saved. Restart Kite to apply changes.": "Configuration source saved. Restart Kite to apply changes."
+  ,
+  "Add .md files in {{root}}/commands/": "Add .md files in {{root}}/commands/",
+  "Manage files in {{root}}/commands/ and {{path}}/.claude/commands/": "Manage files in {{root}}/commands/ and {{path}}/.claude/commands/",
+  "Manage files in {{root}}/commands/": "Manage files in {{root}}/commands/",
+  "Add .md files in {{root}}/commands or .claude/commands": "Add .md files in {{root}}/commands or .claude/commands",
+  "Add .md files in {{root}}/agents or .claude/agents": "Add .md files in {{root}}/agents or .claude/agents"
 }

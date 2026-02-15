@@ -87,6 +87,7 @@ import {
   cleanupExtendedServices
 } from './bootstrap'
 import { initializeApp, getMinimizeToTray } from './services/config.service'
+import { initConfigSourceModeLock } from './services/config-source-mode.service'
 import { disableRemoteAccess } from './services/remote.service'
 import { stopOpenAICompatRouter } from './openai-compat-router'
 import {
@@ -314,6 +315,15 @@ app.whenReady().then(async () => {
 
   // Initialize app data directories
   await initializeApp()
+
+  // Lock configuration source mode before any watcher/agent/session initialization.
+  // This prevents runtime mixed-source reads if user changes mode without restart.
+  try {
+    initConfigSourceModeLock()
+  } catch (error) {
+    console.error('[Main] Failed to initialize config source mode lock:', error)
+    throw error
+  }
 
   // Create application menu
   createAppMenu()

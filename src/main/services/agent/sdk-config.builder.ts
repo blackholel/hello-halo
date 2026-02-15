@@ -8,7 +8,7 @@
 import { join } from 'path'
 import { existsSync, mkdirSync } from 'fs'
 import { homedir } from 'os'
-import { getConfig, getTempSpacePath, getKiteDir } from '../config.service'
+import { getConfig, getTempSpacePath } from '../config.service'
 import { getSpaceConfig, type SpaceToolkit } from '../space-config.service'
 import { buildHooksConfig } from '../hooks.service'
 import { listEnabledPlugins } from '../plugins.service'
@@ -19,6 +19,7 @@ import { getSpaceToolkit } from '../toolkit.service'
 import { createAIBrowserMcpServer, AI_BROWSER_SYSTEM_PROMPT } from '../ai-browser'
 import { SKILLS_LAZY_SYSTEM_PROMPT } from '../skills-mcp-server'
 import { buildPluginMcpServers } from '../plugin-mcp.service'
+import { getLockedConfigSourceMode, getLockedUserConfigRootDir } from '../config-source-mode.service'
 import type { PluginConfig, SettingSource, ToolCall } from './types'
 
 // Re-export types for convenience
@@ -90,6 +91,7 @@ export function getEffectiveSkillsLazyLoad(
  */
 export function buildPluginsConfig(workDir: string): PluginConfig[] {
   const plugins: PluginConfig[] = []
+  const sourceMode = getLockedConfigSourceMode()
   const config = getConfig()
   const spaceConfig = getSpaceConfig(workDir)
   const claudeCodeConfig = config.claudeCode
@@ -131,27 +133,29 @@ export function buildPluginsConfig(workDir: string): PluginConfig[] {
   const disableGlobal = spaceConfig?.claudeCode?.plugins?.disableGlobal === true
 
   if (!disableGlobal) {
-    // 1. System config directory (optional, default: false)
-    // Load ~/.claude/ which contains skills/, commands/, hooks/, agents/
-    if (claudeCodeConfig?.enableSystemSkills) {
-      const systemConfigPath = join(homedir(), '.claude')
-      addIfValid(systemConfigPath)
-    }
+    if (sourceMode === 'claude') {
+      // Strict Claude source mode: use only Claude user root, no app overlay paths.
+      addIfValid(getLockedUserConfigRootDir())
+    } else {
+      // 1. System config directory (optional, default: false)
+      // Load ~/.claude/ which contains skills/, commands/, hooks/, agents/
+      if (claudeCodeConfig?.enableSystemSkills) {
+        const systemConfigPath = join(homedir(), '.claude')
+        addIfValid(systemConfigPath)
+      }
 
-    // 2. Global custom paths from config.claudeCode.plugins.globalPaths
-    const globalPaths = claudeCodeConfig?.plugins?.globalPaths || []
-    for (const globalPath of globalPaths) {
-      // Resolve relative paths from home directory
-      const resolvedPath = globalPath.startsWith('/') ? globalPath : join(homedir(), globalPath)
-      addIfValid(resolvedPath)
-    }
+      // 2. Global custom paths from config.claudeCode.plugins.globalPaths
+      const globalPaths = claudeCodeConfig?.plugins?.globalPaths || []
+      for (const globalPath of globalPaths) {
+        // Resolve relative paths from home directory
+        const resolvedPath = globalPath.startsWith('/') ? globalPath : join(homedir(), globalPath)
+        addIfValid(resolvedPath)
+      }
 
-    // 3. App config directory (default: ~/.kite/)
-    // This loads skills/, commands/, hooks/, agents/ from ~/.kite/
-    if (claudeCodeConfig?.plugins?.loadDefaultPaths !== false) {
-      const kiteDir = getKiteDir()
-      if (kiteDir) {
-        // Load ~/.kite/ as a plugin directory (SDK will scan skills/, commands/, etc.)
+      // 3. App config directory (default: ~/.kite/)
+      // This loads skills/, commands/, hooks/, agents/ from ~/.kite/
+      if (claudeCodeConfig?.plugins?.loadDefaultPaths !== false) {
+        const kiteDir = getLockedUserConfigRootDir()
         addIfValid(kiteDir)
       }
     }
@@ -392,7 +396,7 @@ export function buildSdkOptions(params: BuildSdkOptionsParams): Record<string, a
       }
       return isolated
     }
-    return getKiteDir()
+    return getLockedUserConfigRootDir()
   })()
 
   const sdkOptions: Record<string, any> = {
@@ -472,7 +476,7 @@ export function buildSdkOptions(params: BuildSdkOptionsParams): Record<string, a
  */
 export function _testBuildSdkOptionsEnv(): Record<string, any> {
   return {
-    CLAUDE_CONFIG_DIR: getKiteDir(),
+    CLAUDE_CONFIG_DIR: getLockedUserConfigRootDir(),
     PATH: getPythonEnhancedPath(),
     ELECTRON_RUN_AS_NODE: 1,
     ELECTRON_NO_ATTACH_CONSOLE: 1,

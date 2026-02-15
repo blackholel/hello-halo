@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAppStore } from '../stores/app.store'
 import { usePythonStore } from '../stores/python.store'
 import { api } from '../api'
-import type { KiteConfig, ThemeMode, McpServersConfig } from '../types'
+import type { KiteConfig, ThemeMode, McpServersConfig, ConfigSourceMode } from '../types'
 import { AVAILABLE_MODELS, DEFAULT_MODEL } from '../types'
 import { CheckCircle2, XCircle, ArrowLeft, Eye, EyeOff, ChevronDown, ChevronRight, Package, Trash2, Loader2 } from '../components/icons/ToolIcons'
 import { Header } from '../components/layout/Header'
@@ -130,6 +130,8 @@ export function SettingsPage() {
   const [provider, setProvider] = useState(config?.api.provider || 'anthropic')
   const [model, setModel] = useState(config?.api.model || DEFAULT_MODEL)
   const [theme, setTheme] = useState<ThemeMode>(config?.appearance.theme || 'system')
+  const [configSourceMode, setConfigSourceMode] = useState<ConfigSourceMode>(config?.configSourceMode || 'kite')
+  const [configSourceNotice, setConfigSourceNotice] = useState<string | null>(null)
   // Custom model toggle: enable by default if current model is not in preset list
   const [useCustomModel, setUseCustomModel] = useState(() => {
     const currentModel = config?.api.model || DEFAULT_MODEL
@@ -170,6 +172,10 @@ export function SettingsPage() {
       unsubscribe()
     }
   }, [])
+
+  useEffect(() => {
+    setConfigSourceMode(config?.configSourceMode || 'kite')
+  }, [config?.configSourceMode])
 
   // Load system settings
   useEffect(() => {
@@ -329,6 +335,28 @@ export function SettingsPage() {
   const handleMcpServersSave = async (servers: McpServersConfig) => {
     await api.setConfig({ mcpServers: servers })
     setConfig({ ...config, mcpServers: servers } as KiteConfig)
+  }
+
+  const handleConfigSourceModeChange = async (nextMode: ConfigSourceMode) => {
+    const previousMode = configSourceMode
+    setConfigSourceMode(nextMode)
+    setConfigSourceNotice(null)
+
+    if (nextMode === previousMode) {
+      return
+    }
+
+    try {
+      await api.setConfig({ configSourceMode: nextMode })
+      // Do not update global in-memory config here.
+      // Runtime source mode is locked in main process until restart,
+      // so UI should keep using current effective source outside this page.
+      setConfigSourceNotice(t('Configuration source saved. Restart Kite to apply changes.'))
+    } catch (error) {
+      console.error('[Settings] Failed to update configuration source mode:', error)
+      setConfigSourceMode(previousMode)
+      setConfigSourceNotice(t('Save failed'))
+    }
   }
 
   // Handle Python package install
@@ -660,6 +688,47 @@ export function SettingsPage() {
                 </div>
                 <AppleToggle checked={true} onChange={() => {}} disabled={true} />
               </div>
+            </div>
+          </section>
+
+          {/* Configuration Source Section */}
+          <section className="settings-section">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center">
+                <svg className="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7z" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-base font-semibold tracking-tight">{t('Configuration Source')}</h2>
+                <p className="text-xs text-muted-foreground">{t('Choose which user configuration directory Kite uses')}</p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">
+                  {t('Source Mode')}
+                </label>
+                <select
+                  value={configSourceMode}
+                  onChange={(event) => handleConfigSourceModeChange(event.target.value as ConfigSourceMode)}
+                  className="w-full select-apple text-sm"
+                >
+                  <option value="kite">{t('Kite (~/.kite)')}</option>
+                  <option value="claude">{t('Claude (~/.claude)')}</option>
+                </select>
+              </div>
+
+              <div className="settings-warning text-sm">
+                {t('Changing configuration source requires restart. Current session keeps existing sources until restart.')}
+              </div>
+
+              {configSourceNotice && (
+                <div className="settings-info text-sm">
+                  {configSourceNotice}
+                </div>
+              )}
             </div>
           </section>
 

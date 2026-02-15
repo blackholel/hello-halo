@@ -66,6 +66,7 @@ describe('Config Service', () => {
       expect(config.permissions.commandExecution).toBe('ask')
       expect(config.appearance.theme).toBe('dark')
       expect(config.isFirstLaunch).toBe(true)
+      expect(config.configSourceMode).toBe('kite')
     })
 
     it('should merge saved config with defaults', async () => {
@@ -142,6 +143,26 @@ describe('Config Service', () => {
 
       const config = getConfig()
       expect(config.mcpServers).toEqual({ server2: { command: 'cmd2' } })
+    })
+
+    it('should normalize invalid configSourceMode to kite', () => {
+      saveConfig({ configSourceMode: 'bad-mode' as any } as any)
+
+      const config = getConfig()
+      expect(config.configSourceMode).toBe('kite')
+    })
+  })
+
+  describe('configSourceMode normalization', () => {
+    it('should fallback to kite for invalid value in config file', async () => {
+      await initializeApp()
+      const configPath = getConfigPath()
+      fs.writeFileSync(configPath, JSON.stringify({
+        configSourceMode: 'invalid'
+      }))
+
+      const config = getConfig()
+      expect(config.configSourceMode).toBe('kite')
     })
   })
 })

@@ -2,7 +2,7 @@
  * Commands Service - Manages Claude Code commands configuration
  *
  * Commands are loaded from:
- * 1. ~/.kite/commands/ - Default app-level commands directory
+ * 1. {locked-user-root}/commands/ - Default app-level commands directory
  * 2. {workDir}/.claude/commands/ - Space-level commands
  *
  * Each command is a markdown file (.md).
@@ -10,7 +10,7 @@
 
 import { join, dirname } from 'path'
 import { readdirSync, readFileSync, statSync, existsSync, mkdirSync, writeFileSync, rmSync, copyFileSync } from 'fs'
-import { getKiteDir } from './config.service'
+import { getLockedUserConfigRootDir } from './config-source-mode.service'
 import { getAllSpacePaths } from './space.service'
 import { isPathWithinBasePaths, isValidDirectoryPath, isFileNotFoundError, isWorkDirAllowed } from '../utils/path-validation'
 import { listEnabledPlugins } from './plugins.service'
@@ -129,10 +129,7 @@ function buildGlobalCommands(): CommandDefinition[] {
     addCommands(scanCommandDir(join(plugin.installPath, 'commands'), 'plugin', plugin.installPath, plugin.name))
   }
 
-  const kiteDir = getKiteDir()
-  if (kiteDir) {
-    addCommands(scanCommandDir(join(kiteDir, 'commands'), 'app'))
-  }
+  addCommands(scanCommandDir(join(getLockedUserConfigRootDir(), 'commands'), 'app'))
 
   return commands
 }

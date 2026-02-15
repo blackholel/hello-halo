@@ -10,6 +10,7 @@ import { commandKey } from '../../../shared/command-utils'
 import { useSpaceStore } from '../../stores/space.store'
 import { useToolkitStore } from '../../stores/toolkit.store'
 import { buildDirective } from '../../utils/directive-helpers'
+import { useAppStore } from '../../stores/app.store'
 
 interface CommandsPanelProps {
   workDir?: string
@@ -49,6 +50,8 @@ export function CommandsPanel({
   const [localSearchQuery, setLocalSearchQuery] = useState('')
   const [showAllInToolkitMode, setShowAllInToolkitMode] = useState(false)
   const [updatingToolkitCommand, setUpdatingToolkitCommand] = useState<string | null>(null)
+  const configSourceMode = useAppStore((state) => state.config?.configSourceMode || 'kite')
+  const userConfigRoot = configSourceMode === 'claude' ? '~/.claude' : '~/.kite'
 
   const { commands, loadedWorkDir, isLoading, loadCommands } = useCommandsStore()
   const currentSpace = useSpaceStore((state) => state.currentSpace)
@@ -291,8 +294,8 @@ export function CommandsPanel({
               </p>
               <p className="text-[10px] text-muted-foreground/70 mt-1">
                 {workDir
-                  ? t('Manage files in ~/.kite/commands/ and {{path}}/.claude/commands/', { path: workDir })
-                  : t('Manage files in ~/.kite/commands/')}
+                  ? t('Manage files in {{root}}/commands/ and {{path}}/.claude/commands/', { root: userConfigRoot, path: workDir })
+                  : t('Manage files in {{root}}/commands/', { root: userConfigRoot })}
               </p>
             </div>
             {workDir && onCreateCommand && (
@@ -355,7 +358,7 @@ export function CommandsPanel({
                 <p className="text-[10px] text-muted-foreground/60 mt-1">
                   {localSearchQuery
                     ? t('Try a different search term')
-                    : t('Add .md files in ~/.kite/commands or .claude/commands')}
+                    : t('Add .md files in {{root}}/commands or .claude/commands', { root: userConfigRoot })}
                 </p>
               </div>
             ) : (

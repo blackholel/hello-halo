@@ -2,17 +2,23 @@
  * Hooks Service - Manages Claude Code hooks configuration
  *
  * Hooks are loaded from multiple sources and merged:
- * 1. ~/.kite/settings.json (Claude Code compatible format)
- * 2. config.claudeCode.hooks (Kite global config)
- * 3. space-config.json claudeCode.hooks (Space-level config)
+ * - Kite mode:
+ *   1. ~/.kite/settings.json (Claude Code compatible format)
+ *   2. config.claudeCode.hooks (Kite global config)
+ *   3. space-config.json claudeCode.hooks (Space-level config)
+ *   4. plugin hooks
+ * - Claude mode (strict source):
+ *   1. ~/.claude/settings.json
+ *   2. plugin hooks
  */
 
 import { join } from 'path'
 import { existsSync, readFileSync } from 'fs'
-import { getConfig, getKiteDir, type HooksConfig } from './config.service'
+import { getConfig, type HooksConfig } from './config.service'
 import { getSpaceConfig } from './space-config.service'
 import { FileCache } from '../utils/file-cache'
 import { listEnabledPlugins } from './plugins.service'
+import { getLockedConfigSourceMode, getLockedUserConfigRootDir } from './config-source-mode.service'
 
 // ============================================
 // Kite Settings Types (Claude Code compatible)
@@ -42,16 +48,16 @@ const HOOK_EVENT_TYPES: (keyof HooksConfig)[] = [
 ]
 
 /**
- * Get the path to Kite settings file
+ * Get the path to active settings file based on locked config source mode.
  */
 function getSettingsPath(): string {
-  return join(getKiteDir(), 'settings.json')
+  return join(getLockedUserConfigRootDir(), 'settings.json')
 }
 
 /**
- * Load hooks from ~/.kite/settings.json
+ * Load hooks from active settings.json
  */
-function loadKiteSettingsHooks(): HooksConfig | undefined {
+function loadUserSettingsHooks(): HooksConfig | undefined {
   const settingsPath = getSettingsPath()
 
   const settings = settingsCache.get(settingsPath, () => {
@@ -183,12 +189,14 @@ export function buildHooksConfig(workDir: string): HooksConfig | undefined {
     return undefined
   }
 
-  const settingsHooks = loadKiteSettingsHooks()
-  const globalHooks = config.claudeCode?.hooks
-  const spaceHooks = spaceConfig?.claudeCode?.hooks
+  const settingsHooks = loadUserSettingsHooks()
   const pluginHooks = loadPluginHooks()
-
-  const mergedHooks = mergeHooksConfigs(settingsHooks, globalHooks, spaceHooks, pluginHooks)
+  const sourceMode = getLockedConfigSourceMode()
+  const globalHooks = sourceMode === 'kite' ? config.claudeCode?.hooks : undefined
+  const spaceHooks = sourceMode === 'kite' ? spaceConfig?.claudeCode?.hooks : undefined
+  const mergedHooks = sourceMode === 'claude'
+    ? mergeHooksConfigs(settingsHooks, pluginHooks)
+    : mergeHooksConfigs(settingsHooks, globalHooks, spaceHooks, pluginHooks)
 
   if (mergedHooks) {
     const hookCounts = Object.entries(mergedHooks)
@@ -234,12 +242,15 @@ export function getAllHooks(workDir?: string): {
   space: HooksConfig | undefined
   merged: HooksConfig | undefined
 } {
-  const settingsHooks = loadKiteSettingsHooks()
+  const settingsHooks = loadUserSettingsHooks()
+  const sourceMode = getLockedConfigSourceMode()
   const config = getConfig()
-  const globalHooks = config.claudeCode?.hooks
-  const spaceHooks = workDir ? getSpaceConfig(workDir)?.claudeCode?.hooks : undefined
+  const globalHooks = sourceMode === 'kite' ? config.claudeCode?.hooks : undefined
+  const spaceHooks = sourceMode === 'kite' && workDir ? getSpaceConfig(workDir)?.claudeCode?.hooks : undefined
   const pluginHooks = loadPluginHooks()
-  const merged = mergeHooksConfigs(settingsHooks, globalHooks, spaceHooks, pluginHooks)
+  const merged = sourceMode === 'claude'
+    ? mergeHooksConfigs(settingsHooks, pluginHooks)
+    : mergeHooksConfigs(settingsHooks, globalHooks, spaceHooks, pluginHooks)
 
   return {
     settings: settingsHooks,

@@ -21,6 +21,16 @@ import type { AnalyticsConfig } from './analytics/types'
 
 type ApiConfigChangeHandler = () => void
 const apiConfigChangeHandlers: ApiConfigChangeHandler[] = []
+const CONFIG_SOURCE_MODE_VALUES = ['kite', 'claude'] as const
+
+export type ConfigSourceMode = (typeof CONFIG_SOURCE_MODE_VALUES)[number]
+
+export function normalizeConfigSourceMode(value: unknown): ConfigSourceMode {
+  if (typeof value === 'string' && (CONFIG_SOURCE_MODE_VALUES as readonly string[]).includes(value)) {
+    return value as ConfigSourceMode
+  }
+  return 'kite'
+}
 
 /**
  * Register a callback to be notified when API config changes.
@@ -85,6 +95,8 @@ interface KiteConfig {
   }
   // Claude Code configuration (plugins, hooks, agents)
   claudeCode?: ClaudeCodeConfig
+  // Configuration source mode (runtime lock consumes this on startup)
+  configSourceMode: ConfigSourceMode
 }
 
 // MCP server configuration types
@@ -180,7 +192,8 @@ const DEFAULT_CONFIG: KiteConfig = {
     completed: false
   },
   mcpServers: {},  // Empty by default
-  isFirstLaunch: true
+  isFirstLaunch: true,
+  configSourceMode: 'kite'
 }
 
 // Initialize app directories
@@ -229,7 +242,8 @@ export function getConfig(): KiteConfig {
       // mcpServers is a flat map, just use parsed value or default
       mcpServers: parsed.mcpServers || DEFAULT_CONFIG.mcpServers,
       // analytics: keep as-is (managed by analytics.service.ts)
-      analytics: parsed.analytics
+      analytics: parsed.analytics,
+      configSourceMode: normalizeConfigSourceMode(parsed.configSourceMode)
     }
   } catch (error) {
     console.error('Failed to read config:', error)
@@ -241,6 +255,7 @@ export function getConfig(): KiteConfig {
 export function saveConfig(config: Partial<KiteConfig>): KiteConfig {
   const currentConfig = getConfig()
   const newConfig = { ...currentConfig, ...config }
+  const rawUpdates = config as Record<string, unknown>
 
   // Deep merge for nested objects
   if (config.api) {
@@ -257,6 +272,9 @@ export function saveConfig(config: Partial<KiteConfig>): KiteConfig {
   }
   if (config.onboarding) {
     newConfig.onboarding = { ...currentConfig.onboarding, ...config.onboarding }
+  }
+  if (rawUpdates.configSourceMode !== undefined) {
+    newConfig.configSourceMode = normalizeConfigSourceMode(rawUpdates.configSourceMode)
   }
   // mcpServers: replace entirely when provided (not merged)
   if (config.mcpServers !== undefined) {
