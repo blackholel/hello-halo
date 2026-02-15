@@ -344,7 +344,7 @@ export function SpacePage() {
         : conversations[0]
 
       if (convToOpen) {
-        openChat(currentSpace.id, convToOpen.id, convToOpen.title)
+        openChat(currentSpace.id, convToOpen.id, convToOpen.title, currentSpace.path)
       }
     }
   }, [layoutMode, currentSpace?.id, conversations.length, isLoading])
@@ -362,7 +362,7 @@ export function SpacePage() {
 
     // In tabs-only mode, open the new conversation in a tab
     if (layoutMode === 'tabs-only' && newConv) {
-      openChat(currentSpace.id, newConv.id, newConv.title)
+      openChat(currentSpace.id, newConv.id, newConv.title, currentSpace.path)
     }
   }, [currentSpace, createConversation, layoutMode, openChat])
 
@@ -372,7 +372,7 @@ export function SpacePage() {
       // In tabs-only mode, open conversation in a tab
       const conv = conversations.find(c => c.id === id)
       if (conv) {
-        openChat(currentSpace.id, id, conv.title)
+        openChat(currentSpace.id, id, conv.title, currentSpace.path)
       }
     } else {
       // In split mode, update the main ChatView
@@ -499,6 +499,7 @@ export function SpacePage() {
                   conversations={conversations}
                   currentConversationId={currentConversationId}
                   spaceId={currentSpace.id}
+                  workDir={currentSpace.path}
                   layoutMode={layoutMode}
                   onSelect={handleSelectConversation}
                   onNew={handleNewConversation}

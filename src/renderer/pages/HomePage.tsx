@@ -32,6 +32,7 @@ import { ExtensionsView } from '../components/home/ExtensionsView'
 import { Monitor, ArrowRight, X, LayoutGrid, Puzzle } from 'lucide-react'
 import { api } from '../api'
 import { useTranslation } from '../i18n'
+import { normalizeEnabledValues } from '../utils/resource-key'
 
 // Check if running in web mode
 const isWebMode = api.isRemoteMode()
@@ -123,6 +124,14 @@ export function HomePage(): JSX.Element {
   const editingPreferences = editingSpace ? getSpacePreferences(editingSpace.id) : undefined
   const legacyEnabledSkills = editingPreferences?.skills?.enabled || []
   const legacyEnabledAgents = editingPreferences?.agents?.enabled || []
+  const normalizedEnabledSkills = useMemo(
+    () => normalizeEnabledValues(legacyEnabledSkills),
+    [legacyEnabledSkills]
+  )
+  const normalizedEnabledAgents = useMemo(
+    () => normalizeEnabledValues(legacyEnabledAgents),
+    [legacyEnabledAgents]
+  )
   const canImportToolkit = legacyEnabledSkills.length > 0 || legacyEnabledAgents.length > 0
 
   const toolkitGroups = useMemo((): Array<{ key: string; title: string; items: DirectiveRef[] }> => {
@@ -153,21 +162,30 @@ export function HomePage(): JSX.Element {
   }
 
   const handleImportToolkitFromPreferences = async (): Promise<void> => {
-    if (!editingSpace || !canImportToolkit) return
+    if (!editingSpace) return
 
     setIsToolkitUpdating(true)
     setToolkitActionError(null)
 
     try {
-      const migrated = await migrateFromPreferences(editingSpace.id, legacyEnabledSkills, legacyEnabledAgents)
+      if (normalizedEnabledSkills.length === 0 && normalizedEnabledAgents.length === 0) {
+        setToolkitActionError(t('Failed to parse enabled resources'))
+        return
+      }
+
+      const migrated = await migrateFromPreferences(
+        editingSpace.id,
+        normalizedEnabledSkills,
+        normalizedEnabledAgents
+      )
       if (!migrated) {
-        setToolkitActionError(t('Failed to update toolkit'))
+        setToolkitActionError(t('Failed to write toolkit resources'))
         return
       }
       await loadToolkit(editingSpace.id)
     } catch (error) {
       console.error('[HomePage] Failed to import toolkit from preferences:', error)
-      setToolkitActionError(t('Failed to update toolkit'))
+      setToolkitActionError(t('Failed to write toolkit resources'))
     } finally {
       setIsToolkitUpdating(false)
     }

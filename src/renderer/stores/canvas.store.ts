@@ -48,8 +48,8 @@ interface CanvasState {
   openUrl: (url: string, title?: string) => Promise<void>
   attachAIBrowserView: (viewId: string, url: string, title?: string) => void
   openContent: (content: string, title: string, type: ContentType, language?: string) => void
-  openPlan: (content: string, title: string, spaceId: string, conversationId: string) => Promise<string>
-  openChat: (spaceId: string, conversationId: string, title: string) => Promise<void>
+  openPlan: (content: string, title: string, spaceId: string, conversationId: string, workDir?: string) => Promise<string>
+  openChat: (spaceId: string, conversationId: string, title: string, workDir?: string) => Promise<void>
   closeTab: (tabId: string) => void
   closeAllTabs: () => void
   switchTab: (tabId: string) => void
@@ -140,12 +140,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => {
       canvasLifecycle.openContent(content, title, type, language)
     },
 
-    openPlan: async (content: string, title: string, spaceId: string, conversationId: string) => {
-      return await canvasLifecycle.openPlan(content, title, spaceId, conversationId)
+    openPlan: async (content: string, title: string, spaceId: string, conversationId: string, workDir?: string) => {
+      return await canvasLifecycle.openPlan(content, title, spaceId, conversationId, workDir)
     },
 
-    openChat: async (spaceId: string, conversationId: string, title: string) => {
-      await canvasLifecycle.openChat(spaceId, conversationId, title)
+    openChat: async (spaceId: string, conversationId: string, title: string, workDir?: string) => {
+      await canvasLifecycle.openChat(spaceId, conversationId, title, workDir)
     },
 
     closeTab: (tabId: string) => {

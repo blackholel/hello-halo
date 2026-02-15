@@ -20,6 +20,7 @@ interface ChatHistoryPanelProps {
   onDelete?: (id: string) => void
   onRename?: (id: string, newTitle: string) => void
   spaceName: string
+  workDir?: string
 }
 
 // Format relative time
@@ -59,7 +60,8 @@ export function ChatHistoryPanel({
   onNew,
   onDelete,
   onRename,
-  spaceName
+  spaceName,
+  workDir
 }: ChatHistoryPanelProps) {
   const { t } = useTranslation()
   const { openChat } = useCanvasLifecycle()
@@ -343,7 +345,7 @@ export function ChatHistoryPanel({
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  openChat(spaceId, conv.id, conv.title)
+                                  openChat(spaceId, conv.id, conv.title, workDir)
                                   handleClose()
                                 }}
                                 className="p-1.5 hover:bg-primary/10 text-muted-foreground hover:text-primary rounded transition-colors"

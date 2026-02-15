@@ -19,23 +19,34 @@
  * - Bottom toolbar for future extensibility
  */
 
-import { useState, useRef, useEffect, useCallback, KeyboardEvent, ClipboardEvent, DragEvent } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo, KeyboardEvent, ClipboardEvent, DragEvent } from 'react'
 import { Plus, ImagePlus, Loader2, AlertCircle, Atom, Globe, ClipboardList } from 'lucide-react'
 import { useOnboardingStore } from '../../stores/onboarding.store'
 import { useAIBrowserStore } from '../../stores/ai-browser.store'
+import { useSpaceStore } from '../../stores/space.store'
+import { useSkillsStore, type SkillDefinition } from '../../stores/skills.store'
+import { useAgentsStore, type AgentDefinition } from '../../stores/agents.store'
+import { useCommandsStore, type CommandDefinition } from '../../stores/commands.store'
+import { useToolkitStore } from '../../stores/toolkit.store'
 import { getOnboardingPrompt } from '../onboarding/onboardingData'
 import { ImageAttachmentPreview } from './ImageAttachmentPreview'
 import { FileContextPreview } from './FileContextPreview'
 import { SkillsDropdown } from '../skills/SkillsDropdown'
+import { ComposerTriggerPanel, type ComposerSuggestionItem, type ComposerSuggestionTab } from './ComposerTriggerPanel'
 import { processImage, isValidImageType, formatFileSize } from '../../utils/imageProcessor'
 import type { ImageAttachment, FileContextAttachment } from '../../types'
 import { useTranslation } from '../../i18n'
 import { useComposerStore } from '../../stores/composer.store'
+import { buildDirective } from '../../utils/directive-helpers'
+import { commandKey } from '../../../shared/command-utils'
+import { getTriggerContext, replaceTriggerToken, type TriggerContext } from '../../utils/composer-trigger'
+import { isResourceEnabled, toResourceKey } from '../../utils/resource-key'
 
 interface InputAreaProps {
   onSend: (content: string, images?: ImageAttachment[], thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[], planEnabled?: boolean) => void
   onStop: () => void
   isGenerating: boolean
+  spaceId: string | null
   placeholder?: string
   isCompact?: boolean
   workDir?: string  // For skills dropdown
@@ -57,6 +68,7 @@ export function InputArea({
   onSend,
   onStop,
   isGenerating,
+  spaceId,
   placeholder,
   isCompact = false,
   workDir,
@@ -73,14 +85,109 @@ export function InputArea({
   const [imageError, setImageError] = useState<ImageError | null>(null)
   const [thinkingEnabled, setThinkingEnabled] = useState(false)  // Extended thinking mode
   const [showAttachMenu, setShowAttachMenu] = useState(false)  // Attachment menu visibility
+  const [triggerContext, setTriggerContext] = useState<TriggerContext | null>(null)
+  const [activeSuggestionTab, setActiveSuggestionTab] = useState<ComposerSuggestionTab>('skills')
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0)
+  const [isComposing, setIsComposing] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const attachMenuRef = useRef<HTMLDivElement>(null)
+  const inputContainerRef = useRef<HTMLDivElement>(null)
+  const lastTriggerTypeRef = useRef<TriggerContext['type'] | null>(null)
   const insertQueue = useComposerStore(state => state.insertQueue)
   const dequeueInsert = useComposerStore(state => state.dequeueInsert)
 
   // AI Browser state
   const { enabled: aiBrowserEnabled, setEnabled: setAIBrowserEnabled } = useAIBrowserStore()
+  const { currentSpace, spaces, haloSpace, getSpacePreferences } = useSpaceStore((state) => ({
+    currentSpace: state.currentSpace,
+    spaces: state.spaces,
+    haloSpace: state.haloSpace,
+    getSpacePreferences: state.getSpacePreferences
+  }))
+  const {
+    skills,
+    loadedWorkDir: loadedSkillsWorkDir,
+    loadSkills
+  } = useSkillsStore((state) => ({
+    skills: state.skills,
+    loadedWorkDir: state.loadedWorkDir,
+    loadSkills: state.loadSkills
+  }))
+  const {
+    commands,
+    loadedWorkDir: loadedCommandsWorkDir,
+    loadCommands
+  } = useCommandsStore((state) => ({
+    commands: state.commands,
+    loadedWorkDir: state.loadedWorkDir,
+    loadCommands: state.loadCommands
+  }))
+  const {
+    agents,
+    loadedWorkDir: loadedAgentsWorkDir,
+    loadAgents
+  } = useAgentsStore((state) => ({
+    agents: state.agents,
+    loadedWorkDir: state.loadedWorkDir,
+    loadAgents: state.loadAgents
+  }))
+  const {
+    loadToolkit,
+    getToolkit,
+    isToolkitLoaded,
+    isInToolkit
+  } = useToolkitStore((state) => ({
+    loadToolkit: state.loadToolkit,
+    getToolkit: state.getToolkit,
+    isToolkitLoaded: state.isToolkitLoaded,
+    isInToolkit: state.isInToolkit
+  }))
+
+  const resolvedSpace = useMemo(() => {
+    if (!spaceId) return null
+    if (currentSpace?.id === spaceId) return currentSpace
+    if (haloSpace?.id === spaceId) return haloSpace
+    return spaces.find(space => space.id === spaceId) || null
+  }, [spaceId, currentSpace, haloSpace, spaces])
+
+  const spacePreferences = useMemo(() => {
+    if (!spaceId) return undefined
+    if (resolvedSpace?.preferences) return resolvedSpace.preferences
+    return getSpacePreferences(spaceId)
+  }, [getSpacePreferences, resolvedSpace?.preferences, spaceId])
+
+  const enabledSkills = spacePreferences?.skills?.enabled || []
+  const enabledAgents = spacePreferences?.agents?.enabled || []
+  const toolkitLoaded = spaceId ? isToolkitLoaded(spaceId) : false
+  const toolkit = spaceId ? getToolkit(spaceId) : null
+  const toolkitMode = Boolean(spaceId && toolkitLoaded && toolkit !== null)
+
+  const triggerQuery = triggerContext?.query.trim().toLowerCase() || ''
+
+  useEffect(() => {
+    if (loadedSkillsWorkDir !== (workDir ?? null) || skills.length === 0) {
+      void loadSkills(workDir)
+    }
+  }, [loadedSkillsWorkDir, loadSkills, skills.length, workDir])
+
+  useEffect(() => {
+    if (loadedCommandsWorkDir !== (workDir ?? null) || commands.length === 0) {
+      void loadCommands(workDir)
+    }
+  }, [commands.length, loadCommands, loadedCommandsWorkDir, workDir])
+
+  useEffect(() => {
+    if (loadedAgentsWorkDir !== (workDir ?? null) || agents.length === 0) {
+      void loadAgents(workDir)
+    }
+  }, [agents.length, loadAgents, loadedAgentsWorkDir, workDir])
+
+  useEffect(() => {
+    if (!spaceId || toolkitLoaded) return
+    if (resolvedSpace?.isTemp) return
+    void loadToolkit(spaceId)
+  }, [loadToolkit, resolvedSpace?.isTemp, spaceId, toolkitLoaded])
 
   // Auto-clear error after 3 seconds
   useEffect(() => {
@@ -116,6 +223,111 @@ export function InputArea({
   // In onboarding send step, show prefilled prompt
   const onboardingPrompt = getOnboardingPrompt(t)
   const displayContent = isOnboardingSendStep ? onboardingPrompt : content
+  const isTriggerPanelOpen = Boolean(triggerContext) && !isOnboardingSendStep && !isGenerating
+
+  const matchesTriggerQuery = useCallback((...values: Array<string | undefined>) => {
+    if (!triggerQuery) return true
+    return values.some(value => value?.toLowerCase().includes(triggerQuery))
+  }, [triggerQuery])
+
+  const filteredSkills = useMemo(() => {
+    let items = skills
+    if (toolkitMode && spaceId) {
+      items = items.filter(skill => isInToolkit(spaceId, buildDirective('skill', skill)))
+    } else if (enabledSkills.length > 0) {
+      items = items.filter(skill => isResourceEnabled(enabledSkills, skill))
+    }
+    return items.filter((skill) => matchesTriggerQuery(
+      toResourceKey(skill),
+      skill.name,
+      skill.description
+    ))
+  }, [enabledSkills, isInToolkit, matchesTriggerQuery, skills, spaceId, toolkitMode])
+
+  const filteredCommands = useMemo(() => {
+    let items = commands
+    if (toolkitMode && spaceId) {
+      items = items.filter(command => isInToolkit(spaceId, buildDirective('command', command)))
+    }
+    return items.filter((command) => matchesTriggerQuery(
+      commandKey(command),
+      command.name,
+      command.description
+    ))
+  }, [commands, isInToolkit, matchesTriggerQuery, spaceId, toolkitMode])
+
+  const filteredAgents = useMemo(() => {
+    let items = agents
+    if (toolkitMode && spaceId) {
+      items = items.filter(agent => isInToolkit(spaceId, buildDirective('agent', agent)))
+    } else if (enabledAgents.length > 0) {
+      items = items.filter(agent => isResourceEnabled(enabledAgents, agent))
+    }
+    return items.filter((agent) => matchesTriggerQuery(
+      toResourceKey(agent),
+      agent.name,
+      agent.description
+    ))
+  }, [agents, enabledAgents, isInToolkit, matchesTriggerQuery, spaceId, toolkitMode])
+
+  const skillSuggestions = useMemo<ComposerSuggestionItem[]>(() => (
+    filteredSkills.map((skill: SkillDefinition) => {
+      const key = toResourceKey(skill)
+      return {
+        id: `skill:${skill.path}`,
+        type: 'skill',
+        displayName: key,
+        insertText: `/${key}`,
+        description: skill.description
+      }
+    })
+  ), [filteredSkills])
+
+  const commandSuggestions = useMemo<ComposerSuggestionItem[]>(() => (
+    filteredCommands.map((command: CommandDefinition) => {
+      const key = commandKey(command)
+      return {
+        id: `command:${command.path}`,
+        type: 'command',
+        displayName: key,
+        insertText: `/${key}`,
+        description: command.description
+      }
+    })
+  ), [filteredCommands])
+
+  const agentSuggestions = useMemo<ComposerSuggestionItem[]>(() => (
+    filteredAgents.map((agent: AgentDefinition) => {
+      const key = toResourceKey(agent)
+      return {
+        id: `agent:${agent.path}`,
+        type: 'agent',
+        displayName: key,
+        insertText: `@${key}`,
+        description: agent.description
+      }
+    })
+  ), [filteredAgents])
+
+  const suggestionCounts = useMemo<Record<ComposerSuggestionTab, number>>(() => ({
+    skills: skillSuggestions.length,
+    commands: commandSuggestions.length,
+    agents: agentSuggestions.length
+  }), [agentSuggestions.length, commandSuggestions.length, skillSuggestions.length])
+
+  const activeSuggestions = useMemo(() => {
+    if (!triggerContext) return [] as ComposerSuggestionItem[]
+    if (triggerContext.type === 'mention') {
+      return agentSuggestions
+    }
+    if (activeSuggestionTab === 'commands') {
+      return commandSuggestions
+    }
+    if (activeSuggestionTab === 'agents') {
+      return agentSuggestions
+    }
+    return skillSuggestions
+  }, [activeSuggestionTab, agentSuggestions, commandSuggestions, skillSuggestions, triggerContext])
 
   // Process file to ImageAttachment with professional compression
   const processFileWithCompression = async (file: File): Promise<ImageAttachment | null> => {
@@ -289,12 +501,101 @@ export function InputArea({
     }
   }, [isGenerating, isOnboardingSendStep])
 
+  const closeTriggerPanel = useCallback(() => {
+    setTriggerContext(null)
+    setActiveSuggestionIndex(0)
+  }, [])
+
+  const refreshTriggerContext = useCallback((nextValue?: string, nextCaret?: number) => {
+    if (isOnboardingSendStep || isGenerating) {
+      closeTriggerPanel()
+      return
+    }
+
+    const textarea = textareaRef.current
+    const value = nextValue ?? content
+    const caret = nextCaret ?? textarea?.selectionStart ?? value.length
+    const context = getTriggerContext(value, caret)
+    setTriggerContext(context)
+  }, [closeTriggerPanel, content, isGenerating, isOnboardingSendStep])
+
+  useEffect(() => {
+    if (isGenerating || isOnboardingSendStep) {
+      closeTriggerPanel()
+    }
+  }, [closeTriggerPanel, isGenerating, isOnboardingSendStep])
+
+  useEffect(() => {
+    if (!isTriggerPanelOpen) return
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (inputContainerRef.current && !inputContainerRef.current.contains(event.target as Node)) {
+        closeTriggerPanel()
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [closeTriggerPanel, isTriggerPanelOpen])
+
+  useEffect(() => {
+    if (!triggerContext) {
+      setActiveSuggestionIndex(0)
+      lastTriggerTypeRef.current = null
+      return
+    }
+    if (lastTriggerTypeRef.current !== triggerContext.type) {
+      setActiveSuggestionTab(triggerContext.type === 'mention' ? 'agents' : 'skills')
+    }
+    lastTriggerTypeRef.current = triggerContext.type
+  }, [triggerContext])
+
+  useEffect(() => {
+    setActiveSuggestionIndex(0)
+  }, [activeSuggestionTab, triggerContext?.query, triggerContext?.start, triggerContext?.type])
+
+  useEffect(() => {
+    if (activeSuggestions.length === 0) {
+      setActiveSuggestionIndex(0)
+      return
+    }
+    setActiveSuggestionIndex(prev => Math.min(prev, activeSuggestions.length - 1))
+  }, [activeSuggestions.length])
+
+  const applySuggestion = useCallback((item: ComposerSuggestionItem) => {
+    if (!triggerContext) return
+    const replaced = replaceTriggerToken(content, triggerContext, item.insertText)
+    setContent(replaced.value)
+    closeTriggerPanel()
+    requestAnimationFrame(() => {
+      const textarea = textareaRef.current
+      if (!textarea) return
+      textarea.focus()
+      textarea.setSelectionRange(replaced.caret, replaced.caret)
+    })
+  }, [closeTriggerPanel, content, triggerContext])
+
+  const syncTriggerWithCursor = useCallback(() => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+    refreshTriggerContext(textarea.value, textarea.selectionStart ?? textarea.value.length)
+  }, [refreshTriggerContext])
+
+  const handleContentChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    if (isOnboardingSendStep) return
+    const value = event.target.value
+    const caret = event.target.selectionStart ?? value.length
+    setContent(value)
+    refreshTriggerContext(value, caret)
+  }
+
   // Handle send
   const handleSend = () => {
     const textToSend = isOnboardingSendStep ? onboardingPrompt : content.trim()
     const hasContent = textToSend || images.length > 0 || fileContexts.length > 0
 
     if (hasContent && !isGenerating) {
+      closeTriggerPanel()
       onSend(
         textToSend,
         images.length > 0 ? images : undefined,
@@ -323,6 +624,37 @@ export function InputArea({
 
   // Handle key press
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    const shouldSkipHotkeys = isComposing || e.nativeEvent.isComposing
+    if ((e.key === 'Enter' || e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Escape') && shouldSkipHotkeys) {
+      return
+    }
+
+    if (isTriggerPanelOpen) {
+      if (e.key === 'ArrowDown' && activeSuggestions.length > 0) {
+        e.preventDefault()
+        setActiveSuggestionIndex(prev => (prev + 1) % activeSuggestions.length)
+        return
+      }
+      if (e.key === 'ArrowUp' && activeSuggestions.length > 0) {
+        e.preventDefault()
+        setActiveSuggestionIndex(prev => (prev - 1 + activeSuggestions.length) % activeSuggestions.length)
+        return
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        closeTriggerPanel()
+        return
+      }
+      if (e.key === 'Enter' && !e.shiftKey && !isMobile()) {
+        const selected = activeSuggestions[activeSuggestionIndex] ?? activeSuggestions[0]
+        if (selected) {
+          e.preventDefault()
+          applySuggestion(selected)
+          return
+        }
+      }
+    }
+
     // Mobile: Enter for newline, send via button only
     // PC: Enter to send, Shift+Enter for newline
     if (e.key === 'Enter' && !e.shiftKey && !isMobile()) {
@@ -393,6 +725,7 @@ export function InputArea({
 
         {/* Input container */}
         <div
+          ref={inputContainerRef}
           className={`
             relative flex flex-col rounded-2xl transition-all duration-200
             ${isFocused
@@ -447,11 +780,22 @@ export function InputArea({
             <textarea
               ref={textareaRef}
               value={displayContent}
-              onChange={(e) => !isOnboardingSendStep && setContent(e.target.value)}
+              onChange={handleContentChange}
               onKeyDown={handleKeyDown}
+              onKeyUp={syncTriggerWithCursor}
+              onSelect={syncTriggerWithCursor}
+              onClick={syncTriggerWithCursor}
               onPaste={handlePaste}
-              onFocus={() => setIsFocused(true)}
+              onFocus={() => {
+                setIsFocused(true)
+                syncTriggerWithCursor()
+              }}
               onBlur={() => setIsFocused(false)}
+              onCompositionStart={() => setIsComposing(true)}
+              onCompositionEnd={() => {
+                setIsComposing(false)
+                requestAnimationFrame(syncTriggerWithCursor)
+              }}
               placeholder={placeholder || t('Type a message, let Kite help you...')}
               disabled={isGenerating}
               readOnly={isOnboardingSendStep}
@@ -463,6 +807,19 @@ export function InputArea({
               style={{ maxHeight: '200px' }}
             />
           </div>
+
+          {isTriggerPanelOpen && triggerContext && (
+            <ComposerTriggerPanel
+              triggerType={triggerContext.type}
+              activeTab={activeSuggestionTab}
+              onTabChange={setActiveSuggestionTab}
+              tabCounts={suggestionCounts}
+              items={activeSuggestions}
+              activeIndex={activeSuggestionIndex}
+              onHoverIndex={setActiveSuggestionIndex}
+              onSelect={applySuggestion}
+            />
+          )}
 
           {/* Bottom toolbar - always visible, industry standard layout */}
           <InputToolbar
