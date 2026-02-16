@@ -3,11 +3,12 @@
  */
 
 import { shell } from 'electron'
-import { join, basename } from 'path'
+import { join } from 'path'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, rmSync } from 'fs'
-import { getKiteDir, getTempSpacePath, getSpacesDir } from './config.service'
+import { getKiteDir, getLegacySpacesDir, getTempSpacePath, getSpacesDir } from './config.service'
 import { updateSpaceConfig } from './space-config.service'
 import { v4 as uuidv4 } from 'uuid'
+import { isPathWithinBasePaths } from '../utils/path-validation'
 
 interface Space {
   id: string
@@ -61,7 +62,86 @@ interface SpaceMeta {
 
 // Space index for tracking custom path spaces
 interface SpaceIndex {
-  customPaths: string[]  // Array of paths to spaces outside ~/.kite/spaces/
+  customPaths: string[]  // Array of paths to spaces outside the default spaces root.
+}
+
+const WINDOWS_RESERVED_FOLDER_NAMES = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i
+
+function sanitizeSpaceDirName(name: string): string {
+  let normalized = name
+    .trim()
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '-')
+    .replace(/\s+/g, ' ')
+    .replace(/[. ]+$/g, '')
+
+  if (!normalized) {
+    normalized = 'untitled-space'
+  }
+
+  if (WINDOWS_RESERVED_FOLDER_NAMES.test(normalized)) {
+    normalized = `${normalized}-space`
+  }
+
+  return normalized
+}
+
+function resolveDefaultSpacePath(name: string): string {
+  const spacesDir = getSpacesDir()
+  const baseName = sanitizeSpaceDirName(name)
+  let candidate = join(spacesDir, baseName)
+  let sequence = 2
+
+  while (existsSync(candidate)) {
+    candidate = join(spacesDir, `${baseName}-${sequence}`)
+    sequence += 1
+  }
+
+  return candidate
+}
+
+function isInDefaultSpacesRoot(spacePath: string): boolean {
+  return isPathWithinBasePaths(spacePath, getDefaultSpaceRoots())
+}
+
+function getDefaultSpaceRoots(): string[] {
+  const roots = [getSpacesDir(), getLegacySpacesDir()]
+  return roots.filter((root, index) => roots.indexOf(root) === index)
+}
+
+function loadSpacesFromRoots(roots: string[]): Space[] {
+  const spaces: Space[] = []
+  const loadedPaths = new Set<string>()
+
+  for (const root of roots) {
+    if (!existsSync(root)) {
+      continue
+    }
+
+    const dirs = readdirSync(root)
+    for (const dir of dirs) {
+      const spacePath = join(root, dir)
+
+      try {
+        if (!statSync(spacePath).isDirectory()) {
+          continue
+        }
+      } catch {
+        continue
+      }
+
+      if (loadedPaths.has(spacePath)) {
+        continue
+      }
+
+      const space = loadSpaceFromPath(spacePath)
+      if (space) {
+        spaces.push(space)
+        loadedPaths.add(spacePath)
+      }
+    }
+  }
+
+  return spaces
 }
 
 function getSpaceIndexPath(): string {
@@ -116,27 +196,33 @@ const KITE_SPACE: Space = {
 // Get all valid space paths (for security checks)
 export function getAllSpacePaths(): string[] {
   const paths: string[] = []
+  const loadedPaths = new Set<string>()
 
   // Add temp space path
-  paths.push(getTempSpacePath())
+  const tempSpacePath = getTempSpacePath()
+  paths.push(tempSpacePath)
+  loadedPaths.add(tempSpacePath)
 
-  // Add default spaces directory
-  const spacesDir = getSpacesDir()
-  if (existsSync(spacesDir)) {
-    const dirs = readdirSync(spacesDir)
-    for (const dir of dirs) {
-      const spacePath = join(spacesDir, dir)
-      if (statSync(spacePath).isDirectory()) {
-        paths.push(spacePath)
-      }
+  // Add valid spaces from default roots (including legacy root for backward compatibility)
+  const defaultSpaces = loadSpacesFromRoots(getDefaultSpaceRoots())
+  for (const space of defaultSpaces) {
+    if (!loadedPaths.has(space.path)) {
+      paths.push(space.path)
+      loadedPaths.add(space.path)
     }
   }
 
-  // Add custom path spaces from index
+  // Add valid custom path spaces from index
   const index = loadSpaceIndex()
   for (const customPath of index.customPaths) {
-    if (existsSync(customPath)) {
+    if (!existsSync(customPath) || loadedPaths.has(customPath)) {
+      continue
+    }
+
+    const space = loadSpaceFromPath(customPath)
+    if (space) {
       paths.push(customPath)
+      loadedPaths.add(customPath)
     }
   }
 
@@ -249,23 +335,9 @@ function loadSpaceFromPath(spacePath: string): Space | null {
 
 // List all spaces (including custom path spaces)
 export function listSpaces(): Space[] {
-  const spacesDir = getSpacesDir()
-  const spaces: Space[] = []
+  const spaces = loadSpacesFromRoots(getDefaultSpaceRoots())
   const loadedPaths = new Set<string>()
-
-  // Load spaces from default directory
-  if (existsSync(spacesDir)) {
-    const dirs = readdirSync(spacesDir)
-
-    for (const dir of dirs) {
-      const spacePath = join(spacesDir, dir)
-      const space = loadSpaceFromPath(spacePath)
-      if (space) {
-        spaces.push(space)
-        loadedPaths.add(spacePath)
-      }
-    }
-  }
+  spaces.forEach(space => loadedPaths.add(space.path))
 
   // Load spaces from custom paths (indexed)
   const index = loadSpaceIndex()
@@ -296,7 +368,7 @@ export function createSpace(input: { name: string; icon: string; customPath?: st
   if (input.customPath) {
     spacePath = input.customPath
   } else {
-    spacePath = join(getSpacesDir(), input.name)
+    spacePath = resolveDefaultSpacePath(input.name)
   }
 
   // Create directories
@@ -356,8 +428,7 @@ export function deleteSpace(spaceId: string): boolean {
   }
 
   const spacePath = space.path
-  const spacesDir = getSpacesDir()
-  const isCustomPath = !spacePath.startsWith(spacesDir)
+  const isCustomPath = !isInDefaultSpacesRoot(spacePath)
 
   try {
     if (isCustomPath) {

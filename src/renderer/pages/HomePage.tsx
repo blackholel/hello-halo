@@ -16,6 +16,7 @@ import { useToolkitStore } from '../stores/toolkit.store'
 import { SPACE_ICONS, DEFAULT_SPACE_ICON } from '../types'
 import type { Space, CreateSpaceInput, SpaceIconId, DirectiveRef } from '../types'
 import { formatDirectiveName } from '../utils/directive-helpers'
+import { resolveSpacePathKind, shortenDisplayPath } from '../utils/space-path'
 import {
   SpaceIcon,
   Sparkles,
@@ -75,7 +76,7 @@ export function HomePage(): JSX.Element {
   // Path selection state
   const [useCustomPath, setUseCustomPath] = useState(false)
   const [customPath, setCustomPath] = useState<string | null>(null)
-  const [defaultPath, setDefaultPath] = useState<string>('~/.kite/spaces')
+  const [defaultPath, setDefaultPath] = useState<string>('')
   const [activeTab, setActiveTab] = useState<'spaces' | 'extensions'>('spaces')
 
   // Close dialogs on Escape key
@@ -100,16 +101,18 @@ export function HomePage(): JSX.Element {
     loadSpaces()
   }, [loadSpaces])
 
-  // Load default path when dialog opens
-  useEffect(() => {
-    if (showCreateDialog) {
-      api.getDefaultSpacePath().then((res) => {
-        if (res.success && res.data) {
-          setDefaultPath(res.data as string)
-        }
-      })
+  const loadDefaultPath = useCallback(async (): Promise<string> => {
+    const res = await api.getDefaultSpacePath()
+    if (res.success && typeof res.data === 'string') {
+      setDefaultPath(res.data)
+      return res.data
     }
-  }, [showCreateDialog])
+    return ''
+  }, [])
+
+  useEffect(() => {
+    void loadDefaultPath()
+  }, [loadDefaultPath])
 
   // Load toolkit when editing space dialog opens
   useEffect(() => {
@@ -233,11 +236,6 @@ export function HomePage(): JSX.Element {
     }
   }
 
-  // Shorten path for display
-  const shortenPath = (path: string): string => {
-    return path.includes('/Users/') ? path.replace(/\/Users\/[^/]+/, '~') : path
-  }
-
   // Handle delete space
   const handleDeleteSpace = async (e: React.MouseEvent, spaceId: string): Promise<void> => {
     e.stopPropagation()
@@ -245,11 +243,21 @@ export function HomePage(): JSX.Element {
     const space = spaces.find(s => s.id === spaceId)
     if (!space) return
 
-    const isCustomPath = !space.path.includes('/.kite/spaces/')
+    let resolvedDefaultPath = defaultPath
+    if (!resolvedDefaultPath) {
+      resolvedDefaultPath = await loadDefaultPath()
+    }
 
-    const message = isCustomPath
-      ? t('Are you sure you want to delete this space?\n\nOnly Kite data (conversation history) will be deleted, your project files will be kept.')
-      : t('Are you sure you want to delete this space?\n\nAll conversations and files in the space will be deleted.')
+    const pathKind = resolveSpacePathKind(space.path, resolvedDefaultPath)
+
+    let message: string
+    if (pathKind === 'custom') {
+      message = t('Are you sure you want to delete this space?\n\nOnly Kite data (conversation history) will be deleted, your project files will be kept.')
+    } else if (pathKind === 'default') {
+      message = t('Are you sure you want to delete this space?\n\nAll conversations and files in the space will be deleted.')
+    } else {
+      message = t('Are you sure you want to delete this space?\n\nKite could not verify the storage type. This operation may delete all conversations and files in the space folder.')
+    }
 
     if (confirm(message)) {
       await deleteSpace(spaceId)
@@ -326,7 +334,7 @@ export function HomePage(): JSX.Element {
     if (customPath) {
       return (
         <div className="text-xs text-muted-foreground truncate mt-0.5">
-          {shortenPath(customPath)}
+          {shortenDisplayPath(customPath)}
         </div>
       )
     }
@@ -612,7 +620,7 @@ export function HomePage(): JSX.Element {
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium">{t('Default Location')}</div>
                     <div className="text-xs text-muted-foreground truncate mt-0.5">
-                      {shortenPath(defaultPath)}/{newSpaceName || '...'}
+                      {shortenDisplayPath(defaultPath || '...')}/{newSpaceName || '...'}
                     </div>
                   </div>
                 </label>

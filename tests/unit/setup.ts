@@ -77,7 +77,7 @@ beforeEach(() => {
   // Create .kite directory structure
   const kiteDir = path.join(testDir, '.kite')
   const tempDir = path.join(kiteDir, 'temp')
-  const spacesDir = path.join(kiteDir, 'spaces')
+  const spacesDir = path.join(testDir, 'kite')
 
   fs.mkdirSync(testDir, { recursive: true })
   fs.mkdirSync(kiteDir, { recursive: true })
