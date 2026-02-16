@@ -31,6 +31,7 @@ import type {
   Thought,
   AgentEventBase,
   AgentCompleteEvent,
+  AgentProcessEvent,
   ImageAttachment,
   CompactInfo,
   CanvasContext,
@@ -39,7 +40,8 @@ import type {
   ChangeSet,
   AgentRunLifecycle,
   ToolStatus,
-  AskUserQuestionAnswerPayload
+  AskUserQuestionAnswerPayload,
+  ProcessTraceNode
 } from '../types'
 import { canvasLifecycle } from '../services/canvas-lifecycle'
 import { buildParallelGroups, getThoughtKey } from '../utils/thought-utils'
@@ -50,6 +52,7 @@ const PRE_RUN_BUFFER_TTL_MS = 2000
 
 type TerminalReason = 'completed' | 'stopped' | 'error' | 'no_text'
 type PendingRunEventKind =
+  | 'process'
   | 'message'
   | 'tool_call'
   | 'tool_result'
@@ -124,6 +127,7 @@ interface SessionState {
   streamingContent: string
   isStreaming: boolean  // True during token-level text streaming
   thoughts: Thought[]
+  processTrace: ProcessTraceNode[]
   isThinking: boolean
   pendingToolApproval: ToolCall | null
   pendingAskUserQuestion: ToolCall | null
@@ -156,6 +160,7 @@ function createEmptySessionState(): SessionState {
     streamingContent: '',
     isStreaming: false,
     thoughts: [],
+    processTrace: [],
     isThinking: false,
     pendingToolApproval: null,
     pendingAskUserQuestion: null,
@@ -212,6 +217,93 @@ function isEventRunAccepted(session: SessionState, runId?: string): boolean {
   if (!session.activeRunId) return false
   if (session.activeRunId !== runId) return false
   return session.lifecycle === 'running'
+}
+
+function isThoughtLike(value: unknown): value is Thought {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<Thought>
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.type === 'string' &&
+    typeof candidate.content === 'string' &&
+    typeof candidate.timestamp === 'string'
+  )
+}
+
+function toProcessTraceNode(event: AgentProcessEvent): ProcessTraceNode {
+  return {
+    type: 'process',
+    kind: event.kind,
+    ts: event.ts || new Date().toISOString(),
+    visibility: event.visibility,
+    payload:
+      event.payload && typeof event.payload === 'object'
+        ? (event.payload as Record<string, unknown>)
+        : { value: event.payload as unknown }
+  }
+}
+
+function extractThoughtFromProcessEvent(event: AgentProcessEvent): Thought | null {
+  const payload =
+    event.payload && typeof event.payload === 'object'
+      ? (event.payload as Record<string, unknown>)
+      : null
+
+  const payloadThought = payload?.thought
+  if (isThoughtLike(payloadThought)) {
+    return payloadThought
+  }
+
+  if (event.kind === 'tool_call' && payload) {
+    const toolCallId =
+      (typeof payload.toolCallId === 'string' && payload.toolCallId) ||
+      (typeof payload.id === 'string' && payload.id) ||
+      null
+    const toolName = typeof payload.name === 'string' ? payload.name : undefined
+    if (!toolCallId || !toolName) {
+      return null
+    }
+    return {
+      id: toolCallId,
+      type: 'tool_use',
+      content: `Tool call: ${toolName}`,
+      timestamp: event.ts || new Date().toISOString(),
+      toolName,
+      toolInput:
+        payload.input && typeof payload.input === 'object'
+          ? (payload.input as Record<string, unknown>)
+          : undefined,
+      status: normalizeToolStatus(payload.status)
+    }
+  }
+
+  if (event.kind === 'tool_result' && payload) {
+    const toolCallId =
+      (typeof payload.toolCallId === 'string' && payload.toolCallId) ||
+      (typeof payload.toolId === 'string' && payload.toolId) ||
+      null
+    if (!toolCallId) {
+      return null
+    }
+    const isError = payload.isError === true
+    const resultText =
+      typeof payload.result === 'string'
+        ? payload.result
+        : payload.result == null
+          ? ''
+          : JSON.stringify(payload.result)
+    return {
+      id: toolCallId,
+      type: 'tool_result',
+      content: isError ? 'Tool execution failed' : 'Tool execution succeeded',
+      timestamp: event.ts || new Date().toISOString(),
+      toolOutput: resultText,
+      isError,
+      status: isError ? 'error' : 'success'
+    }
+  }
+
+  return null
 }
 
 function isRunningLikeToolStatus(status?: ToolStatus): boolean {
@@ -289,6 +381,7 @@ interface ChatState {
   // Event handlers (called from App component) - with session IDs
   handleAgentRunStart: (data: AgentEventBase & { runId: string; startedAt: string }) => void
   handleAgentMessage: (data: AgentEventBase & { content: string; isComplete: boolean }) => void
+  handleAgentProcess: (data: AgentProcessEvent) => void
   handleAgentToolCall: (data: AgentEventBase & ToolCall) => void
   handleAgentToolResult: (data: AgentEventBase & { toolCallId?: string; toolId?: string; result: string; isError: boolean }) => void
   handleAgentError: (data: AgentEventBase & { error: string }) => void
@@ -310,6 +403,211 @@ interface ChatState {
 // Default empty states
 const EMPTY_SESSION: SessionState = createEmptySessionState()
 const EMPTY_SPACE_STATE: SpaceState = createEmptySpaceState()
+
+interface EnsureConversationLoadedOptions {
+  setCurrent?: boolean
+  subscribe?: boolean
+  warmSession?: boolean
+}
+
+function setConversationLoadingState(
+  set: (partial: Partial<ChatState> | ((state: ChatState) => Partial<ChatState>)) => void,
+  conversationId: string,
+  loading: boolean
+): void {
+  set((state) => {
+    const nextLoadingCounts = new Map(state.loadingConversationCounts)
+    const currentCount = nextLoadingCounts.get(conversationId) || 0
+    const nextCount = loading ? currentCount + 1 : Math.max(0, currentCount - 1)
+
+    if (nextCount === 0) {
+      nextLoadingCounts.delete(conversationId)
+    } else {
+      nextLoadingCounts.set(conversationId, nextCount)
+    }
+
+    return { loadingConversationCounts: nextLoadingCounts }
+  })
+}
+
+/**
+ * Auto-open plan tab in Canvas when the last message is a plan response.
+ * Only opens for the currently active conversation to avoid background sessions stealing focus.
+ */
+async function autoOpenPlanTab(
+  conversation: Conversation,
+  spaceId: string,
+  conversationId: string,
+  get: () => ChatState,
+  set: (partial: Partial<ChatState> | ((state: ChatState) => Partial<ChatState>)) => void
+): Promise<void> {
+  const lastMessage = conversation.messages?.[conversation.messages.length - 1]
+  if (!lastMessage || lastMessage.role !== 'assistant' || !lastMessage.isPlan) {
+    return
+  }
+
+  // Only auto-open for the currently active conversation
+  const isActiveConversation =
+    get().currentSpaceId === spaceId &&
+    get().getCurrentConversationId() === conversationId
+
+  if (!isActiveConversation) {
+    return
+  }
+
+  const planTabId = await canvasLifecycle.openPlan(
+    lastMessage.content,
+    i18n.t('Plan'),
+    spaceId,
+    conversationId
+  )
+
+  set((state) => {
+    const newSessions = new Map(state.sessions)
+    const session = newSessions.get(conversationId)
+    if (session) {
+      newSessions.set(conversationId, {
+        ...session,
+        activePlanTabId: planTabId,
+      })
+    }
+    return { sessions: newSessions }
+  })
+}
+
+async function ensureConversationLoadedImpl(
+  set: (partial: Partial<ChatState> | ((state: ChatState) => Partial<ChatState>)) => void,
+  get: () => ChatState,
+  spaceId: string,
+  conversationId: string,
+  options: EnsureConversationLoadedOptions = {}
+): Promise<void> {
+  const { setCurrent = true, subscribe = true, warmSession = true } = options
+  const { spaceStates, conversationCache } = get()
+  const spaceState = spaceStates.get(spaceId)
+  if (!spaceState) return
+
+  const conversationMeta = spaceState.conversations.find((c) => c.id === conversationId)
+  if (!conversationMeta) return
+
+  if (subscribe) {
+    api.subscribeToConversation(conversationId)
+  }
+
+  if (setCurrent) {
+    set((state) => {
+      const latest = state.spaceStates.get(spaceId)
+      if (!latest) return {}
+      const newSpaceStates = new Map(state.spaceStates)
+      newSpaceStates.set(spaceId, {
+        ...latest,
+        currentConversationId: conversationId
+      })
+      return { spaceStates: newSpaceStates }
+    })
+  }
+
+  const needsConversationLoad = !conversationCache.has(conversationId)
+  if (needsConversationLoad) {
+    setConversationLoadingState(set, conversationId, true)
+  }
+
+  try {
+    const conversationPromise = needsConversationLoad
+      ? api.getConversation(spaceId, conversationId)
+      : Promise.resolve(null)
+    const sessionStatePromise = api.getSessionState(conversationId)
+    const changeSetsPromise = api.listChangeSets(spaceId, conversationId)
+
+    const [conversationResponse, sessionResponse, changeSetsResponse] = await Promise.all([
+      conversationPromise,
+      sessionStatePromise,
+      changeSetsPromise
+    ])
+
+    if (conversationResponse?.success && conversationResponse.data) {
+      const fullConversation = conversationResponse.data as Conversation
+      set((state) => {
+        const newCache = new Map(state.conversationCache)
+        newCache.set(conversationId, fullConversation)
+        if (newCache.size > CONVERSATION_CACHE_SIZE) {
+          const firstKey = newCache.keys().next().value
+          if (firstKey) newCache.delete(firstKey)
+        }
+        return { conversationCache: newCache }
+      })
+    }
+
+    if (sessionResponse.success && sessionResponse.data) {
+      const sessionState = sessionResponse.data as {
+        isActive: boolean
+        thoughts: Thought[]
+        processTrace?: ProcessTraceNode[]
+        spaceId?: string
+      }
+      const recoveredProcessTrace = Array.isArray(sessionState.processTrace)
+        ? sessionState.processTrace
+        : []
+      const recoveredThoughtsFromTrace = recoveredProcessTrace
+        .map((node) =>
+          extractThoughtFromProcessEvent({
+            type: 'process',
+            kind: node.kind || node.type || 'thought',
+            payload: node.payload || {},
+            ts: node.ts || node.timestamp,
+            visibility: node.visibility,
+            spaceId: sessionState.spaceId || spaceId,
+            conversationId
+          })
+        )
+        .filter((thought): thought is Thought => thought !== null)
+      const recoveredThoughts =
+        recoveredThoughtsFromTrace.length > 0 ? recoveredThoughtsFromTrace : sessionState.thoughts
+
+      if (
+        sessionState.isActive &&
+        (recoveredThoughts.length > 0 || recoveredProcessTrace.length > 0)
+      ) {
+        set((state) => {
+          const newSessions = new Map(state.sessions)
+          const existingSession = newSessions.get(conversationId) || createEmptySessionState()
+          newSessions.set(conversationId, {
+            ...existingSession,
+            isGenerating: true,
+            isThinking: true,
+            thoughts: recoveredThoughts,
+            processTrace: recoveredProcessTrace
+          })
+          return { sessions: newSessions }
+        })
+      }
+    }
+
+    if (changeSetsResponse.success && changeSetsResponse.data) {
+      const changeSets = changeSetsResponse.data as ChangeSet[]
+      set((state) => {
+        const newChangeSets = new Map(state.changeSets)
+        newChangeSets.set(conversationId, changeSets)
+        return { changeSets: newChangeSets }
+      })
+    }
+  } catch (error) {
+    console.error('[ChatStore] Failed to load conversation or session state:', error)
+  } finally {
+    if (needsConversationLoad) {
+      setConversationLoadingState(set, conversationId, false)
+    }
+  }
+
+  if (warmSession) {
+    try {
+      api.ensureSessionWarm(spaceId, conversationId)
+        .catch((error) => console.error('[ChatStore] Session warm up failed:', error))
+    } catch (error) {
+      console.error('[ChatStore] Failed to trigger session warm up:', error)
+    }
+  }
+}
 
 export const useChatStore = create<ChatState>((set, get) => ({
   // Initial state
@@ -1072,6 +1370,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Replay buffered run events once barrier is established
     for (const event of replayEvents) {
       switch (event.kind) {
+        case 'process':
+          get().handleAgentProcess(event.payload as AgentProcessEvent)
+          break
         case 'message':
           get().handleAgentMessage(event.payload as AgentEventBase & { content: string; isComplete: boolean })
           break
@@ -1094,12 +1395,93 @@ export const useChatStore = create<ChatState>((set, get) => ({
           get().handleAgentToolsAvailable(event.payload as AgentEventBase & { runId: string; snapshotVersion: number; emittedAt: string; tools: string[]; toolCount: number })
           break
         case 'complete':
-          void get().handleAgentComplete(event.payload as AgentEventBase & { reason?: TerminalReason; terminalAt?: string })
+          void get().handleAgentComplete(event.payload as AgentCompleteEvent)
           break
         default:
           break
       }
     }
+  },
+
+  handleAgentProcess: (data) => {
+    const { conversationId, runId, kind } = data
+    const payload =
+      data.payload && typeof data.payload === 'object'
+        ? (data.payload as Record<string, unknown>)
+        : {}
+    let accepted = false
+
+    set((state) => {
+      const newSessions = new Map(state.sessions)
+      const session = newSessions.get(conversationId) || createEmptySessionState()
+
+      if (runId && !session.activeRunId) {
+        newSessions.set(conversationId, {
+          ...session,
+          pendingRunEvents: enqueuePendingRunEvent(session, {
+            kind: 'process',
+            runId,
+            payload: data,
+            receivedAt: Date.now()
+          })
+        })
+        return { sessions: newSessions }
+      }
+
+      if (!isEventRunAccepted(session, runId)) {
+        return state
+      }
+      accepted = true
+
+      newSessions.set(conversationId, {
+        ...session,
+        activeRunId: runId ?? session.activeRunId,
+        processTrace: [...session.processTrace, toProcessTraceNode(data)]
+      })
+      return { sessions: newSessions }
+    })
+
+    if (!accepted) {
+      return
+    }
+
+    if (kind === 'tool_call') {
+      const toolCallPayload =
+        payload.toolCall && typeof payload.toolCall === 'object'
+          ? (payload.toolCall as Record<string, unknown>)
+          : payload
+      get().handleAgentToolCall({
+        ...data,
+        ...(toolCallPayload as unknown as ToolCall)
+      } as AgentEventBase & ToolCall)
+      return
+    }
+
+    if (kind === 'tool_result') {
+      const toolResultPayload =
+        payload.toolResult && typeof payload.toolResult === 'object'
+          ? (payload.toolResult as Record<string, unknown>)
+          : payload
+      get().handleAgentToolResult({
+        ...data,
+        ...(toolResultPayload as unknown as {
+          toolCallId?: string
+          toolId?: string
+          result: string
+          isError: boolean
+        })
+      })
+      return
+    }
+
+    const thought = extractThoughtFromProcessEvent(data)
+    if (!thought) {
+      return
+    }
+    get().handleAgentThought({
+      ...data,
+      thought
+    })
   },
 
   // Handle agent message - update session-specific streaming content
@@ -1409,6 +1791,82 @@ export const useChatStore = create<ChatState>((set, get) => ({
   handleAgentComplete: async (data: AgentCompleteEvent) => {
     const { spaceId, conversationId, runId, reason } = data
     const terminalReason: TerminalReason = reason ?? 'completed'
+    const applyFinalContentFallback = (finalContent?: string): boolean => {
+      if (typeof finalContent !== 'string' || finalContent.trim().length === 0) {
+        return false
+      }
+      const now = new Date().toISOString()
+      set((state) => {
+        const newCache = new Map(state.conversationCache)
+        const cachedConversation = newCache.get(conversationId)
+        const newSpaceStates = new Map(state.spaceStates)
+        if (cachedConversation) {
+          const messages = [...(cachedConversation.messages || [])]
+          const lastMessage = messages[messages.length - 1]
+          if (lastMessage?.role === 'assistant') {
+            messages[messages.length - 1] = {
+              ...lastMessage,
+              content: finalContent,
+              terminalReason
+            }
+          } else {
+            messages.push({
+              id: `fallback-assistant-${Date.now()}`,
+              role: 'assistant',
+              content: finalContent,
+              timestamp: now,
+              terminalReason
+            })
+          }
+
+          const updatedConversation: Conversation = {
+            ...cachedConversation,
+            messages,
+            messageCount: messages.length,
+            updatedAt: now
+          }
+          newCache.set(conversationId, updatedConversation)
+
+          const currentSpaceState = newSpaceStates.get(spaceId)
+          if (currentSpaceState) {
+            newSpaceStates.set(spaceId, {
+              ...currentSpaceState,
+              conversations: currentSpaceState.conversations.map((c) =>
+                c.id === conversationId
+                  ? {
+                      ...c,
+                      updatedAt: now,
+                      messageCount: messages.length,
+                      preview: finalContent.slice(0, 50)
+                    }
+                  : c
+              )
+            })
+          }
+        }
+
+        const newSessions = new Map(state.sessions)
+        const currentSession = newSessions.get(conversationId)
+        if (currentSession) {
+          newSessions.set(conversationId, {
+            ...currentSession,
+            isGenerating: false,
+            isStreaming: false,
+            isThinking: false,
+            streamingContent: '',
+            pendingAskUserQuestion: null,
+            failedAskUserQuestion: null,
+            compactInfo: null
+          })
+        }
+        return {
+          spaceStates: newSpaceStates,
+          sessions: newSessions,
+          conversationCache: newCache
+        }
+      })
+      return true
+    }
 
     let waitForPendingQuestion = false
     let shouldFinalizeTasks = false
@@ -1485,11 +1943,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Reload conversation from backend (Single Source of Truth)
     // Backend has already saved the complete message with thoughts
     try {
+      let conversationReloaded = false
       const [conversationResponse, changeSetsResponse] = await Promise.all([
         api.getConversation(spaceId, conversationId),
         api.listChangeSets(spaceId, conversationId)
       ])
       if (conversationResponse.success && conversationResponse.data) {
+        conversationReloaded = true
         const updatedConversation = conversationResponse.data as Conversation
 
         // Extract updated metadata
@@ -1545,6 +2005,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         })
       }
 
+      if (!conversationReloaded) {
+        applyFinalContentFallback(data.finalContent)
+      }
+
       if (changeSetsResponse.success && changeSetsResponse.data) {
         const changeSets = changeSetsResponse.data as ChangeSet[]
         set((state) => {
@@ -1555,7 +2019,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     } catch (error) {
       console.error('[ChatStore] Failed to reload conversation:', error)
-      // Even on error, must clear state to avoid stale content
+      const appliedFallback = applyFinalContentFallback(data.finalContent)
+      if (appliedFallback) {
+        return
+      }
+      // Even on error without fallback, must clear state to avoid stale content
       set((state) => {
         const newSessions = new Map(state.sessions)
         const currentSession = newSessions.get(conversationId)

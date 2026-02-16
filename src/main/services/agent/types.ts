@@ -128,12 +128,23 @@ export type SessionLifecycle = 'running' | 'terminal'
 export type SessionTerminalReason = 'completed' | 'stopped' | 'error' | 'no_text' | null
 
 export type ThoughtType = 'thinking' | 'text' | 'tool_use' | 'tool_result' | 'system' | 'result' | 'error'
+export type ProcessVisibility = 'user' | 'debug'
+
+export interface ProcessTraceNode {
+  type: string
+  kind?: string
+  ts?: string
+  timestamp?: string
+  visibility?: ProcessVisibility
+  payload?: Record<string, unknown>
+}
 
 export interface Thought {
   id: string
   type: ThoughtType
   content: string
   timestamp: string
+  visibility?: ProcessVisibility
   toolName?: string
   toolInput?: Record<string, unknown>
   toolOutput?: string
@@ -170,6 +181,7 @@ export interface SessionState {
   pendingPermissionResolve: ((approved: boolean) => void) | null
   pendingAskUserQuestion: PendingAskUserQuestionContext | null
   thoughts: Thought[]
+  processTrace: ProcessTraceNode[]
 }
 
 /**

@@ -168,6 +168,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     streamingContent,
     isStreaming,
     thoughts,
+    processTrace,
     parallelGroups,
     isThinking,
     compactInfo,
@@ -346,6 +347,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
                 isGenerating={displayIsGenerating}
                 isStreaming={displayIsStreaming}
                 thoughts={thoughts}
+                processTrace={processTrace}
                 parallelGroups={parallelGroups}
                 isThinking={displayIsThinking}
                 compactInfo={compactInfo}

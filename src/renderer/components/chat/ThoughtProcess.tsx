@@ -48,6 +48,20 @@ interface ThoughtProcessProps {
   defaultExpanded?: boolean
 }
 
+export function filterThoughtsForDisplay(
+  thoughts: Thought[],
+  options?: { hideTask?: boolean }
+): Thought[] {
+  const hideTask = options?.hideTask ?? true
+  return thoughts.filter(
+    (t) =>
+      t.type !== 'result' &&
+      t.toolName !== 'TodoWrite' &&
+      (!hideTask || t.toolName !== 'Task') &&
+      t.visibility !== 'debug'
+  )
+}
+
 // Thought type to icon mapping
 const THOUGHT_ICONS: Record<string, typeof Zap> = {
   thinking: Lightbulb,
@@ -396,10 +410,10 @@ export function ThoughtProcess({
     return parseTodoInput(latest.toolInput!)
   }, [thoughts])
 
-  // Filter thoughts: exclude TodoWrite and result types
+  // Filter thoughts: always hide debug + result + TodoWrite, and only hide Task in realtime mode
   const displayThoughts = useMemo(() => {
-    return thoughts.filter(t => t.type !== 'result' && t.toolName !== 'TodoWrite')
-  }, [thoughts])
+    return filterThoughtsForDisplay(thoughts, { hideTask: mode === 'realtime' })
+  }, [thoughts, mode])
 
   // Get parallel groups that have multiple items
   const displayParallelGroups = useMemo(() => {

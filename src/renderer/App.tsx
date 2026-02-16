@@ -22,7 +22,13 @@ import { SearchHighlightBar } from './components/search/SearchHighlightBar'
 import { OnboardingOverlay } from './components/onboarding'
 import { UpdateNotification } from './components/updater/UpdateNotification'
 import { api } from './api'
-import type { AgentEventBase, Thought, ToolCall } from './types'
+import type {
+  AgentEventBase,
+  AgentCompleteEvent,
+  AgentProcessEvent,
+  Thought,
+  ToolCall
+} from './types'
 
 // Lazy load heavy page components for better initial load performance
 // These pages contain complex components (chat, markdown, code highlighting, etc.)
@@ -78,6 +84,7 @@ export default function App() {
   const {
     handleAgentRunStart,
     handleAgentMessage,
+    handleAgentProcess,
     handleAgentToolCall,
     handleAgentToolResult,
     handleAgentError,
@@ -164,6 +171,11 @@ export default function App() {
       handleAgentMessage(data as AgentEventBase & { content: string; isComplete: boolean })
     })
 
+    const unsubProcess = api.onAgentProcess((data) => {
+      console.log('[App] Received agent:process event:', data)
+      handleAgentProcess(data as AgentProcessEvent)
+    })
+
     const unsubToolCall = api.onAgentToolCall((data) => {
       console.log('[App] Received agent:tool-call event:', data)
       handleAgentToolCall(data as AgentEventBase & ToolCall)
@@ -214,6 +226,7 @@ export default function App() {
       unsubRunStart()
       unsubThought()
       unsubMessage()
+      unsubProcess()
       unsubToolCall()
       unsubToolResult()
       unsubError()
@@ -225,6 +238,7 @@ export default function App() {
   }, [
     handleAgentRunStart,
     handleAgentMessage,
+    handleAgentProcess,
     handleAgentToolCall,
     handleAgentToolResult,
     handleAgentError,

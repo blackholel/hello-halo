@@ -18,6 +18,12 @@ export default defineConfig({
       'unit/**/*.test.ts',
       '../src/main/services/agent/__tests__/ask-user-question-flow.test.ts',
       '../src/main/services/agent/__tests__/message-flow.ask-user-question-status.test.ts',
+      '../src/main/services/agent/__tests__/message-parser.visibility.test.ts',
+      '../src/main/services/agent/__tests__/message-flow.final-content.test.ts',
+      '../src/renderer/api/__tests__/transport.process.test.ts',
+      '../src/renderer/api/__tests__/api.process.test.ts',
+      '../src/renderer/components/chat/__tests__/message-list.thought-priority.test.ts',
+      '../src/renderer/components/chat/__tests__/thought-process.visibility.test.ts',
       '../src/renderer/stores/__tests__/chat.store.ask-user-question.test.ts'
     ],
 

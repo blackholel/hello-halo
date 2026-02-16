@@ -95,6 +95,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
     streamingContent = '',
     isStreaming = false,
     thoughts = [],
+    processTrace = [],
     parallelGroups = new Map(),
     isThinking = false,
     compactInfo = null,
@@ -119,7 +120,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
     handleScroll
   } = useSmartScroll({
     threshold: 100,
-    deps: [conversation?.messages, streamingContent, thoughts]
+    deps: [conversation?.messages, streamingContent, thoughts, processTrace]
   })
 
   // Handle send message - directly to target conversation without global context switching
@@ -208,6 +209,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
                 isGenerating={isGenerating}
                 isStreaming={isStreaming}
                 thoughts={thoughts}
+                processTrace={processTrace}
                 parallelGroups={parallelGroups}
                 isThinking={isThinking}
                 compactInfo={compactInfo}

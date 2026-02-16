@@ -203,6 +203,7 @@ export function onEvent(channel: string, callback: (data: unknown) => void): () 
       'agent:message': 'onAgentMessage',
       'agent:tool-call': 'onAgentToolCall',
       'agent:tool-result': 'onAgentToolResult',
+      'agent:process': 'onAgentProcess',
       'agent:error': 'onAgentError',
       'agent:complete': 'onAgentComplete',
       'agent:thought': 'onAgentThought',
