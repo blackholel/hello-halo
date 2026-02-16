@@ -14,16 +14,33 @@ import { getSpace } from './space.service'
 import { v4 as uuidv4 } from 'uuid'
 
 // Thought types for agent reasoning
+type ProcessVisibility = 'user' | 'debug'
+
 interface Thought {
   id: string
   type: 'thinking' | 'text' | 'tool_use' | 'tool_result' | 'system' | 'result' | 'error'
   content: string
   timestamp: string
+  visibility?: ProcessVisibility
   toolName?: string
   toolInput?: Record<string, unknown>
   toolOutput?: string
   isError?: boolean
   duration?: number
+}
+
+interface ProcessTraceNode {
+  type: string
+  kind?: string
+  ts?: string
+  timestamp?: string
+  visibility?: ProcessVisibility
+  payload?: Record<string, unknown>
+}
+
+interface ProcessSummary {
+  total?: number
+  byKind?: Record<string, number>
 }
 
 // Image attachment types for multi-modal messages
@@ -64,6 +81,8 @@ interface Message {
   timestamp: string
   toolCalls?: ToolCall[]
   thoughts?: Thought[]  // Agent reasoning process for this message
+  processTrace?: ProcessTraceNode[]
+  processSummary?: ProcessSummary
   images?: ImageAttachment[]  // Attached images for multi-modal messages
   tokenUsage?: TokenUsage  // Optional token usage stats for assistant messages
   fileContexts?: FileContextAttachment[]  // File contexts for context injection (metadata only)

@@ -383,4 +383,135 @@ describe('Chat Store - AskUserQuestion Flow', () => {
     expect(session.lifecycle).toBe('completed')
     expect(session.terminalReason).toBe('no_text')
   })
+
+  it('supports AskUserQuestion state machine via agent:process tool_call/tool_result', () => {
+    const conversationId = 'conv-process-ask'
+    const runId = 'run-process-ask'
+
+    useChatStore.getState().handleAgentRunStart({
+      spaceId: 'space-1',
+      conversationId,
+      runId,
+      startedAt: new Date().toISOString()
+    })
+
+    useChatStore.getState().handleAgentProcess({
+      type: 'process',
+      spaceId: 'space-1',
+      conversationId,
+      runId,
+      kind: 'tool_call',
+      payload: {
+        toolCallId: 'tool-ask-process',
+        id: 'tool-ask-process',
+        name: 'AskUserQuestion',
+        status: 'waiting_approval',
+        input: {
+          question: 'Pick one'
+        }
+      }
+    })
+
+    let session = useChatStore.getState().getSession(conversationId)
+    expect(session.pendingAskUserQuestion?.id).toBe('tool-ask-process')
+
+    useChatStore.getState().handleAgentProcess({
+      type: 'process',
+      spaceId: 'space-1',
+      conversationId,
+      runId,
+      kind: 'tool_result',
+      payload: {
+        toolCallId: 'tool-ask-process',
+        result: 'ok',
+        isError: false
+      }
+    })
+
+    session = useChatStore.getState().getSession(conversationId)
+    expect(session.pendingAskUserQuestion).toBeNull()
+    expect(session.failedAskUserQuestion).toBeNull()
+  })
+
+  it('uses complete.finalContent as fallback when conversation reload fails', async () => {
+    const conversationId = 'conv-final-content-fallback'
+    const runId = 'run-final-content-fallback'
+    const finalContent = 'final answer from complete fallback'
+    const now = new Date().toISOString()
+
+    useChatStore.setState({
+      currentSpaceId: 'space-1',
+      spaceStates: new Map([
+        [
+          'space-1',
+          {
+            conversations: [
+              {
+                id: conversationId,
+                spaceId: 'space-1',
+                title: 'Fallback',
+                createdAt: now,
+                updatedAt: now,
+                messageCount: 2,
+                preview: ''
+              }
+            ],
+            currentConversationId: conversationId
+          }
+        ]
+      ]),
+      conversationCache: new Map([
+        [
+          conversationId,
+          {
+            id: conversationId,
+            spaceId: 'space-1',
+            title: 'Fallback',
+            createdAt: now,
+            updatedAt: now,
+            messageCount: 2,
+            messages: [
+              {
+                id: 'user-1',
+                role: 'user',
+                content: 'question',
+                timestamp: now
+              },
+              {
+                id: 'assistant-1',
+                role: 'assistant',
+                content: '',
+                timestamp: now
+              }
+            ]
+          }
+        ]
+      ])
+    })
+
+    useChatStore.getState().handleAgentRunStart({
+      spaceId: 'space-1',
+      conversationId,
+      runId,
+      startedAt: now
+    })
+
+    await useChatStore.getState().handleAgentComplete({
+      type: 'complete',
+      spaceId: 'space-1',
+      conversationId,
+      runId,
+      reason: 'completed',
+      finalContent
+    })
+
+    const cachedConversation = useChatStore.getState().getCachedConversation(conversationId)
+    const lastMessage = cachedConversation?.messages[cachedConversation.messages.length - 1]
+    expect(lastMessage?.role).toBe('assistant')
+    expect(lastMessage?.content).toBe(finalContent)
+
+    const session = useChatStore.getState().getSession(conversationId)
+    expect(session.isGenerating).toBe(false)
+    expect(session.isStreaming).toBe(false)
+  })
 })

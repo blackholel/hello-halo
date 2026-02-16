@@ -122,6 +122,7 @@ export function parseSDKMessages(message: any, options?: ParseSDKMessageOptions)
         type: 'system',
         content: `Connected | Model: ${message.model || 'claude'}`,
         timestamp,
+        visibility: 'user',
         parentToolUseId
       })
       return thoughts
@@ -133,6 +134,7 @@ export function parseSDKMessages(message: any, options?: ParseSDKMessageOptions)
         type: 'system',
         content: `Hook started: ${message.hook_name} (${message.hook_event})`,
         timestamp,
+        visibility: 'debug',
         parentToolUseId
       })
       return thoughts
@@ -144,6 +146,7 @@ export function parseSDKMessages(message: any, options?: ParseSDKMessageOptions)
         type: 'system',
         content: message.output || message.stdout || `Hook progress: ${message.hook_name}`,
         timestamp,
+        visibility: 'debug',
         parentToolUseId
       })
       return thoughts
@@ -156,6 +159,7 @@ export function parseSDKMessages(message: any, options?: ParseSDKMessageOptions)
         type: 'system',
         content: `Hook ${outcome}: ${message.hook_name}${message.output ? ` - ${message.output}` : ''}`,
         timestamp,
+        visibility: 'debug',
         parentToolUseId
       })
       return thoughts
@@ -167,6 +171,7 @@ export function parseSDKMessages(message: any, options?: ParseSDKMessageOptions)
         type: 'system',
         content: `Task ${message.status}: ${message.summary || message.task_id}`,
         timestamp,
+        visibility: 'user',
         parentToolUseId
       })
       return thoughts
@@ -181,6 +186,7 @@ export function parseSDKMessages(message: any, options?: ParseSDKMessageOptions)
       type: 'system',
       content: message.summary || 'Tool execution summary',
       timestamp,
+      visibility: 'user',
       parentToolUseId
     })
     return thoughts

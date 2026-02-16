@@ -124,6 +124,7 @@ export interface KiteAPI {
   onAgentMessage: (callback: (data: unknown) => void) => () => void
   onAgentToolCall: (callback: (data: unknown) => void) => () => void
   onAgentToolResult: (callback: (data: unknown) => void) => () => void
+  onAgentProcess: (callback: (data: unknown) => void) => () => void
   onAgentError: (callback: (data: unknown) => void) => () => void
   onAgentComplete: (callback: (data: unknown) => void) => () => void
   onAgentThinking: (callback: (data: unknown) => void) => () => void
@@ -482,6 +483,7 @@ const api: KiteAPI = {
   onAgentMessage: (callback) => createEventListener('agent:message', callback),
   onAgentToolCall: (callback) => createEventListener('agent:tool-call', callback),
   onAgentToolResult: (callback) => createEventListener('agent:tool-result', callback),
+  onAgentProcess: (callback) => createEventListener('agent:process', callback),
   onAgentError: (callback) => createEventListener('agent:error', callback),
   onAgentComplete: (callback) => createEventListener('agent:complete', callback),
   onAgentThinking: (callback) => createEventListener('agent:thinking', callback),

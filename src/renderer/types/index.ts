@@ -350,6 +350,22 @@ export interface ImageContentBlock {
 
 export type MessageContentBlock = TextContentBlock | ImageContentBlock;
 
+export type ProcessVisibility = 'user' | 'debug';
+
+export interface ProcessTraceNode {
+  type: string;
+  kind?: string;
+  ts?: string;
+  timestamp?: string;
+  visibility?: ProcessVisibility;
+  payload?: Record<string, unknown>;
+}
+
+export interface ProcessSummary {
+  total?: number;
+  byKind?: Record<string, number>;
+}
+
 export interface Message {
   id: string;
   role: MessageRole;
@@ -357,6 +373,8 @@ export interface Message {
   timestamp: string;
   toolCalls?: ToolCall[];
   thoughts?: Thought[];  // Agent's reasoning process for this message
+  processTrace?: ProcessTraceNode[];  // Unified process trace (thought/tool/system events)
+  processSummary?: ProcessSummary;  // Aggregate summary for process panel
   isStreaming?: boolean;
   images?: ImageAttachment[];  // Attached images
   tokenUsage?: TokenUsage;  // Token usage for this assistant message
@@ -450,6 +468,7 @@ export interface Thought {
   type: ThoughtType;
   content: string;
   timestamp: string;
+  visibility?: ProcessVisibility;
   // For tool-related thoughts
   toolName?: string;
   toolInput?: Record<string, unknown>;
@@ -594,6 +613,14 @@ export interface AgentToolResultEvent extends AgentEventBase {
   isError: boolean;
 }
 
+export interface AgentProcessEvent extends AgentEventBase {
+  type: 'process';
+  kind: string;
+  payload: unknown;
+  ts?: string;
+  visibility?: ProcessVisibility;
+}
+
 export interface AgentErrorEvent extends AgentEventBase {
   type: 'error';
   error: string;
@@ -615,6 +642,7 @@ export interface AgentCompleteEvent extends AgentEventBase {
   durationMs?: number;
   reason?: 'completed' | 'stopped' | 'error' | 'no_text';
   terminalAt?: string;
+  finalContent?: string;
   tokenUsage?: TokenUsage | null;
   isPlan?: boolean;
 }
@@ -653,6 +681,7 @@ export interface AgentCompactEvent extends AgentEventBase {
 export type AgentEvent =
   | AgentRunStartEvent
   | AgentMessageEvent
+  | AgentProcessEvent
   | AgentToolCallEvent
   | AgentToolResultEvent
   | AgentErrorEvent
