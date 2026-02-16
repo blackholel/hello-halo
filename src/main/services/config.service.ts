@@ -3,7 +3,7 @@
  */
 
 import { app } from 'electron'
-import { join } from 'path'
+import { basename, dirname, join, posix as pathPosix, resolve, win32 as pathWin32 } from 'path'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { getConfigDir } from '../utils/instance'
 
@@ -144,8 +144,46 @@ export function getTempSpacePath(): string {
   return join(getHaloDir(), 'temp')
 }
 
+export function resolveSpacesRootFromConfigDir(
+  configDir: string,
+  platform: NodeJS.Platform = process.platform
+): string {
+  if (platform === 'win32') {
+    const normalizedConfigDir = pathWin32.resolve(configDir)
+    const configBaseName = pathWin32.basename(normalizedConfigDir)
+    const isDotKiteDir = configBaseName.toLowerCase() === '.kite'
+
+    if (isDotKiteDir) {
+      return pathWin32.resolve(pathWin32.join(pathWin32.dirname(normalizedConfigDir), 'kite'))
+    }
+
+    return pathWin32.resolve(pathWin32.join(normalizedConfigDir, 'kite'))
+  }
+
+  const normalizedConfigDir = pathPosix.resolve(configDir)
+  const configBaseName = basename(normalizedConfigDir)
+  const isDotKiteDir = configBaseName === '.kite'
+
+  if (isDotKiteDir) {
+    return pathPosix.resolve(join(dirname(normalizedConfigDir), 'kite'))
+  }
+
+  return pathPosix.resolve(join(normalizedConfigDir, 'kite'))
+}
+
 export function getSpacesDir(): string {
-  return join(getHaloDir(), 'spaces')
+  return resolveSpacesRootFromConfigDir(getKiteDir())
+}
+
+export function getLegacySpacesDir(
+  configDir: string = getKiteDir(),
+  platform: NodeJS.Platform = process.platform
+): string {
+  if (platform === 'win32') {
+    return pathWin32.resolve(pathWin32.join(pathWin32.resolve(configDir), 'spaces'))
+  }
+
+  return pathPosix.resolve(pathPosix.join(pathPosix.resolve(configDir), 'spaces'))
 }
 
 // Default model (Opus 4.5)

@@ -74,10 +74,10 @@ beforeEach(() => {
   // Create fresh unique test directory for this test
   const testDir = createTestDir()
 
-  // Create .halo directory structure
-  const haloDir = path.join(testDir, '.halo')
-  const tempDir = path.join(haloDir, 'temp')
-  const spacesDir = path.join(haloDir, 'spaces')
+  // Create .kite directory structure
+  const kiteDir = path.join(testDir, '.kite')
+  const tempDir = path.join(kiteDir, 'temp')
+  const spacesDir = path.join(testDir, 'kite')
 
   fs.mkdirSync(testDir, { recursive: true })
   fs.mkdirSync(haloDir, { recursive: true })

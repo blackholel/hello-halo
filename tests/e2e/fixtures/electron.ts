@@ -79,9 +79,9 @@ function createTestConfigDir(appPath: string): string {
   )
 
   // Create directory structure
-  const haloDir = path.join(testDir, '.halo')
-  const tempDir = path.join(haloDir, 'temp')
-  const spacesDir = path.join(haloDir, 'spaces')
+  const kiteDir = path.join(testDir, '.kite')
+  const tempDir = path.join(kiteDir, 'temp')
+  const spacesDir = path.join(testDir, 'kite')
 
   fs.mkdirSync(testDir, { recursive: true })
   fs.mkdirSync(haloDir, { recursive: true })
