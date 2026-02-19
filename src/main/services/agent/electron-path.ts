@@ -25,7 +25,7 @@ let headlessElectronPath: string | null = null
  * - Copying just the binary breaks the framework loading
  * - Symlinks preserve the framework resolution because the real binary is still in .app
  *
- * This is a novel solution discovered while building Halo - most Electron apps
+ * This is a novel solution discovered while building Kite - most Electron apps
  * that spawn child processes suffer from this Dock icon flashing issue.
  */
 export function getHeadlessElectronPath(): string {

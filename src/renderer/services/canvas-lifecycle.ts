@@ -12,11 +12,11 @@
  *
  * Content types and rendering:
  * - code/markdown/json/csv/text: Load content via IPC, render in React
- * - image: Use halo-file:// protocol (bypasses CSP in renderer)
+ * - image: Use kite-file:// protocol (bypasses CSP in renderer)
  * - pdf: Use BrowserView with file:// (BrowserView has no cross-origin restrictions)
  * - browser: Use BrowserView with https:// URLs
  *
- * Protocol: halo-file://
+ * Protocol: kite-file://
  * - Custom protocol registered in main process (protocol.service.ts)
  * - Used by <img> tags in renderer to bypass CSP restrictions
  * - NOT used for BrowserView (BrowserView can access file:// directly)
@@ -36,6 +36,7 @@ import { api } from '../api'
 export type ContentType =
   | 'code'
   | 'markdown'
+  | 'plan'
   | 'html'
   | 'image'
   | 'pdf'
@@ -69,7 +70,7 @@ export interface TabState {
   scrollPosition?: number
   browserViewId?: string
   browserState?: BrowserState
-  // Chat tab specific fields
+  // Session-bound tab fields (used by chat tabs and plan tabs)
   conversationId?: string
   spaceId?: string
   workDir?: string
@@ -186,6 +187,7 @@ class CanvasLifecycle {
 
   // Track which space the current tabs belong to
   private currentSpaceId: string | null = null
+  private enterSpaceSequence: number = 0
 
   // Container bounds getter (set by BrowserViewer)
   private containerBoundsGetter: (() => DOMRect | null) | null = null
@@ -327,7 +329,7 @@ class CanvasLifecycle {
 
   /**
    * Open a PDF file using BrowserView (Chromium native PDF renderer)
-   * Note: BrowserView can access file:// directly, no need for halo-file://
+   * Note: BrowserView can access file:// directly, no need for kite-file://
    */
   private async openPdf(path: string, title?: string): Promise<string> {
     const tabId = generateTabId()
@@ -367,7 +369,7 @@ class CanvasLifecycle {
     const tab = this.tabs.get(tabId)
     if (!tab) return
 
-    // Images use halo-file:// protocol directly (no content loading needed)
+    // Images use kite-file:// protocol directly (no content loading needed)
     if (type === 'image') {
       tab.isLoading = false
       this.notifyTabsChange()
@@ -671,11 +673,12 @@ class CanvasLifecycle {
    * Close all tabs
    */
   async closeAll(): Promise<void> {
-    // Destroy all browser views (browser and pdf types)
+    // Phase A: snapshot native view IDs, then clear UI state immediately
+    const browserViewIds: string[] = []
     for (const [, tab] of this.tabs) {
       const hasBrowserView = (tab.type === 'browser' || tab.type === 'pdf') && tab.browserViewId
       if (hasBrowserView) {
-        await this.destroyBrowserView(tab.browserViewId!)
+        browserViewIds.push(tab.browserViewId!)
       }
     }
 
@@ -685,6 +688,13 @@ class CanvasLifecycle {
 
     this.notifyTabsChange()
     this.notifyActiveTabChange()
+
+    // Phase B: destroy BrowserViews asynchronously after UI is already cleared
+    await Promise.allSettled(
+      browserViewIds.map(async (viewId) => {
+        await this.destroyBrowserView(viewId)
+      })
+    )
   }
 
   /**
@@ -1107,16 +1117,23 @@ class CanvasLifecycle {
    * This is the single point of control for Space isolation of Canvas state.
    * Returns true if tabs were cleared
    */
-  enterSpace(spaceId: string): boolean {
+  async enterSpace(spaceId: string): Promise<boolean> {
+    const sequence = ++this.enterSpaceSequence
     const previousSpaceId = this.currentSpaceId
 
     if (previousSpaceId && previousSpaceId !== spaceId && this.tabs.size > 0) {
       // Switching to different space with existing tabs - clear all
-      this.closeAll()
+      await this.closeAll()
+      if (sequence !== this.enterSpaceSequence) {
+        return false
+      }
       this.currentSpaceId = spaceId
       return true
     }
 
+    if (sequence !== this.enterSpaceSequence) {
+      return false
+    }
     this.currentSpaceId = spaceId
     return false
   }

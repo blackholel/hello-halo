@@ -2,7 +2,7 @@
  * Agents Service - Manages Claude Code agents configuration
  *
  * Agents are loaded from multiple sources:
- * 1. ~/.halo/agents/ - Default app-level agents directory
+ * 1. {locked-user-root}/agents/ - Default app-level agents directory
  * 2. config.claudeCode.agents.paths - Custom global paths
  * 3. {workDir}/.claude/agents/ - Space-level agents (Claude Code compatible)
  *
@@ -11,7 +11,8 @@
 
 import { join, dirname } from 'path'
 import { readdirSync, readFileSync, statSync, existsSync, mkdirSync, writeFileSync, rmSync, copyFileSync } from 'fs'
-import { getConfig, getHaloDir } from './config.service'
+import { getConfig } from './config.service'
+import { getLockedConfigSourceMode, getLockedUserConfigRootDir } from './config-source-mode.service'
 import { getAllSpacePaths } from './space.service'
 import type { ResourceRef, CopyToSpaceOptions, CopyToSpaceResult } from './resource-ref.service'
 import { isPathWithinBasePaths, isValidDirectoryPath, isFileNotFoundError } from '../utils/path-validation'
@@ -111,6 +112,7 @@ function mergeAgents(globalAgents: AgentDefinition[], spaceAgents: AgentDefiniti
 }
 
 function buildGlobalAgents(): AgentDefinition[] {
+  const sourceMode = getLockedConfigSourceMode()
   const agents: AgentDefinition[] = []
   const seenNames = new Set<string>()
 
@@ -131,19 +133,18 @@ function buildGlobalAgents(): AgentDefinition[] {
     addAgents(scanAgentDir(join(plugin.installPath, 'agents'), 'plugin', plugin.installPath, plugin.name))
   }
 
-  // 1. App-level agents (~/.halo/agents/)
-  const haloDir = getHaloDir()
-  if (haloDir) {
-    addAgents(scanAgentDir(join(haloDir, 'agents'), 'app'))
-  }
+  // 1. App-level agents ({locked-user-root}/agents/)
+  addAgents(scanAgentDir(join(getLockedUserConfigRootDir(), 'agents'), 'app'))
 
-  // 2. Global custom paths from config.claudeCode.agents.paths
-  const globalPaths = getConfig().claudeCode?.agents?.paths || []
-  for (const globalPath of globalPaths) {
-    const resolvedPath = globalPath.startsWith('/')
-      ? globalPath
-      : join(require('os').homedir(), globalPath)
-    addAgents(scanAgentDir(resolvedPath, 'global'))
+  // 2. Kite mode only: global custom paths from config.claudeCode.agents.paths
+  if (sourceMode === 'kite') {
+    const globalPaths = getConfig().claudeCode?.agents?.paths || []
+    for (const globalPath of globalPaths) {
+      const resolvedPath = globalPath.startsWith('/')
+        ? globalPath
+        : join(require('os').homedir(), globalPath)
+      addAgents(scanAgentDir(resolvedPath, 'global'))
+    }
   }
 
   return agents

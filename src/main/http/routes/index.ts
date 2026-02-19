@@ -28,7 +28,7 @@ import {
 
 // Helper: get working directory for a space
 function getWorkingDir(spaceId: string): string {
-  if (spaceId === 'halo-temp') {
+  if (spaceId === 'kite-temp') {
     return join(getTempSpacePath(), 'artifacts')
   }
   const space = getSpace(spaceId)
@@ -103,8 +103,8 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
   })
 
   // ===== Space Routes =====
-  app.get('/api/spaces/halo', async (req: Request, res: Response) => {
-    const result = spaceController.getHaloTempSpace()
+  app.get('/api/spaces/kite', async (req: Request, res: Response) => {
+    const result = spaceController.getKiteTempSpace()
     res.json(result)
   })
 
@@ -181,7 +181,7 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
   })
 
   app.delete('/api/spaces/:spaceId/conversations/:conversationId', async (req: Request, res: Response) => {
-    const result = conversationController.deleteConversation(
+    const result = await conversationController.deleteConversation(
       req.params.spaceId,
       req.params.conversationId
     )
@@ -258,7 +258,7 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
 
   app.post('/api/agent/stop', async (req: Request, res: Response) => {
     const { conversationId } = req.body
-    const result = agentController.stopGeneration(conversationId)
+    const result = await agentController.stopGeneration(conversationId)
     res.json(result)
   })
 
@@ -729,7 +729,7 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
 
       // For simplicity, just download the first file if archiver is not available
       // A proper implementation would use archiver to create a zip
-      const fileName = spaceId === 'halo-temp' ? 'halo-artifacts' : basename(workDir)
+      const fileName = spaceId === 'kite-temp' ? 'kite-artifacts' : basename(workDir)
       res.setHeader('Content-Type', 'application/gzip')
       res.setHeader('Content-Disposition', `attachment; filename="${fileName}.tar.gz"`)
 

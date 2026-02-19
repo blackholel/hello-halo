@@ -42,9 +42,9 @@ const envLocal = loadEnvLocal()
  * In open-source builds without .env.local, these will be empty strings (analytics disabled)
  */
 const analyticsDefine = {
-  '__HALO_GA_MEASUREMENT_ID__': JSON.stringify(envLocal.HALO_GA_MEASUREMENT_ID || ''),
-  '__HALO_GA_API_SECRET__': JSON.stringify(envLocal.HALO_GA_API_SECRET || ''),
-  '__HALO_BAIDU_SITE_ID__': JSON.stringify(envLocal.HALO_BAIDU_SITE_ID || ''),
+  '__KITE_GA_MEASUREMENT_ID__': JSON.stringify(envLocal.KITE_GA_MEASUREMENT_ID || ''),
+  '__KITE_GA_API_SECRET__': JSON.stringify(envLocal.KITE_GA_API_SECRET || ''),
+  '__KITE_BAIDU_SITE_ID__': JSON.stringify(envLocal.KITE_BAIDU_SITE_ID || ''),
 }
 
 /**
@@ -60,6 +60,18 @@ function getVitePort(): number {
     }
   }
   return 5173
+}
+
+/**
+ * Get Vite dev server host from environment variable.
+ * Default to 127.0.0.1 to avoid IPv6 (::1) listen permission issues.
+ */
+function getViteHost(): string {
+  const envHost = process.env.VITE_HOST?.trim()
+  if (envHost) {
+    return envHost
+  }
+  return '127.0.0.1'
 }
 
 export default defineConfig({
@@ -97,6 +109,7 @@ export default defineConfig({
   renderer: {
     root: resolve(__dirname, 'src/renderer'),
     server: {
+      host: getViteHost(),
       port: getVitePort()
     },
     build: {

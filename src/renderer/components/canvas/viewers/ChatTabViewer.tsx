@@ -15,6 +15,7 @@ import { useCallback, useEffect } from 'react'
 import { useChatStore } from '../../../stores/chat.store'
 import { useSpaceStore } from '../../../stores/space.store'
 import { useSmartScroll } from '../../../hooks/useSmartScroll'
+import { useCanvasLifecycle } from '../../../hooks/useCanvasLifecycle'
 import { MessageList } from '../../chat/MessageList'
 import { InputArea } from '../../chat/InputArea'
 import { AskUserQuestionPanel } from '../../chat/AskUserQuestionPanel'
@@ -60,27 +61,27 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
   const session = useChatStore(state =>
     conversationId ? state.sessions.get(conversationId) : null
   )
-  const isLoadingConversation = useChatStore(state => state.isLoadingConversation)
+  const isLoadingConversation = useChatStore(state =>
+    conversationId ? state.isConversationLoading(conversationId) : false
+  )
 
   // Store actions
   const sendMessageToConversation = useChatStore(state => state.sendMessageToConversation)
   const stopGeneration = useChatStore(state => state.stopGeneration)
-  const selectConversation = useChatStore(state => state.selectConversation)
+  const hydrateConversation = useChatStore(state => state.hydrateConversation)
   const getCachedConversation = useChatStore(state => state.getCachedConversation)
   const changeSets = useChatStore(state => state.changeSets)
   const loadChangeSets = useChatStore(state => state.loadChangeSets)
   const acceptChangeSet = useChatStore(state => state.acceptChangeSet)
   const rollbackChangeSet = useChatStore(state => state.rollbackChangeSet)
   const setPlanEnabled = useChatStore(state => state.setPlanEnabled)
-  const answerQuestion = useChatStore(state => state.answerQuestion)
-  const dismissAskUserQuestion = useChatStore(state => state.dismissAskUserQuestion)
 
   // Load conversation if not in cache
   useEffect(() => {
-    if (conversationId && !getCachedConversation(conversationId)) {
-      selectConversation(conversationId)
+    if (conversationId && spaceId && !getCachedConversation(conversationId)) {
+      hydrateConversation(spaceId, conversationId)
     }
-  }, [conversationId, getCachedConversation, selectConversation])
+  }, [conversationId, spaceId, getCachedConversation, hydrateConversation])
 
   // Load change sets for this conversation (Canvas tab context)
   useEffect(() => {
@@ -102,10 +103,6 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
     error = null,
     textBlockVersion = 0,
     planEnabled = false,
-    toolStatusById = {},
-    availableToolsSnapshot,
-    pendingAskUserQuestion = null,
-    failedAskUserQuestion = null
   } = session || {}
 
   const currentChangeSets = conversationId ? (changeSets.get(conversationId) || []) : []
@@ -128,13 +125,23 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
     content: string,
     images?: ImageAttachment[],
     thinkingEnabled?: boolean,
-    fileContexts?: FileContextAttachment[]
+    fileContexts?: FileContextAttachment[],
+    planEnabled?: boolean
   ) => {
     if (!conversationId || !spaceId) return
     if ((!content.trim() && (!images || images.length === 0) && (!fileContexts || fileContexts.length === 0)) || isGenerating) return
 
     // Send directly to the target conversation - no global context switching needed
-    await sendMessageToConversation(spaceId, conversationId, content, images, thinkingEnabled, fileContexts)
+    await sendMessageToConversation(
+      spaceId,
+      conversationId,
+      content,
+      images,
+      thinkingEnabled,
+      fileContexts,
+      undefined,
+      planEnabled
+    )
   }, [conversationId, spaceId, isGenerating, sendMessageToConversation])
 
   // Handle stop generation
@@ -217,8 +224,6 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
                 isCompact={true}
                 textBlockVersion={textBlockVersion}
                 onOpenPlanInCanvas={handleOpenPlanInCanvas}
-                toolStatusById={toolStatusById}
-                availableToolsSnapshot={availableToolsSnapshot}
               />
               <div ref={bottomRef} />
             </>

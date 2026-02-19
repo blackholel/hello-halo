@@ -2,7 +2,7 @@
  * Skills Store - Skills state management
  *
  * Manages the state of skills loaded from various sources:
- * - App-level skills (~/.halo/skills/)
+ * - App-level skills (~/.kite/skills/)
  * - Global custom paths
  * - Installed plugins
  * - Space-level skills ({workDir}/.claude/skills/)

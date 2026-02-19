@@ -1,5 +1,5 @@
 ---
-title: Hello-Halo Skills 加载功能实现
+title: Hello-Kite Skills 加载功能实现
 category: integration-issues
 tags: [skills, plugins, sdk, v2-session, claude-agent-sdk]
 created: 2026-01-17
@@ -9,12 +9,12 @@ root_cause: SDK V2 Session 未传递 plugins 参数
 status: resolved
 ---
 
-# Hello-Halo Skills 加载功能实现
+# Hello-Kite Skills 加载功能实现
 
 ## 问题概述
 
-用户希望在 Hello-Halo 应用中实现自定义 Skills 功能，支持两层技能配置：
-- **应用级 Skills**：位于 `~/.halo/skills/`，所有 Space 共享
+用户希望在 Hello-Kite 应用中实现自定义 Skills 功能，支持两层技能配置：
+- **应用级 Skills**：位于 `~/.kite/skills/`，所有 Space 共享
 - **Space 级 Skills**：位于 `{workDir}/.claude/skills/`，项目特定
 
 配置完成后，Skills 无法被识别和加载。
@@ -22,7 +22,7 @@ status: resolved
 ## 症状
 
 ```
-[Agent] Final plugins config: [{"type":"local","path":"/Users/dl/.halo/skills"}]
+[Agent] Final plugins config: [{"type":"local","path":"/Users/dl/.kite/skills"}]
 [Agent][xxx] Loaded skills: []
 [Agent][xxx] Loaded plugins: []
 ```
@@ -104,8 +104,8 @@ function buildPluginsConfig(workDir: string): Array<{ type: 'local'; path: strin
   const plugins: Array<{ type: 'local'; path: string }> = []
 
   // 1. App-level skills (default, lower priority)
-  // Located at ~/.halo/skills/, shared across all spaces
-  const appSkillsPath = join(getHaloDir(), 'skills')
+  // Located at ~/.kite/skills/, shared across all spaces
+  const appSkillsPath = join(getKiteDir(), 'skills')
   console.log(`[Agent] Checking app-level skills path: ${appSkillsPath}, exists: ${existsSync(appSkillsPath)}`)
   if (existsSync(appSkillsPath)) {
     plugins.push({ type: 'local', path: appSkillsPath })
@@ -140,7 +140,7 @@ const sdkOptions = {
 ### 3. Skills 目录结构
 
 ```
-~/.halo/skills/
+~/.kite/skills/
 ├── .claude-plugin/
 │   └── plugin.json       # 插件清单
 └── skills/               # Skills 目录
@@ -155,9 +155,9 @@ const sdkOptions = {
 
 ```json
 {
-  "name": "halo-skills",
+  "name": "kite-skills",
   "version": "1.0.0",
-  "description": "Halo 应用自定义技能集",
+  "description": "Kite 应用自定义技能集",
   "author": {
     "name": "User"
   }
@@ -195,8 +195,8 @@ description: 技能描述，包含触发词
 | 文件 | 变更 |
 |------|------|
 | `src/main/services/agent.service.ts` | 添加 `buildPluginsConfig()` 函数，在 `sdkOptions` 中配置 plugins |
-| `~/.halo/skills/.claude-plugin/plugin.json` | 创建插件清单，添加 version 字段 |
-| `~/.halo/skills/skills/*/SKILL.md` | 创建技能定义文件 |
+| `~/.kite/skills/.claude-plugin/plugin.json` | 创建插件清单，添加 version 字段 |
+| `~/.kite/skills/skills/*/SKILL.md` | 创建技能定义文件 |
 
 **关键修改**：
 - 新增 `buildPluginsConfig()` 函数（第 634-659 行）
@@ -207,20 +207,20 @@ description: 技能描述，包含触发词
 
 1. **启动应用**，观察控制台日志：
    ```
-   [Agent] Checking app-level skills path: /Users/dl/.halo/skills, exists: true
-   [Agent] Added app-level skills: /Users/dl/.halo/skills
-   [Agent] Final plugins config: [{"type":"local","path":"/Users/dl/.halo/skills"}]
+   [Agent] Checking app-level skills path: /Users/dl/.kite/skills, exists: true
+   [Agent] Added app-level skills: /Users/dl/.kite/skills
+   [Agent] Final plugins config: [{"type":"local","path":"/Users/dl/.kite/skills"}]
    ```
 
 2. **发送消息**，确认 skills 加载：
    ```
-   [Agent][xxx] Loaded skills: ["halo-skills:doc-learner", "halo-skills:excalidraw-diagram", ...]
-   [Agent][xxx] Loaded plugins: [{"name":"halo-skills","path":"/Users/dl/.halo/skills"}]
+   [Agent][xxx] Loaded skills: ["kite-skills:doc-learner", "kite-skills:excalidraw-diagram", ...]
+   [Agent][xxx] Loaded plugins: [{"name":"kite-skills","path":"/Users/dl/.kite/skills"}]
    ```
 
 3. **验证插件**：
    ```bash
-   npx @anthropic-ai/claude-code plugin validate ~/.halo/skills
+   npx @anthropic-ai/claude-code plugin validate ~/.kite/skills
    # ✔ Validation passed
    ```
 
@@ -228,7 +228,7 @@ description: 技能描述，包含触发词
 
 | 层级 | 路径 | 用途 | 优先级 |
 |------|------|------|--------|
-| 应用级 | `~/.halo/skills/` | 所有 Space 共享的默认技能 | 低 |
+| 应用级 | `~/.kite/skills/` | 所有 Space 共享的默认技能 | 低 |
 | Space 级 | `{workDir}/.claude/skills/` | 项目特定的技能 | 高（可覆盖应用级） |
 
 ## 注意事项
@@ -244,7 +244,7 @@ description: 技能描述，包含触发词
 ## 相关文件
 
 - `src/main/services/agent.service.ts` - SDK 配置和 skills 加载
-- `src/main/services/config.service.ts` - `getHaloDir()` 函数
+- `src/main/services/config.service.ts` - `getKiteDir()` 函数
 - `patches/@anthropic-ai+claude-agent-sdk+0.2.7.patch` - SDK 补丁
 - `node_modules/@anthropic-ai/claude-code/cli.js` - CLI skills 加载逻辑
 

@@ -171,6 +171,7 @@ export function useCanvasLifecycle() {
     openUrl,
     attachAIBrowserView,
     openContent,
+    openPlan,
     openChat,
     closeTab,
     closeAllTabs,

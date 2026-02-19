@@ -1,7 +1,7 @@
 /**
  * Space Config Service - Manages space-level configuration
  *
- * Space configuration is stored at {workDir}/.halo/space-config.json
+ * Space configuration is stored at {workDir}/.kite/space-config.json
  * It allows per-project customization of plugins, hooks, MCP servers, etc.
  */
 
@@ -72,7 +72,7 @@ const spaceConfigCache = new FileCache<SpaceConfig | null>()
 export function getSpaceConfig(workDir: string): SpaceConfig | null {
   if (!workDir) return null
 
-  const configPath = join(workDir, '.halo', 'space-config.json')
+  const configPath = join(workDir, '.kite', 'space-config.json')
 
   return spaceConfigCache.get(configPath, () => {
     if (!existsSync(configPath)) {
@@ -96,7 +96,7 @@ export function getSpaceConfig(workDir: string): SpaceConfig | null {
  */
 export function clearSpaceConfigCache(workDir?: string): void {
   if (workDir) {
-    const configPath = join(workDir, '.halo', 'space-config.json')
+    const configPath = join(workDir, '.kite', 'space-config.json')
     spaceConfigCache.clear(configPath)
   } else {
     spaceConfigCache.clear()
@@ -178,7 +178,7 @@ export function updateSpaceConfig(
 ): SpaceConfig | null {
   if (!workDir) return null
 
-  const configDir = join(workDir, '.halo')
+  const configDir = join(workDir, '.kite')
   const configPath = join(configDir, 'space-config.json')
 
   try {

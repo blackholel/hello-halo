@@ -298,7 +298,7 @@ function getConversationsDir(spaceId: string): string {
 
   const convDir = space.isTemp
     ? join(space.path, 'conversations')
-    : join(space.path, '.halo', 'conversations')
+    : join(space.path, '.kite', 'conversations')
   console.log(`[Conversation] Found space "${space.name}", conversations dir: ${convDir}`)
   return convDir
 }

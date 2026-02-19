@@ -4,7 +4,7 @@
 
 import { create } from 'zustand'
 import { api } from '../api'
-import type { HaloConfig, AppView, McpServerStatus } from '../types'
+import type { KiteConfig, AppView, McpServerStatus } from '../types'
 
 // Git Bash installation progress
 interface GitBashInstallProgress {
@@ -22,7 +22,7 @@ interface AppState {
   error: string | null
 
   // Config
-  config: HaloConfig | null
+  config: KiteConfig | null
 
   // MCP Status (cached from last conversation)
   mcpStatus: McpServerStatus[]
@@ -37,8 +37,8 @@ interface AppState {
   goBack: () => void  // Navigate back to previous view
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
-  setConfig: (config: HaloConfig) => void
-  updateConfig: (updates: Partial<HaloConfig>) => void
+  setConfig: (config: KiteConfig) => void
+  updateConfig: (updates: Partial<KiteConfig>) => void
   setMcpStatus: (status: McpServerStatus[], timestamp: number) => void
 
   // Git Bash actions
@@ -199,7 +199,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const response = await configPromise
 
       if (response.success && response.data) {
-        const config = response.data as HaloConfig
+        const config = response.data as KiteConfig
 
         set({ config })
 

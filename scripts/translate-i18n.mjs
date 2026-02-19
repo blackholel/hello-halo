@@ -7,9 +7,9 @@
  *   npm run i18n:translate -- --force  # Full translation
  *
  * Environment variables (from .env.local):
- *   HALO_TEST_API_KEY - API Key
- *   HALO_TEST_API_URL - API URL
- *   HALO_TEST_MODEL   - Model name
+ *   KITE_TEST_API_KEY - API Key
+ *   KITE_TEST_API_URL - API URL
+ *   KITE_TEST_MODEL   - Model name
  */
 
 import fs from 'node:fs'
@@ -71,7 +71,7 @@ const TRANSLATION_GUIDELINES = {
 // Product context
 const APP_CONTEXT = `
 ## Product Context
-Halo is a desktop AI assistant application (similar to Cursor/Claude Desktop).
+Kite is a desktop AI assistant application (similar to Cursor/Claude Desktop).
 
 Key concepts:
 - "Space" = A workspace/project folder where AI can read/write files (NOT outer space)
@@ -116,12 +116,12 @@ function getKeysToTranslate(sourceJson, targetJson, force = false) {
 
 // Call LLM API for translation
 async function translateBatch(texts, targetLocale) {
-  const apiKey = process.env.HALO_TEST_API_KEY
-  const apiUrl = process.env.HALO_TEST_API_URL
-  const model = process.env.HALO_TEST_MODEL
+  const apiKey = process.env.KITE_TEST_API_KEY
+  const apiUrl = process.env.KITE_TEST_API_URL
+  const model = process.env.KITE_TEST_MODEL
 
   if (!apiKey || !apiUrl) {
-    throw new Error('Missing HALO_TEST_API_KEY or HALO_TEST_API_URL in .env.local')
+    throw new Error('Missing KITE_TEST_API_KEY or KITE_TEST_API_URL in .env.local')
   }
 
   // Build examples
@@ -144,7 +144,7 @@ Translate the following JSON from English to ${LANG_NAMES[targetLocale]}.
 ## Rules
 1. Keep JSON keys unchanged, only translate values
 2. Keep {{variables}} placeholders exactly as-is (e.g., {{count}}, {{name}})
-3. Keep brand name "Halo" untranslated
+3. Keep brand name "Kite" untranslated
 4. Keep technical terms like "MCP", "API", "JSON" untranslated
 5. ${TRANSLATION_GUIDELINES[targetLocale]}
 
@@ -293,8 +293,8 @@ async function main() {
 
   console.log('\n🌍 i18n Auto Translator\n')
   console.log(`   Mode: ${force ? 'Force (translate all)' : 'Incremental (empty values only)'}`)
-  console.log(`   API: ${process.env.HALO_TEST_API_URL}`)
-  console.log(`   Model: ${process.env.HALO_TEST_MODEL}\n`)
+  console.log(`   API: ${process.env.KITE_TEST_API_URL}`)
+  console.log(`   Model: ${process.env.KITE_TEST_MODEL}\n`)
 
   // Read source file
   const sourceFile = path.join(CONFIG.localesDir, `${CONFIG.sourceLocale}.json`)

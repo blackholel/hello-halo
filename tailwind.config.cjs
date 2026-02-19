@@ -39,11 +39,11 @@ module.exports = {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
-        // Halo brand colors
-        'halo-glow': 'hsl(var(--halo-glow))',
-        'halo-success': 'hsl(var(--halo-success))',
-        'halo-warning': 'hsl(var(--halo-warning))',
-        'halo-error': 'hsl(var(--halo-error))',
+        // Kite brand colors
+        'kite-glow': 'hsl(var(--kite-glow))',
+        'kite-success': 'hsl(var(--kite-success))',
+        'kite-warning': 'hsl(var(--kite-warning))',
+        'kite-error': 'hsl(var(--kite-error))',
       },
       borderRadius: {
         '2xl': '1rem',

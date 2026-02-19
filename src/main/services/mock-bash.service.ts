@@ -38,7 +38,7 @@ export function createMockBash(): string {
   const mockScript = `@echo off
 echo.
 echo ============================================================
-echo [HALO SYSTEM MESSAGE - COMMAND EXECUTION UNAVAILABLE]
+echo [KITE SYSTEM MESSAGE - COMMAND EXECUTION UNAVAILABLE]
 echo ============================================================
 echo.
 echo The command execution environment (Git Bash) is not installed.
@@ -58,7 +58,7 @@ echo.
 echo China Mirror (Recommended for faster download):
 echo   https://registry.npmmirror.com/-/binary/git-for-windows/
 echo.
-echo After installation, restart Halo to enable command execution.
+echo After installation, restart Kite to enable command execution.
 echo ============================================================
 echo.
 exit /b 0

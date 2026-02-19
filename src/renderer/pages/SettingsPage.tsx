@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAppStore } from '../stores/app.store'
 import { usePythonStore } from '../stores/python.store'
 import { api } from '../api'
-import type { HaloConfig, ThemeMode, McpServersConfig } from '../types'
+import type { KiteConfig, ThemeMode, McpServersConfig, ConfigSourceMode } from '../types'
 import { AVAILABLE_MODELS, DEFAULT_MODEL } from '../types'
 import { CheckCircle2, XCircle, ArrowLeft, Eye, EyeOff, ChevronDown, ChevronRight, Package, Trash2, Loader2 } from '../components/icons/ToolIcons'
 import { Header } from '../components/layout/Header'
@@ -130,6 +130,8 @@ export function SettingsPage() {
   const [provider, setProvider] = useState(config?.api.provider || 'anthropic')
   const [model, setModel] = useState(config?.api.model || DEFAULT_MODEL)
   const [theme, setTheme] = useState<ThemeMode>(config?.appearance.theme || 'system')
+  const [configSourceMode, setConfigSourceMode] = useState<ConfigSourceMode>(config?.configSourceMode || 'kite')
+  const [configSourceNotice, setConfigSourceNotice] = useState<string | null>(null)
   // Custom model toggle: enable by default if current model is not in preset list
   const [useCustomModel, setUseCustomModel] = useState(() => {
     const currentModel = config?.api.model || DEFAULT_MODEL
@@ -170,6 +172,10 @@ export function SettingsPage() {
       unsubscribe()
     }
   }, [])
+
+  useEffect(() => {
+    setConfigSourceMode(config?.configSourceMode || 'kite')
+  }, [config?.configSourceMode])
 
   // Load system settings
   useEffect(() => {
@@ -285,8 +291,8 @@ export function SettingsPage() {
   }
 
   // Auto-save helper for appearance settings
-  const autoSave = useCallback(async (partialConfig: Partial<HaloConfig>) => {
-    const newConfig = { ...config, ...partialConfig } as HaloConfig
+  const autoSave = useCallback(async (partialConfig: Partial<KiteConfig>) => {
+    const newConfig = { ...config, ...partialConfig } as KiteConfig
     await api.setConfig(partialConfig)
     setConfig(newConfig)
   }, [config, setConfig])
@@ -296,7 +302,7 @@ export function SettingsPage() {
     setTheme(value)
     // Sync to localStorage immediately (for anti-flash on reload)
     try {
-      localStorage.setItem('halo-theme', value)
+      localStorage.setItem('kite-theme', value)
     } catch (e) { /* ignore */ }
     await autoSave({
       appearance: { theme: value }
@@ -328,7 +334,29 @@ export function SettingsPage() {
   // Handle MCP servers save
   const handleMcpServersSave = async (servers: McpServersConfig) => {
     await api.setConfig({ mcpServers: servers })
-    setConfig({ ...config, mcpServers: servers } as HaloConfig)
+    setConfig({ ...config, mcpServers: servers } as KiteConfig)
+  }
+
+  const handleConfigSourceModeChange = async (nextMode: ConfigSourceMode) => {
+    const previousMode = configSourceMode
+    setConfigSourceMode(nextMode)
+    setConfigSourceNotice(null)
+
+    if (nextMode === previousMode) {
+      return
+    }
+
+    try {
+      await api.setConfig({ configSourceMode: nextMode })
+      // Do not update global in-memory config here.
+      // Runtime source mode is locked in main process until restart,
+      // so UI should keep using current effective source outside this page.
+      setConfigSourceNotice(t('Configuration source saved. Restart Kite to apply changes.'))
+    } catch (error) {
+      console.error('[Settings] Failed to update configuration source mode:', error)
+      setConfigSourceMode(previousMode)
+      setConfigSourceNotice(t('Save failed'))
+    }
   }
 
   // Handle Python package install
@@ -361,7 +389,7 @@ export function SettingsPage() {
         }
       }
       await api.setConfig(apiConfig)
-      setConfig({ ...config, ...apiConfig } as HaloConfig)
+      setConfig({ ...config, ...apiConfig } as KiteConfig)
       setValidationResult({ valid: true, message: t('Saved') })
     } catch (error) {
       setValidationResult({ valid: false, message: t('Save failed') })
@@ -619,7 +647,7 @@ export function SettingsPage() {
           <section className="settings-section">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-medium">{t('Permissions')}</h2>
-              <span className="text-xs px-2.5 py-1 rounded-lg bg-halo-success/15 text-halo-success font-medium">
+              <span className="text-xs px-2.5 py-1 rounded-lg bg-kite-success/15 text-kite-success font-medium">
                 {t('Full Permission Mode')}
               </span>
             </div>
@@ -636,7 +664,7 @@ export function SettingsPage() {
                   <p className="font-medium">{t('File Read/Write')}</p>
                   <p className="text-sm text-muted-foreground">{t('Allow AI to read and create files')}</p>
                 </div>
-                <span className="text-xs px-2.5 py-1 rounded-lg bg-halo-success/15 text-halo-success font-medium">
+                <span className="text-xs px-2.5 py-1 rounded-lg bg-kite-success/15 text-kite-success font-medium">
                   {t('Allow')}
                 </span>
               </div>
@@ -647,7 +675,7 @@ export function SettingsPage() {
                   <p className="font-medium">{t('Execute Commands')}</p>
                   <p className="text-sm text-muted-foreground">{t('Allow AI to execute terminal commands')}</p>
                 </div>
-                <span className="text-xs px-2.5 py-1 rounded-lg bg-halo-success/15 text-halo-success font-medium">
+                <span className="text-xs px-2.5 py-1 rounded-lg bg-kite-success/15 text-kite-success font-medium">
                   {t('Allow')}
                 </span>
               </div>
@@ -660,6 +688,47 @@ export function SettingsPage() {
                 </div>
                 <AppleToggle checked={true} onChange={() => {}} disabled={true} />
               </div>
+            </div>
+          </section>
+
+          {/* Configuration Source Section */}
+          <section className="settings-section">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center">
+                <svg className="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7z" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-base font-semibold tracking-tight">{t('Configuration Source')}</h2>
+                <p className="text-xs text-muted-foreground">{t('Choose which user configuration directory Kite uses')}</p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">
+                  {t('Source Mode')}
+                </label>
+                <select
+                  value={configSourceMode}
+                  onChange={(event) => handleConfigSourceModeChange(event.target.value as ConfigSourceMode)}
+                  className="w-full select-apple text-sm"
+                >
+                  <option value="kite">{t('Kite (~/.kite)')}</option>
+                  <option value="claude">{t('Claude (~/.claude)')}</option>
+                </select>
+              </div>
+
+              <div className="settings-warning text-sm">
+                {t('Changing configuration source requires restart. Current session keeps existing sources until restart.')}
+              </div>
+
+              {configSourceNotice && (
+                <div className="settings-info text-sm">
+                  {configSourceNotice}
+                </div>
+              )}
             </div>
           </section>
 
@@ -872,13 +941,13 @@ export function SettingsPage() {
                       <p className="font-medium">{t('Auto Launch on Startup')}</p>
                       <span
                         className="inline-flex items-center justify-center w-4 h-4 text-xs rounded-full bg-muted text-muted-foreground cursor-help"
-                        title={t('Automatically run Halo when system starts')}
+                        title={t('Automatically run Kite when system starts')}
                       >
                         ?
                       </span>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      {t('Automatically run Halo when system starts')}
+                      {t('Automatically run Kite when system starts')}
                     </p>
                   </div>
                   <AppleToggle checked={autoLaunch} onChange={handleAutoLaunchChange} />
@@ -956,7 +1025,7 @@ export function SettingsPage() {
                 <div>
                   <p className="font-medium">{t('Enable Remote Access')}</p>
                   <p className="text-sm text-muted-foreground">
-                    {t('Allow access to Halo from other devices')}
+                    {t('Allow access to Kite from other devices')}
                   </p>
                 </div>
                 <AppleToggle

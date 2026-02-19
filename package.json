@@ -1,18 +1,18 @@
 {
-  "name": "halo",
+  "name": "kite",
   "version": "1.2.1",
   "description": "AI that gets things done",
   "type": "module",
   "main": "./out/main/index.mjs",
-  "author": "Halo Team",
+  "author": "Kite Team",
   "license": "MIT",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "postinstall": "patch-package && electron-builder install-app-deps",
-    "prepare:python-mac": "node scripts/prepare-python-darwin-arm64.mjs",
-    "prepare:python-win": "node scripts/prepare-python-win-x64.mjs",
+    "prepare:python-mac": "node scripts/prepare-python.mjs darwin-arm64",
+    "prepare:python-win": "node scripts/prepare-python.mjs win-x64",
     "build:mac": "npm run prepare:python-mac && npm run build && electron-builder --mac",
     "build:win": "npm run build && electron-builder --win",
     "build:win-x64": "npm run prepare:win-x64 && npm run prepare:python-win && npm run build && electron-builder --win --x64",
@@ -82,7 +82,7 @@
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.2.0",
     "autoprefixer": "^10.4.16",
-    "electron": "^28.0.0",
+    "electron": "28.0.0",
     "electron-builder": "^24.9.0",
     "electron-vite": "^2.0.0",
     "i18next-parser": "^9.3.0",
@@ -95,8 +95,8 @@
     "vitest": "^1.6.1"
   },
   "build": {
-    "appId": "com.halo.app",
-    "productName": "Halo",
+    "appId": "com.kite.app",
+    "productName": "Kite",
     "releaseInfo": {
       "releaseNotesFile": ".release-notes-current.md"
     },

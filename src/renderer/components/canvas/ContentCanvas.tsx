@@ -1,7 +1,7 @@
 /**
  * Content Canvas - Main content viewing area
  *
- * The Content Canvas transforms Halo from a simple chat interface
+ * The Content Canvas transforms Kite from a simple chat interface
  * into a rich content browser. It displays code, markdown, images,
  * and embedded browser views.
  *
@@ -24,7 +24,7 @@
  */
 
 import { useCallback, useEffect } from 'react'
-import { X, ChevronLeft } from 'lucide-react'
+import { X, ChevronLeft, Minimize2, Maximize2 } from 'lucide-react'
 import { useCanvasLifecycle, type TabState, type ContentType } from '../../hooks/useCanvasLifecycle'
 import { CanvasTabBar } from './CanvasTabs'
 import { CodeEditor } from './viewers/CodeEditor'
@@ -34,10 +34,12 @@ import { HtmlViewer } from './viewers/HtmlViewer'
 import { JsonViewer } from './viewers/JsonViewer'
 import { CsvViewer } from './viewers/CsvViewer'
 import { TextViewer } from './viewers/TextViewer'
+import { PlanEditor } from './viewers/PlanEditor'
 import { BrowserViewer, BrowserViewerFallback } from './viewers/BrowserViewer'
 import { ChatTabViewer } from './viewers/ChatTabViewer'
 import { api } from '../../api'
 import { useTranslation } from '../../i18n'
+import { useChatStore } from '../../stores/chat.store'
 
 // Default URL for new browser tabs
 const DEFAULT_NEW_TAB_URL = 'https://www.bing.com'
@@ -178,6 +180,7 @@ interface TabContentProps {
 
 function TabContent({ tab, onScrollChange, onContentChange, onSave }: TabContentProps) {
   const { t } = useTranslation()
+  const executePlan = useChatStore(state => state.executePlan)
   // Chat tabs have their own component with full chat functionality
   if (tab.type === 'chat') {
     return <ChatTabViewer tab={tab} />
@@ -225,6 +228,21 @@ function TabContent({ tab, onScrollChange, onContentChange, onSave }: TabContent
 
     case 'markdown':
       return <MarkdownViewer tab={tab} onScrollChange={onScrollChange} />
+
+    case 'plan':
+      return (
+        <PlanEditor
+          tab={tab}
+          onContentChange={onContentChange}
+          onBuild={async (content) => {
+            if (!tab.spaceId || !tab.conversationId) {
+              console.error('[ContentCanvas] Plan tab missing conversation binding')
+              return
+            }
+            await executePlan(tab.spaceId, tab.conversationId, content)
+          }}
+        />
+      )
 
     case 'image':
       return <ImageViewer tab={tab} />

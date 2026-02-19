@@ -1,5 +1,5 @@
 /**
- * Halo - Main App Component
+ * Kite - Main App Component
  */
 
 import { useEffect, useRef, Suspense, lazy } from 'react'
@@ -22,13 +22,7 @@ import { SearchHighlightBar } from './components/search/SearchHighlightBar'
 import { OnboardingOverlay } from './components/onboarding'
 import { UpdateNotification } from './components/updater/UpdateNotification'
 import { api } from './api'
-import type {
-  AgentEventBase,
-  AgentCompleteEvent,
-  AgentProcessEvent,
-  Thought,
-  ToolCall
-} from './types'
+import type { AgentEventBase, AgentCompleteEvent, Thought, ToolCall } from './types'
 
 // Lazy load heavy page components for better initial load performance
 // These pages contain complex components (chat, markdown, code highlighting, etc.)
@@ -60,7 +54,7 @@ function applyTheme(theme: 'light' | 'dark' | 'system') {
 
   // Save to localStorage for anti-flash script
   try {
-    localStorage.setItem('halo-theme', theme)
+    localStorage.setItem('kite-theme', theme)
   } catch (e) { /* ignore */ }
 
   let isDark: boolean
@@ -102,7 +96,7 @@ export default function App() {
   const { isSearchOpen, closeSearch, isHighlightBarVisible, hideHighlightBar, goToPreviousResult, goToNextResult, openSearch } = useSearchStore()
 
   // For search result navigation
-  const { spaces, haloSpace, setCurrentSpace: setSpaceStoreCurrentSpace } = useSpaceStore()
+  const { spaces, kiteSpace, setCurrentSpace: setSpaceStoreCurrentSpace } = useSpaceStore()
 
   // Initialize app on mount
   useEffect(() => {
@@ -193,8 +187,8 @@ export default function App() {
 
     const unsubComplete = api.onAgentComplete((data) => {
       console.log('[App] Received agent:complete event:', data)
-      handleAgentComplete(data as AgentEventBase & { reason?: 'completed' | 'stopped' | 'error' | 'no_text'; terminalAt?: string })
-      handleWorkflowAgentComplete(data as AgentEventBase)
+      handleAgentComplete(data as AgentCompleteEvent)
+      handleWorkflowAgentComplete(data as AgentCompleteEvent)
     })
 
     const unsubCompact = api.onAgentCompact((data) => {
@@ -346,8 +340,8 @@ export default function App() {
 
           // Find the space object
           let targetSpace = null
-          if (spaceId === 'halo-temp' && haloSpace) {
-            targetSpace = haloSpace
+          if (spaceId === 'kite-temp' && kiteSpace) {
+            targetSpace = kiteSpace
           } else {
             targetSpace = spaces.find(s => s.id === spaceId)
           }
@@ -415,7 +409,7 @@ export default function App() {
 
     window.addEventListener('search:navigate-to-result', handleNavigateToResult)
     return () => window.removeEventListener('search:navigate-to-result', handleNavigateToResult)
-  }, [currentSpaceId, spaces, haloSpace, setSpaceStoreCurrentSpace, setChatCurrentSpace, loadConversations, selectConversation])
+  }, [currentSpaceId, spaces, kiteSpace, setSpaceStoreCurrentSpace, setChatCurrentSpace, loadConversations, selectConversation])
 
   // Handle Git Bash setup completion
   const handleGitBashSetupComplete = async (installed: boolean) => {

@@ -79,8 +79,8 @@ export function createTray(mainWindow: BrowserWindow | null): Tray | null {
     tray = new Tray(icon)
     // Set tooltip with instance identifier for custom instances
     const tooltip = isCustomInstance()
-      ? `Halo [${getInstanceId()}] - AI Assistant`
-      : 'Halo - AI Assistant'
+      ? `Kite [${getInstanceId()}] - AI Assistant`
+      : 'Kite - AI Assistant'
     tray.setToolTip(tooltip)
 
     // Update context menu
@@ -114,7 +114,7 @@ export function updateTrayMenu(mainWindow: BrowserWindow | null): void {
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'Show Halo',
+      label: 'Show Kite',
       click: () => {
         showMainWindow(mainWindow)
       }

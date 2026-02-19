@@ -56,106 +56,6 @@ interface MessageListProps {
   textBlockVersion?: number  // Increments on each new text block (for StreamingBubble reset)
   workDir?: string  // For skill suggestion card creation
   onOpenPlanInCanvas?: (planContent: string) => void
-  onExecutePlan?: (planContent: string) => void  // Callback when "Execute Plan" button is clicked
-  toolStatusById?: Record<string, ToolStatus>
-  availableToolsSnapshot?: AvailableToolsSnapshot
-}
-
-function extractThoughtsFromProcessTrace(processTrace?: ProcessTraceNode[]): Thought[] {
-  if (!processTrace || processTrace.length === 0) {
-    return []
-  }
-
-  const thoughts: Thought[] = []
-  const seen = new Set<string>()
-
-  for (const node of processTrace) {
-    const payload =
-      node.payload && typeof node.payload === 'object'
-        ? (node.payload as Record<string, unknown>)
-        : null
-    const payloadThought = payload?.thought
-    if (
-      payloadThought &&
-      typeof payloadThought === 'object' &&
-      typeof (payloadThought as Thought).id === 'string' &&
-      typeof (payloadThought as Thought).type === 'string' &&
-      typeof (payloadThought as Thought).content === 'string' &&
-      typeof (payloadThought as Thought).timestamp === 'string'
-    ) {
-      const thought = payloadThought as Thought
-      const key = `${thought.type}:${thought.id}`
-      if (!seen.has(key)) {
-        seen.add(key)
-        thoughts.push(thought)
-      }
-      continue
-    }
-
-    if ((node.kind === 'tool_call' || node.kind === 'tool_result') && payload) {
-      const toolCallId =
-        (typeof payload.toolCallId === 'string' && payload.toolCallId) ||
-        (typeof payload.toolId === 'string' && payload.toolId) ||
-        (typeof payload.id === 'string' && payload.id) ||
-        null
-      if (!toolCallId) continue
-
-      if (node.kind === 'tool_call') {
-        const toolName = typeof payload.name === 'string' ? payload.name : 'tool'
-        const thought: Thought = {
-          id: toolCallId,
-          type: 'tool_use',
-          content: `Tool call: ${toolName}`,
-          timestamp: node.ts || node.timestamp || new Date().toISOString(),
-          toolName,
-          toolInput:
-            payload.input && typeof payload.input === 'object'
-              ? (payload.input as Record<string, unknown>)
-              : undefined
-        }
-        const key = `${thought.type}:${thought.id}`
-        if (!seen.has(key)) {
-          seen.add(key)
-          thoughts.push(thought)
-        }
-      } else {
-        const isError = payload.isError === true
-        const result =
-          typeof payload.result === 'string'
-            ? payload.result
-            : payload.result == null
-              ? ''
-              : JSON.stringify(payload.result)
-        const thought: Thought = {
-          id: toolCallId,
-          type: 'tool_result',
-          content: isError ? 'Tool execution failed' : 'Tool execution succeeded',
-          timestamp: node.ts || node.timestamp || new Date().toISOString(),
-          toolOutput: result,
-          isError
-        }
-        const key = `${thought.type}:${thought.id}`
-        if (!seen.has(key)) {
-          seen.add(key)
-          thoughts.push(thought)
-        }
-      }
-    }
-  }
-
-  return thoughts
-}
-
-export function getMessageThoughtsForDisplay(message: Message): Thought[] {
-  if (Array.isArray(message.thoughts) && message.thoughts.length > 0) {
-    return message.thoughts
-  }
-
-  if (Array.isArray(message.processTrace) && message.processTrace.length > 0) {
-    return extractThoughtsFromProcessTrace(message.processTrace)
-  }
-
-  return []
 }
 
 /**
@@ -337,7 +237,7 @@ function StreamingBubble({
     <div className="rounded-xl px-3 py-2 message-assistant message-working w-full overflow-hidden">
       {/* Working indicator */}
       <div className="flex items-center gap-1 mb-1.5 pb-1.5 border-b border-border/20 working-indicator-fade">
-        <span className="text-[11px] text-muted-foreground/60">{t('Halo is working')}</span>
+        <span className="text-[11px] text-muted-foreground/60">{t('Kite is working')}</span>
       </div>
 
       {/* Viewport - height matches current content only */}
@@ -389,10 +289,7 @@ export function MessageList({
   isCompact = false,
   textBlockVersion = 0,
   workDir,
-  onOpenPlanInCanvas,
-  onExecutePlan,
-  toolStatusById = {},
-  availableToolsSnapshot
+  onOpenPlanInCanvas
 }: MessageListProps) {
   const { t } = useTranslation()
   const runtimeThoughts = useMemo(() => {
@@ -559,12 +456,12 @@ export function MessageList({
                   defaultExpanded={false}
                 />
                 {/* Then the message itself (without embedded thoughts) */}
-                <MessageItem message={message} previousCost={previousCost} hideThoughts isInContainer workDir={workDir} onExecutePlan={onExecutePlan} />
+                <MessageItem message={message} previousCost={previousCost} hideThoughts isInContainer workDir={workDir} onOpenPlanInCanvas={onOpenPlanInCanvas} />
               </div>
             </div>
           )
         }
-        return <MessageItem key={message.id} message={message} previousCost={previousCost} workDir={workDir} onExecutePlan={onExecutePlan} />
+        return <MessageItem key={message.id} message={message} previousCost={previousCost} workDir={workDir} onOpenPlanInCanvas={onOpenPlanInCanvas} />
       })}
 
       {/* Current generation block: Timeline segments + Streaming content below */}

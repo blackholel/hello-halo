@@ -7,13 +7,14 @@
 import type { BrowserWindow } from 'electron'
 import { watch, existsSync, readdirSync, statSync } from 'fs'
 import { join, relative, isAbsolute } from 'path'
-import { getConfig, getHaloDir, getSpacesDir } from './config.service'
+import { getConfig, getSpacesDir } from './config.service'
 import { listEnabledPlugins } from './plugins.service'
 import { invalidateSkillsCache } from './skills.service'
 import { invalidateAgentsCache } from './agents.service'
 import { invalidateCommandsCache } from './commands.service'
 import { getAllSpacePaths } from './space.service'
 import { normalizePlatformPath } from '../utils/path-validation'
+import { getLockedConfigSourceMode, getLockedUserConfigRootDir } from './config-source-mode.service'
 
 type WatchKind = 'skills' | 'agents' | 'commands' | 'spaces-root'
 type ResourceKind = 'skills' | 'agents' | 'commands'
@@ -110,22 +111,23 @@ function resolveGlobalPath(globalPath: string): string {
  */
 function getResourceDirs(kind: ResourceKind): DirEntry[] {
   const dirs: DirEntry[] = []
-  const haloDir = getHaloDir()
+  const sourceMode = getLockedConfigSourceMode()
+  const userRoot = getLockedUserConfigRootDir()
   const config = getConfig()
 
   // App-level directory
-  if (haloDir) {
-    dirs.push({ path: join(haloDir, kind) })
-  }
+  dirs.push({ path: join(userRoot, kind) })
 
-  // Config-driven global paths (skills use plugins.globalPaths + /skills subdir, agents use agents.paths directly)
-  if (kind === 'skills') {
-    for (const p of config.claudeCode?.plugins?.globalPaths || []) {
-      dirs.push({ path: join(resolveGlobalPath(p), 'skills') })
-    }
-  } else if (kind === 'agents') {
-    for (const p of config.claudeCode?.agents?.paths || []) {
-      dirs.push({ path: resolveGlobalPath(p) })
+  // Kite mode only: config-driven global paths
+  if (sourceMode === 'kite') {
+    if (kind === 'skills') {
+      for (const p of config.claudeCode?.plugins?.globalPaths || []) {
+        dirs.push({ path: join(resolveGlobalPath(p), 'skills') })
+      }
+    } else if (kind === 'agents') {
+      for (const p of config.claudeCode?.agents?.paths || []) {
+        dirs.push({ path: resolveGlobalPath(p) })
+      }
     }
   }
 
@@ -228,4 +230,9 @@ export function cleanupSkillAgentWatchers(): void {
   for (const timer of debounceTimers.values()) clearTimeout(timer)
   debounceTimers.clear()
   mainWindow = null
+}
+
+// Test helper: expose resolved watch directories without creating filesystem watchers
+export function _testGetResourceDirs(kind: ResourceKind): Array<{ path: string; workDir?: string }> {
+  return getResourceDirs(kind)
 }

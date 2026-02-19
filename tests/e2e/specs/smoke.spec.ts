@@ -14,21 +14,21 @@ async function navigateToChat(window: any) {
   await window.waitForSelector('#root', { timeout: 10000 })
   await window.waitForLoadState('networkidle')
 
-  // Look for "进入 Halo" text button
-  let enterHalo = await window.waitForSelector(
-    'text=/进入 Halo/',
+  // Look for "进入 Kite" text button
+  let enterKite = await window.waitForSelector(
+    'text=/进入 Kite/',
     { timeout: 5000 }
   ).catch(() => null)
 
-  if (!enterHalo) {
-    enterHalo = await window.waitForSelector(
-      ':text("Halo"):visible',
+  if (!enterKite) {
+    enterKite = await window.waitForSelector(
+      ':text("Kite"):visible',
       { timeout: 5000 }
     ).catch(() => null)
   }
 
-  if (enterHalo) {
-    await enterHalo.click()
+  if (enterKite) {
+    await enterKite.click()
   }
 
   await window.waitForSelector('textarea', { timeout: 10000 })
@@ -41,14 +41,17 @@ async function navigateToRemoteSettings(window: any) {
   await window.waitForSelector('#root', { timeout: 10000 })
   await window.waitForLoadState('networkidle')
 
-  const settingsButton = await window.waitForSelector('button:has(svg)', { timeout: 10000 })
+  const settingsButton = await window.waitForSelector(
+    '[data-testid="settings-button"], button:has(svg[class*="settings"]), button:has(svg[class*="cog"])',
+    { timeout: 10000 }
+  )
   await settingsButton.click()
   await window.waitForTimeout(500)
 
   await window.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
   await window.waitForTimeout(500)
 
-  await window.waitForSelector('text=/远程访问/i', { timeout: 10000 })
+  await window.waitForSelector('text=/远程访问|Remote Access/i', { timeout: 10000 })
 }
 
 /**
@@ -61,7 +64,11 @@ async function clickRemoteToggle(window: any) {
       const checkbox = label.querySelector('input[type="checkbox"]')
       if (checkbox) {
         const parent = label.closest('div')
-        if (parent && parent.textContent?.includes('启用远程访问')) {
+        if (
+          parent &&
+          (parent.textContent?.includes('启用远程访问') ||
+            parent.textContent?.includes('Enable Remote Access'))
+        ) {
           label.click()
           break
         }
@@ -112,7 +119,7 @@ test.describe('Smoke Tests', () => {
       window.waitForSelector('[data-testid="main-content"]', { timeout: 5000 }).catch(() => null),
       window.waitForSelector('[data-testid="api-setup"]', { timeout: 5000 }).catch(() => null),
       // Fallback: any visible text content
-      window.waitForSelector('text=/Halo|API|连接|设置/', { timeout: 5000 }).catch(() => null)
+      window.waitForSelector('text=/Kite|API|连接|设置/', { timeout: 5000 }).catch(() => null)
     ])
 
     // Take screenshot for debugging
@@ -201,7 +208,7 @@ test.describe('Core Features', () => {
   test('can send message and receive AI response', async ({ window }, testInfo) => {
     // Skip if no API key configured
     if (!hasApiKey()) {
-      testInfo.skip(true, 'Skipping: HALO_TEST_API_KEY not set')
+      testInfo.skip(true, 'Skipping: KITE_TEST_API_KEY not set')
       return
     }
 
@@ -220,7 +227,7 @@ test.describe('Core Features', () => {
     await window.waitForSelector('.message-assistant', { timeout: 30000 })
 
     // Wait for AI to finish working
-    await window.waitForSelector('text="Halo 工作中"', { state: 'hidden', timeout: 45000 }).catch(() => {})
+    await window.waitForSelector('text="Kite 工作中"', { state: 'hidden', timeout: 45000 }).catch(() => {})
 
     // Verify AI response contains expected content
     const assistantMessage = await window.waitForSelector('.message-assistant', { timeout: 5000 })
@@ -230,7 +237,12 @@ test.describe('Core Features', () => {
     await window.screenshot({ path: 'tests/e2e/results/smoke-chat-response.png' })
   })
 
-  test('can enable tunnel and get public URL', async ({ window }) => {
+  test('can enable tunnel and get public URL', async ({ window }, testInfo) => {
+    if (!hasApiKey()) {
+      testInfo.skip(true, 'Skipping: KITE_TEST_API_KEY not set')
+      return
+    }
+
     await navigateToRemoteSettings(window)
 
     // Enable remote access
@@ -238,13 +250,13 @@ test.describe('Core Features', () => {
     await window.waitForTimeout(2000)
 
     // Wait for LAN section
-    await window.waitForSelector('text=/本机地址|局域网地址/i', { timeout: 15000 })
+    await window.waitForSelector('text=/本机地址|局域网地址|Local URL|LAN URL/i', { timeout: 15000 })
 
     await window.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
     await window.waitForTimeout(500)
 
     // Click tunnel button
-    const tunnelButton = await window.waitForSelector('button:has-text("启动隧道")', { timeout: 10000 })
+    const tunnelButton = await window.waitForSelector('button:has-text("启动隧道"), button:has-text("Start Tunnel")', { timeout: 10000 })
     await tunnelButton.click()
 
     // Wait for public URL
@@ -259,7 +271,7 @@ test.describe('Core Features', () => {
       await window.screenshot({ path: 'tests/e2e/results/smoke-tunnel-enabled.png' })
     } else {
       // Check for error state (network issue is acceptable)
-      const errorMsg = await window.$('text=/隧道连接失败|Tunnel.*fail|error/i')
+      const errorMsg = await window.$('text=/隧道连接失败|Tunnel connection failed|Tunnel.*fail|error/i')
       expect(publicUrl || errorMsg).toBeTruthy()
       await window.screenshot({ path: 'tests/e2e/results/smoke-tunnel-error.png' })
     }

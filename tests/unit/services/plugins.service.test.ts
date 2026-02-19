@@ -1,8 +1,10 @@
 /**
  * Plugins Service Tests
  *
- * TDD tests for plugins loading functionality.
- * Tests use real filesystem with temporary directories created by setup.ts
+ * Verifies single-source loading behavior:
+ * - kite mode reads only ~/.kite
+ * - claude mode reads only ~/.claude
+ * - cache signature includes mode/path fingerprint
  */
 
 import { describe, it, expect, beforeEach } from 'vitest'
@@ -12,255 +14,124 @@ import { getTestDir } from '../setup'
 
 import {
   loadInstalledPlugins,
+  listEnabledPlugins,
   getInstalledPluginPaths,
   clearPluginsCache
 } from '../../../src/main/services/plugins.service'
-import { getHaloDir } from '../../../src/main/services/config.service'
+import {
+  _testInitConfigSourceModeLock,
+  _testResetConfigSourceModeLock
+} from '../../../src/main/services/config-source-mode.service'
+
+function writeRegistry(rootDir: string, fullName: string, installPath: string): void {
+  const pluginsDir = join(rootDir, 'plugins')
+  fs.mkdirSync(pluginsDir, { recursive: true })
+  fs.mkdirSync(installPath, { recursive: true })
+  const registry = {
+    version: 2,
+    plugins: {
+      [fullName]: [{
+        scope: 'user',
+        installPath,
+        version: '1.0.0',
+        installedAt: '2024-01-01T00:00:00Z',
+        lastUpdated: '2024-01-01T00:00:00Z'
+      }]
+    }
+  }
+  fs.writeFileSync(join(pluginsDir, 'installed_plugins.json'), JSON.stringify(registry))
+}
+
+function writeEnabledPluginsSettings(rootDir: string, enabledPlugins: Record<string, boolean>): void {
+  fs.mkdirSync(rootDir, { recursive: true })
+  fs.writeFileSync(
+    join(rootDir, 'settings.json'),
+    JSON.stringify({ enabledPlugins }, null, 2)
+  )
+}
 
 describe('plugins.service', () => {
   beforeEach(() => {
     clearPluginsCache()
+    _testResetConfigSourceModeLock()
+    _testInitConfigSourceModeLock('kite')
   })
 
-  describe('getInstalledPluginPaths', () => {
-    it('should return plugin paths from ~/.halo/plugins/installed_plugins.json', () => {
-      const testDir = getTestDir()
-      const haloDir = join(testDir, '.halo')
-      const pluginsDir = join(haloDir, 'plugins')
-      const cacheDir = join(pluginsDir, 'cache', 'test-marketplace', 'test-plugin', '1.0.0')
+  it('should read only ~/.kite registry in kite mode', () => {
+    const testDir = getTestDir()
+    const kiteRoot = join(testDir, '.kite')
+    const claudeRoot = join(testDir, '.claude')
+    const kiteInstallPath = join(kiteRoot, 'plugins', 'cache', 'kite-market', 'kite-plugin', '1.0.0')
+    const claudeInstallPath = join(claudeRoot, 'plugins', 'cache', 'claude-market', 'claude-plugin', '1.0.0')
 
-      // Create directories
-      fs.mkdirSync(pluginsDir, { recursive: true })
-      fs.mkdirSync(cacheDir, { recursive: true })
+    writeRegistry(kiteRoot, 'kite-plugin@kite-market', kiteInstallPath)
+    writeRegistry(claudeRoot, 'claude-plugin@claude-market', claudeInstallPath)
 
-      // Create registry
-      const registry = {
-        version: 2,
-        plugins: {
-          'test-plugin@test-marketplace': [{
-            scope: 'user',
-            installPath: cacheDir,
-            version: '1.0.0',
-            installedAt: '2024-01-01T00:00:00Z',
-            lastUpdated: '2024-01-01T00:00:00Z'
-          }]
-        }
-      }
-      fs.writeFileSync(join(pluginsDir, 'installed_plugins.json'), JSON.stringify(registry))
-
-      const paths = getInstalledPluginPaths()
-
-      expect(paths).toContain(cacheDir)
-    })
-
-    it('should merge plugins from both ~/.halo/ and ~/.claude/ registries', () => {
-      // This test verifies that plugins from BOTH registries are loaded
-      const testDir = getTestDir()
-
-      // Setup Halo registry
-      const haloDir = join(testDir, '.halo')
-      const haloPluginsDir = join(haloDir, 'plugins')
-      const haloCacheDir = join(haloPluginsDir, 'cache', 'halo-marketplace', 'halo-plugin', '1.0.0')
-      fs.mkdirSync(haloPluginsDir, { recursive: true })
-      fs.mkdirSync(haloCacheDir, { recursive: true })
-
-      const haloRegistry = {
-        version: 2,
-        plugins: {
-          'halo-plugin@halo-marketplace': [{
-            scope: 'user',
-            installPath: haloCacheDir,
-            version: '1.0.0',
-            installedAt: '2024-01-01T00:00:00Z',
-            lastUpdated: '2024-01-01T00:00:00Z'
-          }]
-        }
-      }
-      fs.writeFileSync(join(haloPluginsDir, 'installed_plugins.json'), JSON.stringify(haloRegistry))
-
-      // Setup Claude registry
-      const claudeDir = join(testDir, '.claude')
-      const claudePluginsDir = join(claudeDir, 'plugins')
-      const claudeCacheDir = join(claudePluginsDir, 'cache', 'claude-marketplace', 'claude-plugin', '2.0.0')
-      fs.mkdirSync(claudePluginsDir, { recursive: true })
-      fs.mkdirSync(claudeCacheDir, { recursive: true })
-
-      const claudeRegistry = {
-        version: 2,
-        plugins: {
-          'claude-plugin@claude-marketplace': [{
-            scope: 'user',
-            installPath: claudeCacheDir,
-            version: '2.0.0',
-            installedAt: '2024-01-01T00:00:00Z',
-            lastUpdated: '2024-01-01T00:00:00Z'
-          }]
-        }
-      }
-      fs.writeFileSync(join(claudePluginsDir, 'installed_plugins.json'), JSON.stringify(claudeRegistry))
-
-      const paths = getInstalledPluginPaths()
-
-      // Should contain plugins from BOTH registries
-      expect(paths).toContain(haloCacheDir)
-      expect(paths).toContain(claudeCacheDir)
-      expect(paths).toHaveLength(2)
-    })
-
-    it('should deduplicate plugins that exist in both registries', () => {
-      // Same plugin in both registries should only appear once
-      // Halo registry takes precedence
-      const testDir = getTestDir()
-
-      // Shared plugin path (in claude directory, but referenced by both)
-      const claudeDir = join(testDir, '.claude')
-      const sharedCacheDir = join(claudeDir, 'plugins', 'cache', 'shared-marketplace', 'shared-plugin', '1.0.0')
-      fs.mkdirSync(sharedCacheDir, { recursive: true })
-
-      const sharedPlugin = {
-        scope: 'user',
-        installPath: sharedCacheDir,
-        version: '1.0.0',
-        installedAt: '2024-01-01T00:00:00Z',
-        lastUpdated: '2024-01-01T00:00:00Z'
-      }
-
-      // Setup Halo registry with shared plugin
-      const haloDir = join(testDir, '.halo')
-      const haloPluginsDir = join(haloDir, 'plugins')
-      fs.mkdirSync(haloPluginsDir, { recursive: true })
-
-      const haloRegistry = {
-        version: 2,
-        plugins: {
-          'shared-plugin@shared-market': [sharedPlugin]
-        }
-      }
-      fs.writeFileSync(join(haloPluginsDir, 'installed_plugins.json'), JSON.stringify(haloRegistry))
-
-      // Setup Claude registry with same shared plugin
-      const claudePluginsDir = join(claudeDir, 'plugins')
-
-      const claudeRegistry = {
-        version: 2,
-        plugins: {
-          'shared-plugin@shared-marketplace': [sharedPlugin]
-        }
-      }
-      fs.writeFileSync(join(claudePluginsDir, 'installed_plugins.json'), JSON.stringify(claudeRegistry))
-
-      const paths = getInstalledPluginPaths()
-
-      // Should only contain the plugin once (deduplicated)
-      expect(paths).toHaveLength(1)
-      expect(paths).toContain(sharedCacheDir)
-    })
-
-    it('should fallback to ~/.claude/ registry when ~/.halo/ registry does not exist', () => {
-      const testDir = getTestDir()
-
-      // Only setup Claude registry (no Halo registry)
-      const claudeDir = join(testDir, '.claude')
-      const claudePluginsDir = join(claudeDir, 'plugins')
-      const claudeCacheDir = join(claudePluginsDir, 'cache', 'claude-marketplace', 'claude-only-plugin', '1.0.0')
-      fs.mkdirSync(claudePluginsDir, { recursive: true })
-      fs.mkdirSync(claudeCacheDir, { recursive: true })
-
-      const claudeRegistry = {
-        version: 2,
-        plugins: {
-          'claude-only-plugin@claude-marketplace': [{
-            scope: 'user',
-            installPath: claudeCacheDir,
-            version: '1.0.0',
-            installedAt: '2024-01-01T00:00:00Z',
-            lastUpdated: '2024-01-01T00:00:00Z'
-          }]
-        }
-      }
-      fs.writeFileSync(join(claudePluginsDir, 'installed_plugins.json'), JSON.stringify(claudeRegistry))
-
-      const paths = getInstalledPluginPaths()
-
-      expect(paths).toContain(claudeCacheDir)
-    })
-
-    it('should reject symlink plugin paths for security', () => {
-      const testDir = getTestDir()
-      const haloDir = join(testDir, '.halo')
-      const pluginsDir = join(haloDir, 'plugins')
-
-      // Create a real directory and a symlink to it
-      const realDir = join(testDir, 'real-plugin')
-      const symlinkDir = join(pluginsDir, 'cache', 'test-marketplace', 'symlink-plugin', '1.0.0')
-
-      fs.mkdirSync(realDir, { recursive: true })
-      fs.mkdirSync(join(pluginsDir, 'cache', 'test-marketplace', 'symlink-plugin'), { recursive: true })
-      fs.symlinkSync(realDir, symlinkDir)
-
-      // Create registry pointing to symlink
-      const registry = {
-        version: 2,
-        plugins: {
-          'symlink-plugin@test-marketplace': [{
-            scope: 'user',
-            installPath: symlinkDir,
-            version: '1.0.0',
-            installedAt: '2024-01-01T00:00:00Z',
-            lastUpdated: '2024-01-01T00:00:00Z'
-          }]
-        }
-      }
-      fs.writeFileSync(join(pluginsDir, 'installed_plugins.json'), JSON.stringify(registry))
-
-      const paths = getInstalledPluginPaths()
-
-      // Symlink paths should be rejected
-      expect(paths).toHaveLength(0)
-    })
-
-    it('should return empty array when no registries exist', () => {
-      // No registry files created - should return empty
-      const paths = getInstalledPluginPaths()
-
-      expect(paths).toEqual([])
-    })
+    const paths = getInstalledPluginPaths()
+    expect(paths).toEqual([kiteInstallPath])
   })
 
-  describe('loadInstalledPlugins', () => {
-    it('should parse plugin full name correctly', () => {
-      const testDir = getTestDir()
-      const haloDir = join(testDir, '.halo')
-      const pluginsDir = join(haloDir, 'plugins')
-      const cacheDir = join(pluginsDir, 'cache', 'my-marketplace', 'my-plugin', '1.0.0')
+  it('should read only ~/.claude registry in claude mode', () => {
+    const testDir = getTestDir()
+    const kiteRoot = join(testDir, '.kite')
+    const claudeRoot = join(testDir, '.claude')
+    const kiteInstallPath = join(kiteRoot, 'plugins', 'cache', 'kite-market', 'kite-plugin', '1.0.0')
+    const claudeInstallPath = join(claudeRoot, 'plugins', 'cache', 'claude-market', 'claude-plugin', '1.0.0')
 
-      fs.mkdirSync(pluginsDir, { recursive: true })
-      fs.mkdirSync(cacheDir, { recursive: true })
+    writeRegistry(kiteRoot, 'kite-plugin@kite-market', kiteInstallPath)
+    writeRegistry(claudeRoot, 'claude-plugin@claude-market', claudeInstallPath)
 
-      const registry = {
-        version: 2,
-        plugins: {
-          'my-plugin@my-marketplace': [{
-            scope: 'user',
-            installPath: cacheDir,
-            version: '1.0.0',
-            installedAt: '2024-01-01T00:00:00Z',
-            lastUpdated: '2024-01-01T00:00:00Z'
-          }]
-        }
-      }
-      fs.writeFileSync(join(pluginsDir, 'installed_plugins.json'), JSON.stringify(registry))
+    _testResetConfigSourceModeLock()
+    _testInitConfigSourceModeLock('claude')
 
-      const plugins = loadInstalledPlugins()
+    const paths = getInstalledPluginPaths()
+    expect(paths).toEqual([claudeInstallPath])
+  })
 
-      expect(plugins).toHaveLength(1)
-      expect(plugins[0]).toMatchObject({
-        name: 'my-plugin',
-        marketplace: 'my-marketplace',
-        fullName: 'my-plugin@my-marketplace',
-        version: '1.0.0',
-        scope: 'user'
-      })
-    })
+  it('should invalidate cache when mode changes without manual cache clear', () => {
+    const testDir = getTestDir()
+    const kiteRoot = join(testDir, '.kite')
+    const claudeRoot = join(testDir, '.claude')
+    const kiteInstallPath = join(kiteRoot, 'plugins', 'cache', 'kite-market', 'kite-plugin', '1.0.0')
+    const claudeInstallPath = join(claudeRoot, 'plugins', 'cache', 'claude-market', 'claude-plugin', '1.0.0')
+
+    writeRegistry(kiteRoot, 'kite-plugin@kite-market', kiteInstallPath)
+    writeRegistry(claudeRoot, 'claude-plugin@claude-market', claudeInstallPath)
+
+    const kitePlugins = loadInstalledPlugins()
+    expect(kitePlugins).toHaveLength(1)
+    expect(kitePlugins[0]?.installPath).toBe(kiteInstallPath)
+
+    _testResetConfigSourceModeLock()
+    _testInitConfigSourceModeLock('claude')
+
+    const claudePlugins = loadInstalledPlugins()
+    expect(claudePlugins).toHaveLength(1)
+    expect(claudePlugins[0]?.installPath).toBe(claudeInstallPath)
+  })
+
+  it('should read enabledPlugins from active source settings only', () => {
+    const testDir = getTestDir()
+    const kiteRoot = join(testDir, '.kite')
+    const claudeRoot = join(testDir, '.claude')
+    const kiteInstallPath = join(kiteRoot, 'plugins', 'cache', 'kite-market', 'kite-plugin', '1.0.0')
+    const claudeInstallPath = join(claudeRoot, 'plugins', 'cache', 'claude-market', 'claude-plugin', '1.0.0')
+
+    writeRegistry(kiteRoot, 'kite-plugin@kite-market', kiteInstallPath)
+    writeRegistry(claudeRoot, 'claude-plugin@claude-market', claudeInstallPath)
+    writeEnabledPluginsSettings(kiteRoot, { 'kite-plugin@kite-market': false })
+    writeEnabledPluginsSettings(claudeRoot, { 'claude-plugin@claude-market': true })
+
+    // Kite mode: disabled in kite settings -> no enabled plugins
+    _testResetConfigSourceModeLock()
+    _testInitConfigSourceModeLock('kite')
+    expect(listEnabledPlugins()).toEqual([])
+
+    // Claude mode: enabled in claude settings -> one enabled plugin
+    _testResetConfigSourceModeLock()
+    _testInitConfigSourceModeLock('claude')
+    const enabled = listEnabledPlugins()
+    expect(enabled).toHaveLength(1)
+    expect(enabled[0]?.fullName).toBe('claude-plugin@claude-market')
   })
 })

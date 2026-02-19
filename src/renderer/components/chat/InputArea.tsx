@@ -27,6 +27,7 @@ import { useSpaceStore } from '../../stores/space.store'
 import { useSkillsStore, type SkillDefinition } from '../../stores/skills.store'
 import { useAgentsStore, type AgentDefinition } from '../../stores/agents.store'
 import { useCommandsStore, type CommandDefinition } from '../../stores/commands.store'
+import { useToolkitStore } from '../../stores/toolkit.store'
 import { getOnboardingPrompt } from '../onboarding/onboardingData'
 import { ImageAttachmentPreview } from './ImageAttachmentPreview'
 import { FileContextPreview } from './FileContextPreview'
@@ -36,6 +37,7 @@ import { processImage, isValidImageType, formatFileSize } from '../../utils/imag
 import type { ImageAttachment, FileContextAttachment } from '../../types'
 import { useTranslation } from '../../i18n'
 import { useComposerStore } from '../../stores/composer.store'
+import { buildDirective } from '../../utils/directive-helpers'
 import { commandKey } from '../../../shared/command-utils'
 import { getTriggerContext, replaceTriggerToken, type TriggerContext } from '../../utils/composer-trigger'
 import { isResourceEnabled, toResourceKey } from '../../utils/resource-key'
@@ -48,6 +50,8 @@ interface InputAreaProps {
   placeholder?: string
   isCompact?: boolean
   workDir?: string  // For skills dropdown
+  planEnabled: boolean
+  onPlanEnabledChange: (enabled: boolean) => void
 }
 
 // Image constraints
@@ -80,7 +84,6 @@ export function InputArea({
   const [isProcessingImages, setIsProcessingImages] = useState(false)
   const [imageError, setImageError] = useState<ImageError | null>(null)
   const [thinkingEnabled, setThinkingEnabled] = useState(false)  // Extended thinking mode
-  const [planEnabled, setPlanEnabled] = useState(false)  // Plan mode (no tool execution)
   const [showAttachMenu, setShowAttachMenu] = useState(false)  // Attachment menu visibility
   const [triggerContext, setTriggerContext] = useState<TriggerContext | null>(null)
   const [activeSuggestionTab, setActiveSuggestionTab] = useState<ComposerSuggestionTab>('skills')
@@ -129,6 +132,18 @@ export function InputArea({
     loadedWorkDir: state.loadedWorkDir,
     loadAgents: state.loadAgents
   }))
+  const {
+    loadToolkit,
+    getToolkit,
+    isToolkitLoaded,
+    isInToolkit
+  } = useToolkitStore((state) => ({
+    loadToolkit: state.loadToolkit,
+    getToolkit: state.getToolkit,
+    isToolkitLoaded: state.isToolkitLoaded,
+    isInToolkit: state.isInToolkit
+  }))
+
   const resolvedSpace = useMemo(() => {
     if (!spaceId) return null
     if (currentSpace?.id === spaceId) return currentSpace
@@ -144,6 +159,9 @@ export function InputArea({
 
   const enabledSkills = spacePreferences?.skills?.enabled || []
   const enabledAgents = spacePreferences?.agents?.enabled || []
+  const toolkitLoaded = spaceId ? isToolkitLoaded(spaceId) : false
+  const toolkit = spaceId ? getToolkit(spaceId) : null
+  const toolkitMode = Boolean(spaceId && toolkitLoaded && toolkit !== null)
 
   const triggerQuery = triggerContext?.query.trim().toLowerCase() || ''
 
@@ -164,6 +182,12 @@ export function InputArea({
       void loadAgents(workDir)
     }
   }, [agents.length, loadAgents, loadedAgentsWorkDir, workDir])
+
+  useEffect(() => {
+    if (!spaceId || toolkitLoaded) return
+    if (resolvedSpace?.isTemp) return
+    void loadToolkit(spaceId)
+  }, [loadToolkit, resolvedSpace?.isTemp, spaceId, toolkitLoaded])
 
   // Auto-clear error after 3 seconds
   useEffect(() => {
@@ -207,8 +231,10 @@ export function InputArea({
   }, [triggerQuery])
 
   const filteredSkills = useMemo(() => {
-    let items = skills.filter(skill => skill.source === 'space')
-    if (enabledSkills.length > 0) {
+    let items = skills
+    if (toolkitMode && spaceId) {
+      items = items.filter(skill => isInToolkit(spaceId, buildDirective('skill', skill)))
+    } else if (enabledSkills.length > 0) {
       items = items.filter(skill => isResourceEnabled(enabledSkills, skill))
     }
     return items.filter((skill) => matchesTriggerQuery(
@@ -216,20 +242,25 @@ export function InputArea({
       skill.name,
       skill.description
     ))
-  }, [enabledSkills, matchesTriggerQuery, skills])
+  }, [enabledSkills, isInToolkit, matchesTriggerQuery, skills, spaceId, toolkitMode])
 
   const filteredCommands = useMemo(() => {
-    const items = commands.filter(command => command.source === 'space')
+    let items = commands
+    if (toolkitMode && spaceId) {
+      items = items.filter(command => isInToolkit(spaceId, buildDirective('command', command)))
+    }
     return items.filter((command) => matchesTriggerQuery(
       commandKey(command),
       command.name,
       command.description
     ))
-  }, [commands, matchesTriggerQuery])
+  }, [commands, isInToolkit, matchesTriggerQuery, spaceId, toolkitMode])
 
   const filteredAgents = useMemo(() => {
-    let items = agents.filter(agent => agent.source === 'space')
-    if (enabledAgents.length > 0) {
+    let items = agents
+    if (toolkitMode && spaceId) {
+      items = items.filter(agent => isInToolkit(spaceId, buildDirective('agent', agent)))
+    } else if (enabledAgents.length > 0) {
       items = items.filter(agent => isResourceEnabled(enabledAgents, agent))
     }
     return items.filter((agent) => matchesTriggerQuery(
@@ -237,7 +268,7 @@ export function InputArea({
       agent.name,
       agent.description
     ))
-  }, [agents, enabledAgents, matchesTriggerQuery])
+  }, [agents, enabledAgents, isInToolkit, matchesTriggerQuery, spaceId, toolkitMode])
 
   const skillSuggestions = useMemo<ComposerSuggestionItem[]>(() => (
     filteredSkills.map((skill: SkillDefinition) => {
@@ -405,11 +436,11 @@ export function InputArea({
     setIsDragOver(false)
 
     // Check for file context from file tree drag
-    const haloFileData = e.dataTransfer.getData('application/x-halo-file')
+    const kiteFileData = e.dataTransfer.getData('application/x-kite-file')
 
-    if (haloFileData) {
+    if (kiteFileData) {
       try {
-        const fileData = JSON.parse(haloFileData) as { path: string; name: string; extension: string }
+        const fileData = JSON.parse(kiteFileData) as { path: string; name: string; extension: string }
         // Check if file already exists in fileContexts
         const exists = fileContexts.some(f => f.path === fileData.path)
         if (!exists) {
@@ -424,7 +455,7 @@ export function InputArea({
         }
         return
       } catch (err) {
-        console.error('Failed to parse halo file data:', err)
+        console.error('Failed to parse kite file data:', err)
       }
     }
 
@@ -798,7 +829,7 @@ export function InputArea({
             thinkingEnabled={thinkingEnabled}
             onThinkingToggle={() => setThinkingEnabled(!thinkingEnabled)}
             planEnabled={planEnabled}
-            onPlanToggle={() => setPlanEnabled(!planEnabled)}
+            onPlanToggle={() => onPlanEnabledChange(!planEnabled)}
             aiBrowserEnabled={aiBrowserEnabled}
             onAIBrowserToggle={() => setAIBrowserEnabled(!aiBrowserEnabled)}
             showAttachMenu={showAttachMenu}

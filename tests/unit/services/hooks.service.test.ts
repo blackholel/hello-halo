@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // Mock config.service
 vi.mock('../../../src/main/services/config.service', () => ({
   getConfig: vi.fn(),
-  getHaloDir: vi.fn(() => '/home/user/.halo')
+  getKiteDir: vi.fn(() => '/home/user/.kite')
 }))
 
 // Mock space-config.service
@@ -16,17 +16,29 @@ vi.mock('../../../src/main/services/space-config.service', () => ({
   getSpaceConfig: vi.fn()
 }))
 
+vi.mock('../../../src/main/services/config-source-mode.service', () => ({
+  getLockedConfigSourceMode: vi.fn(() => 'kite'),
+  getLockedUserConfigRootDir: vi.fn(() => '/home/user/.kite')
+}))
+
+vi.mock('../../../src/main/services/plugins.service', () => ({
+  listEnabledPlugins: vi.fn(() => [])
+}))
+
 import {
+  buildHooksConfig,
   mergeHooksConfigs,
   convertToSdkHooksFormat,
   clearSettingsCache
 } from '../../../src/main/services/hooks.service'
 import { getConfig } from '../../../src/main/services/config.service'
 import { getSpaceConfig } from '../../../src/main/services/space-config.service'
+import { getLockedConfigSourceMode } from '../../../src/main/services/config-source-mode.service'
 import type { HooksConfig, HookDefinition } from '../../../src/main/services/config.service'
 
 const mockGetConfig = vi.mocked(getConfig)
 const mockGetSpaceConfig = vi.mocked(getSpaceConfig)
+const mockGetLockedConfigSourceMode = vi.mocked(getLockedConfigSourceMode)
 
 // Helper to create hook definitions
 function createHookDef(matcher: string, command: string): HookDefinition {
@@ -46,6 +58,7 @@ describe('hooks.service', () => {
       claudeCode: {}
     } as ReturnType<typeof getConfig>)
     mockGetSpaceConfig.mockReturnValue(null)
+    mockGetLockedConfigSourceMode.mockReturnValue('kite')
   })
 
   describe('mergeHooksConfigs', () => {
@@ -179,7 +192,7 @@ describe('hooks.service', () => {
   })
 
   describe('buildHooksConfig mode boundaries', () => {
-    it('should disable hooks by default in strict space-only mode', () => {
+    it('should merge global and space hooks in kite mode', () => {
       mockGetLockedConfigSourceMode.mockReturnValue('kite')
       mockGetConfig.mockReturnValue({
         claudeCode: {
@@ -189,31 +202,6 @@ describe('hooks.service', () => {
         }
       } as ReturnType<typeof getConfig>)
       mockGetSpaceConfig.mockReturnValue({
-        claudeCode: {
-          hooks: {
-            PreToolUse: [createHookDef('space', 'echo space')]
-          }
-        }
-      } as any)
-
-      const result = buildHooksConfig('/test/workdir')
-      expect(result).toBeUndefined()
-    })
-
-    it('should merge global and space hooks in kite mode when policy is legacy', () => {
-      mockGetLockedConfigSourceMode.mockReturnValue('kite')
-      mockGetConfig.mockReturnValue({
-        claudeCode: {
-          hooks: {
-            PreToolUse: [createHookDef('global', 'echo global')]
-          }
-        }
-      } as ReturnType<typeof getConfig>)
-      mockGetSpaceConfig.mockReturnValue({
-        resourcePolicy: {
-          version: 1,
-          mode: 'legacy'
-        },
         claudeCode: {
           hooks: {
             PreToolUse: [createHookDef('space', 'echo space')]
@@ -260,7 +248,7 @@ describe('hooks.service', () => {
       expect(result).toBeUndefined()
     })
 
-    it('should convert Halo hooks to SDK format', () => {
+    it('should convert Kite hooks to SDK format', () => {
       const hooks: HooksConfig = {
         PreToolUse: [{
           matcher: 'Bash',

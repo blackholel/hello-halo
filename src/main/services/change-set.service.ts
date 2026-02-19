@@ -69,7 +69,7 @@ function getChangeSetsDir(spaceId: string): string {
   if (!space) {
     throw new Error(`Space not found: ${spaceId}`)
   }
-  return join(space.path, '.halo', 'change-sets')
+  return join(space.path, '.kite', 'change-sets')
 }
 
 function getChangeSetsFile(spaceId: string, conversationId: string): string {

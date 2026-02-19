@@ -101,20 +101,20 @@ export function UpdateNotification() {
     <div className="fixed bottom-4 right-4 z-50 animate-fade-in">
       <div className={`glass-dialog !p-4 ${hasNotes ? 'max-w-md' : 'max-w-sm'}`}>
         <div className="flex items-start gap-3">
-          <div className="flex-shrink-0 w-10 h-10 bg-halo-success/15 rounded-2xl flex items-center justify-center">
-            <Download className="w-5 h-5 text-halo-success" />
+          <div className="flex-shrink-0 w-10 h-10 bg-kite-success/15 rounded-2xl flex items-center justify-center">
+            <Download className="w-5 h-5 text-kite-success" />
           </div>
 
           <div className="flex-1 min-w-0">
             <h4 className="text-sm font-semibold tracking-tight text-foreground">
-              {t('New version Halo {{version}} available', { version: notificationVersion })}
+              {t('New version Kite {{version}} available', { version: notificationVersion })}
             </h4>
 
             {hasNotes ? (
               <ul className="mt-2 space-y-1 max-h-32 overflow-y-auto text-xs text-muted-foreground">
                 {releaseNotes.map((note, index) => (
                   <li key={index} className="flex items-start gap-1.5">
-                    <span className="text-halo-success mt-0.5">•</span>
+                    <span className="text-kite-success mt-0.5">•</span>
                     <span>{note}</span>
                   </li>
                 ))}
@@ -128,7 +128,7 @@ export function UpdateNotification() {
             <div className="flex items-center gap-2 mt-3">
               <button
                 onClick={handleInstall}
-                className="flex items-center gap-1.5 px-3.5 py-2 bg-halo-success hover:brightness-110 text-white text-xs font-medium rounded-xl transition-all duration-200"
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-kite-success hover:brightness-110 text-white text-xs font-medium rounded-xl transition-all duration-200"
               >
                 {isManualDownload || isMac ? (
                   <>

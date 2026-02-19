@@ -2,7 +2,7 @@
  * Agents Store - Agents state management
  *
  * Manages the state of agents loaded from various sources:
- * - App-level agents (~/.halo/agents/)
+ * - App-level agents (~/.kite/agents/)
  * - Global custom paths
  * - Space-level agents ({workDir}/.claude/agents/)
  * - Enabled plugin agents

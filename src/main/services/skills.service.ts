@@ -2,7 +2,7 @@
  * Skills Service - Manages Claude Code skills configuration
  *
  * Skills are loaded from multiple sources:
- * 1. ~/.halo/skills/ - Default app-level skills directory
+ * 1. {locked-user-root}/skills/ - Default app-level skills directory
  * 2. config.claudeCode.plugins.globalPaths - Custom global paths (skills/ subdirectory)
  * 3. Installed plugins - Skills from installed plugins
  * 4. {workDir}/.claude/skills/ - Space-level skills (Claude Code compatible)
@@ -12,7 +12,8 @@
 
 import { join, dirname } from 'path'
 import { readdirSync, readFileSync, statSync, existsSync, mkdirSync, writeFileSync, rmSync, copyFileSync } from 'fs'
-import { getConfig, getHaloDir } from './config.service'
+import { getConfig } from './config.service'
+import { getLockedConfigSourceMode, getLockedUserConfigRootDir } from './config-source-mode.service'
 import { listEnabledPlugins } from './plugins.service'
 import { getAllSpacePaths } from './space.service'
 import type { ResourceRef, CopyToSpaceOptions, CopyToSpaceResult } from './resource-ref.service'
@@ -203,6 +204,7 @@ function mergeSkills(globalSkills: SkillDefinition[], spaceSkills: SkillDefiniti
 }
 
 function buildGlobalSkills(): SkillDefinition[] {
+  const sourceMode = getLockedConfigSourceMode()
   const skills: SkillDefinition[] = []
   const seenNames = new Set<string>()
 
@@ -226,21 +228,20 @@ function buildGlobalSkills(): SkillDefinition[] {
     }
   }
 
-  // 1. App-level skills (~/.halo/skills/)
-  const haloDir = getHaloDir()
-  if (haloDir) {
-    addSkills(scanSkillDir(join(haloDir, 'skills'), 'app'))
-  }
+  // 1. App-level skills ({locked-user-root}/skills/)
+  addSkills(scanSkillDir(join(getLockedUserConfigRootDir(), 'skills'), 'app'))
 
-  // 2. Global custom paths from config.claudeCode.plugins.globalPaths
-  const globalPaths = getConfig().claudeCode?.plugins?.globalPaths || []
-  for (const globalPath of globalPaths) {
-    const resolvedPath = globalPath.startsWith('/')
-      ? globalPath
-      : join(require('os').homedir(), globalPath)
-    const skillsSubdir = join(resolvedPath, 'skills')
-    if (existsSync(skillsSubdir)) {
-      addSkills(scanSkillDir(skillsSubdir, 'global'))
+  // 2. Kite mode only: global custom paths from config.claudeCode.plugins.globalPaths
+  if (sourceMode === 'kite') {
+    const globalPaths = getConfig().claudeCode?.plugins?.globalPaths || []
+    for (const globalPath of globalPaths) {
+      const resolvedPath = globalPath.startsWith('/')
+        ? globalPath
+        : join(require('os').homedir(), globalPath)
+      const skillsSubdir = join(resolvedPath, 'skills')
+      if (existsSync(skillsSubdir)) {
+        addSkills(scanSkillDir(skillsSubdir, 'global'))
+      }
     }
   }
 

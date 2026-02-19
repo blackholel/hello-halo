@@ -35,15 +35,15 @@ export function formatCanvasContext(canvasContext?: CanvasContext): string {
     )
     .join('\n')
 
-  return `<halo_canvas>
-Content canvas currently open in Halo:
+  return `<kite_canvas>
+Content canvas currently open in Kite:
 - Total ${canvasContext.tabCount} tabs
 - Active: ${activeTab ? `${activeTab.title} (${activeTab.type})` : 'None'}
 ${activeTab?.url ? `- URL: ${activeTab.url}` : ''}${activeTab?.path ? `- File path: ${activeTab.path}` : ''}
 
 All tabs:
 ${tabsSummary}
-</halo_canvas>
+</kite_canvas>
 
 `
 }

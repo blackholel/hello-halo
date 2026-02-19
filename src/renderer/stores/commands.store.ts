@@ -1,7 +1,7 @@
 /**
  * Commands Store - Commands state management
  *
- * Manages commands loaded from app-level (~/.halo/commands/),
+ * Manages commands loaded from app-level (~/.kite/commands/),
  * space-level ({workDir}/.claude/commands/), and plugin sources.
  */
 

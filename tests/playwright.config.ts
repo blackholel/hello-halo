@@ -1,7 +1,7 @@
 /**
  * Playwright Configuration for Electron E2E Tests
  *
- * Configures Playwright to test the Halo Electron application.
+ * Configures Playwright to test the Kite Electron application.
  * Uses the _electron module for native Electron testing.
  */
 
@@ -15,8 +15,8 @@ function getAppPath(): string {
 
   if (platform === 'darwin') {
     // macOS: Check for arm64 first, then x64
-    const arm64Path = path.join(projectRoot, 'dist/mac-arm64/Halo.app/Contents/MacOS/Halo')
-    const x64Path = path.join(projectRoot, 'dist/mac/Halo.app/Contents/MacOS/Halo')
+    const arm64Path = path.join(projectRoot, 'dist/mac-arm64/Kite.app/Contents/MacOS/Kite')
+    const x64Path = path.join(projectRoot, 'dist/mac/Kite.app/Contents/MacOS/Kite')
 
     // Prefer arm64 on Apple Silicon
     if (process.arch === 'arm64') {
@@ -24,10 +24,10 @@ function getAppPath(): string {
     }
     return x64Path
   } else if (platform === 'win32') {
-    return path.join(projectRoot, 'dist/win-unpacked/Halo.exe')
+    return path.join(projectRoot, 'dist/win-unpacked/Kite.exe')
   } else {
     // Linux
-    return path.join(projectRoot, 'dist/linux-unpacked/halo')
+    return path.join(projectRoot, 'dist/linux-unpacked/kite')
   }
 }
 

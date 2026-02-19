@@ -8,7 +8,7 @@
 
 ### 代码对比
 
-**Halo 传递的参数** (`agent.service.ts`):
+**Kite 传递的参数** (`agent.service.ts`):
 ```typescript
 const sdkOptions = {
   cwd: workDir,                    // ✅ 正确设置

@@ -29,10 +29,118 @@ interface MessageItemProps {
   isWorking?: boolean  // True when AI is still generating (not yet complete)
   isWaitingMore?: boolean  // True when content paused (e.g., during tool call), show "..." animation
   workDir?: string  // For skill suggestion card creation
-  onExecutePlan?: (planContent: string) => void  // Callback when "Execute Plan" button is clicked
+  onOpenPlanInCanvas?: (planContent: string) => void
 }
 
-export function MessageItem({ message, previousCost = 0, isInContainer = false, isWorking = false, isWaitingMore = false, workDir, onOpenPlanInCanvas }: MessageItemProps) {
+// Collapsible thought history component
+function ThoughtHistory({ thoughts }: { thoughts: Thought[] }) {
+  const [isExpanded, setIsExpanded] = useState(false)
+  const { t } = useTranslation()
+
+  // Filter out result type (final reply is in message bubble)
+  const displayThoughts = thoughts.filter(t => t.type !== 'result')
+
+  if (displayThoughts.length === 0) return null
+
+  // Stats
+  const thinkingCount = thoughts.filter(t => t.type === 'thinking').length
+  const toolCount = thoughts.filter(t => t.type === 'tool_use').length
+
+  return (
+    <div className="mt-3 border-t border-border/15 pt-2.5">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center gap-2 text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors w-full"
+      >
+        <ChevronRight
+          size={10}
+          className={`transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
+        />
+        <span>{t('View thought process')}</span>
+        <span className="text-muted-foreground/30">
+          ({thinkingCount > 0 && `${thinkingCount} ${t('thoughts')}`}
+          {thinkingCount > 0 && toolCount > 0 && ', '}
+          {toolCount > 0 && `${toolCount} ${t('tools')}`})
+        </span>
+      </button>
+
+      {isExpanded && (
+        <div className="mt-2 space-y-2 animate-slide-down">
+          {displayThoughts.map((thought) => (
+            <ThoughtItem key={thought.id} thought={thought} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Single thought item
+function ThoughtItem({ thought }: { thought: Thought }) {
+  const [isExpanded, setIsExpanded] = useState(false)
+  const { t } = useTranslation()
+
+  const getTypeInfo = () => {
+    switch (thought.type) {
+      case 'thinking':
+        return { label: t('Thinking'), color: 'text-blue-400', Icon: Lightbulb }
+      case 'tool_use':
+        return {
+          label: `${t('Calling')} ${thought.toolName}`,
+          color: 'text-amber-400',
+          Icon: thought.toolName ? getToolIcon(thought.toolName) : Wrench
+        }
+      case 'tool_result':
+        return {
+          label: t('Tool result'),
+          color: thought.isError ? 'text-red-400' : 'text-green-400',
+          Icon: thought.isError ? XCircle : CheckCircle2
+        }
+      case 'system':
+        return { label: t('System'), color: 'text-muted-foreground', Icon: Info }
+      case 'error':
+        return { label: t('Error'), color: 'text-red-400', Icon: XCircle }
+      default:
+        return { label: thought.type, color: 'text-muted-foreground', Icon: FileText }
+    }
+  }
+
+  const info = getTypeInfo()
+  const content = thought.type === 'tool_use'
+    ? JSON.stringify(thought.toolInput, null, 2)
+    : thought.type === 'tool_result'
+      ? thought.toolOutput
+      : thought.content
+
+  const previewLength = 100
+  const needsTruncate = content && content.length > previewLength
+
+  return (
+    <div className="flex gap-2 text-xs">
+      <info.Icon size={14} className={info.color} />
+      <div className="flex-1 min-w-0">
+        <span className={`font-medium ${info.color}`}>{info.label}</span>
+        {content && (
+          <div className="mt-0.5 text-muted-foreground/70">
+            <span className="whitespace-pre-wrap break-words">
+              {isExpanded || !needsTruncate ? content : content.substring(0, previewLength) + '...'}
+            </span>
+            {needsTruncate && (
+              <button
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="ml-1 text-primary/60 hover:text-primary"
+              >
+                {isExpanded ? t('Collapse') : t('Expand')}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export function MessageItem({ message, previousCost = 0, hideThoughts = false, isInContainer = false, isWorking = false, isWaitingMore = false, workDir, onOpenPlanInCanvas }: MessageItemProps) {
   const isUser = message.role === 'user'
   const isStreaming = (message as any).isStreaming
   const [copied, setCopied] = useState(false)
@@ -65,7 +173,7 @@ export function MessageItem({ message, previousCost = 0, isInContainer = false, 
       {isWorking && !isUser && (
         <div className="flex items-center gap-2 mb-2.5 pb-2 border-b border-border/20 working-indicator-fade">
           <Sparkles size={12} className="text-primary/50 animate-pulse-gentle" />
-          <span className="text-[11px] text-muted-foreground/60 font-medium tracking-wide">{t('Halo is working')}</span>
+          <span className="text-[11px] text-muted-foreground/60 font-medium tracking-wide">{t('Kite is working')}</span>
         </div>
       )}
 
@@ -82,7 +190,7 @@ export function MessageItem({ message, previousCost = 0, isInContainer = false, 
             <span className="whitespace-pre-wrap">{message.content}</span>
           ) : message.isPlan ? (
             // Plan mode: structured plan card
-            <PlanCard content={message.content} onExecute={onExecutePlan} workDir={workDir} />
+            <PlanCard content={message.content} onOpenInCanvas={onOpenPlanInCanvas} workDir={workDir} />
           ) : (
             // Assistant messages: full markdown rendering
             <MarkdownRenderer content={message.content} workDir={workDir} />
@@ -113,8 +221,8 @@ export function MessageItem({ message, previousCost = 0, isInContainer = false, 
           >
             {copied ? (
               <>
-                <Check size={12} className="text-halo-success" />
-                <span className="text-halo-success">{t('Copied')}</span>
+                <Check size={12} className="text-kite-success" />
+                <span className="text-kite-success">{t('Copied')}</span>
               </>
             ) : (
               <Copy size={12} />

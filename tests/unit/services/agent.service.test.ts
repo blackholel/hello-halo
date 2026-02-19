@@ -3,9 +3,9 @@
  *
  * Tests for the configuration isolation mechanism:
  * - CLAUDE_CONFIG_DIR should be set to ~/.kite/ in SDK env
- * - strict only-space policy should force settingSources to ['local']
+ * - settingSources should return ['user', 'project'] by default
  *
- * These tests verify that Halo uses ~/.halo/ as its config directory
+ * These tests verify that Kite uses ~/.kite/ as its config directory
  * instead of ~/.claude/, providing complete isolation from system Claude Code.
  */
 
@@ -47,7 +47,7 @@ vi.mock('../../../src/main/services/config.service', () => ({
     onboarding: { completed: true },
     isFirstLaunch: false
   })),
-  getHaloDir: vi.fn(() => join(homedir(), '.halo')),
+  getKiteDir: vi.fn(() => join(homedir(), '.kite')),
   getTempSpacePath: vi.fn(() => '/mock/temp'),
   onApiConfigChange: vi.fn(() => () => {})
 }))
@@ -62,6 +62,11 @@ vi.mock('../../../src/main/services/hooks.service', () => ({
 
 vi.mock('../../../src/main/services/plugins.service', () => ({
   getInstalledPluginPaths: vi.fn(() => [])
+}))
+
+vi.mock('../../../src/main/services/config-source-mode.service', () => ({
+  getLockedConfigSourceMode: vi.fn(() => 'kite'),
+  getLockedUserConfigRootDir: vi.fn(() => join(homedir(), '.kite'))
 }))
 
 vi.mock('../../../src/main/services/conversation.service', () => ({
@@ -104,6 +109,7 @@ vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
 // Import after mocks are set up
 import { getConfig } from '../../../src/main/services/config.service'
 import { getSpaceConfig } from '../../../src/main/services/space-config.service'
+import { getLockedUserConfigRootDir } from '../../../src/main/services/config-source-mode.service'
 
 // Import the exported test helpers
 import {
@@ -114,6 +120,7 @@ import {
 describe('Agent Service - CLAUDE_CONFIG_DIR', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(getLockedUserConfigRootDir).mockReturnValue(join(homedir(), '.kite'))
   })
 
   afterEach(() => {
@@ -121,14 +128,14 @@ describe('Agent Service - CLAUDE_CONFIG_DIR', () => {
   })
 
   describe('buildSdkOptions env.CLAUDE_CONFIG_DIR', () => {
-    it('should set CLAUDE_CONFIG_DIR to ~/.halo/ in env', () => {
+    it('should set CLAUDE_CONFIG_DIR to ~/.kite/ in env', () => {
       // This test verifies that the SDK options include CLAUDE_CONFIG_DIR
-      // pointing to ~/.halo/ so SDK loads config from there instead of ~/.claude/
+      // pointing to ~/.kite/ so SDK loads config from there instead of ~/.claude/
 
       const env = _testBuildSdkOptionsEnv()
 
       expect(env.CLAUDE_CONFIG_DIR).toBeDefined()
-      expect(env.CLAUDE_CONFIG_DIR).toBe(join(homedir(), '.halo'))
+      expect(env.CLAUDE_CONFIG_DIR).toBe(join(homedir(), '.kite'))
     })
 
     it('should NOT point CLAUDE_CONFIG_DIR to ~/.claude/', () => {
@@ -136,10 +143,20 @@ describe('Agent Service - CLAUDE_CONFIG_DIR', () => {
 
       expect(env.CLAUDE_CONFIG_DIR).not.toContain('.claude')
     })
+
+    it('should switch to ~/.claude/ when locked mode is claude', () => {
+      vi.mocked(getLockedUserConfigRootDir).mockReturnValue(join(homedir(), '.claude'))
+      const env = _testBuildSdkOptionsEnv()
+      expect(env.CLAUDE_CONFIG_DIR).toBe(join(homedir(), '.claude'))
+    })
   })
 
   describe('buildSettingSources', () => {
-    it('should return ["local"] by default in strict space-only mode', () => {
+    it('should return ["user", "project"] by default', () => {
+      // When CLAUDE_CONFIG_DIR is set to ~/.kite/:
+      // - 'user' loads from ~/.kite/ (skills, commands, agents, settings)
+      // - 'project' loads from {workDir}/.claude/ (project-level config)
+
       const sources = _testBuildSettingSources('/test/workspace')
       expect(sources).toEqual(['local'])
     })
@@ -155,13 +172,9 @@ describe('Agent Service - CLAUDE_CONFIG_DIR', () => {
       expect(sources).toEqual(['local'])
     })
 
-    it('should keep legacy behavior when resource policy is explicitly legacy', () => {
-      vi.mocked(getSpaceConfig).mockReturnValue({
-        resourcePolicy: {
-          version: 1,
-          mode: 'legacy'
-        }
-      } as any)
+    it('should always include "user" source (for ~/.kite/ loading)', () => {
+      // 'user' source is always included because it now points to ~/.kite/
+      // via CLAUDE_CONFIG_DIR environment variable
 
       const sources = _testBuildSettingSources('/test/workspace')
       expect(sources).toEqual(['user', 'project'])
@@ -185,15 +198,18 @@ describe('Agent Service - CLAUDE_CONFIG_DIR', () => {
 })
 
 describe('Agent Service - Configuration Isolation', () => {
-  it('should use ~/.halo/ as the config directory via CLAUDE_CONFIG_DIR', () => {
+  it('should use ~/.kite/ as the config directory via CLAUDE_CONFIG_DIR', () => {
     const env = _testBuildSdkOptionsEnv()
 
-    // Should point to ~/.halo/, not ~/.claude/
+    // Should point to ~/.kite/, not ~/.claude/
     expect(env.CLAUDE_CONFIG_DIR).not.toContain('.claude')
-    expect(env.CLAUDE_CONFIG_DIR).toContain('.halo')
+    expect(env.CLAUDE_CONFIG_DIR).toContain('.kite')
   })
 
-  it('should force local settings source by default in strict mode', () => {
+  it('should enable user and project settings by default', () => {
+    // With CLAUDE_CONFIG_DIR=~/.kite/, enabling 'user' source loads from ~/.kite/
+    // This is the key change: we no longer need enableUserSettings flag
+
     const sources = _testBuildSettingSources('/test/workspace')
     expect(sources).toEqual(['local'])
   })

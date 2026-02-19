@@ -3,6 +3,10 @@ import { ChevronDown, MoreHorizontal, Plus, Search, SquarePen, Terminal, Trash2 
 import { useTranslation } from '../../i18n'
 import { useCommandsStore, type CommandDefinition } from '../../stores/commands.store'
 import { commandKey } from '../../../shared/command-utils'
+import { useSpaceStore } from '../../stores/space.store'
+import { useToolkitStore } from '../../stores/toolkit.store'
+import { buildDirective } from '../../utils/directive-helpers'
+import { useAppStore } from '../../stores/app.store'
 
 interface CommandsPanelProps {
   workDir?: string
@@ -20,9 +24,13 @@ export function CommandsPanel({
   preferInsertOnClick = false
 }: CommandsPanelProps): JSX.Element {
   const { t } = useTranslation()
-  const [expanded, setExpanded] = useState(false)
-  const [query, setQuery] = useState('')
-  const [menuPath, setMenuPath] = useState<string | null>(null)
+  const [isExpanded, setIsExpanded] = useState(false)
+  const [isAnimatingOut, setIsAnimatingOut] = useState(false)
+  const [localSearchQuery, setLocalSearchQuery] = useState('')
+  const [showAllInToolkitMode, setShowAllInToolkitMode] = useState(false)
+  const [updatingToolkitCommand, setUpdatingToolkitCommand] = useState<string | null>(null)
+  const configSourceMode = useAppStore((state) => state.config?.configSourceMode || 'kite')
+  const userConfigRoot = configSourceMode === 'claude' ? '~/.claude' : '~/.kite'
 
   const { commands, loadedWorkDir, isLoading, loadCommands, deleteCommand } = useCommandsStore()
 
@@ -54,15 +62,43 @@ export function CommandsPanel({
         <ChevronDown size={14} className={expanded ? 'rotate-180 transition-transform' : 'transition-transform'} />
       </button>
 
-      {expanded && (
-        <div className="px-2 pb-2 space-y-2">
-          <div className="flex items-center gap-1">
-            <button className="p-1.5 rounded-md hover:bg-secondary/70" title={t('Create command')} onClick={() => onCreateCommand?.()}>
-              <SquarePen size={14} />
-            </button>
-            <button className="p-1.5 rounded-md hover:bg-secondary/70" title={t('Template Library')} onClick={onOpenTemplateLibrary}>
-              <Plus size={14} />
-            </button>
+      {isExpanded && (
+        <div
+          className={`
+            mt-2 w-full
+            bg-card/90 backdrop-blur-xl rounded-xl border border-border/60
+            shadow-sm overflow-hidden
+            ${isAnimatingOut ? 'animate-fade-out' : 'animate-fade-in'}
+          `}
+          style={{ animationDuration: `${PANEL_ANIMATION_MS}ms` }}
+        >
+          <div className="px-3 py-2.5 border-b border-border/50 flex items-center justify-between">
+            <div>
+              <h3 className="text-xs font-semibold text-foreground">{t('Commands')}</h3>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                {isToolkitMode && !showAllInToolkitMode
+                  ? t('{{toolkit}} / {{total}} commands in toolkit', {
+                    toolkit: toolkitCommandsCount,
+                    total: totalCommandsCount
+                  })
+                  : t('{{count}} commands available', { count: totalCommandsCount })}
+              </p>
+              <p className="text-[10px] text-muted-foreground/70 mt-1">
+                {workDir
+                  ? t('Manage files in {{root}}/commands/ and {{path}}/.claude/commands/', { root: userConfigRoot, path: workDir })
+                  : t('Manage files in {{root}}/commands/', { root: userConfigRoot })}
+              </p>
+            </div>
+            {workDir && onCreateCommand && (
+              <button
+                onClick={onCreateCommand}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-medium
+                  bg-primary/10 hover:bg-primary/20 text-primary rounded-lg transition-colors"
+              >
+                <Plus size={14} />
+                {t('New command')}
+              </button>
+            )}
           </div>
 
           <div className="relative">
@@ -77,10 +113,25 @@ export function CommandsPanel({
 
           <div className="max-h-56 overflow-auto space-y-1">
             {isLoading ? (
-              <div className="text-[11px] text-muted-foreground px-2 py-2">{t('Loading...')}</div>
-            ) : visibleCommands.length === 0 ? (
-              <div className="text-[11px] text-muted-foreground px-2 py-2">
-                {t('Agent can suggest creating Commands in chat. You can also click ➕ to import from Template Library.')}
+              <div className="px-4 py-6 text-center">
+                <div className="w-8 h-8 mx-auto mb-3 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                <p className="text-xs text-muted-foreground">{t('Loading commands...')}</p>
+              </div>
+            ) : filteredCommands.length === 0 ? (
+              <div className="px-4 py-6 text-center">
+                <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-muted/50 flex items-center justify-center">
+                  <Terminal size={24} className="text-muted-foreground/50" />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {localSearchQuery
+                    ? t('No commands found')
+                    : (isToolkitMode && !showAllInToolkitMode ? t('No toolkit resources available') : t('No commands available'))}
+                </p>
+                <p className="text-[10px] text-muted-foreground/60 mt-1">
+                  {localSearchQuery
+                    ? t('Try a different search term')
+                    : t('Add .md files in {{root}}/commands or .claude/commands', { root: userConfigRoot })}
+                </p>
               </div>
             ) : (
               visibleCommands.map((command) => {

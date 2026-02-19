@@ -1,20 +1,16 @@
 /**
  * Plugins Service - Manages installed plugins from plugin registries
  *
- * This service reads installed plugins from both ~/.halo/ and ~/.claude/ registries
- * and provides their paths to the SDK for loading skills, commands, hooks, and agents.
- *
- * Registry loading order (Halo takes precedence for deduplication):
- * 1. ~/.halo/plugins/installed_plugins.json
- * 2. ~/.claude/plugins/installed_plugins.json
+ * This service reads plugins from a single locked config source root:
+ * - Kite mode: ~/.kite
+ * - Claude mode: ~/.claude
  */
 
 import { join } from 'path'
-import { homedir } from 'os'
 import { existsSync, readFileSync, statSync } from 'fs'
-import { getHaloDir } from './config.service'
 import { isValidDirectoryPath } from '../utils/path-validation'
 import { FileCache } from '../utils/file-cache'
+import { getLockedConfigSourceMode, getLockedUserConfigRootDir } from './config-source-mode.service'
 
 // ============================================
 // Plugin Types
@@ -44,7 +40,7 @@ export interface PluginInfo {
 }
 
 // Cache for installed plugins
-let pluginsCache: { plugins: PluginInfo[]; mtime: number } | null = null
+let pluginsCache: { plugins: PluginInfo[]; mtime: number; signature: string } | null = null
 
 // Cache for enabled plugins settings
 const enabledPluginsCache = new FileCache<Record<string, boolean> | null>()
@@ -53,12 +49,8 @@ interface EnabledPluginsSettings {
   enabledPlugins?: Record<string, boolean>
 }
 
-function getSettingsPathInHalo(): string {
-  return join(getHaloDir(), 'settings.json')
-}
-
-function getSettingsPathInClaude(): string {
-  return join(homedir(), '.claude', 'settings.json')
+function getSettingsPath(): string {
+  return join(getLockedUserConfigRootDir(), 'settings.json')
 }
 
 function loadEnabledPluginsFromSettings(settingsPath: string): Record<string, boolean> | null {
@@ -76,31 +68,18 @@ function loadEnabledPluginsFromSettings(settingsPath: string): Record<string, bo
   })
 }
 
-function getMergedEnabledPlugins(): { map: Record<string, boolean>; hasConfig: boolean } {
-  const haloEnabled = loadEnabledPluginsFromSettings(getSettingsPathInHalo()) || {}
-  const claudeEnabled = loadEnabledPluginsFromSettings(getSettingsPathInClaude()) || {}
-  const merged = { ...claudeEnabled, ...haloEnabled }
-  const hasConfig = Object.keys(merged).length > 0
-  return { map: merged, hasConfig }
+function getEnabledPluginsFromActiveSettings(): { map: Record<string, boolean>; hasConfig: boolean } {
+  const settings = loadEnabledPluginsFromSettings(getSettingsPath()) || {}
+  const hasConfig = Object.keys(settings).length > 0
+  return { map: settings, hasConfig }
 }
 
 /**
- * Get all registry paths that exist
+ * Get active registry path if it exists.
  */
-function getInstalledPluginsPaths(): string[] {
-  const paths: string[] = []
-
-  const haloPath = join(getHaloDir(), 'plugins', 'installed_plugins.json')
-  if (existsSync(haloPath)) {
-    paths.push(haloPath)
-  }
-
-  const claudePath = join(homedir(), '.claude', 'plugins', 'installed_plugins.json')
-  if (existsSync(claudePath)) {
-    paths.push(claudePath)
-  }
-
-  return paths
+function getInstalledPluginRegistryPaths(): string[] {
+  const registryPath = join(getLockedUserConfigRootDir(), 'plugins', 'installed_plugins.json')
+  return existsSync(registryPath) ? [registryPath] : []
 }
 
 /**
@@ -163,34 +142,23 @@ function getCombinedMtime(paths: string[]): number {
  * Load installed plugins from all registries
  */
 export function loadInstalledPlugins(): PluginInfo[] {
-  const registryPaths = getInstalledPluginsPaths()
+  const mode = getLockedConfigSourceMode()
+  const registryPaths = getInstalledPluginRegistryPaths()
   if (registryPaths.length === 0) {
     return []
   }
 
+  const signature = `${mode}|${registryPaths.join('|')}|${getSettingsPath()}`
+
   // Check cache
   const currentMtime = getCombinedMtime(registryPaths)
-  if (pluginsCache && pluginsCache.mtime === currentMtime) {
+  if (pluginsCache && pluginsCache.mtime === currentMtime && pluginsCache.signature === signature) {
     return pluginsCache.plugins
   }
 
-  const allPlugins: PluginInfo[] = []
-  const seenFullNames = new Set<string>()
-  const seenPaths = new Set<string>()
+  const allPlugins = loadPluginsFromRegistry(registryPaths[0])
 
-  for (const registryPath of registryPaths) {
-    const plugins = loadPluginsFromRegistry(registryPath)
-    for (const plugin of plugins) {
-      if (seenFullNames.has(plugin.fullName) || seenPaths.has(plugin.installPath)) {
-        continue
-      }
-      allPlugins.push(plugin)
-      seenFullNames.add(plugin.fullName)
-      seenPaths.add(plugin.installPath)
-    }
-  }
-
-  pluginsCache = { plugins: allPlugins, mtime: currentMtime }
+  pluginsCache = { plugins: allPlugins, mtime: currentMtime, signature }
 
   if (allPlugins.length > 0) {
     console.log(`[Plugins] Loaded ${allPlugins.length} installed plugins: ${allPlugins.map(p => p.name).join(', ')}`)
@@ -200,12 +168,11 @@ export function loadInstalledPlugins(): PluginInfo[] {
 }
 
 /**
- * Get enabled plugin full names from settings.json (Halo + Claude)
- * - Halo settings take precedence over Claude settings.
+ * Get enabled plugin full names from active source settings.json.
  * - If no enabledPlugins configured, default to all installed plugins.
  */
 export function getEnabledPluginFullNames(): Set<string> {
-  const { map, hasConfig } = getMergedEnabledPlugins()
+  const { map, hasConfig } = getEnabledPluginsFromActiveSettings()
   const installed = loadInstalledPlugins()
 
   if (!hasConfig) {

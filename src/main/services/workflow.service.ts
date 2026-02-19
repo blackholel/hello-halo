@@ -57,7 +57,7 @@ function ensureWorkflowsDir(spaceId: string): string | null {
   const space = getSpace(spaceId)
   if (!space) return null
 
-  const workflowsDir = join(space.path, '.halo', 'workflows')
+  const workflowsDir = join(space.path, '.kite', 'workflows')
   if (!existsSync(workflowsDir)) {
     mkdirSync(workflowsDir, { recursive: true })
   }

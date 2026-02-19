@@ -1,5 +1,5 @@
 // ============================================
-// Halo Type Definitions
+// Kite Type Definitions
 // ============================================
 
 // API Provider Configuration
@@ -43,6 +43,7 @@ export type PermissionLevel = 'allow' | 'ask' | 'deny';
 
 // Theme Mode
 export type ThemeMode = 'light' | 'dark' | 'system';
+export type ConfigSourceMode = 'kite' | 'claude';
 
 // Tool Call Status
 export type ToolStatus =
@@ -104,7 +105,7 @@ export interface McpStdioServerConfig {
   args?: string[];
   env?: Record<string, string>;
   timeout?: number;  // milliseconds
-  disabled?: boolean;  // Halo extension: temporarily disable this server
+  disabled?: boolean;  // Kite extension: temporarily disable this server
 }
 
 // MCP HTTP server (REST API)
@@ -112,7 +113,7 @@ export interface McpHttpServerConfig {
   type: 'http';
   url: string;
   headers?: Record<string, string>;
-  disabled?: boolean;  // Halo extension: temporarily disable this server
+  disabled?: boolean;  // Kite extension: temporarily disable this server
 }
 
 // MCP SSE server (Server-Sent Events)
@@ -120,7 +121,7 @@ export interface McpSseServerConfig {
   type: 'sse';
   url: string;
   headers?: Record<string, string>;
-  disabled?: boolean;  // Halo extension: temporarily disable this server
+  disabled?: boolean;  // Kite extension: temporarily disable this server
 }
 
 // Union type for all MCP server configs
@@ -156,7 +157,7 @@ export type {
   ClaudeCodeConfig
 } from '../../shared/types/claude-code';
 
-export interface HaloConfig {
+export interface KiteConfig {
   api: ApiConfig;
   permissions: PermissionConfig;
   appearance: AppearanceConfig;
@@ -164,6 +165,7 @@ export interface HaloConfig {
   remoteAccess: RemoteAccessConfig;
   mcpServers: McpServersConfig;  // MCP servers configuration
   isFirstLaunch: boolean;
+  configSourceMode: ConfigSourceMode;
   claudeCode?: ClaudeCodeConfig;  // Claude Code configuration (plugins, hooks, agents)
 }
 
@@ -637,11 +639,8 @@ export interface TokenUsage {
 export interface AgentCompleteEvent extends AgentEventBase {
   type: 'complete';
   duration?: number;
-  durationMs?: number;
-  reason?: 'completed' | 'stopped' | 'error' | 'no_text';
-  terminalAt?: string;
-  finalContent?: string;
   tokenUsage?: TokenUsage | null;
+  isPlan?: boolean;
 }
 
 export interface AgentRunStartEvent extends AgentEventBase {
@@ -711,7 +710,7 @@ export interface AppState {
   view: AppView;
   isLoading: boolean;
   error: string | null;
-  config: HaloConfig | null;
+  config: KiteConfig | null;
 }
 
 // ============================================
@@ -735,7 +734,7 @@ export interface ValidationResult {
 }
 
 // Default values
-export const DEFAULT_CONFIG: HaloConfig = {
+export const DEFAULT_CONFIG: KiteConfig = {
   api: {
     provider: 'anthropic',
     apiKey: '',
@@ -760,7 +759,8 @@ export const DEFAULT_CONFIG: HaloConfig = {
     port: 3456
   },
   mcpServers: {},  // Empty by default
-  isFirstLaunch: true
+  isFirstLaunch: true,
+  configSourceMode: 'kite'
 };
 
 // Icon options for spaces (using icon IDs that map to Lucide icons)

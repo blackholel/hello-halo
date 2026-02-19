@@ -21,6 +21,16 @@ import type { AnalyticsConfig } from './analytics/types'
 
 type ApiConfigChangeHandler = () => void
 const apiConfigChangeHandlers: ApiConfigChangeHandler[] = []
+const CONFIG_SOURCE_MODE_VALUES = ['kite', 'claude'] as const
+
+export type ConfigSourceMode = (typeof CONFIG_SOURCE_MODE_VALUES)[number]
+
+export function normalizeConfigSourceMode(value: unknown): ConfigSourceMode {
+  if (typeof value === 'string' && (CONFIG_SOURCE_MODE_VALUES as readonly string[]).includes(value)) {
+    return value as ConfigSourceMode
+  }
+  return 'kite'
+}
 
 /**
  * Register a callback to be notified when API config changes.
@@ -44,7 +54,7 @@ export function onApiConfigChange(handler: ApiConfigChangeHandler): () => void {
 // - 'zhipu': ZhipuAI (智谱) - Anthropic-compatible, direct connection
 // - 'minimax': MiniMax - Anthropic-compatible, direct connection
 // - 'custom': Legacy custom provider (treated as anthropic-compat)
-interface HaloConfig {
+interface KiteConfig {
   api: {
     provider: 'anthropic' | 'anthropic-compat' | 'openai' | 'zhipu' | 'minimax' | 'custom'
     apiKey: string
@@ -85,6 +95,8 @@ interface HaloConfig {
   }
   // Claude Code configuration (plugins, hooks, agents)
   claudeCode?: ClaudeCodeConfig
+  // Configuration source mode (runtime lock consumes this on startup)
+  configSourceMode: ConfigSourceMode
 }
 
 // MCP server configuration types
@@ -96,21 +108,21 @@ interface McpStdioServerConfig {
   args?: string[]
   env?: Record<string, string>
   timeout?: number
-  disabled?: boolean  // Halo extension: temporarily disable this server
+  disabled?: boolean  // Kite extension: temporarily disable this server
 }
 
 interface McpHttpServerConfig {
   type: 'http'
   url: string
   headers?: Record<string, string>
-  disabled?: boolean  // Halo extension: temporarily disable this server
+  disabled?: boolean  // Kite extension: temporarily disable this server
 }
 
 interface McpSseServerConfig {
   type: 'sse'
   url: string
   headers?: Record<string, string>
-  disabled?: boolean  // Halo extension: temporarily disable this server
+  disabled?: boolean  // Kite extension: temporarily disable this server
 }
 
 // ============================================
@@ -130,18 +142,18 @@ export type {
 import type { ClaudeCodeConfig } from '../../shared/types/claude-code'
 
 // Paths
-// Use getConfigDir() from instance utils to support HALO_CONFIG_DIR environment variable
-// This enables running multiple Halo instances in parallel (e.g., different git worktrees)
-export function getHaloDir(): string {
+// Use getConfigDir() from instance utils to support KITE_CONFIG_DIR environment variable
+// This enables running multiple Kite instances in parallel (e.g., different git worktrees)
+export function getKiteDir(): string {
   return getConfigDir()
 }
 
 export function getConfigPath(): string {
-  return join(getHaloDir(), 'config.json')
+  return join(getKiteDir(), 'config.json')
 }
 
 export function getTempSpacePath(): string {
-  return join(getHaloDir(), 'temp')
+  return join(getKiteDir(), 'temp')
 }
 
 export function resolveSpacesRootFromConfigDir(
@@ -172,25 +184,14 @@ export function resolveSpacesRootFromConfigDir(
 }
 
 export function getSpacesDir(): string {
-  return resolveSpacesRootFromConfigDir(getKiteDir())
-}
-
-export function getLegacySpacesDir(
-  configDir: string = getKiteDir(),
-  platform: NodeJS.Platform = process.platform
-): string {
-  if (platform === 'win32') {
-    return pathWin32.resolve(pathWin32.join(pathWin32.resolve(configDir), 'spaces'))
-  }
-
-  return pathPosix.resolve(pathPosix.join(pathPosix.resolve(configDir), 'spaces'))
+  return join(getKiteDir(), 'spaces')
 }
 
 // Default model (Opus 4.5)
 const DEFAULT_MODEL = 'claude-opus-4-5-20251101'
 
 // Default configuration
-const DEFAULT_CONFIG: HaloConfig = {
+const DEFAULT_CONFIG: KiteConfig = {
   api: {
     provider: 'anthropic',
     apiKey: '',
@@ -218,19 +219,20 @@ const DEFAULT_CONFIG: HaloConfig = {
     completed: false
   },
   mcpServers: {},  // Empty by default
-  isFirstLaunch: true
+  isFirstLaunch: true,
+  configSourceMode: 'kite'
 }
 
 // Initialize app directories
 export async function initializeApp(): Promise<void> {
-  const haloDir = getHaloDir()
+  const kiteDir = getKiteDir()
   const tempDir = getTempSpacePath()
   const spacesDir = getSpacesDir()
   const tempArtifactsDir = join(tempDir, 'artifacts')
   const tempConversationsDir = join(tempDir, 'conversations')
 
   // Create directories if they don't exist
-  const dirs = [haloDir, tempDir, spacesDir, tempArtifactsDir, tempConversationsDir]
+  const dirs = [kiteDir, tempDir, spacesDir, tempArtifactsDir, tempConversationsDir]
   for (const dir of dirs) {
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true })
@@ -245,7 +247,7 @@ export async function initializeApp(): Promise<void> {
 }
 
 // Get configuration
-export function getConfig(): HaloConfig {
+export function getConfig(): KiteConfig {
   const configPath = getConfigPath()
 
   if (!existsSync(configPath)) {
@@ -267,7 +269,8 @@ export function getConfig(): HaloConfig {
       // mcpServers is a flat map, just use parsed value or default
       mcpServers: parsed.mcpServers || DEFAULT_CONFIG.mcpServers,
       // analytics: keep as-is (managed by analytics.service.ts)
-      analytics: parsed.analytics
+      analytics: parsed.analytics,
+      configSourceMode: normalizeConfigSourceMode(parsed.configSourceMode)
     }
   } catch (error) {
     console.error('Failed to read config:', error)
@@ -276,9 +279,10 @@ export function getConfig(): HaloConfig {
 }
 
 // Save configuration
-export function saveConfig(config: Partial<HaloConfig>): HaloConfig {
+export function saveConfig(config: Partial<KiteConfig>): KiteConfig {
   const currentConfig = getConfig()
   const newConfig = { ...currentConfig, ...config }
+  const rawUpdates = config as Record<string, unknown>
 
   // Deep merge for nested objects
   if (config.api) {
@@ -295,6 +299,9 @@ export function saveConfig(config: Partial<HaloConfig>): HaloConfig {
   }
   if (config.onboarding) {
     newConfig.onboarding = { ...currentConfig.onboarding, ...config.onboarding }
+  }
+  if (rawUpdates.configSourceMode !== undefined) {
+    newConfig.configSourceMode = normalizeConfigSourceMode(rawUpdates.configSourceMode)
   }
   // mcpServers: replace entirely when provided (not merged)
   if (config.mcpServers !== undefined) {

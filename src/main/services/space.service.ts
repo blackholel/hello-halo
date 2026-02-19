@@ -5,8 +5,8 @@
 import { shell } from 'electron'
 import { join } from 'path'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, rmSync } from 'fs'
-import { getKiteDir, getLegacySpacesDir, getTempSpacePath, getSpacesDir } from './config.service'
-import { getSpaceConfig, updateSpaceConfig } from './space-config.service'
+import { getKiteDir, getTempSpacePath, getSpacesDir } from './config.service'
+import { updateSpaceConfig } from './space-config.service'
 import { v4 as uuidv4 } from 'uuid'
 import { isPathWithinBasePaths } from '../utils/path-validation'
 import { ensureSpaceResourcePolicy } from './agent/space-resource-policy.service'
@@ -64,90 +64,11 @@ interface SpaceMeta {
 
 // Space index for tracking custom path spaces
 interface SpaceIndex {
-  customPaths: string[]  // Array of paths to spaces outside the default spaces root.
-}
-
-const WINDOWS_RESERVED_FOLDER_NAMES = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i
-
-function sanitizeSpaceDirName(name: string): string {
-  let normalized = name
-    .trim()
-    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '-')
-    .replace(/\s+/g, ' ')
-    .replace(/[. ]+$/g, '')
-
-  if (!normalized) {
-    normalized = 'untitled-space'
-  }
-
-  if (WINDOWS_RESERVED_FOLDER_NAMES.test(normalized)) {
-    normalized = `${normalized}-space`
-  }
-
-  return normalized
-}
-
-function resolveDefaultSpacePath(name: string): string {
-  const spacesDir = getSpacesDir()
-  const baseName = sanitizeSpaceDirName(name)
-  let candidate = join(spacesDir, baseName)
-  let sequence = 2
-
-  while (existsSync(candidate)) {
-    candidate = join(spacesDir, `${baseName}-${sequence}`)
-    sequence += 1
-  }
-
-  return candidate
-}
-
-function isInDefaultSpacesRoot(spacePath: string): boolean {
-  return isPathWithinBasePaths(spacePath, getDefaultSpaceRoots())
-}
-
-function getDefaultSpaceRoots(): string[] {
-  const roots = [getSpacesDir(), getLegacySpacesDir()]
-  return roots.filter((root, index) => roots.indexOf(root) === index)
-}
-
-function loadSpacesFromRoots(roots: string[]): Space[] {
-  const spaces: Space[] = []
-  const loadedPaths = new Set<string>()
-
-  for (const root of roots) {
-    if (!existsSync(root)) {
-      continue
-    }
-
-    const dirs = readdirSync(root)
-    for (const dir of dirs) {
-      const spacePath = join(root, dir)
-
-      try {
-        if (!statSync(spacePath).isDirectory()) {
-          continue
-        }
-      } catch {
-        continue
-      }
-
-      if (loadedPaths.has(spacePath)) {
-        continue
-      }
-
-      const space = loadSpaceFromPath(spacePath)
-      if (space) {
-        spaces.push(space)
-        loadedPaths.add(spacePath)
-      }
-    }
-  }
-
-  return spaces
+  customPaths: string[]  // Array of paths to spaces outside ~/.kite/spaces/
 }
 
 function getSpaceIndexPath(): string {
-  return join(getHaloDir(), 'spaces-index.json')
+  return join(getKiteDir(), 'spaces-index.json')
 }
 
 function loadSpaceIndex(): SpaceIndex {
@@ -181,9 +102,9 @@ function removeFromSpaceIndex(path: string): void {
   saveSpaceIndex(index)
 }
 
-const HALO_SPACE: Space = {
-  id: 'halo-temp',
-  name: 'Halo',
+const KITE_SPACE: Space = {
+  id: 'kite-temp',
+  name: 'Kite',
   icon: 'sparkles',  // Maps to Lucide Sparkles icon
   path: '',
   isTemp: true,
@@ -234,7 +155,7 @@ export function getAllSpacePaths(): string[] {
 // Get space stats
 function getSpaceStats(spacePath: string): { artifactCount: number; conversationCount: number } {
   const artifactsDir = join(spacePath, 'artifacts')
-  const conversationsDir = join(spacePath, '.halo', 'conversations')
+  const conversationsDir = join(spacePath, '.kite', 'conversations')
 
   let artifactCount = 0
   let conversationCount = 0
@@ -280,13 +201,13 @@ function getSpaceStats(spacePath: string): { artifactCount: number; conversation
   return { artifactCount, conversationCount }
 }
 
-// Get Halo temp space
-export function getHaloSpace(): Space {
+// Get Kite temp space
+export function getKiteSpace(): Space {
   const tempPath = getTempSpacePath()
   const stats = getSpaceStats(tempPath)
 
   // Load preferences if they exist
-  const metaPath = join(tempPath, '.halo', 'meta.json')
+  const metaPath = join(tempPath, '.kite', 'meta.json')
   let preferences: SpacePreferences | undefined
 
   if (existsSync(metaPath)) {
@@ -299,7 +220,7 @@ export function getHaloSpace(): Space {
   }
 
   return {
-    ...HALO_SPACE,
+    ...KITE_SPACE,
     path: tempPath,
     stats,
     preferences
@@ -308,7 +229,9 @@ export function getHaloSpace(): Space {
 
 // Helper to load a space from a path
 function loadSpaceFromPath(spacePath: string): Space | null {
-  const metaPath = join(spacePath, '.halo', 'meta.json')
+  // Deliberate policy: only .kite metadata is recognized.
+  // Legacy .halo/meta.json is intentionally ignored (no compatibility fallback).
+  const metaPath = join(spacePath, '.kite', 'meta.json')
 
   if (existsSync(metaPath)) {
     try {
@@ -417,8 +340,8 @@ export function createSpace(input: { name: string; icon: string; customPath?: st
 
   // Create directories
   mkdirSync(spacePath, { recursive: true })
-  mkdirSync(join(spacePath, '.halo'), { recursive: true })
-  mkdirSync(join(spacePath, '.halo', 'conversations'), { recursive: true })
+  mkdirSync(join(spacePath, '.kite'), { recursive: true })
+  mkdirSync(join(spacePath, '.kite', 'conversations'), { recursive: true })
 
   // Create meta file
   const meta: SpaceMeta = {
@@ -429,7 +352,7 @@ export function createSpace(input: { name: string; icon: string; customPath?: st
     updatedAt: now
   }
 
-  writeFileSync(join(spacePath, '.halo', 'meta.json'), JSON.stringify(meta, null, 2))
+  writeFileSync(join(spacePath, '.kite', 'meta.json'), JSON.stringify(meta, null, 2))
 
   // Initialize empty toolkit for space isolation (whitelist mode)
   // Uses updateSpaceConfig to merge safely — preserves existing claudeCode config
@@ -484,10 +407,10 @@ export function deleteSpace(spaceId: string): boolean {
 
   try {
     if (isCustomPath) {
-      // For custom path spaces, only delete the .halo folder (preserve user's files)
-      const haloDir = join(spacePath, '.halo')
-      if (existsSync(haloDir)) {
-        rmSync(haloDir, { recursive: true, force: true })
+      // For custom path spaces, only delete the .kite folder (preserve user's files)
+      const kiteDir = join(spacePath, '.kite')
+      if (existsSync(kiteDir)) {
+        rmSync(kiteDir, { recursive: true, force: true })
       }
       // Remove from index
       removeFromSpaceIndex(spacePath)
@@ -504,8 +427,8 @@ export function deleteSpace(spaceId: string): boolean {
 
 // Get a specific space by ID
 export function getSpace(spaceId: string): Space | null {
-  if (spaceId === 'halo-temp') {
-    return getHaloSpace()
+  if (spaceId === 'kite-temp') {
+    return getKiteSpace()
   }
 
   const spaces = listSpaces()
@@ -541,7 +464,7 @@ export function updateSpace(spaceId: string, updates: { name?: string; icon?: st
     return null
   }
 
-  const metaPath = join(space.path, '.halo', 'meta.json')
+  const metaPath = join(space.path, '.kite', 'meta.json')
 
   try {
     const meta: SpaceMeta = JSON.parse(readFileSync(metaPath, 'utf-8'))
@@ -572,14 +495,14 @@ export function updateSpacePreferences(
 
   // For temp space, store preferences in a special location
   const metaPath = space.isTemp
-    ? join(space.path, '.halo', 'meta.json')
-    : join(space.path, '.halo', 'meta.json')
+    ? join(space.path, '.kite', 'meta.json')
+    : join(space.path, '.kite', 'meta.json')
 
   try {
-    // Ensure .halo directory exists for temp space
-    const haloDir = join(space.path, '.halo')
-    if (!existsSync(haloDir)) {
-      mkdirSync(haloDir, { recursive: true })
+    // Ensure .kite directory exists for temp space
+    const kiteDir = join(space.path, '.kite')
+    if (!existsSync(kiteDir)) {
+      mkdirSync(kiteDir, { recursive: true })
     }
 
     // Load or create meta
@@ -642,7 +565,7 @@ export function getSpacePreferences(spaceId: string): SpacePreferences | null {
     return null
   }
 
-  const metaPath = join(space.path, '.halo', 'meta.json')
+  const metaPath = join(space.path, '.kite', 'meta.json')
 
   try {
     if (existsSync(metaPath)) {
@@ -705,7 +628,7 @@ export function saveOnboardingConversation(
     // Determine conversations directory
     const conversationsDir = space.isTemp
       ? join(space.path, 'conversations')
-      : join(space.path, '.halo', 'conversations')
+      : join(space.path, '.kite', 'conversations')
 
     // Ensure directory exists
     mkdirSync(conversationsDir, { recursive: true })
@@ -713,7 +636,7 @@ export function saveOnboardingConversation(
     // Create conversation data
     const conversation = {
       id: conversationId,
-      title: 'Welcome to Halo',
+      title: 'Welcome to Kite',
       createdAt: now,
       updatedAt: now,
       messages: [

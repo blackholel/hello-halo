@@ -90,7 +90,7 @@
 ### IPC / Preload / Renderer API
 
 - `src/preload/index.ts`
-  - HaloAPI 增加 toolkit 相关方法（含 `migrateToToolkit`）。
+  - KiteAPI 增加 toolkit 相关方法（含 `migrateToToolkit`）。
 
 - `src/renderer/api/index.ts`
   - 增加 toolkit API（IPC + HTTP 双通道）。
