@@ -10,9 +10,9 @@
  */
 
 import { join } from 'path'
-import { existsSync, readdirSync, readFileSync, statSync } from 'fs'
-import { getTempSpacePath, getKiteDir } from './config.service'
-import { getSpace } from './space.service'
+import { existsSync, readdirSync, readFileSync } from 'fs'
+import { getTempSpacePath } from './config.service'
+import { getSpace, listSpaces } from './space.service'
 
 /**
  * Search result for a single message match
@@ -208,7 +208,6 @@ export class SearchService {
     conversationId?: string,
     spaceId?: string
   ): string[] {
-    const kiteDir = getKiteDir()
     const files: string[] = []
 
     if (scope === 'conversation' && conversationId) {
@@ -244,18 +243,13 @@ export class SearchService {
         files.push(...this.scanConversationFiles(tempConvDir))
       }
 
-      // Scan all custom spaces
-      const spacesDir = join(kiteDir, 'spaces')
-      if (existsSync(spacesDir)) {
-        const spaceNames = readdirSync(spacesDir)
-        spaceNames.forEach(spaceName => {
-          try {
-            const convDir = join(spacesDir, spaceName, '.kite', 'conversations')
-            if (existsSync(convDir)) {
-              files.push(...this.scanConversationFiles(convDir))
-            }
-          } catch (e) {
-            console.error(`Error scanning space ${spaceName}:`, e)
+      // Scan all regular spaces from space service
+      const spaces = listSpaces()
+      spaces.forEach((space) => {
+        try {
+          const convDir = join(space.path, '.kite', 'conversations')
+          if (existsSync(convDir)) {
+            files.push(...this.scanConversationFiles(convDir))
           }
         } catch (e) {
           console.error(`Error scanning space ${space.id}:`, e)
@@ -296,8 +290,6 @@ export class SearchService {
    * Find conversation file in filesystem
    */
   private findConversationFile(conversationId: string, spaceId?: string): string | null {
-    const kiteDir = getKiteDir()
-
     // If spaceId is provided, search in that space first
     if (spaceId) {
       if (spaceId === 'kite-temp') {
@@ -329,18 +321,13 @@ export class SearchService {
       return filePath
     }
 
-    // Search custom spaces
-    const spacesDir = join(kiteDir, 'spaces')
-    if (existsSync(spacesDir)) {
-      const spaceNames = readdirSync(spacesDir)
-      for (const spaceName of spaceNames) {
-        try {
-          filePath = join(spacesDir, spaceName, '.kite', 'conversations', `${conversationId}.json`)
-          if (existsSync(filePath)) {
-            return filePath
-          }
-        } catch (e) {
-          // Continue searching
+    // Search regular spaces from space service
+    const spaces = listSpaces()
+    for (const space of spaces) {
+      try {
+        filePath = join(space.path, '.kite', 'conversations', `${conversationId}.json`)
+        if (existsSync(filePath)) {
+          return filePath
         }
       } catch (e) {
         // Continue searching

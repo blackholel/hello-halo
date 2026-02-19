@@ -5,12 +5,10 @@
 import { shell } from 'electron'
 import { join } from 'path'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, rmSync } from 'fs'
-import { getKiteDir, getTempSpacePath, getSpacesDir } from './config.service'
+import { getKiteDir, getLegacySpacesDir, getTempSpacePath, getSpacesDir } from './config.service'
 import { updateSpaceConfig } from './space-config.service'
 import { v4 as uuidv4 } from 'uuid'
 import { isPathWithinBasePaths } from '../utils/path-validation'
-import { ensureSpaceResourcePolicy } from './agent/space-resource-policy.service'
-import type { ResourceRef } from './resource-ref.service'
 
 interface Space {
   id: string
@@ -64,7 +62,86 @@ interface SpaceMeta {
 
 // Space index for tracking custom path spaces
 interface SpaceIndex {
-  customPaths: string[]  // Array of paths to spaces outside ~/.kite/spaces/
+  customPaths: string[]  // Array of paths to spaces outside the default spaces root.
+}
+
+const WINDOWS_RESERVED_FOLDER_NAMES = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i
+
+function sanitizeSpaceDirName(name: string): string {
+  let normalized = name
+    .trim()
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '-')
+    .replace(/\s+/g, ' ')
+    .replace(/[. ]+$/g, '')
+
+  if (!normalized) {
+    normalized = 'untitled-space'
+  }
+
+  if (WINDOWS_RESERVED_FOLDER_NAMES.test(normalized)) {
+    normalized = `${normalized}-space`
+  }
+
+  return normalized
+}
+
+function resolveDefaultSpacePath(name: string): string {
+  const spacesDir = getSpacesDir()
+  const baseName = sanitizeSpaceDirName(name)
+  let candidate = join(spacesDir, baseName)
+  let sequence = 2
+
+  while (existsSync(candidate)) {
+    candidate = join(spacesDir, `${baseName}-${sequence}`)
+    sequence += 1
+  }
+
+  return candidate
+}
+
+function isInDefaultSpacesRoot(spacePath: string): boolean {
+  return isPathWithinBasePaths(spacePath, getDefaultSpaceRoots())
+}
+
+function getDefaultSpaceRoots(): string[] {
+  const roots = [getSpacesDir(), getLegacySpacesDir()]
+  return roots.filter((root, index) => roots.indexOf(root) === index)
+}
+
+function loadSpacesFromRoots(roots: string[]): Space[] {
+  const spaces: Space[] = []
+  const loadedPaths = new Set<string>()
+
+  for (const root of roots) {
+    if (!existsSync(root)) {
+      continue
+    }
+
+    const dirs = readdirSync(root)
+    for (const dir of dirs) {
+      const spacePath = join(root, dir)
+
+      try {
+        if (!statSync(spacePath).isDirectory()) {
+          continue
+        }
+      } catch {
+        continue
+      }
+
+      if (loadedPaths.has(spacePath)) {
+        continue
+      }
+
+      const space = loadSpaceFromPath(spacePath)
+      if (space) {
+        spaces.push(space)
+        loadedPaths.add(spacePath)
+      }
+    }
+  }
+
+  return spaces
 }
 
 function getSpaceIndexPath(): string {

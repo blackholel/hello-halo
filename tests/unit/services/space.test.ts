@@ -88,6 +88,24 @@ describe('Space Service', () => {
       expect(spaces).toHaveLength(0)
       expect(getSpace('legacy-halo-space-id')).toBeFalsy()
     })
+
+    it('should load spaces from legacy ~/.kite/spaces root for backward compatibility', () => {
+      const legacyRoot = path.join(globalThis.__KITE_TEST_DIR__, '.kite', 'spaces')
+      const legacySpacePath = path.join(legacyRoot, 'legacy-kite-space')
+      const metaPath = path.join(legacySpacePath, '.kite', 'meta.json')
+
+      fs.mkdirSync(path.dirname(metaPath), { recursive: true })
+      fs.writeFileSync(metaPath, JSON.stringify({
+        id: 'legacy-kite-space-id',
+        name: 'Legacy Kite Space',
+        icon: 'folder',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }))
+
+      const spaces = listSpaces()
+      expect(spaces.some(space => space.id === 'legacy-kite-space-id')).toBe(true)
+    })
   })
 
   describe('createSpace', () => {
@@ -141,6 +159,38 @@ describe('Space Service', () => {
 
       expect(space.path).toBe(customPath)
       expect(fs.existsSync(path.join(customPath, '.kite', 'meta.json'))).toBe(true)
+    })
+
+    it('should create default space with sanitized folder name', async () => {
+      const space = await createSpace({
+        name: 'A:B*Project?',
+        icon: 'folder'
+      })
+
+      expect(path.basename(space.path)).toBe('A-B-Project-')
+    })
+
+    it('should map windows reserved folder names to safe names', async () => {
+      const space = await createSpace({
+        name: 'CON',
+        icon: 'folder'
+      })
+
+      expect(path.basename(space.path)).toBe('CON-space')
+    })
+
+    it('should avoid overwriting when same default name is created twice', async () => {
+      const first = await createSpace({
+        name: 'Same Name',
+        icon: 'folder'
+      })
+      const second = await createSpace({
+        name: 'Same Name',
+        icon: 'folder'
+      })
+
+      expect(first.path).not.toBe(second.path)
+      expect(path.basename(second.path)).toBe('Same Name-2')
     })
   })
 

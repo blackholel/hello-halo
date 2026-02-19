@@ -76,7 +76,7 @@ export function HomePage(): JSX.Element {
   // Path selection state
   const [useCustomPath, setUseCustomPath] = useState(false)
   const [customPath, setCustomPath] = useState<string | null>(null)
-  const [defaultPath, setDefaultPath] = useState<string>('~/.kite/spaces')
+  const [defaultPath, setDefaultPath] = useState<string>('')
   const [activeTab, setActiveTab] = useState<'spaces' | 'extensions'>('spaces')
 
   // Close dialogs on Escape key
@@ -243,11 +243,21 @@ export function HomePage(): JSX.Element {
     const space = spaces.find(s => s.id === spaceId)
     if (!space) return
 
-    const isCustomPath = !space.path.includes('/.kite/spaces/')
+    let resolvedDefaultPath = defaultPath
+    if (!resolvedDefaultPath) {
+      resolvedDefaultPath = await loadDefaultPath()
+    }
 
-    const message = isCustomPath
-      ? t('Are you sure you want to delete this space?\n\nOnly Kite data (conversation history) will be deleted, your project files will be kept.')
-      : t('Are you sure you want to delete this space?\n\nAll conversations and files in the space will be deleted.')
+    const pathKind = resolveSpacePathKind(space.path, resolvedDefaultPath)
+
+    let message: string
+    if (pathKind === 'custom') {
+      message = t('Are you sure you want to delete this space?\n\nOnly Kite data (conversation history) will be deleted, your project files will be kept.')
+    } else if (pathKind === 'default') {
+      message = t('Are you sure you want to delete this space?\n\nAll conversations and files in the space will be deleted.')
+    } else {
+      message = t('Are you sure you want to delete this space?\n\nKite could not verify the storage type. This operation may delete all conversations and files in the space folder.')
+    }
 
     if (confirm(message)) {
       await deleteSpace(spaceId)
