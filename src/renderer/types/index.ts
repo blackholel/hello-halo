@@ -642,6 +642,7 @@ export interface AgentCompleteEvent extends AgentEventBase {
   durationMs?: number;
   reason?: 'completed' | 'stopped' | 'error' | 'no_text';
   terminalAt?: string;
+  finalContent?: string;
   tokenUsage?: TokenUsage | null;
   isPlan?: boolean;
 }

@@ -174,6 +174,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     streamingContent,
     isStreaming,
     thoughts,
+    processTrace,
     parallelGroups,
     isThinking,
     compactInfo,

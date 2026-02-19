@@ -22,7 +22,14 @@ import { SubAgentCard } from './SubAgentCard'
 import { SkillCard } from './SkillCard'
 import { TaskPanel } from '../task'
 import { useTaskStore } from '../../stores/task.store'
-import type { Message, Thought, CompactInfo, ParallelGroup, ToolStatus } from '../../types'
+import type {
+  Message,
+  Thought,
+  CompactInfo,
+  ParallelGroup,
+  ProcessTraceNode,
+  ToolStatus
+} from '../../types'
 import { useTranslation } from '../../i18n'
 import { buildTimelineSegments, type TimelineSegment } from '../../utils/thought-utils'
 
@@ -52,6 +59,103 @@ interface MessageListProps {
   onExecutePlan?: (planContent: string) => void  // Callback when "Execute Plan" button is clicked
   toolStatusById?: Record<string, ToolStatus>
   availableToolsSnapshot?: AvailableToolsSnapshot
+}
+
+function extractThoughtsFromProcessTrace(processTrace?: ProcessTraceNode[]): Thought[] {
+  if (!processTrace || processTrace.length === 0) {
+    return []
+  }
+
+  const thoughts: Thought[] = []
+  const seen = new Set<string>()
+
+  for (const node of processTrace) {
+    const payload =
+      node.payload && typeof node.payload === 'object'
+        ? (node.payload as Record<string, unknown>)
+        : null
+    const payloadThought = payload?.thought
+    if (
+      payloadThought &&
+      typeof payloadThought === 'object' &&
+      typeof (payloadThought as Thought).id === 'string' &&
+      typeof (payloadThought as Thought).type === 'string' &&
+      typeof (payloadThought as Thought).content === 'string' &&
+      typeof (payloadThought as Thought).timestamp === 'string'
+    ) {
+      const thought = payloadThought as Thought
+      const key = `${thought.type}:${thought.id}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        thoughts.push(thought)
+      }
+      continue
+    }
+
+    if ((node.kind === 'tool_call' || node.kind === 'tool_result') && payload) {
+      const toolCallId =
+        (typeof payload.toolCallId === 'string' && payload.toolCallId) ||
+        (typeof payload.toolId === 'string' && payload.toolId) ||
+        (typeof payload.id === 'string' && payload.id) ||
+        null
+      if (!toolCallId) continue
+
+      if (node.kind === 'tool_call') {
+        const toolName = typeof payload.name === 'string' ? payload.name : 'tool'
+        const thought: Thought = {
+          id: toolCallId,
+          type: 'tool_use',
+          content: `Tool call: ${toolName}`,
+          timestamp: node.ts || node.timestamp || new Date().toISOString(),
+          toolName,
+          toolInput:
+            payload.input && typeof payload.input === 'object'
+              ? (payload.input as Record<string, unknown>)
+              : undefined
+        }
+        const key = `${thought.type}:${thought.id}`
+        if (!seen.has(key)) {
+          seen.add(key)
+          thoughts.push(thought)
+        }
+      } else {
+        const isError = payload.isError === true
+        const result =
+          typeof payload.result === 'string'
+            ? payload.result
+            : payload.result == null
+              ? ''
+              : JSON.stringify(payload.result)
+        const thought: Thought = {
+          id: toolCallId,
+          type: 'tool_result',
+          content: isError ? 'Tool execution failed' : 'Tool execution succeeded',
+          timestamp: node.ts || node.timestamp || new Date().toISOString(),
+          toolOutput: result,
+          isError
+        }
+        const key = `${thought.type}:${thought.id}`
+        if (!seen.has(key)) {
+          seen.add(key)
+          thoughts.push(thought)
+        }
+      }
+    }
+  }
+
+  return thoughts
+}
+
+export function getMessageThoughtsForDisplay(message: Message): Thought[] {
+  if (Array.isArray(message.thoughts) && message.thoughts.length > 0) {
+    return message.thoughts
+  }
+
+  if (Array.isArray(message.processTrace) && message.processTrace.length > 0) {
+    return extractThoughtsFromProcessTrace(message.processTrace)
+  }
+
+  return []
 }
 
 /**
@@ -285,7 +389,7 @@ export function MessageList({
   isCompact = false,
   textBlockVersion = 0,
   workDir,
-  onOpenPlanInCanvas
+  onOpenPlanInCanvas,
   onExecutePlan,
   toolStatusById = {},
   availableToolsSnapshot
@@ -297,10 +401,6 @@ export function MessageList({
     }
     return extractThoughtsFromProcessTrace(processTrace)
   }, [thoughts, processTrace])
-
-  const isRunningLikeStatus = (status?: ToolStatus): boolean => {
-    return status === 'pending' || status === 'running' || status === 'waiting_approval'
-  }
 
   const isRunningLikeStatus = (status?: ToolStatus): boolean => {
     return status === 'pending' || status === 'running' || status === 'waiting_approval'
@@ -356,7 +456,7 @@ export function MessageList({
     }
 
     const calls: Array<{id: string; name: string; status: ToolStatus; input: Record<string, unknown>}> = []
-    for (const t of thoughts) {
+    for (const t of runtimeThoughts) {
       // Skip sub-agent thoughts
       if (t.parentToolUseId != null) continue
       // Skip Task and Skill
@@ -372,7 +472,7 @@ export function MessageList({
       })
     }
     return calls
-  }, [thoughts, toolStatusById])
+  }, [runtimeThoughts, toolStatusById])
 
   const runSummary = useMemo(() => {
     const statuses = Object.values(toolStatusById)
@@ -442,7 +542,7 @@ export function MessageList({
         const previousCost = getPreviousCost(index)
         const messageProcessThoughts = getMessageThoughtsForDisplay(message)
         // Show collapsed thoughts ABOVE assistant messages, in same container for consistent width
-        if (message.role === 'assistant' && message.thoughts && message.thoughts.length > 0) {
+        if (message.role === 'assistant' && messageProcessThoughts.length > 0) {
           const messageToolStatusById = Object.fromEntries(
             (message.toolCalls || []).map((toolCall) => [toolCall.id, toolCall.status])
           ) as Record<string, ToolStatus>
@@ -452,7 +552,7 @@ export function MessageList({
               <div className="w-[85%]">
                 {/* Thought process above the message (completed mode = collapsed by default) */}
                 <ThoughtProcess
-                  thoughts={message.thoughts}
+                  thoughts={messageProcessThoughts}
                   toolStatusById={messageToolStatusById}
                   isThinking={false}
                   mode="completed"
