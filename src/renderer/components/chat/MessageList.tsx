@@ -22,14 +22,7 @@ import { SubAgentCard } from './SubAgentCard'
 import { SkillCard } from './SkillCard'
 import { TaskPanel } from '../task'
 import { useTaskStore } from '../../stores/task.store'
-import type {
-  Message,
-  Thought,
-  CompactInfo,
-  ParallelGroup,
-  ProcessTraceNode,
-  ToolStatus
-} from '../../types'
+import type { Message, Thought, CompactInfo, ParallelGroup, ToolStatus } from '../../types'
 import { useTranslation } from '../../i18n'
 import { buildTimelineSegments, type TimelineSegment } from '../../utils/thought-utils'
 
@@ -56,6 +49,7 @@ interface MessageListProps {
   textBlockVersion?: number  // Increments on each new text block (for StreamingBubble reset)
   workDir?: string  // For skill suggestion card creation
   onOpenPlanInCanvas?: (planContent: string) => void
+  onExecutePlan?: (planContent: string) => void  // Callback when "Execute Plan" button is clicked
   toolStatusById?: Record<string, ToolStatus>
   availableToolsSnapshot?: AvailableToolsSnapshot
 }
@@ -291,7 +285,8 @@ export function MessageList({
   isCompact = false,
   textBlockVersion = 0,
   workDir,
-  onOpenPlanInCanvas,
+  onOpenPlanInCanvas
+  onExecutePlan,
   toolStatusById = {},
   availableToolsSnapshot
 }: MessageListProps) {
@@ -302,6 +297,10 @@ export function MessageList({
     }
     return extractThoughtsFromProcessTrace(processTrace)
   }, [thoughts, processTrace])
+
+  const isRunningLikeStatus = (status?: ToolStatus): boolean => {
+    return status === 'pending' || status === 'running' || status === 'waiting_approval'
+  }
 
   const isRunningLikeStatus = (status?: ToolStatus): boolean => {
     return status === 'pending' || status === 'running' || status === 'waiting_approval'
@@ -357,7 +356,7 @@ export function MessageList({
     }
 
     const calls: Array<{id: string; name: string; status: ToolStatus; input: Record<string, unknown>}> = []
-    for (const t of runtimeThoughts) {
+    for (const t of thoughts) {
       // Skip sub-agent thoughts
       if (t.parentToolUseId != null) continue
       // Skip Task and Skill
@@ -373,7 +372,7 @@ export function MessageList({
       })
     }
     return calls
-  }, [runtimeThoughts, toolStatusById])
+  }, [thoughts, toolStatusById])
 
   const runSummary = useMemo(() => {
     const statuses = Object.values(toolStatusById)
@@ -443,7 +442,7 @@ export function MessageList({
         const previousCost = getPreviousCost(index)
         const messageProcessThoughts = getMessageThoughtsForDisplay(message)
         // Show collapsed thoughts ABOVE assistant messages, in same container for consistent width
-        if (message.role === 'assistant' && messageProcessThoughts.length > 0) {
+        if (message.role === 'assistant' && message.thoughts && message.thoughts.length > 0) {
           const messageToolStatusById = Object.fromEntries(
             (message.toolCalls || []).map((toolCall) => [toolCall.id, toolCall.status])
           ) as Record<string, ToolStatus>
@@ -453,7 +452,7 @@ export function MessageList({
               <div className="w-[85%]">
                 {/* Thought process above the message (completed mode = collapsed by default) */}
                 <ThoughtProcess
-                  thoughts={messageProcessThoughts}
+                  thoughts={message.thoughts}
                   toolStatusById={messageToolStatusById}
                   isThinking={false}
                   mode="completed"

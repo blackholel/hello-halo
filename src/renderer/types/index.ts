@@ -639,6 +639,9 @@ export interface TokenUsage {
 export interface AgentCompleteEvent extends AgentEventBase {
   type: 'complete';
   duration?: number;
+  durationMs?: number;
+  reason?: 'completed' | 'stopped' | 'error' | 'no_text';
+  terminalAt?: string;
   tokenUsage?: TokenUsage | null;
   isPlan?: boolean;
 }

@@ -393,14 +393,7 @@ export const api = {
     answer: string | AskUserQuestionAnswerPayload
   ): Promise<ApiResponse> => {
     if (isElectron()) {
-      const bridge = (window as unknown as { kite?: { answerQuestion?: (id: string, payload: string | AskUserQuestionAnswerPayload) => Promise<ApiResponse> } }).kite
-      if (!bridge || typeof bridge.answerQuestion !== 'function') {
-        return {
-          success: false,
-          error: 'IPC bridge unavailable: answerQuestion'
-        }
-      }
-      return bridge.answerQuestion(conversationId, answer)
+      return window.halo.answerQuestion(conversationId, answer)
     }
     if (typeof answer === 'string') {
       return httpRequest('POST', '/api/agent/answer-question', { conversationId, answer })

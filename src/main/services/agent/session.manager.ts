@@ -366,19 +366,11 @@ export function getSessionState(conversationId: string): {
 } {
   const session = activeSessions.get(conversationId)
   if (!session) {
-    return {
-      isActive: false,
-      thoughts: [],
-      processTrace: [],
-      runId: null,
-      lifecycle: 'idle',
-      terminalReason: null
-    }
+    return { isActive: false, thoughts: [], runId: null, lifecycle: 'idle', terminalReason: null }
   }
   return {
     isActive: true,
     thoughts: [...session.thoughts],
-    processTrace: [...session.processTrace],
     spaceId: session.spaceId,
     runId: session.runId,
     lifecycle: session.lifecycle,

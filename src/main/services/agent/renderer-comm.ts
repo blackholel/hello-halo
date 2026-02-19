@@ -10,12 +10,6 @@ import { resolve } from 'path'
 import { broadcastToWebSocket } from '../../http/websocket'
 import { getConfig } from '../config.service'
 import { isAIBrowserTool } from '../ai-browser'
-import {
-  extractToolPath,
-  isBashCommandTouchingProtectedResourceDir,
-  isPathInProtectedResourceDir
-} from './resource-dir-guard.service'
-import { getSpaceResourcePolicy, isStrictSpaceOnlyPolicy } from './space-resource-policy.service'
 import type {
   ToolCall,
   SessionState,
@@ -331,6 +325,35 @@ export function createCanUseTool(
       JSON.stringify(input).substring(0, 200)
     )
     const strictSpaceOnly = isStrictSpaceOnlyPolicy(getSpaceResourcePolicy(workDir))
+
+    if (toolName === 'AskUserQuestion') {
+      // Wait for user response using session-specific resolver.
+      // Tool-call UI is sent from message-flow with the real tool_use.id.
+      const session = getActiveSession(conversationId)
+      if (!session) {
+        return { behavior: 'deny' as const, message: 'Session not found' }
+      }
+
+      if (session.pendingAskUserQuestion) {
+        return {
+          behavior: 'deny' as const,
+          message: 'Another AskUserQuestion is already pending'
+        }
+      }
+
+      const normalizedInput = normalizeAskUserQuestionInput(input)
+      const mode: AskUserQuestionMode = 'sdk_allow_updated_input'
+      return new Promise((resolveDecision) => {
+        session.pendingAskUserQuestion = {
+          resolve: resolveDecision,
+          inputSnapshot: normalizedInput,
+          expectedToolCallId: null,
+          runId: session.runId,
+          createdAt: Date.now(),
+          mode
+        }
+      })
+    }
 
     if (toolName === 'AskUserQuestion') {
       // Wait for user response using session-specific resolver.

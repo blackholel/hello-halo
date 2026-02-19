@@ -21,7 +21,26 @@
 
 import { create } from 'zustand'
 import { api } from '../api'
-import type { Conversation, ConversationMeta, Message, ToolCall, Artifact, Thought, AgentEventBase, AgentCompleteEvent, ImageAttachment, CompactInfo, CanvasContext, FileContextAttachment, ParallelGroup, ChangeSet } from '../types'
+import { useTaskStore } from './task.store'
+import type {
+  Conversation,
+  ConversationMeta,
+  Message,
+  ToolCall,
+  Artifact,
+  Thought,
+  AgentEventBase,
+  AgentCompleteEvent,
+  ImageAttachment,
+  CompactInfo,
+  CanvasContext,
+  FileContextAttachment,
+  ParallelGroup,
+  ChangeSet,
+  AgentRunLifecycle,
+  ToolStatus,
+  AskUserQuestionAnswerPayload
+} from '../types'
 import { canvasLifecycle } from '../services/canvas-lifecycle'
 import { buildParallelGroups, getThoughtKey } from '../utils/thought-utils'
 import i18n from '../i18n'
@@ -32,7 +51,6 @@ const PRE_RUN_BUFFER_TTL_MS = 2000
 
 type TerminalReason = 'completed' | 'stopped' | 'error' | 'no_text'
 type PendingRunEventKind =
-  | 'process'
   | 'message'
   | 'tool_call'
   | 'tool_result'
@@ -150,6 +168,18 @@ function createEmptySessionState(): SessionState {
     error: null,
     compactInfo: null,
     textBlockVersion: 0,
+    toolStatusById: {},
+    toolCallsById: {},
+    orphanToolResults: {},
+    availableToolsSnapshot: {
+      runId: null,
+      snapshotVersion: 0,
+      emittedAt: null,
+      tools: [],
+      toolCount: 0
+    },
+    pendingRunEvents: [],
+    // New fields
     parallelGroups: new Map(),
     activeAgentIds: [],
     planEnabled: false,
@@ -189,93 +219,6 @@ function isEventRunAccepted(session: SessionState, runId?: string): boolean {
   if (!session.activeRunId) return false
   if (session.activeRunId !== runId) return false
   return session.lifecycle === 'running'
-}
-
-function isThoughtLike(value: unknown): value is Thought {
-  if (!value || typeof value !== 'object') return false
-  const candidate = value as Partial<Thought>
-  return (
-    typeof candidate.id === 'string' &&
-    typeof candidate.type === 'string' &&
-    typeof candidate.content === 'string' &&
-    typeof candidate.timestamp === 'string'
-  )
-}
-
-function toProcessTraceNode(event: AgentProcessEvent): ProcessTraceNode {
-  return {
-    type: 'process',
-    kind: event.kind,
-    ts: event.ts || new Date().toISOString(),
-    visibility: event.visibility,
-    payload:
-      event.payload && typeof event.payload === 'object'
-        ? (event.payload as Record<string, unknown>)
-        : { value: event.payload as unknown }
-  }
-}
-
-function extractThoughtFromProcessEvent(event: AgentProcessEvent): Thought | null {
-  const payload =
-    event.payload && typeof event.payload === 'object'
-      ? (event.payload as Record<string, unknown>)
-      : null
-
-  const payloadThought = payload?.thought
-  if (isThoughtLike(payloadThought)) {
-    return payloadThought
-  }
-
-  if (event.kind === 'tool_call' && payload) {
-    const toolCallId =
-      (typeof payload.toolCallId === 'string' && payload.toolCallId) ||
-      (typeof payload.id === 'string' && payload.id) ||
-      null
-    const toolName = typeof payload.name === 'string' ? payload.name : undefined
-    if (!toolCallId || !toolName) {
-      return null
-    }
-    return {
-      id: toolCallId,
-      type: 'tool_use',
-      content: `Tool call: ${toolName}`,
-      timestamp: event.ts || new Date().toISOString(),
-      toolName,
-      toolInput:
-        payload.input && typeof payload.input === 'object'
-          ? (payload.input as Record<string, unknown>)
-          : undefined,
-      status: normalizeToolStatus(payload.status)
-    }
-  }
-
-  if (event.kind === 'tool_result' && payload) {
-    const toolCallId =
-      (typeof payload.toolCallId === 'string' && payload.toolCallId) ||
-      (typeof payload.toolId === 'string' && payload.toolId) ||
-      null
-    if (!toolCallId) {
-      return null
-    }
-    const isError = payload.isError === true
-    const resultText =
-      typeof payload.result === 'string'
-        ? payload.result
-        : payload.result == null
-          ? ''
-          : JSON.stringify(payload.result)
-    return {
-      id: toolCallId,
-      type: 'tool_result',
-      content: isError ? 'Tool execution failed' : 'Tool execution succeeded',
-      timestamp: event.ts || new Date().toISOString(),
-      toolOutput: resultText,
-      isError,
-      status: isError ? 'error' : 'success'
-    }
-  }
-
-  return null
 }
 
 function isRunningLikeToolStatus(status?: ToolStatus): boolean {
@@ -1314,9 +1257,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Replay buffered run events once barrier is established
     for (const event of replayEvents) {
       switch (event.kind) {
-        case 'process':
-          get().handleAgentProcess(event.payload as AgentProcessEvent)
-          break
         case 'message':
           get().handleAgentMessage(event.payload as AgentEventBase & { content: string; isComplete: boolean })
           break
@@ -1339,93 +1279,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
           get().handleAgentToolsAvailable(event.payload as AgentEventBase & { runId: string; snapshotVersion: number; emittedAt: string; tools: string[]; toolCount: number })
           break
         case 'complete':
-          void get().handleAgentComplete(event.payload as AgentCompleteEvent)
+          void get().handleAgentComplete(event.payload as AgentEventBase & { reason?: TerminalReason; terminalAt?: string })
           break
         default:
           break
       }
     }
-  },
-
-  handleAgentProcess: (data) => {
-    const { conversationId, runId, kind } = data
-    const payload =
-      data.payload && typeof data.payload === 'object'
-        ? (data.payload as Record<string, unknown>)
-        : {}
-    let accepted = false
-
-    set((state) => {
-      const newSessions = new Map(state.sessions)
-      const session = newSessions.get(conversationId) || createEmptySessionState()
-
-      if (runId && !session.activeRunId) {
-        newSessions.set(conversationId, {
-          ...session,
-          pendingRunEvents: enqueuePendingRunEvent(session, {
-            kind: 'process',
-            runId,
-            payload: data,
-            receivedAt: Date.now()
-          })
-        })
-        return { sessions: newSessions }
-      }
-
-      if (!isEventRunAccepted(session, runId)) {
-        return state
-      }
-      accepted = true
-
-      newSessions.set(conversationId, {
-        ...session,
-        activeRunId: runId ?? session.activeRunId,
-        processTrace: [...session.processTrace, toProcessTraceNode(data)]
-      })
-      return { sessions: newSessions }
-    })
-
-    if (!accepted) {
-      return
-    }
-
-    if (kind === 'tool_call') {
-      const toolCallPayload =
-        payload.toolCall && typeof payload.toolCall === 'object'
-          ? (payload.toolCall as Record<string, unknown>)
-          : payload
-      get().handleAgentToolCall({
-        ...data,
-        ...(toolCallPayload as unknown as ToolCall)
-      } as AgentEventBase & ToolCall)
-      return
-    }
-
-    if (kind === 'tool_result') {
-      const toolResultPayload =
-        payload.toolResult && typeof payload.toolResult === 'object'
-          ? (payload.toolResult as Record<string, unknown>)
-          : payload
-      get().handleAgentToolResult({
-        ...data,
-        ...(toolResultPayload as unknown as {
-          toolCallId?: string
-          toolId?: string
-          result: string
-          isError: boolean
-        })
-      })
-      return
-    }
-
-    const thought = extractThoughtFromProcessEvent(data)
-    if (!thought) {
-      return
-    }
-    get().handleAgentThought({
-      ...data,
-      thought
-    })
   },
 
   // Handle agent message - update session-specific streaming content
@@ -1731,59 +1590,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  // Handle complete - reload conversation from backend (Single Source of Truth)
-  // Key: Only set isGenerating=false AFTER backend data is loaded to prevent flash
+  // Terminal event for a run
   handleAgentComplete: async (data: AgentCompleteEvent) => {
-    const { spaceId, conversationId } = data
-
-          const updatedConversation: Conversation = {
-            ...cachedConversation,
-            messages,
-            messageCount: messages.length,
-            updatedAt: now
-          }
-          newCache.set(conversationId, updatedConversation)
-
-          const currentSpaceState = newSpaceStates.get(spaceId)
-          if (currentSpaceState) {
-            newSpaceStates.set(spaceId, {
-              ...currentSpaceState,
-              conversations: currentSpaceState.conversations.map((c) =>
-                c.id === conversationId
-                  ? {
-                      ...c,
-                      updatedAt: now,
-                      messageCount: messages.length,
-                      preview: finalContent.slice(0, 50)
-                    }
-                  : c
-              )
-            })
-          }
-        }
-
-        const newSessions = new Map(state.sessions)
-        const currentSession = newSessions.get(conversationId)
-        if (currentSession) {
-          newSessions.set(conversationId, {
-            ...currentSession,
-            isGenerating: false,
-            isStreaming: false,
-            isThinking: false,
-            streamingContent: '',
-            pendingAskUserQuestion: null,
-            failedAskUserQuestion: null,
-            compactInfo: null
-          })
-        }
-        return {
-          spaceStates: newSpaceStates,
-          sessions: newSessions,
-          conversationCache: newCache
-        }
-      })
-      return true
-    }
+    const { spaceId, conversationId, runId, reason } = data
+    const terminalReason: TerminalReason = reason ?? 'completed'
 
     let waitForPendingQuestion = false
     let shouldFinalizeTasks = false

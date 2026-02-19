@@ -53,6 +53,8 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     answerQuestion,
     dismissAskUserQuestion,
     setPlanEnabled,
+    answerQuestion,
+    dismissAskUserQuestion
   } = useChatStore()
   const { openPlan } = useCanvasLifecycle()
 
@@ -177,11 +179,11 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     compactInfo,
     error,
     textBlockVersion,
+    planEnabled,
     toolStatusById,
     availableToolsSnapshot,
     pendingAskUserQuestion,
-    failedAskUserQuestion,
-    planEnabled
+    failedAskUserQuestion
   } = session
 
   // Smart auto-scroll: only scrolls when user is at bottom
