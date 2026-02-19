@@ -6,9 +6,11 @@ import { shell } from 'electron'
 import { join } from 'path'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, rmSync } from 'fs'
 import { getKiteDir, getLegacySpacesDir, getTempSpacePath, getSpacesDir } from './config.service'
-import { updateSpaceConfig } from './space-config.service'
+import { getSpaceConfig, updateSpaceConfig } from './space-config.service'
 import { v4 as uuidv4 } from 'uuid'
 import { isPathWithinBasePaths } from '../utils/path-validation'
+import { ensureSpaceResourcePolicy } from './agent/space-resource-policy.service'
+import type { ResourceRef } from './resource-ref.service'
 
 interface Space {
   id: string

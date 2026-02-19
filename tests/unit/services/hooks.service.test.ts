@@ -192,7 +192,7 @@ describe('hooks.service', () => {
   })
 
   describe('buildHooksConfig mode boundaries', () => {
-    it('should merge global and space hooks in kite mode', () => {
+    it('should disable hooks by default in strict space-only mode', () => {
       mockGetLockedConfigSourceMode.mockReturnValue('kite')
       mockGetConfig.mockReturnValue({
         claudeCode: {
@@ -202,6 +202,31 @@ describe('hooks.service', () => {
         }
       } as ReturnType<typeof getConfig>)
       mockGetSpaceConfig.mockReturnValue({
+        claudeCode: {
+          hooks: {
+            PreToolUse: [createHookDef('space', 'echo space')]
+          }
+        }
+      } as any)
+
+      const result = buildHooksConfig('/test/workdir')
+      expect(result).toBeUndefined()
+    })
+
+    it('should merge global and space hooks in kite mode when policy is legacy', () => {
+      mockGetLockedConfigSourceMode.mockReturnValue('kite')
+      mockGetConfig.mockReturnValue({
+        claudeCode: {
+          hooks: {
+            PreToolUse: [createHookDef('global', 'echo global')]
+          }
+        }
+      } as ReturnType<typeof getConfig>)
+      mockGetSpaceConfig.mockReturnValue({
+        resourcePolicy: {
+          version: 1,
+          mode: 'legacy'
+        },
         claudeCode: {
           hooks: {
             PreToolUse: [createHookDef('space', 'echo space')]

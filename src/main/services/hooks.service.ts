@@ -19,6 +19,7 @@ import { getSpaceConfig } from './space-config.service'
 import { FileCache } from '../utils/file-cache'
 import { listEnabledPlugins } from './plugins.service'
 import { getLockedConfigSourceMode, getLockedUserConfigRootDir } from './config-source-mode.service'
+import { getSpaceResourcePolicy, isStrictSpaceOnlyPolicy } from './agent/space-resource-policy.service'
 
 // ============================================
 // Kite Settings Types (Claude Code compatible)

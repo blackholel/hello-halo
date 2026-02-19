@@ -20,6 +20,7 @@ import { createAIBrowserMcpServer, AI_BROWSER_SYSTEM_PROMPT } from '../ai-browse
 import { SKILLS_LAZY_SYSTEM_PROMPT } from '../skills-mcp-server'
 import { buildPluginMcpServers } from '../plugin-mcp.service'
 import { getLockedConfigSourceMode, getLockedUserConfigRootDir } from '../config-source-mode.service'
+import { getSpaceResourcePolicy, isStrictSpaceOnlyPolicy } from './space-resource-policy.service'
 import type { PluginConfig, SettingSource, ToolCall } from './types'
 
 // Re-export types for convenience
