@@ -29,6 +29,7 @@ import {
 import { parseSDKMessages, formatCanvasContext, buildMessageContent } from './message-parser'
 import { broadcastMcpStatus } from './mcp-status.service'
 import { expandLazyDirectives } from './skill-expander'
+import { getSpaceResourcePolicy, isStrictSpaceOnlyPolicy } from './space-resource-policy.service'
 import { findEnabledPluginByInput } from '../plugins.service'
 import {
   beginChangeSet,
@@ -332,6 +333,30 @@ function extractMcpDirectives(input: string, conversationId: string): McpDirecti
   return { text: outLines.join('\n'), enabled, missing }
 }
 
+function stripMcpDirectives(input: string): McpDirectiveResult {
+  const lines = input.split(/\r?\n/)
+  let inFence = false
+
+  const outLines = lines.map((line) => {
+    const trimmed = line.trim()
+    if (trimmed.startsWith('```')) {
+      inFence = !inFence
+      return line
+    }
+    if (inFence) return line
+    if (trimmed.match(/^\/mcp(?:\s+(.+))?$/i)) {
+      return '<!-- injected: mcp -->'
+    }
+    return line
+  })
+
+  return {
+    text: outLines.join('\n'),
+    enabled: [],
+    missing: []
+  }
+}
+
 /**
  * Send message to agent (supports multiple concurrent sessions)
  */
@@ -380,11 +405,16 @@ export async function sendMessage(
   beginChangeSet(spaceId, conversationId, workDir)
   const spaceConfig = getSpaceConfig(workDir)
   const { effectiveLazyLoad: skillsLazyLoad, toolkit } = getEffectiveSkillsLazyLoad(workDir, config)
+  const policy = getSpaceResourcePolicy(workDir)
+  const strictSpaceOnly = isStrictSpaceOnlyPolicy(policy)
+  const strictBlocksMcpDirective = strictSpaceOnly && policy.allowPluginMcpDirective !== true
   const toolkitHash = getToolkitHash(toolkit)
 
-  const mcpDirectiveResult = skillsLazyLoad
-    ? extractMcpDirectives(message, conversationId)
-    : { text: message, enabled: [], missing: [] }
+  const mcpDirectiveResult = strictBlocksMcpDirective
+    ? stripMcpDirectives(message)
+    : (skillsLazyLoad
+      ? extractMcpDirectives(message, conversationId)
+      : { text: message, enabled: [], missing: [] })
   const messageForSend = mcpDirectiveResult.text
 
   if (mcpDirectiveResult.enabled.length > 0) {
@@ -638,8 +668,10 @@ export async function sendMessage(
     // This provides AI awareness of what user is currently viewing
     const canvasPrefix = formatCanvasContext(canvasContext)
 
-    const expandedMessage = skillsLazyLoad
-      ? expandLazyDirectives(messageForSend, workDir, toolkit)
+    const expandedMessage = (skillsLazyLoad || strictSpaceOnly)
+      ? expandLazyDirectives(messageForSend, workDir, toolkit, {
+        allowSources: strictSpaceOnly ? ['space'] : undefined
+      })
       : {
           text: messageForSend,
           expanded: { skills: [], commands: [], agents: [] },

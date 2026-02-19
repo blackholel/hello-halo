@@ -73,7 +73,13 @@ export function SkillDetailModal({ skill, workDir, onClose, onEdit }: SkillDetai
   // Handle copy to space
   const handleCopyToSpace = async () => {
     if (workDir && skill.source !== 'space') {
-      await copyToSpace(skill.name, workDir)
+      const result = await copyToSpace(skill, workDir)
+      if (result.status === 'conflict') {
+        const overwrite = window.confirm(t('Already added. Overwrite existing resource?'))
+        if (overwrite) {
+          await copyToSpace(skill, workDir, { overwrite: true })
+        }
+      }
       onClose()
     }
   }

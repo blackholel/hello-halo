@@ -6,12 +6,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { X, Save, ListChecks, Plus, Trash2, GripVertical, Play } from 'lucide-react'
 import { useTranslation } from '../../i18n'
 import type { Workflow, WorkflowStep } from '../../types'
-import { buildDirective } from '../../utils/directive-helpers'
 import { useWorkflowsStore } from '../../stores/workflows.store'
 import { useSkillsStore } from '../../stores/skills.store'
 import { useAgentsStore } from '../../stores/agents.store'
 import { useSpaceStore } from '../../stores/space.store'
-import { useToolkitStore } from '../../stores/toolkit.store'
 
 interface WorkflowEditorModalProps {
   spaceId: string
@@ -89,12 +87,6 @@ export function WorkflowEditorModal({ spaceId, workflow, onClose, onSaved }: Wor
     isLoading: isLoadingAgents,
     loadAgents
   } = useAgentsStore()
-  const {
-    loadToolkit,
-    getToolkit,
-    isInToolkit,
-    isToolkitLoaded
-  } = useToolkitStore()
   const isEditMode = !!workflow
   const activeSpace = useMemo(() => {
     if (currentSpace?.id === spaceId) return currentSpace
@@ -104,9 +96,6 @@ export function WorkflowEditorModal({ spaceId, workflow, onClose, onSaved }: Wor
     return null
   }, [currentSpace, spaces, haloSpace, spaceId])
   const workDir = activeSpace?.path
-  const toolkitLoaded = !!activeSpace && isToolkitLoaded(activeSpace.id)
-  const toolkit = activeSpace ? getToolkit(activeSpace.id) : null
-  const isToolkitMode = !!activeSpace && !activeSpace.isTemp && toolkitLoaded && toolkit !== null
 
   const clearErrors = useCallback(() => {
     setError(null)
@@ -168,11 +157,6 @@ export function WorkflowEditorModal({ spaceId, workflow, onClose, onSaved }: Wor
     loadAgents
   ])
 
-  useEffect(() => {
-    if (!activeSpace || activeSpace.isTemp || toolkitLoaded) return
-    void loadToolkit(activeSpace.id)
-  }, [activeSpace, toolkitLoaded, loadToolkit])
-
   const selectedStep = useMemo(
     () => steps.find(step => step.id === selectedStepId) || null,
     [steps, selectedStepId]
@@ -184,18 +168,14 @@ export function WorkflowEditorModal({ spaceId, workflow, onClose, onSaved }: Wor
   )
 
   const availableSkills = useMemo(() => {
-    const base = isToolkitMode && activeSpace
-      ? skills.filter((skill) => isInToolkit(activeSpace.id, buildDirective('skill', skill)))
-      : [...skills]
+    const base = skills.filter(skill => skill.source === 'space')
     return base.sort((a, b) => a.name.localeCompare(b.name))
-  }, [skills, isToolkitMode, activeSpace, toolkit, isInToolkit])
+  }, [skills])
 
   const availableAgents = useMemo(() => {
-    const base = isToolkitMode && activeSpace
-      ? agents.filter((agent) => isInToolkit(activeSpace.id, buildDirective('agent', agent)))
-      : [...agents]
+    const base = agents.filter(agent => agent.source === 'space')
     return base.sort((a, b) => a.name.localeCompare(b.name))
-  }, [agents, isToolkitMode, activeSpace, toolkit, isInToolkit])
+  }, [agents])
   const selectedSkillName = useMemo(() => {
     if (!selectedStep || selectedStep.type !== 'skill') return ''
     return availableSkills.some(skill => skill.name === selectedStep.name) ? (selectedStep.name || '') : ''
@@ -662,11 +642,6 @@ export function WorkflowEditorModal({ spaceId, workflow, onClose, onSaved }: Wor
                             </option>
                           ))}
                         </select>
-                        {isToolkitMode && (
-                          <p className="text-[11px] text-muted-foreground mt-1">
-                            {t('Only toolkit resources are selectable')}
-                          </p>
-                        )}
                       </div>
                     )}
 

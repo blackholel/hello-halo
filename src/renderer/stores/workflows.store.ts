@@ -6,7 +6,7 @@ import { create } from 'zustand'
 import { api } from '../api'
 import type { Workflow, WorkflowMeta, WorkflowStep } from '../types'
 import { useChatStore } from './chat.store'
-import { useToolkitStore } from './toolkit.store'
+import { useSpaceStore } from './space.store'
 
 export interface WorkflowRunStepState {
   id: string
@@ -81,11 +81,21 @@ function shouldSummarizeAfterStep(step: WorkflowStep, stepIndex: number, totalSt
   return !!step.summarizeAfter && stepIndex < totalSteps - 1
 }
 
-function hasToolkitResource(
+function hasSpaceResource(
   name: string,
-  refs: Array<{ name: string }>
+  refs: Array<{ name: string; namespace?: string }>
 ): boolean {
-  return refs.some((ref) => ref.name === name)
+  const trimmed = name.trim()
+  if (!trimmed) return false
+
+  if (!trimmed.includes(':')) {
+    return refs.some((ref) => ref.name === trimmed && !ref.namespace)
+      || refs.some((ref) => ref.name === trimmed)
+  }
+
+  const [namespace, resourceName] = trimmed.split(':', 2)
+  if (!namespace || !resourceName) return false
+  return refs.some((ref) => ref.name === resourceName && ref.namespace === namespace)
 }
 
 export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
@@ -193,25 +203,35 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
     const workflow = await get().loadWorkflow(spaceId, workflowId)
     if (!workflow) return
 
-    const toolkit = await useToolkitStore.getState().loadToolkit(spaceId)
-    if (toolkit) {
-      const missingSteps: string[] = []
+    const currentSpace = useSpaceStore.getState().currentSpace
+    const knownSpace = currentSpace?.id === spaceId
+      ? currentSpace
+      : useSpaceStore.getState().spaces.find(space => space.id === spaceId)
+    if (knownSpace?.path) {
+      const [skillsResponse, agentsResponse] = await Promise.all([
+        api.listSkills(knownSpace.path),
+        api.listAgents(knownSpace.path)
+      ])
 
+      const spaceSkills = (skillsResponse.success ? (skillsResponse.data as Array<{ name: string; namespace?: string; source: string }>) : [])
+        .filter(skill => skill.source === 'space')
+      const spaceAgents = (agentsResponse.success ? (agentsResponse.data as Array<{ name: string; namespace?: string; source: string }>) : [])
+        .filter(agent => agent.source === 'space')
+
+      const missingSteps: string[] = []
       workflow.steps.forEach((step, index) => {
         const stepName = step.name?.trim()
         if (!stepName) return
-
-        if (step.type === 'skill' && !hasToolkitResource(stepName, toolkit.skills)) {
+        if (step.type === 'skill' && !hasSpaceResource(stepName, spaceSkills)) {
           missingSteps.push(`Step ${index + 1}: skill ${stepName}`)
         }
-
-        if (step.type === 'agent' && !hasToolkitResource(stepName, toolkit.agents)) {
+        if (step.type === 'agent' && !hasSpaceResource(stepName, spaceAgents)) {
           missingSteps.push(`Step ${index + 1}: agent ${stepName}`)
         }
       })
 
       if (missingSteps.length > 0) {
-        const message = `Workflow contains resources outside toolkit: ${missingSteps.join(', ')}`
+        const message = `Workflow contains non-space resources: ${missingSteps.join(', ')}`
         console.warn('[WorkflowsStore]', message)
         set({ error: message })
         return

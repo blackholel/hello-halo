@@ -178,6 +178,77 @@ describe('hooks.service', () => {
     })
   })
 
+  describe('buildHooksConfig mode boundaries', () => {
+    it('should disable hooks by default in strict space-only mode', () => {
+      mockGetLockedConfigSourceMode.mockReturnValue('kite')
+      mockGetConfig.mockReturnValue({
+        claudeCode: {
+          hooks: {
+            PreToolUse: [createHookDef('global', 'echo global')]
+          }
+        }
+      } as ReturnType<typeof getConfig>)
+      mockGetSpaceConfig.mockReturnValue({
+        claudeCode: {
+          hooks: {
+            PreToolUse: [createHookDef('space', 'echo space')]
+          }
+        }
+      } as any)
+
+      const result = buildHooksConfig('/test/workdir')
+      expect(result).toBeUndefined()
+    })
+
+    it('should merge global and space hooks in kite mode when policy is legacy', () => {
+      mockGetLockedConfigSourceMode.mockReturnValue('kite')
+      mockGetConfig.mockReturnValue({
+        claudeCode: {
+          hooks: {
+            PreToolUse: [createHookDef('global', 'echo global')]
+          }
+        }
+      } as ReturnType<typeof getConfig>)
+      mockGetSpaceConfig.mockReturnValue({
+        resourcePolicy: {
+          version: 1,
+          mode: 'legacy'
+        },
+        claudeCode: {
+          hooks: {
+            PreToolUse: [createHookDef('space', 'echo space')]
+          }
+        }
+      } as any)
+
+      const result = buildHooksConfig('/test/workdir')
+      expect(result?.PreToolUse).toHaveLength(2)
+      expect(result?.PreToolUse?.[0].matcher).toBe('global')
+      expect(result?.PreToolUse?.[1].matcher).toBe('space')
+    })
+
+    it('should ignore global and space hooks in claude mode', () => {
+      mockGetLockedConfigSourceMode.mockReturnValue('claude')
+      mockGetConfig.mockReturnValue({
+        claudeCode: {
+          hooks: {
+            PreToolUse: [createHookDef('global', 'echo global')]
+          }
+        }
+      } as ReturnType<typeof getConfig>)
+      mockGetSpaceConfig.mockReturnValue({
+        claudeCode: {
+          hooks: {
+            PreToolUse: [createHookDef('space', 'echo space')]
+          }
+        }
+      } as any)
+
+      const result = buildHooksConfig('/test/workdir')
+      expect(result).toBeUndefined()
+    })
+  })
+
   describe('convertToSdkHooksFormat', () => {
     it('should return undefined for undefined hooks', () => {
       const result = convertToSdkHooksFormat(undefined)

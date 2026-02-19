@@ -13,15 +13,15 @@ import rehypeHighlight from 'rehype-highlight'
 import { Check, Copy } from 'lucide-react'
 import { useTranslation } from '../../i18n'
 import { hljs } from '../../lib/highlight-loader'
-import { SkillSuggestionCard, parseSkillSuggestion } from '../skills/SkillSuggestionCard'
+import { ResourceSuggestionCard, parseResourceSuggestion } from '../skills/SkillSuggestionCard'
 
 interface MarkdownRendererProps {
   content: string
   className?: string
-  workDir?: string  // For skill suggestion card creation
+  workDir?: string
 }
 
-// Code block with copy button and skill suggestion detection
+// Code block with copy button and suggestion detection
 interface CodeBlockProps extends React.HTMLAttributes<HTMLElement> {
   children?: React.ReactNode
   workDir?: string
@@ -54,12 +54,13 @@ function CodeBlock({
     return extractText(children)
   }, [children])
 
-  // Check if this is a JSON code block with skill_suggestion
-  const skillSuggestion = useMemo(() => {
-    if (language === 'json' && workDir && rawContent) {
-      return parseSkillSuggestion(rawContent)
+  const resourceSuggestion = useMemo(() => {
+    if (!workDir || !rawContent) return null
+    const normalizedLanguage = language.toLowerCase()
+    if (normalizedLanguage && normalizedLanguage !== 'json' && normalizedLanguage !== 'jsonc') {
+      return null
     }
-    return null
+    return parseResourceSuggestion(rawContent)
   }, [language, workDir, rawContent])
 
   const handleCopy = useCallback(async () => {
@@ -83,9 +84,8 @@ function CodeBlock({
     )
   }
 
-  // Render SkillSuggestionCard for skill_suggestion JSON
-  if (skillSuggestion && workDir) {
-    return <SkillSuggestionCard suggestion={skillSuggestion} workDir={workDir} />
+  if (resourceSuggestion && workDir) {
+    return <ResourceSuggestionCard suggestion={resourceSuggestion} workDir={workDir} />
   }
 
   // Code block
@@ -234,8 +234,24 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
 
   // Create components with workDir context - memoized to avoid recreation
   const components = useMemo(() => createComponents(workDir), [workDir])
+  const suggestionFromMarkdown = useMemo(() => {
+    if (!workDir) return null
+    const trimmed = content.trim()
+    if (!trimmed) return null
+
+    // Avoid replacing mixed markdown content (text + fenced suggestion) with a full card.
+    // Full-message replacement is only for pure suggestion payloads.
+    const hasFence = /```/.test(trimmed)
+    const isSingleFence = /^```(?:json|jsonc)?\s*[\s\S]*?```\s*$/i.test(trimmed)
+    if (hasFence && !isSingleFence) return null
+
+    return parseResourceSuggestion(trimmed)
+  }, [content, workDir])
 
   if (!content) return null
+  if (suggestionFromMarkdown && workDir) {
+    return <ResourceSuggestionCard suggestion={suggestionFromMarkdown} workDir={workDir} />
+  }
 
   return (
     <div className={`markdown-content ${className}`}>

@@ -331,6 +331,22 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
     res.json({ success: true, data: migrateToToolkit(workDir, skills, agents) })
   }))
 
+  // ===== Preset Routes =====
+  app.get('/api/presets', safeRoute(async (_req, res) => {
+    const { listPresets } = await import('../../services/preset.service')
+    res.json({ success: true, data: listPresets() })
+  }))
+
+  app.get('/api/presets/:presetId', safeRoute(async (req, res) => {
+    const { getPreset } = await import('../../services/preset.service')
+    const preset = getPreset(req.params.presetId)
+    if (!preset) {
+      res.json({ success: false, error: `Preset not found: ${req.params.presetId}` })
+      return
+    }
+    res.json({ success: true, data: preset })
+  }))
+
   // ===== Skills Routes =====
   app.get('/api/skills', safeRoute(async (req, res) => {
     const workDir = validateWorkDir(req, res)
@@ -390,6 +406,14 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
       return
     }
     res.json({ success: true, data: skill })
+  }))
+
+  app.post('/api/skills/copy-by-ref', safeRoute(async (req, res) => {
+    const workDir = validateWorkDir(req, res)
+    if (workDir === null) return
+    const { copySkillToSpaceByRef } = await import('../../services/skills.service')
+    const { ref, options } = req.body
+    res.json({ success: true, data: copySkillToSpaceByRef(ref, workDir, options) })
   }))
 
   app.post('/api/skills/clear-cache', safeRoute(async (_req, res) => {
@@ -459,6 +483,14 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
     res.json({ success: true, data: agent })
   }))
 
+  app.post('/api/agents/copy-by-ref', safeRoute(async (req, res) => {
+    const workDir = validateWorkDir(req, res)
+    if (workDir === null) return
+    const { copyAgentToSpaceByRef } = await import('../../services/agents.service')
+    const { ref, options } = req.body
+    res.json({ success: true, data: copyAgentToSpaceByRef(ref, workDir, options) })
+  }))
+
   app.post('/api/agents/clear-cache', safeRoute(async (_req, res) => {
     const { clearAgentsCache } = await import('../../services/agents.service')
     clearAgentsCache()
@@ -524,6 +556,14 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
       return
     }
     res.json({ success: true, data: command })
+  }))
+
+  app.post('/api/commands/copy-by-ref', safeRoute(async (req, res) => {
+    const workDir = validateWorkDir(req, res)
+    if (workDir === null) return
+    const { copyCommandToSpaceByRef } = await import('../../services/commands.service')
+    const { ref, options } = req.body
+    res.json({ success: true, data: copyCommandToSpaceByRef(ref, workDir, options) })
   }))
 
   app.post('/api/commands/clear-cache', safeRoute(async (_req, res) => {

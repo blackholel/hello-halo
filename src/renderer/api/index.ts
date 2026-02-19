@@ -630,6 +630,17 @@ export const api = {
     return httpRequest('POST', '/api/skills/copy', { skillName, workDir })
   },
 
+  copySkillToSpaceByRef: async (
+    ref: Record<string, unknown>,
+    workDir: string,
+    options?: { overwrite?: boolean }
+  ): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.kite.copySkillToSpaceByRef(ref, workDir, options)
+    }
+    return httpRequest('POST', '/api/skills/copy-by-ref', { ref, workDir, options })
+  },
+
   clearSkillsCache: async (): Promise<ApiResponse> => {
     if (isElectron()) {
       return window.halo.clearSkillsCache()
@@ -680,6 +691,17 @@ export const api = {
       return window.halo.copyCommandToSpace(commandName, workDir)
     }
     return httpRequest('POST', '/api/commands/copy', { commandName, workDir })
+  },
+
+  copyCommandToSpaceByRef: async (
+    ref: Record<string, unknown>,
+    workDir: string,
+    options?: { overwrite?: boolean }
+  ): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.kite.copyCommandToSpaceByRef(ref, workDir, options)
+    }
+    return httpRequest('POST', '/api/commands/copy-by-ref', { ref, workDir, options })
   },
 
   clearCommandsCache: async (): Promise<ApiResponse> => {
@@ -734,6 +756,17 @@ export const api = {
     return httpRequest('POST', '/api/agents/copy', { agentName, workDir })
   },
 
+  copyAgentToSpaceByRef: async (
+    ref: Record<string, unknown>,
+    workDir: string,
+    options?: { overwrite?: boolean }
+  ): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.kite.copyAgentToSpaceByRef(ref, workDir, options)
+    }
+    return httpRequest('POST', '/api/agents/copy-by-ref', { ref, workDir, options })
+  },
+
   clearAgentsCache: async (): Promise<ApiResponse> => {
     if (isElectron()) {
       return window.halo.clearAgentsCache()
@@ -782,6 +815,21 @@ export const api = {
       skills,
       agents
     })
+  },
+
+  // ===== Presets =====
+  listPresets: async (): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.kite.listPresets()
+    }
+    return httpRequest('GET', '/api/presets')
+  },
+
+  getPreset: async (presetId: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.kite.getPreset(presetId)
+    }
+    return httpRequest('GET', `/api/presets/${encodeURIComponent(presetId)}`)
   },
 
   // ===== Workflows =====

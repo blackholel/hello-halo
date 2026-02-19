@@ -27,7 +27,6 @@ import { useSpaceStore } from '../../stores/space.store'
 import { useSkillsStore, type SkillDefinition } from '../../stores/skills.store'
 import { useAgentsStore, type AgentDefinition } from '../../stores/agents.store'
 import { useCommandsStore, type CommandDefinition } from '../../stores/commands.store'
-import { useToolkitStore } from '../../stores/toolkit.store'
 import { getOnboardingPrompt } from '../onboarding/onboardingData'
 import { ImageAttachmentPreview } from './ImageAttachmentPreview'
 import { FileContextPreview } from './FileContextPreview'
@@ -37,7 +36,6 @@ import { processImage, isValidImageType, formatFileSize } from '../../utils/imag
 import type { ImageAttachment, FileContextAttachment } from '../../types'
 import { useTranslation } from '../../i18n'
 import { useComposerStore } from '../../stores/composer.store'
-import { buildDirective } from '../../utils/directive-helpers'
 import { commandKey } from '../../../shared/command-utils'
 import { getTriggerContext, replaceTriggerToken, type TriggerContext } from '../../utils/composer-trigger'
 import { isResourceEnabled, toResourceKey } from '../../utils/resource-key'
@@ -131,18 +129,6 @@ export function InputArea({
     loadedWorkDir: state.loadedWorkDir,
     loadAgents: state.loadAgents
   }))
-  const {
-    loadToolkit,
-    getToolkit,
-    isToolkitLoaded,
-    isInToolkit
-  } = useToolkitStore((state) => ({
-    loadToolkit: state.loadToolkit,
-    getToolkit: state.getToolkit,
-    isToolkitLoaded: state.isToolkitLoaded,
-    isInToolkit: state.isInToolkit
-  }))
-
   const resolvedSpace = useMemo(() => {
     if (!spaceId) return null
     if (currentSpace?.id === spaceId) return currentSpace
@@ -158,9 +144,6 @@ export function InputArea({
 
   const enabledSkills = spacePreferences?.skills?.enabled || []
   const enabledAgents = spacePreferences?.agents?.enabled || []
-  const toolkitLoaded = spaceId ? isToolkitLoaded(spaceId) : false
-  const toolkit = spaceId ? getToolkit(spaceId) : null
-  const toolkitMode = Boolean(spaceId && toolkitLoaded && toolkit !== null)
 
   const triggerQuery = triggerContext?.query.trim().toLowerCase() || ''
 
@@ -181,12 +164,6 @@ export function InputArea({
       void loadAgents(workDir)
     }
   }, [agents.length, loadAgents, loadedAgentsWorkDir, workDir])
-
-  useEffect(() => {
-    if (!spaceId || toolkitLoaded) return
-    if (resolvedSpace?.isTemp) return
-    void loadToolkit(spaceId)
-  }, [loadToolkit, resolvedSpace?.isTemp, spaceId, toolkitLoaded])
 
   // Auto-clear error after 3 seconds
   useEffect(() => {
@@ -230,10 +207,8 @@ export function InputArea({
   }, [triggerQuery])
 
   const filteredSkills = useMemo(() => {
-    let items = skills
-    if (toolkitMode && spaceId) {
-      items = items.filter(skill => isInToolkit(spaceId, buildDirective('skill', skill)))
-    } else if (enabledSkills.length > 0) {
+    let items = skills.filter(skill => skill.source === 'space')
+    if (enabledSkills.length > 0) {
       items = items.filter(skill => isResourceEnabled(enabledSkills, skill))
     }
     return items.filter((skill) => matchesTriggerQuery(
@@ -241,25 +216,20 @@ export function InputArea({
       skill.name,
       skill.description
     ))
-  }, [enabledSkills, isInToolkit, matchesTriggerQuery, skills, spaceId, toolkitMode])
+  }, [enabledSkills, matchesTriggerQuery, skills])
 
   const filteredCommands = useMemo(() => {
-    let items = commands
-    if (toolkitMode && spaceId) {
-      items = items.filter(command => isInToolkit(spaceId, buildDirective('command', command)))
-    }
+    const items = commands.filter(command => command.source === 'space')
     return items.filter((command) => matchesTriggerQuery(
       commandKey(command),
       command.name,
       command.description
     ))
-  }, [commands, isInToolkit, matchesTriggerQuery, spaceId, toolkitMode])
+  }, [commands, matchesTriggerQuery])
 
   const filteredAgents = useMemo(() => {
-    let items = agents
-    if (toolkitMode && spaceId) {
-      items = items.filter(agent => isInToolkit(spaceId, buildDirective('agent', agent)))
-    } else if (enabledAgents.length > 0) {
+    let items = agents.filter(agent => agent.source === 'space')
+    if (enabledAgents.length > 0) {
       items = items.filter(agent => isResourceEnabled(enabledAgents, agent))
     }
     return items.filter((agent) => matchesTriggerQuery(
@@ -267,7 +237,7 @@ export function InputArea({
       agent.name,
       agent.description
     ))
-  }, [agents, enabledAgents, isInToolkit, matchesTriggerQuery, spaceId, toolkitMode])
+  }, [agents, enabledAgents, matchesTriggerQuery])
 
   const skillSuggestions = useMemo<ComposerSuggestionItem[]>(() => (
     filteredSkills.map((skill: SkillDefinition) => {

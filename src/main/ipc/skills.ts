@@ -12,8 +12,10 @@ import {
   updateSkill,
   deleteSkill,
   copySkillToSpace,
+  copySkillToSpaceByRef,
   clearSkillsCache
 } from '../services/skills.service'
+import type { ResourceRef } from '../services/resource-ref.service'
 
 export function registerSkillsHandlers(): void {
   // List all available skills
@@ -93,6 +95,18 @@ export function registerSkillsHandlers(): void {
       return { success: false, error: err.message }
     }
   })
+
+  ipcMain.handle(
+    'skills:copy-to-space-by-ref',
+    async (_event, ref: ResourceRef, workDir: string, options?: { overwrite?: boolean }) => {
+      try {
+        return { success: true, data: copySkillToSpaceByRef(ref, workDir, options) }
+      } catch (error: unknown) {
+        const err = error as Error
+        return { success: false, error: err.message }
+      }
+    }
+  )
 
   // Clear skills cache (useful after external modifications)
   ipcMain.handle('skills:clear-cache', async () => {

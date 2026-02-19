@@ -18,13 +18,15 @@ interface AgentDetailModalProps {
 const SOURCE_LABELS: Record<AgentDefinition['source'], string> = {
   app: 'App',
   global: 'Global',
-  space: 'Space'
+  space: 'Space',
+  plugin: 'Plugin'
 }
 
 const SOURCE_COLORS: Record<AgentDefinition['source'], string> = {
   app: 'bg-blue-500/10 text-blue-500',
   global: 'bg-purple-500/10 text-purple-500',
-  space: 'bg-green-500/10 text-green-500'
+  space: 'bg-green-500/10 text-green-500',
+  plugin: 'bg-orange-500/10 text-orange-500'
 }
 
 export function AgentDetailModal({ agent, workDir, onClose, onEdit }: AgentDetailModalProps) {
@@ -46,7 +48,13 @@ export function AgentDetailModal({ agent, workDir, onClose, onEdit }: AgentDetai
 
   const handleCopyToSpace = async () => {
     if (workDir && agent.source !== 'space') {
-      await copyToSpace(agent.name, workDir)
+      const result = await copyToSpace(agent, workDir)
+      if (result.status === 'conflict') {
+        const overwrite = window.confirm(t('Already added. Overwrite existing resource?'))
+        if (overwrite) {
+          await copyToSpace(agent, workDir, { overwrite: true })
+        }
+      }
       onClose()
     }
   }

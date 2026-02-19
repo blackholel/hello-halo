@@ -13,6 +13,7 @@ import { join, dirname } from 'path'
 import { readdirSync, readFileSync, statSync, existsSync, mkdirSync, writeFileSync, rmSync, copyFileSync } from 'fs'
 import { getConfig, getHaloDir } from './config.service'
 import { getAllSpacePaths } from './space.service'
+import type { ResourceRef, CopyToSpaceOptions, CopyToSpaceResult } from './resource-ref.service'
 import { isPathWithinBasePaths, isValidDirectoryPath, isFileNotFoundError } from '../utils/path-validation'
 import { listEnabledPlugins } from './plugins.service'
 import { FileCache } from '../utils/file-cache'
@@ -161,6 +162,20 @@ function findAgent(agents: AgentDefinition[], name: string): AgentDefinition | u
     ?? agents.find(a => a.name === name)
 }
 
+function findAgentByRef(agents: AgentDefinition[], ref: ResourceRef): AgentDefinition | undefined {
+  if (ref.path) {
+    const byPath = agents.find(agent => agent.path === ref.path)
+    if (byPath) return byPath
+  }
+
+  return agents.find((agent) => {
+    if (agent.name !== ref.name) return false
+    if ((ref.namespace || undefined) !== (agent.namespace || undefined)) return false
+    if (ref.source && agent.source !== ref.source) return false
+    return true
+  })
+}
+
 function logFound(label: string, items: AgentDefinition[]): void {
   if (items.length > 0) {
     console.log(`[Agents] Found ${items.length} ${label}: ${items.map(agentKey).join(', ')}`)
@@ -189,6 +204,25 @@ export function listAgents(workDir?: string): AgentDefinition[] {
   const agents = mergeAgents(globalAgentsCache, spaceAgents)
   logFound('agents', agents)
   return agents
+}
+
+export function listSpaceAgents(workDir: string): AgentDefinition[] {
+  return listAgents(workDir).filter(agent => agent.source === 'space')
+}
+
+function listAgentsForRefLookup(workDir: string): AgentDefinition[] {
+  if (!globalAgentsCache) {
+    globalAgentsCache = buildGlobalAgents()
+  }
+
+  let spaceAgents = spaceAgentsCache.get(workDir)
+  if (!spaceAgents) {
+    spaceAgents = buildSpaceAgents(workDir)
+    spaceAgentsCache.set(workDir, spaceAgents)
+  }
+
+  // Keep source-distinct entries for by-ref copy lookup; do not merge by key.
+  return [...spaceAgents, ...globalAgentsCache]
 }
 
 /**
@@ -348,32 +382,45 @@ export function deleteAgent(agentPath: string): boolean {
  * @param workDir - Target workspace directory
  */
 export function copyAgentToSpace(agentName: string, workDir: string): AgentDefinition | null {
-  const agents = listAgents(workDir)
-  const sourceAgent = agents.find(a => a.name === agentName)
+  const result = copyAgentToSpaceByRef({ type: 'agent', name: agentName }, workDir)
+  return result.status === 'copied' ? (result.data ?? null) : null
+}
 
+export function copyAgentToSpaceByRef(
+  ref: ResourceRef,
+  workDir: string,
+  options?: CopyToSpaceOptions
+): CopyToSpaceResult<AgentDefinition> {
+  const sourceAgent = findAgentByRef(listAgentsForRefLookup(workDir), ref)
   if (!sourceAgent) {
-    console.warn(`[Agents] Source agent not found: ${agentName}`)
-    return null
+    console.warn(`[Agents] Source agent not found: ${ref.name}`)
+    return { status: 'not_found' }
   }
 
-  if (sourceAgent.source === 'space') {
-    console.warn(`[Agents] Agent already in space: ${agentName}`)
-    return sourceAgent
+  const targetDir = join(workDir, '.claude', 'agents')
+  const targetPath = join(targetDir, `${sourceAgent.name}.md`)
+
+  if (sourceAgent.source === 'space' && sourceAgent.path === targetPath) {
+    return { status: 'copied', data: sourceAgent }
+  }
+
+  if (existsSync(targetPath) && !options?.overwrite) {
+    return { status: 'conflict', existingPath: targetPath }
   }
 
   try {
-    const targetDir = join(workDir, '.claude', 'agents')
-    const targetPath = join(targetDir, `${agentName}.md`)
+    if (existsSync(targetPath) && options?.overwrite) {
+      rmSync(targetPath, { force: true })
+    }
     mkdirSync(targetDir, { recursive: true })
     copyFileSync(sourceAgent.path, targetPath)
     invalidateAgentsCache(workDir)
     return {
-      ...sourceAgent,
-      path: targetPath,
-      source: 'space'
+      status: 'copied',
+      data: { ...sourceAgent, path: targetPath, source: 'space' }
     }
   } catch (error) {
     console.error('[Agents] Failed to copy agent to space:', error)
-    return null
+    return { status: 'not_found', error: (error as Error).message }
   }
 }

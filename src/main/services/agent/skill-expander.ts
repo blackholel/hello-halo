@@ -9,9 +9,9 @@
  * Only active when skillsLazyLoad is enabled.
  */
 
-import { getSkillContent } from '../skills.service'
-import { getCommandContent } from '../commands.service'
-import { getAgentContent } from '../agents.service'
+import { getSkillContent, getSkillDefinition } from '../skills.service'
+import { getCommand, getCommandContent } from '../commands.service'
+import { getAgent, getAgentContent } from '../agents.service'
 import { toolkitContains } from '../toolkit.service'
 import type { SpaceToolkit } from '../space-config.service'
 
@@ -48,6 +48,11 @@ interface InlineTokenMatch {
 interface CodeRange {
   start: number
   end: number
+}
+
+interface ExpandLazyDirectiveOptions {
+  skip?: Set<string>
+  allowSources?: string[]
 }
 
 export interface LazyExpansionResult {
@@ -180,14 +185,36 @@ function canUseFromToolkit(
   })
 }
 
+function isAllowedSource(allowedSources: string[] | undefined, source: string | undefined): boolean {
+  if (!allowedSources || allowedSources.length === 0) return true
+  if (!source) return false
+  return allowedSources.includes(source)
+}
+
+function shouldSkipToken(token: ParsedDirectiveToken, options?: ExpandLazyDirectiveOptions): boolean {
+  if (!options?.skip) return false
+  return options.skip.has(token.raw) || options.skip.has(token.name)
+}
+
 function expandAgentDirective(
   token: ParsedDirectiveToken,
   state: ExpansionState,
   workDir?: string,
   toolkit?: SpaceToolkit | null,
-  args?: string
+  args?: string,
+  options?: ExpandLazyDirectiveOptions
 ): string | null {
+  if (shouldSkipToken(token, options)) {
+    return null
+  }
+
   if (!canUseFromToolkit(toolkit, 'agent', token)) {
+    pushMissing(state, 'agents', token.raw)
+    return null
+  }
+
+  const agentDefinition = getAgent(token.raw, workDir)
+  if (!agentDefinition || !isAllowedSource(options?.allowSources, agentDefinition.source)) {
     pushMissing(state, 'agents', token.raw)
     return null
   }
@@ -213,12 +240,23 @@ function expandSlashDirective(
   state: ExpansionState,
   workDir?: string,
   toolkit?: SpaceToolkit | null,
-  args?: string
+  args?: string,
+  options?: ExpandLazyDirectiveOptions
 ): string | null {
+  if (shouldSkipToken(token, options)) {
+    return null
+  }
+
   const argsAttr = buildArgsAttr(args)
-  const command = getCommandContent(token.raw, workDir, { silent: true })
+  const commandDefinition = getCommand(token.raw, workDir)
+  const command = commandDefinition ? getCommandContent(token.raw, workDir, { silent: true }) : null
 
   if (command) {
+    if (!isAllowedSource(options?.allowSources, commandDefinition?.source)) {
+      pushMissing(state, 'commands', token.raw)
+      return null
+    }
+
     if (!canUseFromToolkit(toolkit, 'command', token)) {
       pushMissing(state, 'commands', token.raw)
       return null
@@ -229,6 +267,12 @@ function expandSlashDirective(
       const referencedSkillToken = parseDirectiveToken(referencedSkillRaw)
       if (referencedSkillToken) {
         if (!canUseFromToolkit(toolkit, 'skill', referencedSkillToken)) {
+          pushMissing(state, 'skills', referencedSkillToken.raw)
+          return null
+        }
+
+        const skillDefinition = getSkillDefinition(referencedSkillToken.raw, workDir)
+        if (!skillDefinition || !isAllowedSource(options?.allowSources, skillDefinition.source)) {
           pushMissing(state, 'skills', referencedSkillToken.raw)
           return null
         }
@@ -256,6 +300,12 @@ function expandSlashDirective(
   }
 
   if (!canUseFromToolkit(toolkit, 'skill', token)) {
+    pushMissing(state, 'skills', token.raw)
+    return null
+  }
+
+  const skillDefinition = getSkillDefinition(token.raw, workDir)
+  if (!skillDefinition || !isAllowedSource(options?.allowSources, skillDefinition.source)) {
     pushMissing(state, 'skills', token.raw)
     return null
   }
@@ -385,8 +435,21 @@ function collectInlineDirectiveTokens(line: string): InlineTokenMatch[] {
 export function expandLazyDirectives(
   input: string,
   workDir?: string,
-  toolkit?: SpaceToolkit | null
+  toolkitOrOptions?: SpaceToolkit | null | ExpandLazyDirectiveOptions,
+  maybeOptions?: ExpandLazyDirectiveOptions
 ): LazyExpansionResult {
+  const toolkit = (
+    toolkitOrOptions &&
+    typeof toolkitOrOptions === 'object' &&
+    ('skills' in toolkitOrOptions || 'commands' in toolkitOrOptions || 'agents' in toolkitOrOptions)
+  ) ? (toolkitOrOptions as SpaceToolkit | null) : undefined
+
+  const options = (
+    toolkitOrOptions &&
+    typeof toolkitOrOptions === 'object' &&
+    !('skills' in toolkitOrOptions || 'commands' in toolkitOrOptions || 'agents' in toolkitOrOptions)
+  ) ? (toolkitOrOptions as ExpandLazyDirectiveOptions) : maybeOptions
+
   const state: ExpansionState = {
     expanded: { skills: [], commands: [], agents: [] },
     missing: { skills: [], commands: [], agents: [] },
@@ -421,7 +484,7 @@ export function expandLazyDirectives(
     if (agentMatch) {
       const token = parseDirectiveToken(agentMatch[1])
       if (!token) return line
-      const expanded = expandAgentDirective(token, state, workDir, toolkit, agentMatch[2])
+      const expanded = expandAgentDirective(token, state, workDir, toolkit, agentMatch[2], options)
       return expanded ?? line
     }
 
@@ -429,7 +492,7 @@ export function expandLazyDirectives(
     if (slashMatch) {
       const token = parseDirectiveToken(slashMatch[1])
       if (!token) return line
-      const expanded = expandSlashDirective(token, state, workDir, toolkit, slashMatch[2])
+      const expanded = expandSlashDirective(token, state, workDir, toolkit, slashMatch[2], options)
       return expanded ?? line
     }
 
@@ -439,8 +502,8 @@ export function expandLazyDirectives(
       if (seenInlineTokenKeys.has(tokenKey)) continue
 
       const block = match.type === 'at'
-        ? expandAgentDirective(match.token, state, workDir, toolkit)
-        : expandSlashDirective(match.token, state, workDir, toolkit)
+        ? expandAgentDirective(match.token, state, workDir, toolkit, undefined, options)
+        : expandSlashDirective(match.token, state, workDir, toolkit, undefined, options)
 
       if (!block) continue
       seenInlineTokenKeys.add(tokenKey)

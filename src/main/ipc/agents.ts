@@ -12,8 +12,10 @@ import {
   createAgent,
   updateAgent,
   deleteAgent,
-  copyAgentToSpace
+  copyAgentToSpace,
+  copyAgentToSpaceByRef
 } from '../services/agents.service'
+import type { ResourceRef } from '../services/resource-ref.service'
 
 export function registerAgentsHandlers(): void {
   // List all available agents
@@ -104,4 +106,16 @@ export function registerAgentsHandlers(): void {
       return { success: false, error: err.message }
     }
   })
+
+  ipcMain.handle(
+    'agents:copy-to-space-by-ref',
+    async (_event, ref: ResourceRef, workDir: string, options?: { overwrite?: boolean }) => {
+      try {
+        return { success: true, data: copyAgentToSpaceByRef(ref, workDir, options) }
+      } catch (error: unknown) {
+        const err = error as Error
+        return { success: false, error: err.message }
+      }
+    }
+  )
 }
