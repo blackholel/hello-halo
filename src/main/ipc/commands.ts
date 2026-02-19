@@ -10,8 +10,10 @@ import {
   updateCommand,
   deleteCommand,
   copyCommandToSpace,
+  copyCommandToSpaceByRef,
   clearCommandsCache
 } from '../services/commands.service'
+import type { ResourceRef } from '../services/resource-ref.service'
 
 export function registerCommandsHandlers(): void {
   ipcMain.handle('commands:list', async (_event, workDir?: string) => {
@@ -77,6 +79,17 @@ export function registerCommandsHandlers(): void {
       return { success: false, error: (error as Error).message }
     }
   })
+
+  ipcMain.handle(
+    'commands:copy-to-space-by-ref',
+    async (_event, ref: ResourceRef, workDir: string, options?: { overwrite?: boolean }) => {
+      try {
+        return { success: true, data: copyCommandToSpaceByRef(ref, workDir, options) }
+      } catch (error: unknown) {
+        return { success: false, error: (error as Error).message }
+      }
+    }
+  )
 
   ipcMain.handle('commands:clear-cache', async () => {
     try {

@@ -19,6 +19,7 @@ import { getSpaceConfig } from './space-config.service'
 import { FileCache } from '../utils/file-cache'
 import { listEnabledPlugins } from './plugins.service'
 import { getLockedConfigSourceMode, getLockedUserConfigRootDir } from './config-source-mode.service'
+import { getSpaceResourcePolicy, isStrictSpaceOnlyPolicy } from './agent/space-resource-policy.service'
 
 // ============================================
 // Kite Settings Types (Claude Code compatible)
@@ -180,6 +181,11 @@ export function mergeHooksConfigs(...configs: (HooksConfig | undefined)[]): Hook
 export function buildHooksConfig(workDir: string): HooksConfig | undefined {
   const config = getConfig()
   const spaceConfig = getSpaceConfig(workDir)
+  const policy = getSpaceResourcePolicy(workDir)
+  if (isStrictSpaceOnlyPolicy(policy) && policy.allowHooks !== true) {
+    console.log('[Hooks] Strict space-only mode: hooks disabled')
+    return undefined
+  }
   const hooksDisabled =
     config.claudeCode?.hooksEnabled === false ||
     spaceConfig?.claudeCode?.hooksEnabled === false

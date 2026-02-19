@@ -20,6 +20,7 @@ import { createAIBrowserMcpServer, AI_BROWSER_SYSTEM_PROMPT } from '../ai-browse
 import { SKILLS_LAZY_SYSTEM_PROMPT } from '../skills-mcp-server'
 import { buildPluginMcpServers } from '../plugin-mcp.service'
 import { getLockedConfigSourceMode, getLockedUserConfigRootDir } from '../config-source-mode.service'
+import { getSpaceResourcePolicy, isStrictSpaceOnlyPolicy } from './space-resource-policy.service'
 import type { PluginConfig, SettingSource, ToolCall } from './types'
 
 // Re-export types for convenience
@@ -76,13 +77,16 @@ export function getEffectiveSkillsLazyLoad(
   configLazyLoad: boolean
   effectiveLazyLoad: boolean
   toolkit: SpaceToolkit | null
+  strictSpaceOnly: boolean
 } {
   const resolvedConfig = config ?? getConfig()
   const spaceConfig = getSpaceConfig(workDir)
   const configLazyLoad = getConfigSkillsLazyLoad(resolvedConfig, spaceConfig)
   const toolkit = getSpaceToolkit(workDir)
-  const effectiveLazyLoad = configLazyLoad || toolkit !== null
-  return { configLazyLoad, effectiveLazyLoad, toolkit }
+  const policy = getSpaceResourcePolicy(workDir)
+  const strictSpaceOnly = isStrictSpaceOnlyPolicy(policy)
+  const effectiveLazyLoad = strictSpaceOnly || configLazyLoad || toolkit !== null
+  return { configLazyLoad, effectiveLazyLoad, toolkit, strictSpaceOnly }
 }
 
 /**
@@ -95,7 +99,7 @@ export function buildPluginsConfig(workDir: string): PluginConfig[] {
   const config = getConfig()
   const spaceConfig = getSpaceConfig(workDir)
   const claudeCodeConfig = config.claudeCode
-  const { configLazyLoad, effectiveLazyLoad, toolkit } = getEffectiveSkillsLazyLoad(workDir, config)
+  const { configLazyLoad, effectiveLazyLoad, toolkit, strictSpaceOnly } = getEffectiveSkillsLazyLoad(workDir, config)
 
   // Helper to add plugin if valid and not already added
   const addedPaths = new Set<string>()
@@ -110,6 +114,17 @@ export function buildPluginsConfig(workDir: string): PluginConfig[] {
   // Check if plugins are enabled (default: true)
   if (claudeCodeConfig?.plugins?.enabled === false) {
     console.log('[Agent] Plugins disabled by configuration')
+    return plugins
+  }
+
+  if (strictSpaceOnly) {
+    const spacePaths = spaceConfig?.claudeCode?.plugins?.paths || []
+    for (const spacePath of spacePaths) {
+      const resolvedPath = spacePath.startsWith('/') ? spacePath : join(workDir, spacePath)
+      addIfValid(resolvedPath)
+    }
+    addIfValid(join(workDir, '.claude'))
+    console.log('[Agent] Strict space-only mode: loading only space plugin directories')
     return plugins
   }
 
@@ -192,9 +207,9 @@ export function buildPluginsConfig(workDir: string): PluginConfig[] {
 export function buildSettingSources(workDir: string): SettingSource[] {
   const config = getConfig()
   const spaceConfig = getSpaceConfig(workDir)
-  const { configLazyLoad, effectiveLazyLoad, toolkit } = getEffectiveSkillsLazyLoad(workDir, config)
+  const { configLazyLoad, effectiveLazyLoad, toolkit, strictSpaceOnly } = getEffectiveSkillsLazyLoad(workDir, config)
 
-  if (effectiveLazyLoad) {
+  if (strictSpaceOnly || effectiveLazyLoad) {
     if (!configLazyLoad && toolkit) {
       console.log('[Agent] Toolkit allowlist active: forcing settingSources=local only')
     } else {
@@ -252,16 +267,19 @@ function buildMcpServersConfig(
   workDir: string,
   conversationId: string,
   aiBrowserEnabled?: boolean,
-  enabledPluginMcps?: string[]
+  enabledPluginMcps?: string[],
+  strictSpaceOnly?: boolean
 ): { mcpServers?: Record<string, any> } {
   const mcpDisabled =
     config.claudeCode?.mcpEnabled === false ||
     spaceConfig?.claudeCode?.mcpEnabled === false
+  const policy = getSpaceResourcePolicy(workDir)
+  const strictDisablesExternalMcp = strictSpaceOnly && policy.allowMcp !== true
 
-  const enabledMcp = getEnabledMcpServers(config.mcpServers || {}, workDir)
+  const enabledMcp = strictDisablesExternalMcp ? null : getEnabledMcpServers(config.mcpServers || {}, workDir)
   const mcpServers: Record<string, any> = enabledMcp ? { ...enabledMcp } : {}
 
-  if (!mcpDisabled && enabledPluginMcps && enabledPluginMcps.length > 0) {
+  if (!strictDisablesExternalMcp && !mcpDisabled && enabledPluginMcps && enabledPluginMcps.length > 0) {
     const pluginServers = buildPluginMcpServers(enabledPluginMcps, mcpServers)
     Object.assign(mcpServers, pluginServers)
   }
@@ -386,7 +404,7 @@ export function buildSdkOptions(params: BuildSdkOptionsParams): Record<string, a
   } = params
 
   const spaceConfig = getSpaceConfig(workDir)
-  const { effectiveLazyLoad, toolkit } = getEffectiveSkillsLazyLoad(workDir, config)
+  const { effectiveLazyLoad, toolkit, strictSpaceOnly } = getEffectiveSkillsLazyLoad(workDir, config)
 
   const configDir = (() => {
     if (effectiveLazyLoad) {
@@ -449,7 +467,8 @@ export function buildSdkOptions(params: BuildSdkOptionsParams): Record<string, a
       workDir,
       conversationId,
       aiBrowserEnabled,
-      enabledPluginMcps
+      enabledPluginMcps,
+      strictSpaceOnly
     )
   }
 

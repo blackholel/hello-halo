@@ -10,6 +10,12 @@ import { resolve } from 'path'
 import { broadcastToWebSocket } from '../../http/websocket'
 import { getConfig } from '../config.service'
 import { isAIBrowserTool } from '../ai-browser'
+import {
+  extractToolPath,
+  isBashCommandTouchingProtectedResourceDir,
+  isPathInProtectedResourceDir
+} from './resource-dir-guard.service'
+import { getSpaceResourcePolicy, isStrictSpaceOnlyPolicy } from './space-resource-policy.service'
 import type {
   ToolCall,
   SessionState,
@@ -324,6 +330,7 @@ export function createCanUseTool(
       `[Agent] canUseTool called - Tool: ${toolName}, Input:`,
       JSON.stringify(input).substring(0, 200)
     )
+    const strictSpaceOnly = isStrictSpaceOnlyPolicy(getSpaceResourcePolicy(workDir))
 
     if (toolName === 'AskUserQuestion') {
       // Wait for user response using session-specific resolver.
@@ -357,10 +364,10 @@ export function createCanUseTool(
     // Check file path tools - restrict to working directory
     const fileTools = ['Read', 'Write', 'Edit', 'Grep', 'Glob']
     if (fileTools.includes(toolName)) {
-      const pathParam = (input.file_path || input.path) as string | undefined
+      const pathParam = extractToolPath(input)
 
       if (pathParam) {
-        const absolutePath = resolve(pathParam)
+        const absolutePath = resolve(absoluteWorkDir, pathParam)
         const sep = require('path').sep
         const isWithinWorkDir =
           absolutePath.startsWith(absoluteWorkDir + sep) || absolutePath === absoluteWorkDir
@@ -372,11 +379,26 @@ export function createCanUseTool(
             message: `Can only access files within the current space: ${workDir}`
           }
         }
+
+        if (strictSpaceOnly && (toolName === 'Write' || toolName === 'Edit') && isPathInProtectedResourceDir(pathParam, workDir)) {
+          return {
+            behavior: 'deny' as const,
+            message: 'Modifying .claude skills/agents/commands via tools is not allowed in strict space mode'
+          }
+        }
       }
     }
 
     // Check Bash commands based on permission settings
     if (toolName === 'Bash') {
+      const command = typeof input.command === 'string' ? input.command : ''
+      if (strictSpaceOnly && command && isBashCommandTouchingProtectedResourceDir(command)) {
+        return {
+          behavior: 'deny' as const,
+          message: 'Bash cannot modify .claude skills/agents/commands in strict space mode'
+        }
+      }
+
       const permission = config.permissions.commandExecution
 
       if (permission === 'deny') {

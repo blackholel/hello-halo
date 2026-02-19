@@ -6,9 +6,11 @@ import { shell } from 'electron'
 import { join } from 'path'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, rmSync } from 'fs'
 import { getKiteDir, getLegacySpacesDir, getTempSpacePath, getSpacesDir } from './config.service'
-import { updateSpaceConfig } from './space-config.service'
+import { getSpaceConfig, updateSpaceConfig } from './space-config.service'
 import { v4 as uuidv4 } from 'uuid'
 import { isPathWithinBasePaths } from '../utils/path-validation'
+import { ensureSpaceResourcePolicy } from './agent/space-resource-policy.service'
+import type { ResourceRef } from './resource-ref.service'
 
 interface Space {
   id: string
@@ -314,6 +316,7 @@ function loadSpaceFromPath(spacePath: string): Space | null {
     try {
       const meta: SpaceMeta = JSON.parse(readFileSync(metaPath, 'utf-8'))
       const stats = getSpaceStats(spacePath)
+      runSpaceResourceMigration(spacePath)
 
       return {
         id: meta.id,
@@ -331,6 +334,49 @@ function loadSpaceFromPath(spacePath: string): Space | null {
     }
   }
   return null
+}
+
+function migrateToolkitRefToSpace(workDir: string, ref: ResourceRef): void {
+  try {
+    const { copySkillToSpaceByRef } = require('./skills.service') as typeof import('./skills.service')
+    const { copyAgentToSpaceByRef } = require('./agents.service') as typeof import('./agents.service')
+    const { copyCommandToSpaceByRef } = require('./commands.service') as typeof import('./commands.service')
+
+    if (ref.type === 'skill') {
+      copySkillToSpaceByRef(ref, workDir)
+      return
+    }
+    if (ref.type === 'agent') {
+      copyAgentToSpaceByRef(ref, workDir)
+      return
+    }
+    if (ref.type === 'command') {
+      copyCommandToSpaceByRef(ref, workDir)
+    }
+  } catch (error) {
+    console.warn('[Space] Failed to migrate toolkit resource to space:', ref, error)
+  }
+}
+
+function runSpaceResourceMigration(workDir: string): void {
+  try {
+    ensureSpaceResourcePolicy(workDir)
+    const spaceConfig = getSpaceConfig(workDir)
+    const toolkit = spaceConfig?.toolkit
+    if (!toolkit) return
+
+    const refs: ResourceRef[] = [
+      ...toolkit.skills.map((ref) => ({ ...ref, type: 'skill' as const })),
+      ...toolkit.agents.map((ref) => ({ ...ref, type: 'agent' as const })),
+      ...toolkit.commands.map((ref) => ({ ...ref, type: 'command' as const }))
+    ]
+
+    refs
+      .filter((ref) => ref.source && ref.source !== 'space')
+      .forEach((ref) => migrateToolkitRefToSpace(workDir, ref))
+  } catch (error) {
+    console.warn('[Space] Failed to run resource migration:', error)
+  }
 }
 
 // List all spaces (including custom path spaces)
@@ -392,7 +438,15 @@ export function createSpace(input: { name: string; icon: string; customPath?: st
   // when customPath points to a directory that already has space-config.json
   const initResult = updateSpaceConfig(spacePath, (config) => ({
     ...config,
-    toolkit: config.toolkit ?? { skills: [], commands: [], agents: [] }
+    toolkit: config.toolkit ?? { skills: [], commands: [], agents: [] },
+    resourcePolicy: {
+      version: 1,
+      mode: 'strict-space-only',
+      allowHooks: false,
+      allowMcp: false,
+      allowPluginMcpDirective: false,
+      allowedSources: ['space']
+    }
   }))
 
   if (!initResult) {

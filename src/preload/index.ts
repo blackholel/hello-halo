@@ -161,6 +161,11 @@ export interface KiteAPI {
   updateSkill: (skillPath: string, content: string) => Promise<IpcResponse>
   deleteSkill: (skillPath: string) => Promise<IpcResponse>
   copySkillToSpace: (skillName: string, workDir: string) => Promise<IpcResponse>
+  copySkillToSpaceByRef: (
+    ref: Record<string, unknown>,
+    workDir: string,
+    options?: { overwrite?: boolean }
+  ) => Promise<IpcResponse>
   clearSkillsCache: () => Promise<IpcResponse>
 
   // Commands
@@ -170,6 +175,11 @@ export interface KiteAPI {
   updateCommand: (commandPath: string, content: string) => Promise<IpcResponse>
   deleteCommand: (commandPath: string) => Promise<IpcResponse>
   copyCommandToSpace: (commandName: string, workDir: string) => Promise<IpcResponse>
+  copyCommandToSpaceByRef: (
+    ref: Record<string, unknown>,
+    workDir: string,
+    options?: { overwrite?: boolean }
+  ) => Promise<IpcResponse>
   clearCommandsCache: () => Promise<IpcResponse>
 
   // Agents
@@ -179,6 +189,11 @@ export interface KiteAPI {
   updateAgent: (agentPath: string, content: string) => Promise<IpcResponse>
   deleteAgent: (agentPath: string) => Promise<IpcResponse>
   copyAgentToSpace: (agentName: string, workDir: string) => Promise<IpcResponse>
+  copyAgentToSpaceByRef: (
+    ref: Record<string, unknown>,
+    workDir: string,
+    options?: { overwrite?: boolean }
+  ) => Promise<IpcResponse>
   clearAgentsCache: () => Promise<IpcResponse>
 
   // Toolkit
@@ -187,6 +202,10 @@ export interface KiteAPI {
   removeToolkitResource: (spaceId: string, directive: Record<string, unknown>) => Promise<IpcResponse>
   clearToolkit: (spaceId: string) => Promise<IpcResponse>
   migrateToToolkit: (spaceId: string, skills: string[], agents: string[]) => Promise<IpcResponse>
+
+  // Presets
+  listPresets: () => Promise<IpcResponse>
+  getPreset: (presetId: string) => Promise<IpcResponse>
 
   // Workflows
   listWorkflows: (spaceId: string) => Promise<IpcResponse>
@@ -522,6 +541,7 @@ const api: KiteAPI = {
   updateSkill: (skillPath, content) => ipcRenderer.invoke('skills:update', skillPath, content),
   deleteSkill: (skillPath) => ipcRenderer.invoke('skills:delete', skillPath),
   copySkillToSpace: (skillName, workDir) => ipcRenderer.invoke('skills:copy-to-space', skillName, workDir),
+  copySkillToSpaceByRef: (ref, workDir, options) => ipcRenderer.invoke('skills:copy-to-space-by-ref', ref, workDir, options),
   clearSkillsCache: () => ipcRenderer.invoke('skills:clear-cache'),
 
   // Commands
@@ -531,6 +551,7 @@ const api: KiteAPI = {
   updateCommand: (commandPath, content) => ipcRenderer.invoke('commands:update', commandPath, content),
   deleteCommand: (commandPath) => ipcRenderer.invoke('commands:delete', commandPath),
   copyCommandToSpace: (commandName, workDir) => ipcRenderer.invoke('commands:copy-to-space', commandName, workDir),
+  copyCommandToSpaceByRef: (ref, workDir, options) => ipcRenderer.invoke('commands:copy-to-space-by-ref', ref, workDir, options),
   clearCommandsCache: () => ipcRenderer.invoke('commands:clear-cache'),
 
   // Agents
@@ -540,6 +561,7 @@ const api: KiteAPI = {
   updateAgent: (agentPath, content) => ipcRenderer.invoke('agents:update', agentPath, content),
   deleteAgent: (agentPath) => ipcRenderer.invoke('agents:delete', agentPath),
   copyAgentToSpace: (agentName, workDir) => ipcRenderer.invoke('agents:copy-to-space', agentName, workDir),
+  copyAgentToSpaceByRef: (ref, workDir, options) => ipcRenderer.invoke('agents:copy-to-space-by-ref', ref, workDir, options),
   clearAgentsCache: () => ipcRenderer.invoke('agents:clear-cache'),
 
   // Toolkit
@@ -548,6 +570,10 @@ const api: KiteAPI = {
   removeToolkitResource: (spaceId, directive) => ipcRenderer.invoke('toolkit:remove', spaceId, directive),
   clearToolkit: (spaceId) => ipcRenderer.invoke('toolkit:clear', spaceId),
   migrateToToolkit: (spaceId, skills, agents) => ipcRenderer.invoke('toolkit:migrate', spaceId, skills, agents),
+
+  // Presets
+  listPresets: () => ipcRenderer.invoke('preset:list'),
+  getPreset: (presetId) => ipcRenderer.invoke('preset:get', presetId),
 
   // Workflows
   listWorkflows: (spaceId) => ipcRenderer.invoke('workflow:list', spaceId),

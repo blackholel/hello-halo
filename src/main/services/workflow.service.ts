@@ -6,6 +6,8 @@ import { join } from 'path'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, rmSync } from 'fs'
 import { v4 as uuidv4 } from 'uuid'
 import { getSpace } from './space.service'
+import { listSpaceSkills } from './skills.service'
+import { listSpaceAgents } from './agents.service'
 
 export interface WorkflowStep {
   id: string
@@ -155,6 +157,52 @@ function normalizeSteps(steps: WorkflowStep[]): WorkflowStep[] {
   }))
 }
 
+function parseDirectiveName(raw: string): { name: string; namespace?: string } | null {
+  const value = raw.trim()
+  if (!value) return null
+  if (!value.includes(':')) return { name: value }
+
+  const [namespace, name] = value.split(':', 2)
+  if (!namespace || !name) return null
+  return { namespace, name }
+}
+
+function validateWorkflowSteps(spaceId: string, steps: WorkflowStep[]): void {
+  const space = getSpace(spaceId)
+  if (!space) {
+    throw new Error('Space not found')
+  }
+
+  const availableSkills = listSpaceSkills(space.path)
+  const availableAgents = listSpaceAgents(space.path)
+
+  const missing: string[] = []
+  for (const [index, step] of steps.entries()) {
+    const parsed = parseDirectiveName(step.name || '')
+    if (!parsed || step.type === 'message') continue
+
+    if (step.type === 'skill') {
+      const ok = availableSkills.some(skill => (
+        skill.name === parsed.name &&
+        (skill.namespace || undefined) === (parsed.namespace || undefined)
+      ))
+      if (!ok) missing.push(`Step ${index + 1}: skill ${step.name}`)
+    }
+
+    if (step.type === 'agent') {
+      const ok = availableAgents.some(agent => (
+        agent.name === parsed.name &&
+        (agent.namespace || undefined) === (parsed.namespace || undefined)
+      ))
+      if (!ok) missing.push(`Step ${index + 1}: agent ${step.name}`)
+    }
+  }
+
+  if (missing.length > 0) {
+    throw new Error(`Workflow contains non-space resources: ${missing.join(', ')}`)
+  }
+}
+
 export function createWorkflow(spaceId: string, input: Omit<Workflow, 'id' | 'createdAt' | 'updatedAt'>): Workflow {
   const workflowsDir = ensureWorkflowsDir(spaceId)
   if (!workflowsDir) {
@@ -164,6 +212,7 @@ export function createWorkflow(spaceId: string, input: Omit<Workflow, 'id' | 'cr
   if (!input.name || !input.steps || !Array.isArray(input.steps)) {
     throw new Error('Invalid workflow input')
   }
+  validateWorkflowSteps(spaceId, input.steps)
 
   const now = new Date().toISOString()
   const workflow: Workflow = {
@@ -195,6 +244,9 @@ export function updateWorkflow(spaceId: string, workflowId: string, updates: Par
 
   try {
     const existing = JSON.parse(readFileSync(filePath, 'utf-8')) as Workflow
+    if (updates.steps) {
+      validateWorkflowSteps(spaceId, updates.steps)
+    }
     const updated: Workflow = {
       ...existing,
       ...updates,

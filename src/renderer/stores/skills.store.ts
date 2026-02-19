@@ -59,7 +59,11 @@ interface SkillsState {
   createSkill: (workDir: string, name: string, content: string) => Promise<SkillDefinition | null>
   updateSkill: (skillPath: string, content: string) => Promise<boolean>
   deleteSkill: (skillPath: string) => Promise<boolean>
-  copyToSpace: (skillName: string, workDir: string) => Promise<SkillDefinition | null>
+  copyToSpace: (
+    skill: SkillDefinition,
+    workDir: string,
+    options?: { overwrite?: boolean }
+  ) => Promise<{ status: 'copied' | 'conflict' | 'not_found'; data?: SkillDefinition }>
   clearCache: () => Promise<void>
   markDirty: (workDir?: string | null) => void
   markAllDirty: () => void
@@ -262,36 +266,41 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
   },
 
   // Copy a skill to space directory
-  copyToSpace: async (skillName, workDir) => {
+  copyToSpace: async (skill, workDir, options) => {
     try {
-      const response = await api.copySkillToSpace(skillName, workDir)
+      const response = await api.copySkillToSpaceByRef({
+        type: 'skill',
+        name: skill.name,
+        namespace: skill.namespace,
+        source: skill.source,
+        path: skill.path
+      }, workDir, options)
 
       if (response.success && response.data) {
-        const copiedSkill = response.data as SkillDefinition
+        const copyResult = response.data as { status: 'copied' | 'conflict' | 'not_found'; data?: SkillDefinition }
+        if (copyResult.status !== 'copied' || !copyResult.data) {
+          return copyResult
+        }
+        const copiedSkill = copyResult.data
         const cacheKey = getCacheKey(workDir)
 
-        // Update skills list - replace the original with the space copy
+        // Update skills list - replace by exact path, avoid clobbering same-name resources
         set((state) => ({
-          skills: state.skills.map(s =>
-            s.name === skillName ? copiedSkill : s
-          ),
+          skills: state.skills.map(s => s.path === skill.path ? copiedSkill : s),
           skillsByWorkDir: {
             ...state.skillsByWorkDir,
-            [cacheKey]: (state.skillsByWorkDir[cacheKey] || []).map(s =>
-              s.name === skillName ? copiedSkill : s
-            )
+            [cacheKey]: (state.skillsByWorkDir[cacheKey] || []).map(s => s.path === skill.path ? copiedSkill : s)
           }
         }))
 
-        return copiedSkill
-      } else {
-        set({ error: response.error || 'Failed to copy skill to space' })
-        return null
+        return { status: 'copied', data: copiedSkill }
       }
+      set({ error: response.error || 'Failed to copy skill to space' })
+      return { status: 'not_found' }
     } catch (error) {
       console.error('[SkillsStore] Failed to copy skill to space:', error)
       set({ error: 'Failed to copy skill to space' })
-      return null
+      return { status: 'not_found' }
     }
   },
 

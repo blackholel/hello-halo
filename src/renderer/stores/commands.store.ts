@@ -31,7 +31,11 @@ interface CommandsState {
   createCommand: (workDir: string, name: string, content: string) => Promise<CommandDefinition | null>
   updateCommand: (commandPath: string, content: string) => Promise<boolean>
   deleteCommand: (commandPath: string) => Promise<boolean>
-  copyToSpace: (commandName: string, workDir: string) => Promise<CommandDefinition | null>
+  copyToSpace: (
+    command: CommandDefinition,
+    workDir: string,
+    options?: { overwrite?: boolean }
+  ) => Promise<{ status: 'copied' | 'conflict' | 'not_found'; data?: CommandDefinition }>
   clearCache: () => Promise<void>
 }
 
@@ -152,25 +156,35 @@ export const useCommandsStore = create<CommandsState>((set, get) => ({
     }
   },
 
-  copyToSpace: async (commandName, workDir) => {
+  copyToSpace: async (command, workDir, options) => {
     try {
-      const response = await api.copyCommandToSpace(commandName, workDir)
+      const response = await api.copyCommandToSpaceByRef({
+        type: 'command',
+        name: command.name,
+        namespace: command.namespace,
+        source: command.source,
+        path: command.path
+      }, workDir, options)
       if (response.success && response.data) {
-        const copiedCommand = response.data as CommandDefinition
+        const copyResult = response.data as { status: 'copied' | 'conflict' | 'not_found'; data?: CommandDefinition }
+        if (copyResult.status !== 'copied' || !copyResult.data) {
+          return copyResult
+        }
+        const copiedCommand = copyResult.data
         const targetWorkDir = workDir ?? null
         set((state) => ({
           commands: state.loadedWorkDir === targetWorkDir
-            ? state.commands.map(command => command.name === commandName ? copiedCommand : command)
+            ? state.commands.map(item => item.path === command.path ? copiedCommand : item)
             : state.commands
         }))
-        return copiedCommand
+        return { status: 'copied', data: copiedCommand }
       }
       set({ error: response.error || 'Failed to copy command to space' })
-      return null
+      return { status: 'not_found' }
     } catch (error) {
       console.error('[CommandsStore] Failed to copy command to space:', error)
       set({ error: 'Failed to copy command to space' })
-      return null
+      return { status: 'not_found' }
     }
   },
 

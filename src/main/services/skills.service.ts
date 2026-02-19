@@ -16,6 +16,7 @@ import { getConfig } from './config.service'
 import { getLockedConfigSourceMode, getLockedUserConfigRootDir } from './config-source-mode.service'
 import { listEnabledPlugins } from './plugins.service'
 import { getAllSpacePaths } from './space.service'
+import type { ResourceRef, CopyToSpaceOptions, CopyToSpaceResult } from './resource-ref.service'
 import { isPathWithinBasePaths, isValidDirectoryPath, isFileNotFoundError } from '../utils/path-validation'
 import { FileCache } from '../utils/file-cache'
 
@@ -78,6 +79,20 @@ function findSkill(skills: SkillDefinition[], name: string): SkillDefinition | u
   }
   return skills.find(s => s.name === name && !s.namespace)
     ?? skills.find(s => s.name === name)
+}
+
+function findSkillByRef(skills: SkillDefinition[], ref: ResourceRef): SkillDefinition | undefined {
+  if (ref.path) {
+    const byPath = skills.find((skill) => skill.path === ref.path)
+    if (byPath) return byPath
+  }
+
+  return skills.find((skill) => {
+    if (skill.name !== ref.name) return false
+    if ((ref.namespace || undefined) !== (skill.namespace || undefined)) return false
+    if (ref.source && skill.source !== ref.source) return false
+    return true
+  })
 }
 
 // ============================================
@@ -271,11 +286,44 @@ export function listSkills(workDir?: string): SkillDefinition[] {
   return skills
 }
 
+export function listSpaceSkills(workDir: string): SkillDefinition[] {
+  return listSkills(workDir).filter(skill => skill.source === 'space')
+}
+
+function listSkillsForRefLookup(workDir: string): SkillDefinition[] {
+  if (!globalSkillsCache) {
+    globalSkillsCache = buildGlobalSkills()
+  }
+
+  let spaceSkills = spaceSkillsCache.get(workDir)
+  if (!spaceSkills) {
+    spaceSkills = buildSpaceSkills(workDir)
+    spaceSkillsCache.set(workDir, spaceSkills)
+  }
+
+  // Keep source-distinct entries for by-ref copy lookup; do not merge by key.
+  return [...spaceSkills, ...globalSkillsCache]
+}
+
+export function getSkillDefinition(
+  name: string,
+  workDir?: string,
+  opts?: { allowedSources?: SkillDefinition['source'][] }
+): SkillDefinition | null {
+  const skill = findSkill(listSkills(workDir), name)
+  if (!skill) return null
+
+  if (opts?.allowedSources && !opts.allowedSources.includes(skill.source)) {
+    return null
+  }
+  return skill
+}
+
 /**
  * Get skill content by name
  */
 export function getSkillContent(name: string, workDir?: string): SkillContent | null {
-  const skill = findSkill(listSkills(workDir), name)
+  const skill = getSkillDefinition(name, workDir)
   if (!skill) {
     console.warn(`[Skills] Skill not found: ${name}`)
     return null
@@ -394,26 +442,47 @@ export function deleteSkill(skillPath: string): boolean {
  * Copy a skill to the space directory
  */
 export function copySkillToSpace(skillName: string, workDir: string): SkillDefinition | null {
-  const sourceSkill = listSkills(workDir).find(s => s.name === skillName)
+  const result = copySkillToSpaceByRef({ type: 'skill', name: skillName }, workDir)
+  return result.status === 'copied' ? (result.data ?? null) : null
+}
+
+export function copySkillToSpaceByRef(
+  ref: ResourceRef,
+  workDir: string,
+  options?: CopyToSpaceOptions
+): CopyToSpaceResult<SkillDefinition> {
+  const sourceSkill = findSkillByRef(listSkillsForRefLookup(workDir), ref)
   if (!sourceSkill) {
-    console.warn(`[Skills] Source skill not found: ${skillName}`)
-    return null
+    console.warn(`[Skills] Source skill not found: ${ref.name}`)
+    return { status: 'not_found' }
   }
 
-  if (sourceSkill.source === 'space') {
-    console.warn(`[Skills] Skill is already in space: ${skillName}`)
-    return sourceSkill
+  const targetDir = join(workDir, '.claude', 'skills', sourceSkill.name)
+  const targetSkillPath = join(targetDir, 'SKILL.md')
+
+  if (sourceSkill.source === 'space' && sourceSkill.path === targetDir) {
+    return { status: 'copied', data: sourceSkill }
+  }
+
+  if (existsSync(targetSkillPath) && !options?.overwrite) {
+    return { status: 'conflict', existingPath: targetDir }
   }
 
   try {
-    const targetDir = join(workDir, '.claude', 'skills', skillName)
+    if (existsSync(targetDir) && options?.overwrite) {
+      rmSync(targetDir, { recursive: true, force: true })
+    }
+
     mkdirSync(targetDir, { recursive: true })
-    copyFileSync(join(sourceSkill.path, 'SKILL.md'), join(targetDir, 'SKILL.md'))
+    copyFileSync(join(sourceSkill.path, 'SKILL.md'), targetSkillPath)
     invalidateSkillsCache(workDir)
-    return { ...sourceSkill, path: targetDir, source: 'space' }
+    return {
+      status: 'copied',
+      data: { ...sourceSkill, path: targetDir, source: 'space' }
+    }
   } catch (error) {
     console.error('[Skills] Failed to copy skill to space:', error)
-    return null
+    return { status: 'not_found', error: (error as Error).message }
   }
 }
 

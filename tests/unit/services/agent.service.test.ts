@@ -3,7 +3,7 @@
  *
  * Tests for the configuration isolation mechanism:
  * - CLAUDE_CONFIG_DIR should be set to ~/.kite/ in SDK env
- * - settingSources should return ['user', 'project'] by default
+ * - strict only-space policy should force settingSources to ['local']
  *
  * These tests verify that Kite uses ~/.kite/ as its config directory
  * instead of ~/.claude/, providing complete isolation from system Claude Code.
@@ -152,20 +152,12 @@ describe('Agent Service - CLAUDE_CONFIG_DIR', () => {
   })
 
   describe('buildSettingSources', () => {
-    it('should return ["user", "project"] by default', () => {
-      // When CLAUDE_CONFIG_DIR is set to ~/.kite/:
-      // - 'user' loads from ~/.kite/ (skills, commands, agents, settings)
-      // - 'project' loads from {workDir}/.claude/ (project-level config)
-
+    it('should return ["local"] by default in strict space-only mode', () => {
       const sources = _testBuildSettingSources('/test/workspace')
-
-      expect(sources).toContain('user')
-      expect(sources).toContain('project')
-      expect(sources).toEqual(['user', 'project'])
+      expect(sources).toEqual(['local'])
     })
 
-    it('should exclude "project" when space config disables it', () => {
-      // Space-level override: can disable project settings for specific spaces
+    it('should remain ["local"] when project settings are disabled under strict mode', () => {
       vi.mocked(getSpaceConfig).mockReturnValue({
         claudeCode: {
           enableProjectSettings: false
@@ -173,19 +165,34 @@ describe('Agent Service - CLAUDE_CONFIG_DIR', () => {
       } as any)
 
       const sources = _testBuildSettingSources('/test/workspace')
-
-      expect(sources).toContain('user')
-      expect(sources).not.toContain('project')
-      expect(sources).toEqual(['user'])
+      expect(sources).toEqual(['local'])
     })
 
-    it('should always include "user" source (for ~/.kite/ loading)', () => {
-      // 'user' source is always included because it now points to ~/.kite/
-      // via CLAUDE_CONFIG_DIR environment variable
+    it('should keep legacy behavior when resource policy is explicitly legacy', () => {
+      vi.mocked(getSpaceConfig).mockReturnValue({
+        resourcePolicy: {
+          version: 1,
+          mode: 'legacy'
+        }
+      } as any)
 
       const sources = _testBuildSettingSources('/test/workspace')
+      expect(sources).toEqual(['user', 'project'])
+    })
 
-      expect(sources).toContain('user')
+    it('should exclude "project" in legacy mode when explicitly disabled', () => {
+      vi.mocked(getSpaceConfig).mockReturnValue({
+        resourcePolicy: {
+          version: 1,
+          mode: 'legacy'
+        },
+        claudeCode: {
+          enableProjectSettings: false
+        }
+      } as any)
+
+      const sources = _testBuildSettingSources('/test/workspace')
+      expect(sources).toEqual(['user'])
     })
   })
 })
@@ -199,13 +206,8 @@ describe('Agent Service - Configuration Isolation', () => {
     expect(env.CLAUDE_CONFIG_DIR).toContain('.kite')
   })
 
-  it('should enable user and project settings by default', () => {
-    // With CLAUDE_CONFIG_DIR=~/.kite/, enabling 'user' source loads from ~/.kite/
-    // This is the key change: we no longer need enableUserSettings flag
-
+  it('should force local settings source by default in strict mode', () => {
     const sources = _testBuildSettingSources('/test/workspace')
-
-    // Both should be enabled by default
-    expect(sources).toEqual(['user', 'project'])
+    expect(sources).toEqual(['local'])
   })
 })

@@ -42,6 +42,15 @@ export interface SpaceClaudeCodeConfig {
   enableProjectSettings?: boolean
 }
 
+export interface SpaceResourcePolicy {
+  version: number
+  mode: 'strict-space-only' | 'legacy'
+  allowHooks?: boolean
+  allowMcp?: boolean
+  allowPluginMcpDirective?: boolean
+  allowedSources?: Array<'space'>
+}
+
 export interface SpaceToolkit {
   skills: import('./agent/types').DirectiveRef[]
   commands: import('./agent/types').DirectiveRef[]
@@ -51,6 +60,7 @@ export interface SpaceToolkit {
 export interface SpaceConfig {
   claudeCode?: SpaceClaudeCodeConfig
   toolkit?: SpaceToolkit
+  resourcePolicy?: SpaceResourcePolicy
 }
 
 // File cache for space configs (mtime-based invalidation)

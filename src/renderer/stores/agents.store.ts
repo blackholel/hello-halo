@@ -55,7 +55,11 @@ interface AgentsState {
   createAgent: (workDir: string, name: string, content: string) => Promise<AgentDefinition | null>
   updateAgent: (agentPath: string, content: string) => Promise<boolean>
   deleteAgent: (agentPath: string) => Promise<boolean>
-  copyToSpace: (agentName: string, workDir: string) => Promise<AgentDefinition | null>
+  copyToSpace: (
+    agent: AgentDefinition,
+    workDir: string,
+    options?: { overwrite?: boolean }
+  ) => Promise<{ status: 'copied' | 'conflict' | 'not_found'; data?: AgentDefinition }>
   clearCache: () => Promise<void>
   markDirty: (workDir?: string | null) => void
   markAllDirty: () => void
@@ -249,29 +253,39 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
   },
 
   // Copy agent to space
-  copyToSpace: async (agentName, workDir) => {
+  copyToSpace: async (agent, workDir, options) => {
     try {
-      const response = await api.copyAgentToSpace(agentName, workDir)
+      const response = await api.copyAgentToSpaceByRef({
+        type: 'agent',
+        name: agent.name,
+        namespace: agent.namespace,
+        source: agent.source,
+        path: agent.path
+      }, workDir, options)
       if (response.success && response.data) {
-        const copiedAgent = response.data as AgentDefinition
+        const copyResult = response.data as { status: 'copied' | 'conflict' | 'not_found'; data?: AgentDefinition }
+        if (copyResult.status !== 'copied' || !copyResult.data) {
+          return copyResult
+        }
+        const copiedAgent = copyResult.data
         const cacheKey = getCacheKey(workDir)
         set((state) => ({
-          agents: state.agents.map(a => a.name === agentName ? copiedAgent : a),
+          agents: state.agents.map(a => a.path === agent.path ? copiedAgent : a),
           agentsByWorkDir: {
             ...state.agentsByWorkDir,
             [cacheKey]: (state.agentsByWorkDir[cacheKey] || []).map(a =>
-              a.name === agentName ? copiedAgent : a
+              a.path === agent.path ? copiedAgent : a
             )
           }
         }))
-        return copiedAgent
+        return { status: 'copied', data: copiedAgent }
       }
       set({ error: response.error || 'Failed to copy agent to space' })
-      return null
+      return { status: 'not_found' }
     } catch (error) {
       console.error('[AgentsStore] Failed to copy agent to space:', error)
       set({ error: 'Failed to copy agent to space' })
-      return null
+      return { status: 'not_found' }
     }
   },
 

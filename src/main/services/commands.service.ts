@@ -15,6 +15,7 @@ import { getAllSpacePaths } from './space.service'
 import { isPathWithinBasePaths, isValidDirectoryPath, isFileNotFoundError, isWorkDirAllowed } from '../utils/path-validation'
 import { listEnabledPlugins } from './plugins.service'
 import { FileCache } from '../utils/file-cache'
+import type { ResourceRef, CopyToSpaceOptions, CopyToSpaceResult } from './resource-ref.service'
 import { commandKey } from '../../shared/command-utils'
 
 // ============================================
@@ -149,6 +150,20 @@ function findCommand(commands: CommandDefinition[], name: string): CommandDefini
     ?? commands.find(c => c.name === name)
 }
 
+function findCommandByRef(commands: CommandDefinition[], ref: ResourceRef): CommandDefinition | undefined {
+  if (ref.path) {
+    const byPath = commands.find(command => command.path === ref.path)
+    if (byPath) return byPath
+  }
+
+  return commands.find((command) => {
+    if (command.name !== ref.name) return false
+    if ((ref.namespace || undefined) !== (command.namespace || undefined)) return false
+    if (ref.source && command.source !== ref.source) return false
+    return true
+  })
+}
+
 function logFound(items: CommandDefinition[]): void {
   if (items.length > 0) {
     console.log(`[Commands] Found ${items.length} commands: ${items.map(commandKey).join(', ')}`)
@@ -176,12 +191,35 @@ export function listCommands(workDir?: string): CommandDefinition[] {
   return commands
 }
 
+export function listSpaceCommands(workDir: string): CommandDefinition[] {
+  return listCommands(workDir).filter(command => command.source === 'space')
+}
+
+function listCommandsForRefLookup(workDir: string): CommandDefinition[] {
+  if (!globalCommandsCache) {
+    globalCommandsCache = buildGlobalCommands()
+  }
+
+  let spaceCommands = spaceCommandsCache.get(workDir)
+  if (!spaceCommands) {
+    spaceCommands = buildSpaceCommands(workDir)
+    spaceCommandsCache.set(workDir, spaceCommands)
+  }
+
+  // Keep source-distinct entries for by-ref copy lookup; do not merge by key.
+  return [...spaceCommands, ...globalCommandsCache]
+}
+
+export function getCommand(name: string, workDir?: string): CommandDefinition | null {
+  return findCommand(listCommands(workDir), name) ?? null
+}
+
 export function getCommandContent(
   name: string,
   workDir?: string,
   opts?: { silent?: boolean }
 ): string | null {
-  const command = findCommand(listCommands(workDir), name)
+  const command = getCommand(name, workDir)
 
   if (!command) {
     if (!opts?.silent) console.warn(`[Commands] Command not found: ${name}`)
@@ -279,31 +317,46 @@ export function deleteCommand(commandPath: string): boolean {
 }
 
 export function copyCommandToSpace(commandName: string, workDir: string): CommandDefinition | null {
-  const sourceCommand = findCommand(listCommands(workDir), commandName)
+  const result = copyCommandToSpaceByRef({ type: 'command', name: commandName }, workDir)
+  return result.status === 'copied' ? (result.data ?? null) : null
+}
+
+export function copyCommandToSpaceByRef(
+  ref: ResourceRef,
+  workDir: string,
+  options?: CopyToSpaceOptions
+): CopyToSpaceResult<CommandDefinition> {
+  const sourceCommand = findCommandByRef(listCommandsForRefLookup(workDir), ref)
   if (!sourceCommand) {
-    console.warn(`[Commands] Source command not found: ${commandName}`)
-    return null
+    console.warn(`[Commands] Source command not found: ${ref.name}`)
+    return { status: 'not_found' }
   }
 
-  if (sourceCommand.source === 'space') {
-    console.warn(`[Commands] Command is already in space: ${commandName}`)
-    return sourceCommand
+  const targetDir = join(workDir, '.claude', 'commands')
+  const targetPath = join(targetDir, `${sourceCommand.name}.md`)
+
+  if (sourceCommand.source === 'space' && sourceCommand.path === targetPath) {
+    return { status: 'copied', data: sourceCommand }
+  }
+
+  if (existsSync(targetPath) && !options?.overwrite) {
+    return { status: 'conflict', existingPath: targetPath }
   }
 
   try {
-    const targetDir = join(workDir, '.claude', 'commands')
-    const targetPath = join(targetDir, `${sourceCommand.name}.md`)
+    if (existsSync(targetPath) && options?.overwrite) {
+      rmSync(targetPath, { force: true })
+    }
     mkdirSync(targetDir, { recursive: true })
     copyFileSync(sourceCommand.path, targetPath)
     invalidateCommandsCache(workDir)
     return {
-      ...sourceCommand,
-      path: targetPath,
-      source: 'space'
+      status: 'copied',
+      data: { ...sourceCommand, path: targetPath, source: 'space' }
     }
   } catch (error) {
     console.error('[Commands] Failed to copy command to space:', error)
-    return null
+    return { status: 'not_found', error: (error as Error).message }
   }
 }
 
