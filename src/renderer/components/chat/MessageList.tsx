@@ -56,6 +56,8 @@ interface MessageListProps {
   textBlockVersion?: number  // Increments on each new text block (for StreamingBubble reset)
   workDir?: string  // For skill suggestion card creation
   onOpenPlanInCanvas?: (planContent: string) => void
+  toolStatusById?: Record<string, ToolStatus>
+  availableToolsSnapshot?: AvailableToolsSnapshot
 }
 
 /**
@@ -289,7 +291,9 @@ export function MessageList({
   isCompact = false,
   textBlockVersion = 0,
   workDir,
-  onOpenPlanInCanvas
+  onOpenPlanInCanvas,
+  toolStatusById = {},
+  availableToolsSnapshot
 }: MessageListProps) {
   const { t } = useTranslation()
   const runtimeThoughts = useMemo(() => {

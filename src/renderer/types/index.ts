@@ -658,21 +658,6 @@ export interface AgentToolsAvailableEvent extends AgentEventBase {
   toolCount: number;
 }
 
-export interface AgentRunStartEvent extends AgentEventBase {
-  type: 'run_start';
-  runId: string;
-  startedAt: string;
-}
-
-export interface AgentToolsAvailableEvent extends AgentEventBase {
-  type: 'tools_available';
-  runId: string;
-  snapshotVersion: number;
-  emittedAt: string;
-  tools: string[];
-  toolCount: number;
-}
-
 export interface AgentThoughtEvent extends AgentEventBase {
   thought: Thought;
 }

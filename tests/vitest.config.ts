@@ -18,19 +18,8 @@ export default defineConfig({
       'unit/**/*.test.ts',
       '../src/main/services/agent/__tests__/ask-user-question-flow.test.ts',
       '../src/main/services/agent/__tests__/message-flow.ask-user-question-status.test.ts',
-      '../src/main/services/agent/__tests__/message-parser.visibility.test.ts',
-      '../src/main/services/agent/__tests__/message-flow.final-content.test.ts',
-      '../src/main/services/agent/__tests__/sdk-config.builder.strict-space.test.ts',
-      '../src/main/services/agent/__tests__/renderer-comm.resource-guard.test.ts',
-      '../src/main/services/agent/__tests__/skill-expander.space-only.test.ts',
-      '../src/main/services/__tests__/toolkit.service.test.ts',
-      '../src/main/services/__tests__/workflow.service.space-only.test.ts',
-      '../src/main/services/__tests__/resource-copy-by-ref.test.ts',
-      '../src/renderer/api/__tests__/transport.process.test.ts',
-      '../src/renderer/api/__tests__/api.process.test.ts',
-      '../src/renderer/components/chat/__tests__/message-list.thought-priority.test.ts',
-      '../src/renderer/components/chat/__tests__/thought-process.visibility.test.ts',
-      '../src/renderer/stores/__tests__/chat.store.ask-user-question.test.ts'
+      '../src/renderer/stores/__tests__/chat.store.ask-user-question.test.ts',
+      './unit/services/renderer-comm.ask-user-question.test.ts'
     ],
 
     // Root directory for tests

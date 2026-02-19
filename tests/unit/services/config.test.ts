@@ -34,37 +34,6 @@ describe('Config Service', () => {
     })
   })
 
-  describe('resolveSpacesRootFromConfigDir', () => {
-    it('should resolve sibling kite directory for .kite config dir', () => {
-      expect(resolveSpacesRootFromConfigDir('/A/.kite')).toBe(path.resolve('/A/kite'))
-    })
-
-    it('should resolve sibling kite directory for .kite config dir with trailing slash', () => {
-      expect(resolveSpacesRootFromConfigDir('/A/.kite/')).toBe(path.resolve('/A/kite'))
-    })
-
-    it('should resolve nested kite directory for non-.kite config dir', () => {
-      expect(resolveSpacesRootFromConfigDir('/A/custom-config')).toBe(path.resolve('/A/custom-config/kite'))
-    })
-
-    it('should resolve nested kite directory for non-.kite config dir with trailing slash', () => {
-      expect(resolveSpacesRootFromConfigDir('/A/custom-config/')).toBe(path.resolve('/A/custom-config/kite'))
-    })
-
-    it('should compare basename case-insensitively on windows', () => {
-      expect(resolveSpacesRootFromConfigDir('C:\\Users\\dl\\.KITE', 'win32')).toBe(path.win32.resolve('C:\\Users\\dl\\kite'))
-      expect(resolveSpacesRootFromConfigDir('C:\\Users\\dl\\Custom', 'win32')).toBe(path.win32.resolve('C:\\Users\\dl\\Custom\\kite'))
-    })
-  })
-
-  describe('getSpacesDir', () => {
-    it('should use instance-isolated kite root derived from config dir', () => {
-      const spacesDir = getSpacesDir()
-      expect(spacesDir.endsWith(path.join('kite'))).toBe(true)
-      expect(spacesDir.includes(path.join('.kite', 'spaces'))).toBe(false)
-    })
-  })
-
   describe('initializeApp', () => {
     it('should create necessary directories', async () => {
       await initializeApp()

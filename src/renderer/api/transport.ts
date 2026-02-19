@@ -3,9 +3,9 @@
  * Automatically selects the appropriate transport based on environment
  */
 
-// Detect if running in Electron (has window.kite via preload)
+// Detect if running in Electron (supports both window.kite and legacy window.halo)
 export function isElectron(): boolean {
-  return typeof window !== 'undefined' && 'kite' in window
+  return typeof window !== 'undefined' && ('kite' in window || 'halo' in window)
 }
 
 // Detect if running as remote web client
@@ -198,7 +198,8 @@ export function unsubscribeFromConversation(conversationId: string): void {
 export function onEvent(channel: string, callback: (data: unknown) => void): () => void {
   if (isElectron()) {
     // Use IPC in Electron
-    const methodMap: Record<string, keyof typeof window.kite> = {
+    const methodMap: Record<string, string> = {
+      'agent:run-start': 'onAgentRunStart',
       'agent:message': 'onAgentMessage',
       'agent:tool-call': 'onAgentToolCall',
       'agent:tool-result': 'onAgentToolResult',
@@ -222,8 +223,9 @@ export function onEvent(channel: string, callback: (data: unknown) => void): () 
     }
 
     const method = methodMap[channel]
-    if (method && typeof window.kite[method] === 'function') {
-      return (window.kite[method] as (cb: (data: unknown) => void) => () => void)(callback)
+    const ipcApi = ((window as any).kite ?? (window as any).halo) as Record<string, unknown> | undefined
+    if (method && ipcApi && typeof ipcApi[method] === 'function') {
+      return (ipcApi[method] as (cb: (data: unknown) => void) => () => void)(callback)
     }
 
     return () => {}

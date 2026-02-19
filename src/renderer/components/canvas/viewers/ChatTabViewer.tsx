@@ -74,6 +74,8 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
   const loadChangeSets = useChatStore(state => state.loadChangeSets)
   const acceptChangeSet = useChatStore(state => state.acceptChangeSet)
   const rollbackChangeSet = useChatStore(state => state.rollbackChangeSet)
+  const answerQuestion = useChatStore(state => state.answerQuestion)
+  const dismissAskUserQuestion = useChatStore(state => state.dismissAskUserQuestion)
   const setPlanEnabled = useChatStore(state => state.setPlanEnabled)
 
   // Load conversation if not in cache
@@ -102,7 +104,11 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
     compactInfo = null,
     error = null,
     textBlockVersion = 0,
+    toolStatusById = {},
+    availableToolsSnapshot,
+    pendingAskUserQuestion = null,
     planEnabled = false,
+    failedAskUserQuestion = null
   } = session || {}
 
   const currentChangeSets = conversationId ? (changeSets.get(conversationId) || []) : []
@@ -223,6 +229,8 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
                 error={error}
                 isCompact={true}
                 textBlockVersion={textBlockVersion}
+                toolStatusById={toolStatusById}
+                availableToolsSnapshot={availableToolsSnapshot}
                 onOpenPlanInCanvas={handleOpenPlanInCanvas}
               />
               <div ref={bottomRef} />

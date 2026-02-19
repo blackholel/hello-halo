@@ -1925,10 +1925,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         await autoOpenPlanTab(updatedConversation, spaceId, conversationId, get, set)
       }
 
-      if (!conversationReloaded) {
-        applyFinalContentFallback(data.finalContent)
-      }
-
       if (changeSetsResponse.success && changeSetsResponse.data) {
         const changeSets = changeSetsResponse.data as ChangeSet[]
         set((state) => {

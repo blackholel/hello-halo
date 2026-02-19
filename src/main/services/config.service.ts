@@ -156,33 +156,6 @@ export function getTempSpacePath(): string {
   return join(getKiteDir(), 'temp')
 }
 
-export function resolveSpacesRootFromConfigDir(
-  configDir: string,
-  platform: NodeJS.Platform = process.platform
-): string {
-  if (platform === 'win32') {
-    const normalizedConfigDir = pathWin32.resolve(configDir)
-    const configBaseName = pathWin32.basename(normalizedConfigDir)
-    const isDotKiteDir = configBaseName.toLowerCase() === '.kite'
-
-    if (isDotKiteDir) {
-      return pathWin32.resolve(pathWin32.join(pathWin32.dirname(normalizedConfigDir), 'kite'))
-    }
-
-    return pathWin32.resolve(pathWin32.join(normalizedConfigDir, 'kite'))
-  }
-
-  const normalizedConfigDir = pathPosix.resolve(configDir)
-  const configBaseName = basename(normalizedConfigDir)
-  const isDotKiteDir = configBaseName === '.kite'
-
-  if (isDotKiteDir) {
-    return pathPosix.resolve(join(dirname(normalizedConfigDir), 'kite'))
-  }
-
-  return pathPosix.resolve(join(normalizedConfigDir, 'kite'))
-}
-
 export function getSpacesDir(): string {
   return join(getKiteDir(), 'spaces')
 }

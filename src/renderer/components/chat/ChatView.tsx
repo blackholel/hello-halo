@@ -50,6 +50,8 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     rollbackChangeSet,
     sendMessage,
     stopGeneration,
+    answerQuestion,
+    dismissAskUserQuestion,
     setPlanEnabled,
   } = useChatStore()
   const { openPlan } = useCanvasLifecycle()
@@ -165,7 +167,22 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     currentConversationId ? state.isConversationLoading(currentConversationId) : false
   )
   const session = getCurrentSession()
-  const { isGenerating, streamingContent, isStreaming, thoughts, parallelGroups, isThinking, compactInfo, error, textBlockVersion, planEnabled } = session
+  const {
+    isGenerating,
+    streamingContent,
+    isStreaming,
+    thoughts,
+    parallelGroups,
+    isThinking,
+    compactInfo,
+    error,
+    textBlockVersion,
+    toolStatusById,
+    availableToolsSnapshot,
+    pendingAskUserQuestion,
+    failedAskUserQuestion,
+    planEnabled
+  } = session
 
   // Smart auto-scroll: only scrolls when user is at bottom
   const {
