@@ -11,6 +11,9 @@ import { v4 as uuidv4 } from 'uuid'
 import { isPathWithinBasePaths } from '../utils/path-validation'
 import { ensureSpaceResourcePolicy } from './agent/space-resource-policy.service'
 import type { ResourceRef } from './resource-ref.service'
+import { copySkillToSpaceByRef } from './skills.service'
+import { copyAgentToSpaceByRef } from './agents.service'
+import { copyCommandToSpaceByRef } from './commands.service'
 
 interface Space {
   id: string
@@ -338,10 +341,6 @@ function loadSpaceFromPath(spacePath: string): Space | null {
 
 function migrateToolkitRefToSpace(workDir: string, ref: ResourceRef): void {
   try {
-    const { copySkillToSpaceByRef } = require('./skills.service') as typeof import('./skills.service')
-    const { copyAgentToSpaceByRef } = require('./agents.service') as typeof import('./agents.service')
-    const { copyCommandToSpaceByRef } = require('./commands.service') as typeof import('./commands.service')
-
     if (ref.type === 'skill') {
       copySkillToSpaceByRef(ref, workDir)
       return
