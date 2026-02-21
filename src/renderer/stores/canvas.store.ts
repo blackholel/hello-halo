@@ -20,6 +20,7 @@ import {
   type BrowserState,
   type ContentType,
 } from '../services/canvas-lifecycle'
+import type { TemplateLibraryTab } from '../types/template-library'
 
 // Re-export types for backward compatibility
 export type { BrowserState, ContentType }
@@ -50,6 +51,7 @@ interface CanvasState {
   openContent: (content: string, title: string, type: ContentType, language?: string) => void
   openPlan: (content: string, title: string, spaceId: string, conversationId: string, workDir?: string) => Promise<string>
   openChat: (spaceId: string, conversationId: string, title: string, workDir?: string) => Promise<void>
+  openTemplateLibrary: (title: string, initialTab: TemplateLibraryTab, workDir?: string) => Promise<string>
   closeTab: (tabId: string) => void
   closeAllTabs: () => void
   switchTab: (tabId: string) => void
@@ -146,6 +148,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => {
 
     openChat: async (spaceId: string, conversationId: string, title: string, workDir?: string) => {
       await canvasLifecycle.openChat(spaceId, conversationId, title, workDir)
+    },
+
+    openTemplateLibrary: async (title: string, initialTab: TemplateLibraryTab, workDir?: string) => {
+      return await canvasLifecycle.openTemplateLibrary(title, initialTab, workDir)
     },
 
     closeTab: (tabId: string) => {

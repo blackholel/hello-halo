@@ -24,7 +24,7 @@
  */
 
 import { useState, useRef, useCallback, useEffect, forwardRef } from 'react'
-import { X, Loader2, AlertCircle, Plus, XCircle, Maximize2, Minimize2, MessageSquare } from 'lucide-react'
+import { X, Loader2, AlertCircle, Plus, XCircle, Maximize2, Minimize2, MessageSquare, BookOpen } from 'lucide-react'
 import { type TabState } from '../../services/canvas-lifecycle'
 import { useCanvasLifecycle } from '../../hooks/useCanvasLifecycle'
 import { useCanvasStore } from '../../stores/canvas.store'
@@ -414,6 +414,8 @@ const TabItem = forwardRef<HTMLDivElement, TabItemProps>(function TabItem({
           <AlertCircle className="w-4 h-4 text-destructive" />
         ) : tab.type === 'chat' ? (
           <MessageSquare className="w-4 h-4 text-blue-500" />
+        ) : tab.type === 'template-library' ? (
+          <BookOpen className="w-4 h-4 text-emerald-500" />
         ) : (
           <FileIcon
             extension={extension}

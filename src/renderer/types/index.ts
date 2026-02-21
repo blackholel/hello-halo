@@ -258,6 +258,8 @@ export interface WorkflowStep {
   summarizeAfter?: boolean;
 }
 
+export type { TemplateLibraryTab } from './template-library';
+
 export interface Workflow {
   id: string;
   spaceId: string;

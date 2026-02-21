@@ -19,10 +19,6 @@ import { SkillsPanel } from '../skills/SkillsPanel'
 import { AgentsPanel } from '../agents/AgentsPanel'
 import { CommandsPanel } from '../commands/CommandsPanel'
 import { WorkflowsPanel } from '../workflows/WorkflowsPanel'
-import { TemplateLibraryModal, type TemplateLibraryTab } from '../shared/TemplateLibraryModal'
-import { useSkillsStore } from '../../stores/skills.store'
-import { useAgentsStore } from '../../stores/agents.store'
-import { useCommandsStore } from '../../stores/commands.store'
 import type { SkillDefinition } from '../../stores/skills.store'
 import type { AgentDefinition } from '../../stores/agents.store'
 
@@ -71,18 +67,13 @@ export function ConversationList({
   onCreateCommand
 }: ConversationListProps) {
   const { t } = useTranslation()
-  const { openChat } = useCanvasLifecycle()
+  const { openChat, openTemplateLibrary } = useCanvasLifecycle()
   const [width, setWidth] = useState(DEFAULT_WIDTH)
   const [isDragging, setIsDragging] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
-  const [templateModalOpen, setTemplateModalOpen] = useState(false)
-  const [templateModalTab, setTemplateModalTab] = useState<TemplateLibraryTab>('skills')
   const containerRef = useRef<HTMLDivElement>(null)
   const editInputRef = useRef<HTMLInputElement>(null)
-  const loadSkills = useSkillsStore(state => state.loadSkills)
-  const loadAgents = useAgentsStore(state => state.loadAgents)
-  const loadCommands = useCommandsStore(state => state.loadCommands)
 
   // Handle drag resize
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -305,8 +296,7 @@ export function ConversationList({
           onInsertSkill={onInsertSkill}
           onCreateSkill={onCreateSkill}
           onOpenTemplateLibrary={() => {
-            setTemplateModalTab('skills')
-            setTemplateModalOpen(true)
+            void openTemplateLibrary(t('Template Library'), 'skills', workDir)
           }}
           preferInsertOnClick
         />
@@ -316,8 +306,7 @@ export function ConversationList({
           onInsertAgent={onInsertAgent}
           onCreateAgent={onCreateAgent}
           onOpenTemplateLibrary={() => {
-            setTemplateModalTab('agents')
-            setTemplateModalOpen(true)
+            void openTemplateLibrary(t('Template Library'), 'agents', workDir)
           }}
           preferInsertOnClick
         />
@@ -326,8 +315,7 @@ export function ConversationList({
           onInsertCommand={onInsertCommand}
           onCreateCommand={onCreateCommand}
           onOpenTemplateLibrary={() => {
-            setTemplateModalTab('commands')
-            setTemplateModalOpen(true)
+            void openTemplateLibrary(t('Template Library'), 'commands', workDir)
           }}
           preferInsertOnClick
         />
@@ -346,20 +334,6 @@ export function ConversationList({
         `}
         onMouseDown={handleMouseDown}
         title={t('Drag to resize width')}
-      />
-
-      <TemplateLibraryModal
-        open={templateModalOpen}
-        workDir={workDir}
-        initialTab={templateModalTab}
-        onClose={() => setTemplateModalOpen(false)}
-        onImported={() => {
-          void Promise.all([
-            loadSkills(workDir),
-            loadAgents(workDir),
-            loadCommands(workDir)
-          ])
-        }}
       />
     </div>
   )

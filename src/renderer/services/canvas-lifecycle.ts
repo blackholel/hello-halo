@@ -28,6 +28,7 @@
  */
 
 import { api } from '../api'
+import type { TemplateLibraryTab } from '../types/template-library'
 
 // ============================================
 // Types
@@ -46,6 +47,7 @@ export type ContentType =
   | 'browser'
   | 'terminal'
   | 'chat'
+  | 'template-library'
 
 export interface BrowserState {
   isLoading: boolean
@@ -74,6 +76,7 @@ export interface TabState {
   conversationId?: string
   spaceId?: string
   workDir?: string
+  templateLibraryTab?: TemplateLibraryTab
 }
 
 // Callback types
@@ -627,6 +630,50 @@ class CanvasLifecycle {
       workDir,
       isDirty: false,
       isLoading: false,
+    }
+
+    this.tabs.set(tabId, tab)
+    this.setOpen(true)
+    this.notifyTabsChange()
+
+    await this.switchTab(tabId)
+
+    return tabId
+  }
+
+  /**
+   * Open Template Library in a Canvas tab
+   * Reuses existing template tab for the same workDir when possible
+   */
+  async openTemplateLibrary(
+    title: string,
+    initialTab: TemplateLibraryTab,
+    workDir?: string
+  ): Promise<string> {
+    for (const [tabId, tab] of this.tabs) {
+      if (tab.type === 'template-library' && tab.workDir === workDir) {
+        this.tabs.set(tabId, {
+          ...tab,
+          title,
+          workDir,
+          templateLibraryTab: initialTab
+        })
+        this.setOpen(true)
+        this.notifyTabsChange()
+        await this.switchTab(tabId)
+        return tabId
+      }
+    }
+
+    const tabId = generateTabId()
+    const tab: TabState = {
+      id: tabId,
+      type: 'template-library',
+      title,
+      workDir,
+      templateLibraryTab: initialTab,
+      isDirty: false,
+      isLoading: false
     }
 
     this.tabs.set(tabId, tab)
