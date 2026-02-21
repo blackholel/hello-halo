@@ -37,6 +37,7 @@ import { TextViewer } from './viewers/TextViewer'
 import { PlanEditor } from './viewers/PlanEditor'
 import { BrowserViewer, BrowserViewerFallback } from './viewers/BrowserViewer'
 import { ChatTabViewer } from './viewers/ChatTabViewer'
+import { TemplateLibraryViewer } from './viewers/TemplateLibraryViewer'
 import { api } from '../../api'
 import { useTranslation } from '../../i18n'
 import { useChatStore } from '../../stores/chat.store'
@@ -269,6 +270,9 @@ function TabContent({ tab, onScrollChange, onContentChange, onSave }: TabContent
           </div>
         </div>
       )
+
+    case 'template-library':
+      return <TemplateLibraryViewer tab={tab} />
 
     default:
       return <TextViewer tab={tab} onScrollChange={onScrollChange} />

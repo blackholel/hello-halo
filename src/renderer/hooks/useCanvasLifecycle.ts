@@ -18,6 +18,7 @@ import {
   type BrowserState,
   type ContentType,
 } from '../services/canvas-lifecycle'
+import type { TemplateLibraryTab } from '../types/template-library'
 
 /**
  * Main hook for Canvas lifecycle management
@@ -79,6 +80,12 @@ export function useCanvasLifecycle() {
   const openChat = useCallback(
     (spaceId: string, conversationId: string, title: string, workDir?: string) =>
       canvasLifecycle.openChat(spaceId, conversationId, title, workDir),
+    []
+  )
+
+  const openTemplateLibrary = useCallback(
+    (title: string, initialTab: TemplateLibraryTab, workDir?: string) =>
+      canvasLifecycle.openTemplateLibrary(title, initialTab, workDir),
     []
   )
 
@@ -173,6 +180,7 @@ export function useCanvasLifecycle() {
     openContent,
     openPlan,
     openChat,
+    openTemplateLibrary,
     closeTab,
     closeAllTabs,
     switchTab,

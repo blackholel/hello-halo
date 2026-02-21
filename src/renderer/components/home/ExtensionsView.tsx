@@ -8,7 +8,7 @@ import { type CommandDefinition, useCommandsStore } from '../../stores/commands.
 import { type SkillDefinition, useSkillsStore } from '../../stores/skills.store'
 import { useToolkitStore } from '../../stores/toolkit.store'
 import { useSpaceStore } from '../../stores/space.store'
-import { ResourceCard } from './ResourceCard'
+import { ResourceCard } from '../resources/ResourceCard'
 
 type FilterTab = 'all' | 'skills' | 'agents' | 'commands'
 
@@ -245,7 +245,13 @@ export function ExtensionsView(): JSX.Element {
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {groupedItems.skill.map((item, index) => (
-                      <ResourceCard key={item.id} resource={item.resource} type="skill" index={index} />
+                      <ResourceCard
+                        key={item.id}
+                        resource={item.resource}
+                        type="skill"
+                        index={index}
+                        actionMode="toolkit"
+                      />
                     ))}
                   </div>
                 </section>
@@ -257,7 +263,13 @@ export function ExtensionsView(): JSX.Element {
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {groupedItems.agent.map((item, index) => (
-                      <ResourceCard key={item.id} resource={item.resource} type="agent" index={index} />
+                      <ResourceCard
+                        key={item.id}
+                        resource={item.resource}
+                        type="agent"
+                        index={index}
+                        actionMode="toolkit"
+                      />
                     ))}
                   </div>
                 </section>
@@ -270,7 +282,13 @@ export function ExtensionsView(): JSX.Element {
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                       {groupedItems.command.map((item, index) => (
-                        <ResourceCard key={item.id} resource={item.resource} type="command" index={index} />
+                        <ResourceCard
+                          key={item.id}
+                          resource={item.resource}
+                          type="command"
+                          index={index}
+                          actionMode="toolkit"
+                        />
                       ))}
                     </div>
                   </section>
@@ -279,7 +297,13 @@ export function ExtensionsView(): JSX.Element {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 stagger-item" style={{ animationDelay: '120ms' }}>
                 {filteredItems.map((item, index) => (
-                  <ResourceCard key={item.id} resource={item.resource} type={item.type} index={index} />
+                  <ResourceCard
+                    key={item.id}
+                    resource={item.resource}
+                    type={item.type}
+                    index={index}
+                    actionMode="toolkit"
+                  />
                 ))}
               </div>
             )}
