@@ -52,9 +52,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     stopGeneration,
     answerQuestion,
     dismissAskUserQuestion,
-    setPlanEnabled,
-    answerQuestion,
-    dismissAskUserQuestion
+    setPlanEnabled
   } = useChatStore()
   const { openPlan } = useCanvasLifecycle()
 

@@ -1,5 +1,5 @@
 {
-  "name": "kite",
+  "name": "buddykite",
   "version": "1.2.1",
   "description": "AI that gets things done",
   "type": "module",
@@ -11,18 +11,19 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "postinstall": "patch-package && electron-builder install-app-deps",
+    "prepare:kite-seed": "node scripts/copy-kite-seed.mjs",
     "prepare:python-mac": "node scripts/prepare-python.mjs darwin-arm64",
     "prepare:python-win": "node scripts/prepare-python.mjs win-x64",
-    "build:mac": "npm run prepare:python-mac && npm run build && electron-builder --mac",
-    "build:win": "npm run build && electron-builder --win",
-    "build:win-x64": "npm run prepare:win-x64 && npm run prepare:python-win && npm run build && electron-builder --win --x64",
+    "build:mac": "npm run prepare:kite-seed && npm run prepare:python-mac && npm run build && electron-builder --mac",
+    "build:win": "npm run prepare:kite-seed && npm run build && electron-builder --win",
+    "build:win-x64": "npm run prepare:kite-seed && npm run prepare:win-x64 && npm run prepare:python-win && npm run build && electron-builder --win --x64",
     "prepare:win-x64": "node scripts/prepare-cloudflared-win-x64.mjs",
-    "build:linux": "npm run build && electron-builder --linux",
+    "build:linux": "npm run prepare:kite-seed && npm run build && electron-builder --linux",
     "icons": "bash scripts/generate-icons.sh",
-    "release": "npm run build && electron-builder --mac --win --publish always",
-    "release:mac": "npm run build && electron-builder --mac --publish always",
-    "release:win": "npm run build && electron-builder --win --publish always",
-    "release:linux": "npm run build && electron-builder --linux --publish always",
+    "release": "npm run prepare:kite-seed && npm run build && electron-builder --mac --win --publish always",
+    "release:mac": "npm run prepare:kite-seed && npm run build && electron-builder --mac --publish always",
+    "release:win": "npm run prepare:kite-seed && npm run build && electron-builder --win --publish always",
+    "release:linux": "npm run prepare:kite-seed && npm run build && electron-builder --linux --publish always",
     "test": "npm run test:check && npm run test:ask-user-question-guard && npm run test:unit",
     "test:check": "node tests/check/binaries.mjs",
     "test:check:mac": "node tests/check/binaries.mjs --platform mac",
@@ -97,7 +98,7 @@
   },
   "build": {
     "appId": "com.kite.app",
-    "productName": "Kite",
+    "productName": "buddykite",
     "releaseInfo": {
       "releaseNotesFile": ".release-notes-current.md"
     },
@@ -129,6 +130,13 @@
         {
           "from": "resources/python/darwin-arm64",
           "to": "python",
+          "filter": [
+            "**/*"
+          ]
+        },
+        {
+          "from": "build/default-kite-config",
+          "to": "default-kite-config",
           "filter": [
             "**/*"
           ]
@@ -182,6 +190,13 @@
           "filter": [
             "**/*"
           ]
+        },
+        {
+          "from": "build/default-kite-config",
+          "to": "default-kite-config",
+          "filter": [
+            "**/*"
+          ]
         }
       ],
       "target": [
@@ -201,6 +216,15 @@
     },
     "linux": {
       "icon": "resources/linux",
+      "extraResources": [
+        {
+          "from": "build/default-kite-config",
+          "to": "default-kite-config",
+          "filter": [
+            "**/*"
+          ]
+        }
+      ],
       "target": [
         {
           "target": "AppImage",

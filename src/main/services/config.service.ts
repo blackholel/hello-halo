@@ -4,7 +4,7 @@
 
 import { app } from 'electron'
 import { basename, dirname, join, posix as pathPosix, resolve, win32 as pathWin32 } from 'path'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'fs'
 import { getConfigDir } from '../utils/instance'
 
 // Import analytics config type
@@ -234,6 +234,305 @@ const DEFAULT_CONFIG: KiteConfig = {
   configSourceMode: 'kite'
 }
 
+const BUILTIN_SEED_ENV_KEY = 'KITE_BUILTIN_SEED_DIR'
+const DISABLE_BUILTIN_SEED_ENV_KEY = 'KITE_DISABLE_BUILTIN_SEED'
+const SEED_STATE_FILE = '.seed-state.json'
+const KITE_ROOT_TEMPLATE = '__KITE_ROOT__'
+const BUILTIN_SEED_CONFIG_NAMES = new Set([
+  'config.json',
+  'settings.json',
+  'agents',
+  'commands',
+  'hooks',
+  'mcp',
+  'rules',
+  'skills',
+  'contexts',
+  'plugins'
+])
+
+interface SeedInstalledPlugin {
+  scope?: 'user' | 'project'
+  installPath?: string
+  version?: string
+  installedAt?: string
+  lastUpdated?: string
+  gitCommitSha?: string
+}
+
+interface SeedInstalledPluginsRegistry {
+  version?: number
+  plugins?: Record<string, SeedInstalledPlugin[]>
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function cloneJsonValue<T>(value: T): T {
+  if (value === undefined || value === null || typeof value !== 'object') {
+    return value
+  }
+  return JSON.parse(JSON.stringify(value))
+}
+
+function isDirectory(path: string): boolean {
+  try {
+    return statSync(path).isDirectory()
+  } catch {
+    return false
+  }
+}
+
+function isBuiltInSeedDisabled(): boolean {
+  const value = process.env[DISABLE_BUILTIN_SEED_ENV_KEY]
+  if (!value) return false
+  return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase())
+}
+
+function deepFillMissing<T>(target: T, seedValue: unknown): T {
+  if (!isPlainObject(seedValue) || !isPlainObject(target)) {
+    return target
+  }
+
+  const merged: Record<string, unknown> = { ...target }
+  for (const [key, incoming] of Object.entries(seedValue)) {
+    const existing = merged[key]
+    if (existing === undefined) {
+      merged[key] = cloneJsonValue(incoming)
+      continue
+    }
+    if (isPlainObject(existing) && isPlainObject(incoming)) {
+      merged[key] = deepFillMissing(existing, incoming)
+    }
+  }
+
+  return merged as T
+}
+
+function readJsonFile(path: string): unknown | null {
+  if (!existsSync(path)) return null
+  try {
+    return JSON.parse(readFileSync(path, 'utf-8'))
+  } catch (error) {
+    console.warn(`[Seed] Failed to read JSON: ${path}`, error)
+    return null
+  }
+}
+
+function copyFileIfMissing(sourcePath: string, targetPath: string): void {
+  if (existsSync(targetPath)) return
+  mkdirSync(dirname(targetPath), { recursive: true })
+  copyFileSync(sourcePath, targetPath)
+}
+
+function copyDirMissingOnly(sourceDir: string, targetDir: string): void {
+  mkdirSync(targetDir, { recursive: true })
+  for (const entry of readdirSync(sourceDir, { withFileTypes: true })) {
+    const sourcePath = join(sourceDir, entry.name)
+    const targetPath = join(targetDir, entry.name)
+    if (entry.isDirectory()) {
+      copyDirMissingOnly(sourcePath, targetPath)
+      continue
+    }
+    if (entry.isFile()) {
+      copyFileIfMissing(sourcePath, targetPath)
+    }
+  }
+}
+
+function mergeJsonFileByMissingKeys(sourcePath: string, targetPath: string): void {
+  const sourceValue = readJsonFile(sourcePath)
+  if (!isPlainObject(sourceValue)) return
+
+  if (!existsSync(targetPath)) {
+    mkdirSync(dirname(targetPath), { recursive: true })
+    writeFileSync(targetPath, JSON.stringify(sourceValue, null, 2))
+    return
+  }
+
+  const targetValue = readJsonFile(targetPath)
+  if (!isPlainObject(targetValue)) return
+
+  const merged = deepFillMissing(targetValue, sourceValue)
+  writeFileSync(targetPath, JSON.stringify(merged, null, 2))
+}
+
+function normalizeInstallPath(pathValue: string, kiteDir: string): string {
+  if (!pathValue.startsWith(KITE_ROOT_TEMPLATE)) {
+    return pathValue
+  }
+
+  const suffix = pathValue.slice(KITE_ROOT_TEMPLATE.length).replace(/^[/\\]+/, '')
+  if (!suffix) return kiteDir
+
+  const parts = suffix.split(/[\\/]+/).filter(Boolean)
+  return join(kiteDir, ...parts)
+}
+
+function mergePluginRegistryWithTemplatePath(sourcePath: string, targetPath: string, kiteDir: string): void {
+  const sourceValue = readJsonFile(sourcePath)
+  if (!isPlainObject(sourceValue)) return
+
+  const sourceRegistry = sourceValue as SeedInstalledPluginsRegistry
+  const sourcePlugins = isPlainObject(sourceRegistry.plugins) ? sourceRegistry.plugins : {}
+
+  const normalizedSeedPlugins: Record<string, SeedInstalledPlugin[]> = {}
+  for (const [fullName, installations] of Object.entries(sourcePlugins)) {
+    if (!Array.isArray(installations) || installations.length === 0) continue
+    const normalizedInstallations = installations
+      .filter((installation) => isPlainObject(installation))
+      .map((installation) => {
+        const installPathValue = typeof installation.installPath === 'string'
+          ? normalizeInstallPath(installation.installPath, kiteDir)
+          : undefined
+        return {
+          ...installation,
+          ...(installPathValue ? { installPath: installPathValue } : {})
+        }
+      })
+      .filter((installation) => typeof installation.installPath === 'string')
+
+    if (normalizedInstallations.length > 0) {
+      normalizedSeedPlugins[fullName] = normalizedInstallations
+    }
+  }
+
+  if (Object.keys(normalizedSeedPlugins).length === 0) return
+
+  const targetValue = readJsonFile(targetPath)
+  const targetRegistry = isPlainObject(targetValue)
+    ? (targetValue as SeedInstalledPluginsRegistry)
+    : { version: sourceRegistry.version || 2, plugins: {} }
+  const targetPlugins = isPlainObject(targetRegistry.plugins) ? { ...targetRegistry.plugins } : {}
+
+  for (const [fullName, installations] of Object.entries(normalizedSeedPlugins)) {
+    if (!Object.prototype.hasOwnProperty.call(targetPlugins, fullName)) {
+      targetPlugins[fullName] = installations
+    }
+  }
+
+  const mergedRegistry: SeedInstalledPluginsRegistry = {
+    version: typeof targetRegistry.version === 'number'
+      ? targetRegistry.version
+      : (sourceRegistry.version || 2),
+    plugins: targetPlugins
+  }
+
+  mkdirSync(dirname(targetPath), { recursive: true })
+  writeFileSync(targetPath, JSON.stringify(mergedRegistry, null, 2))
+}
+
+function injectPluginsSeed(sourcePluginsDir: string, targetPluginsDir: string, kiteDir: string): void {
+  const sourceCacheDir = join(sourcePluginsDir, 'cache')
+  if (isDirectory(sourceCacheDir)) {
+    copyDirMissingOnly(sourceCacheDir, join(targetPluginsDir, 'cache'))
+  }
+
+  const sourceRegistryPath = join(sourcePluginsDir, 'installed_plugins.json')
+  if (existsSync(sourceRegistryPath)) {
+    mergePluginRegistryWithTemplatePath(
+      sourceRegistryPath,
+      join(targetPluginsDir, 'installed_plugins.json'),
+      kiteDir
+    )
+  }
+}
+
+function getSeedStatePath(kiteDir: string): string {
+  return join(kiteDir, SEED_STATE_FILE)
+}
+
+function shouldInjectBuiltInSeed(kiteDir: string, seedDir: string | null): boolean {
+  if (isBuiltInSeedDisabled()) {
+    console.log('[Seed] Injection disabled by KITE_DISABLE_BUILTIN_SEED')
+    return false
+  }
+  if (!seedDir) return false
+  if (!isDirectory(seedDir)) return false
+  if (existsSync(getSeedStatePath(kiteDir))) return false
+  return true
+}
+
+function getDevSeedCandidates(): string[] {
+  const candidates: string[] = []
+  try {
+    const appPath = typeof app.getAppPath === 'function' ? app.getAppPath() : null
+    if (appPath) {
+      candidates.push(join(appPath, '../resources/default-kite-config'))
+    }
+  } catch {
+    // Ignore app path errors in tests/dev environments
+  }
+
+  candidates.push(
+    join(__dirname, '../../resources/default-kite-config'),
+    join(process.cwd(), 'build/default-kite-config'),
+    join(process.cwd(), 'resources/default-kite-config')
+  )
+  return candidates
+}
+
+export function resolveSeedDir(): string | null {
+  const envSeedPath = process.env[BUILTIN_SEED_ENV_KEY]
+  const packagedSeedPath = typeof process.resourcesPath === 'string'
+    ? join(process.resourcesPath, 'default-kite-config')
+    : null
+  const candidates = [
+    ...(envSeedPath ? [envSeedPath] : []),
+    ...(packagedSeedPath ? [packagedSeedPath] : []),
+    ...getDevSeedCandidates()
+  ]
+
+  for (const candidate of candidates) {
+    if (isDirectory(candidate)) {
+      console.log(`[Seed] Using built-in seed dir: ${candidate}`)
+      return candidate
+    }
+  }
+
+  return null
+}
+
+function injectBuiltInSeed(seedDir: string, kiteDir: string): boolean {
+  let hasSeedEntries = false
+  for (const entryName of BUILTIN_SEED_CONFIG_NAMES) {
+    const sourcePath = join(seedDir, entryName)
+    if (!existsSync(sourcePath)) continue
+    hasSeedEntries = true
+    const targetPath = join(kiteDir, entryName)
+
+    if (entryName === 'config.json' || entryName === 'settings.json') {
+      mergeJsonFileByMissingKeys(sourcePath, targetPath)
+      continue
+    }
+
+    if (entryName === 'plugins' && isDirectory(sourcePath)) {
+      injectPluginsSeed(sourcePath, targetPath, kiteDir)
+      continue
+    }
+
+    if (isDirectory(sourcePath)) {
+      copyDirMissingOnly(sourcePath, targetPath)
+      continue
+    }
+
+    copyFileIfMissing(sourcePath, targetPath)
+  }
+
+  if (!hasSeedEntries) {
+    return false
+  }
+
+  const seedState = {
+    schemaVersion: 1,
+    appVersion: app.getVersion(),
+    injectedAt: new Date().toISOString()
+  }
+  writeFileSync(getSeedStatePath(kiteDir), JSON.stringify(seedState, null, 2))
+  return true
+}
+
 // Initialize app directories
 export async function initializeApp(): Promise<void> {
   const kiteDir = getKiteDir()
@@ -247,6 +546,20 @@ export async function initializeApp(): Promise<void> {
   for (const dir of dirs) {
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true })
+    }
+  }
+
+  const seedDir = resolveSeedDir()
+  if (shouldInjectBuiltInSeed(kiteDir, seedDir) && seedDir) {
+    try {
+      const injected = injectBuiltInSeed(seedDir, kiteDir)
+      if (injected) {
+        console.log('[Seed] Built-in seed injection complete')
+      } else {
+        console.log('[Seed] Built-in seed injection skipped (no seed entries)')
+      }
+    } catch (error) {
+      console.error('[Seed] Built-in seed injection failed:', error)
     }
   }
 

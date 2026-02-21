@@ -77,8 +77,6 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
   const answerQuestion = useChatStore(state => state.answerQuestion)
   const dismissAskUserQuestion = useChatStore(state => state.dismissAskUserQuestion)
   const setPlanEnabled = useChatStore(state => state.setPlanEnabled)
-  const answerQuestion = useChatStore(state => state.answerQuestion)
-  const dismissAskUserQuestion = useChatStore(state => state.dismissAskUserQuestion)
 
   // Load conversation if not in cache
   useEffect(() => {
@@ -110,9 +108,6 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
     availableToolsSnapshot,
     pendingAskUserQuestion = null,
     planEnabled = false,
-    toolStatusById = {},
-    availableToolsSnapshot,
-    pendingAskUserQuestion = null,
     failedAskUserQuestion = null
   } = session || {}
 
