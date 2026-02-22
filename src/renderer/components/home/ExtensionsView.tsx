@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Bot, Puzzle, Search, Terminal, Zap } from 'lucide-react'
-import { commandKey } from '../../../shared/command-utils'
 import { api } from '../../api'
 import { useTranslation } from '../../i18n'
 import { type AgentDefinition, useAgentsStore } from '../../stores/agents.store'
@@ -9,27 +8,25 @@ import { type SkillDefinition, useSkillsStore } from '../../stores/skills.store'
 import { useToolkitStore } from '../../stores/toolkit.store'
 import { useSpaceStore } from '../../stores/space.store'
 import { ResourceCard } from '../resources/ResourceCard'
-
-type FilterTab = 'all' | 'skills' | 'agents' | 'commands'
-
-interface ExtensionItem {
-  id: string
-  type: 'skill' | 'agent' | 'command'
-  resource: SkillDefinition | AgentDefinition | CommandDefinition
-  searchable: string
-}
+import {
+  applySceneFilter,
+  applyTypeAndSearchFilter,
+  computeSceneCounts,
+  computeTypeCounts,
+  getSceneOrder,
+  groupByType,
+  normalizeExtensionItems,
+  shouldShowRemoteCommandsUnavailable,
+  sortExtensions,
+  type FilterTab
+} from '../resources/extension-filtering'
+import { SCENE_TAG_CLASS, SCENE_TAG_LABEL_KEY } from '../resources/scene-tag-meta'
+import type { SceneFilter } from '../../../shared/extension-taxonomy'
 
 interface EmptyStateProps {
   icon: typeof Puzzle
   title: string
   description: string
-}
-
-const FILTER_TO_TYPE: Record<FilterTab, ExtensionItem['type'] | null> = {
-  all: null,
-  skills: 'skill',
-  agents: 'agent',
-  commands: 'command'
 }
 
 function EmptyState({ icon: Icon, title, description }: EmptyStateProps): JSX.Element {
@@ -47,6 +44,7 @@ function EmptyState({ icon: Icon, title, description }: EmptyStateProps): JSX.El
 export function ExtensionsView(): JSX.Element {
   const { t } = useTranslation()
   const [activeFilter, setActiveFilter] = useState<FilterTab>('all')
+  const [sceneFilter, setSceneFilter] = useState<SceneFilter>('all')
   const [query, setQuery] = useState('')
   const isRemote = api.isRemoteMode()
   const hasRequestedGlobalResources = useRef(false)
@@ -55,27 +53,22 @@ export function ExtensionsView(): JSX.Element {
 
   const {
     skills,
-    loadedWorkDir: loadedSkillsWorkDir,
     isLoading: skillsLoading,
     loadSkills
   } = useSkillsStore()
 
   const {
     agents,
-    loadedWorkDir: loadedAgentsWorkDir,
     isLoading: agentsLoading,
     loadAgents
   } = useAgentsStore()
 
   const {
     commands,
-    loadedWorkDir: loadedCommandsWorkDir,
     isLoading: commandsLoading,
     loadCommands
   } = useCommandsStore()
 
-  // Load global resources once on mount.
-  // The ref guard ensures this runs at most once; deps kept minimal.
   useEffect(() => {
     if (hasRequestedGlobalResources.current) return
     hasRequestedGlobalResources.current = true
@@ -92,70 +85,33 @@ export function ExtensionsView(): JSX.Element {
     }
   }, [currentSpace, loadToolkit])
 
-  const normalizedItems = useMemo<ExtensionItem[]>(() => {
-    const skillItems: ExtensionItem[] = skills.map((skill) => ({
-      id: `skill:${skill.namespace ?? '-'}:${skill.name}`,
-      type: 'skill',
-      resource: skill,
-      searchable: [
-        skill.name,
-        skill.namespace,
-        skill.description,
-        skill.category,
-        ...(skill.triggers || [])
-      ].filter(Boolean).join(' ').toLowerCase()
-    }))
+  const normalizedItems = useMemo(() => normalizeExtensionItems({
+    skills: skills as SkillDefinition[],
+    agents: agents as AgentDefinition[],
+    commands: commands as CommandDefinition[],
+    isRemote
+  }), [agents, commands, isRemote, skills])
 
-    const agentItems: ExtensionItem[] = agents.map((agent) => ({
-      id: `agent:${agent.namespace ?? '-'}:${agent.name}`,
-      type: 'agent',
-      resource: agent,
-      searchable: [agent.name, agent.namespace, agent.description].filter(Boolean).join(' ').toLowerCase()
-    }))
+  const typeSearchFilteredItems = useMemo(
+    () => sortExtensions(applyTypeAndSearchFilter(normalizedItems, activeFilter, query)),
+    [activeFilter, normalizedItems, query]
+  )
 
-    const commandItems: ExtensionItem[] = (isRemote ? [] : commands).map((command) => ({
-      id: `command:${command.namespace ?? '-'}:${command.name}`,
-      type: 'command',
-      resource: command,
-      searchable: [commandKey(command), command.description].filter(Boolean).join(' ').toLowerCase()
-    }))
+  const sceneCounts = useMemo(
+    () => computeSceneCounts(typeSearchFilteredItems),
+    [typeSearchFilteredItems]
+  )
 
-    return [...skillItems, ...agentItems, ...commandItems]
-  }, [agents, commands, isRemote, skills])
+  const filteredItems = useMemo(
+    () => applySceneFilter(typeSearchFilteredItems, sceneFilter),
+    [sceneFilter, typeSearchFilteredItems]
+  )
 
-  const filteredItems = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase()
-    const filterType = FILTER_TO_TYPE[activeFilter]
-    return normalizedItems.filter((item) => {
-      if (filterType && item.type !== filterType) return false
-      if (!normalizedQuery) return true
-      return item.searchable.includes(normalizedQuery)
-    })
-  }, [activeFilter, normalizedItems, query])
-
-  const groupedItems = useMemo(() => {
-    const groups: Record<'skill' | 'agent' | 'command', ExtensionItem[]> = {
-      skill: [],
-      agent: [],
-      command: []
-    }
-
-    filteredItems.forEach((item) => {
-      groups[item.type].push(item)
-    })
-
-    return groups
-  }, [filteredItems])
+  const groupedItems = useMemo(() => groupByType(filteredItems), [filteredItems])
 
   const isLoading = skillsLoading || agentsLoading || (!isRemote && commandsLoading)
 
-  const typeCounts = useMemo(() => {
-    const counts = { skill: 0, agent: 0, command: 0 }
-    for (const item of normalizedItems) {
-      counts[item.type]++
-    }
-    return counts
-  }, [normalizedItems])
+  const typeCounts = useMemo(() => computeTypeCounts(normalizedItems), [normalizedItems])
 
   const tabs = useMemo<Array<{ key: FilterTab; label: string; count: number }>>(() => [
     { key: 'all', label: t('All'), count: normalizedItems.length },
@@ -168,7 +124,24 @@ export function ExtensionsView(): JSX.Element {
     }
   ], [normalizedItems.length, typeCounts, t, isRemote])
 
-  const showRemoteCommandsUnavailable = isRemote && (activeFilter === 'commands' || activeFilter === 'all')
+  const showRemoteCommandsUnavailable = shouldShowRemoteCommandsUnavailable(isRemote, activeFilter)
+
+  const sceneOptions = useMemo(() => {
+    const allCount = typeSearchFilteredItems.length
+    return [
+      { key: 'all' as const, label: t('All scenes'), count: allCount },
+      ...getSceneOrder().map((tag) => ({
+        key: tag,
+        label: t(SCENE_TAG_LABEL_KEY[tag]),
+        count: sceneCounts[tag]
+      }))
+    ]
+  }, [sceneCounts, t, typeSearchFilteredItems.length])
+
+  const handleClearFilters = (): void => {
+    setSceneFilter('all')
+    setQuery('')
+  }
 
   return (
     <div className="h-full overflow-auto">
@@ -211,6 +184,35 @@ export function ExtensionsView(): JSX.Element {
               )
             })}
           </div>
+
+          <div className="flex flex-wrap gap-1.5 mt-2 pt-2 border-t border-border/40">
+            {sceneOptions.map((scene) => {
+              const isActive = sceneFilter === scene.key
+              const isZero = scene.count === 0 && scene.key !== 'all'
+              const canClick = isActive || !isZero
+
+              const sceneStyle = scene.key === 'all'
+                ? 'text-muted-foreground hover:text-foreground hover:bg-secondary/70'
+                : SCENE_TAG_CLASS[scene.key]
+
+              return (
+                <button
+                  key={scene.key}
+                  type="button"
+                  onClick={() => canClick && setSceneFilter(scene.key)}
+                  disabled={!canClick}
+                  className={`px-2.5 py-1 text-[11px] rounded-full border transition-all ${
+                    isActive
+                      ? 'bg-primary/15 text-primary border-primary/25 font-medium'
+                      : `${sceneStyle} ${isZero ? 'opacity-45 cursor-not-allowed' : 'hover:opacity-90'}`
+                  }`}
+                >
+                  {scene.label}
+                  <span className="ml-1 text-[10px] opacity-80">{scene.count}</span>
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         {isLoading ? (
@@ -232,9 +234,20 @@ export function ExtensionsView(): JSX.Element {
               <div className="stagger-item" style={{ animationDelay: '120ms' }}>
                 <EmptyState
                   icon={Puzzle}
-                  title={query ? t('No matching extensions') : t('No extensions available')}
-                  description={query ? t('Try another search keyword') : t('Resources will appear here after loading')}
+                  title={query || sceneFilter !== 'all' ? t('No matching extensions') : t('No extensions available')}
+                  description={query || sceneFilter !== 'all' ? t('Try another search keyword') : t('Resources will appear here after loading')}
                 />
+                {(query || sceneFilter !== 'all') && (
+                  <div className="mt-3 text-center">
+                    <button
+                      type="button"
+                      onClick={handleClearFilters}
+                      className="px-3 py-1.5 text-xs rounded-lg bg-secondary/80 hover:bg-secondary text-muted-foreground"
+                    >
+                      {t('Clear filters')}
+                    </button>
+                  </div>
+                )}
               </div>
             ) : activeFilter === 'all' ? (
               <div className="space-y-8">

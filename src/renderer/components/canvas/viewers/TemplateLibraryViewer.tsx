@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Bot, Puzzle, Search, Terminal, X, Zap } from 'lucide-react'
-import { commandKey } from '../../../../shared/command-utils'
 import { api } from '../../../api'
 import { useTranslation } from '../../../i18n'
 import { useCanvasLifecycle } from '../../../hooks/useCanvasLifecycle'
@@ -11,38 +10,30 @@ import { useAgentsStore, type AgentDefinition } from '../../../stores/agents.sto
 import { useCommandsStore, type CommandDefinition } from '../../../stores/commands.store'
 import { useSkillsStore, type SkillDefinition } from '../../../stores/skills.store'
 import type { TabState } from '../../../services/canvas-lifecycle'
-import type { TemplateLibraryTab } from '../../../types/template-library'
-
-type FilterTab = 'all' | 'skills' | 'agents' | 'commands'
+import {
+  applySceneFilter,
+  applyTypeAndSearchFilter,
+  buildTemplateFilterState,
+  computeSceneCounts,
+  computeTypeCounts,
+  getSceneOrder,
+  groupByType,
+  normalizeExtensionItems,
+  shouldShowRemoteCommandsUnavailable,
+  sortExtensions,
+  type FilterTab
+} from '../../resources/extension-filtering'
+import { SCENE_TAG_CLASS, SCENE_TAG_LABEL_KEY } from '../../resources/scene-tag-meta'
+import type { SceneFilter } from '../../../../shared/extension-taxonomy'
 
 interface TemplateLibraryViewerProps {
   tab: TabState
-}
-
-interface TemplateItem {
-  id: string
-  type: ResourceType
-  resource: SkillDefinition | AgentDefinition | CommandDefinition
-  searchable: string
 }
 
 interface EmptyStateProps {
   icon: typeof Puzzle
   title: string
   description: string
-}
-
-const FILTER_TO_TYPE: Record<FilterTab, ResourceType | null> = {
-  all: null,
-  skills: 'skill',
-  agents: 'agent',
-  commands: 'command'
-}
-
-function mapTemplateTabToFilter(tab: TemplateLibraryTab): FilterTab {
-  if (tab === 'agents') return 'agents'
-  if (tab === 'commands') return 'commands'
-  return 'skills'
 }
 
 function EmptyState({ icon: Icon, title, description }: EmptyStateProps): JSX.Element {
@@ -69,8 +60,10 @@ export function TemplateLibraryViewer({ tab }: TemplateLibraryViewerProps): JSX.
   const markAgentsDirty = useAgentsStore((state) => state.markDirty)
   const loadCommands = useCommandsStore((state) => state.loadCommands)
 
-  const [activeFilter, setActiveFilter] = useState<FilterTab>(mapTemplateTabToFilter(tab.templateLibraryTab ?? 'skills'))
-  const [query, setQuery] = useState('')
+  const initialState = buildTemplateFilterState(tab.templateLibraryTab ?? 'skills')
+  const [activeFilter, setActiveFilter] = useState<FilterTab>(initialState.activeFilter)
+  const [sceneFilter, setSceneFilter] = useState<SceneFilter>(initialState.sceneFilter)
+  const [query, setQuery] = useState(initialState.query)
   const [loading, setLoading] = useState(false)
   const [refreshToken, setRefreshToken] = useState(0)
   const [templateSkills, setTemplateSkills] = useState<SkillDefinition[]>([])
@@ -81,8 +74,10 @@ export function TemplateLibraryViewer({ tab }: TemplateLibraryViewerProps): JSX.
   const [spaceCommandKeys, setSpaceCommandKeys] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    setActiveFilter(mapTemplateTabToFilter(tab.templateLibraryTab ?? 'skills'))
-    setQuery('')
+    const state = buildTemplateFilterState(tab.templateLibraryTab ?? 'skills')
+    setActiveFilter(state.activeFilter)
+    setSceneFilter(state.sceneFilter)
+    setQuery(state.query)
   }, [tab.id, tab.templateLibraryTab])
 
   useEffect(() => {
@@ -173,72 +168,34 @@ export function TemplateLibraryViewer({ tab }: TemplateLibraryViewerProps): JSX.
     }
   }, [refreshStores, triggerRefresh, workDir])
 
-  const normalizedItems = useMemo<TemplateItem[]>(() => {
-    const skillItems: TemplateItem[] = templateSkills.map((skill) => ({
-      id: `skill:${skill.namespace ?? '-'}:${skill.name}`,
-      type: 'skill',
-      resource: skill,
-      searchable: [
-        skill.name,
-        skill.namespace,
-        skill.description,
-        skill.category,
-        ...(skill.triggers || [])
-      ].filter(Boolean).join(' ').toLowerCase()
-    }))
+  const normalizedItems = useMemo(
+    () => normalizeExtensionItems({
+      skills: templateSkills,
+      agents: templateAgents,
+      commands: templateCommands,
+      isRemote
+    }),
+    [isRemote, templateAgents, templateCommands, templateSkills]
+  )
 
-    const agentItems: TemplateItem[] = templateAgents.map((agent) => ({
-      id: `agent:${agent.namespace ?? '-'}:${agent.name}`,
-      type: 'agent',
-      resource: agent,
-      searchable: [agent.name, agent.namespace, agent.description].filter(Boolean).join(' ').toLowerCase()
-    }))
+  const typeSearchFilteredItems = useMemo(
+    () => sortExtensions(applyTypeAndSearchFilter(normalizedItems, activeFilter, query)),
+    [activeFilter, normalizedItems, query]
+  )
 
-    const commandItems: TemplateItem[] = (isRemote ? [] : templateCommands).map((command) => ({
-      id: `command:${command.namespace ?? '-'}:${command.name}`,
-      type: 'command',
-      resource: command,
-      searchable: [commandKey(command), command.description].filter(Boolean).join(' ').toLowerCase()
-    }))
+  const sceneCounts = useMemo(
+    () => computeSceneCounts(typeSearchFilteredItems),
+    [typeSearchFilteredItems]
+  )
 
-    return [...skillItems, ...agentItems, ...commandItems]
-  }, [isRemote, templateAgents, templateCommands, templateSkills])
+  const filteredItems = useMemo(
+    () => applySceneFilter(typeSearchFilteredItems, sceneFilter),
+    [sceneFilter, typeSearchFilteredItems]
+  )
 
-  const filteredItems = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase()
-    const filterType = FILTER_TO_TYPE[activeFilter]
-    return normalizedItems.filter((item) => {
-      if (filterType && item.type !== filterType) return false
-      if (!normalizedQuery) return true
-      return item.searchable.includes(normalizedQuery)
-    })
-  }, [activeFilter, normalizedItems, query])
+  const groupedItems = useMemo(() => groupByType(filteredItems), [filteredItems])
 
-  const groupedItems = useMemo(() => {
-    const groups: Record<ResourceType, TemplateItem[]> = {
-      skill: [],
-      agent: [],
-      command: []
-    }
-
-    filteredItems.forEach((item) => {
-      groups[item.type].push(item)
-    })
-
-    return groups
-  }, [filteredItems])
-
-  const counts = useMemo(() => {
-    const value = {
-      skill: 0,
-      agent: 0,
-      command: 0
-    }
-    for (const item of normalizedItems) {
-      value[item.type]++
-    }
-    return value
-  }, [normalizedItems])
+  const counts = useMemo(() => computeTypeCounts(normalizedItems), [normalizedItems])
 
   const tabs = useMemo<Array<{ key: FilterTab; label: string; count: number }>>(() => [
     { key: 'all', label: t('All'), count: normalizedItems.length },
@@ -251,21 +208,38 @@ export function TemplateLibraryViewer({ tab }: TemplateLibraryViewerProps): JSX.
     }
   ], [counts, isRemote, normalizedItems.length, t])
 
-  const isAdded = useCallback((item: TemplateItem): boolean => {
+  const sceneOptions = useMemo(() => {
+    const allCount = typeSearchFilteredItems.length
+    return [
+      { key: 'all' as const, label: t('All scenes'), count: allCount },
+      ...getSceneOrder().map((tag) => ({
+        key: tag,
+        label: t(SCENE_TAG_LABEL_KEY[tag]),
+        count: sceneCounts[tag]
+      }))
+    ]
+  }, [sceneCounts, t, typeSearchFilteredItems.length])
+
+  const isAdded = useCallback((item: { type: ResourceType; resource: SkillDefinition | AgentDefinition | CommandDefinition }): boolean => {
     const key = resourceKey(item.resource)
     if (item.type === 'skill') return spaceSkillKeys.has(key)
     if (item.type === 'agent') return spaceAgentKeys.has(key)
     return spaceCommandKeys.has(key)
   }, [spaceAgentKeys, spaceCommandKeys, spaceSkillKeys])
 
-  const getDisabledReason = useCallback((item: TemplateItem): string | undefined => {
+  const getDisabledReason = useCallback((item: { type: ResourceType; resource: SkillDefinition | AgentDefinition | CommandDefinition }): string | undefined => {
     if (item.type === 'command' && isRemote) return t('Not available')
     if (!workDir) return t('No space selected')
     if (isAdded(item)) return t('Already added')
     return undefined
   }, [isAdded, isRemote, t, workDir])
 
-  const showRemoteCommandsUnavailable = isRemote && (activeFilter === 'commands' || activeFilter === 'all')
+  const showRemoteCommandsUnavailable = shouldShowRemoteCommandsUnavailable(isRemote, activeFilter)
+
+  const handleClearFilters = (): void => {
+    setSceneFilter('all')
+    setQuery('')
+  }
 
   return (
     <div className="flex flex-col h-full bg-card">
@@ -320,6 +294,34 @@ export function TemplateLibraryViewer({ tab }: TemplateLibraryViewerProps): JSX.
                 )
               })}
             </div>
+
+            <div className="flex flex-wrap gap-1.5 mt-2 pt-2 border-t border-border/40">
+              {sceneOptions.map((scene) => {
+                const isActive = sceneFilter === scene.key
+                const isZero = scene.count === 0 && scene.key !== 'all'
+                const canClick = isActive || !isZero
+                const sceneStyle = scene.key === 'all'
+                  ? 'text-muted-foreground hover:text-foreground hover:bg-secondary/70'
+                  : SCENE_TAG_CLASS[scene.key]
+
+                return (
+                  <button
+                    key={scene.key}
+                    type="button"
+                    onClick={() => canClick && setSceneFilter(scene.key)}
+                    disabled={!canClick}
+                    className={`px-2.5 py-1 text-[11px] rounded-full border transition-all ${
+                      isActive
+                        ? 'bg-primary/15 text-primary border-primary/25 font-medium'
+                        : `${sceneStyle} ${isZero ? 'opacity-45 cursor-not-allowed' : 'hover:opacity-90'}`
+                    }`}
+                  >
+                    {scene.label}
+                    <span className="ml-1 text-[10px] opacity-80">{scene.count}</span>
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
           {loading ? (
@@ -341,9 +343,20 @@ export function TemplateLibraryViewer({ tab }: TemplateLibraryViewerProps): JSX.
                 <div className="stagger-item" style={{ animationDelay: '120ms' }}>
                   <EmptyState
                     icon={Puzzle}
-                    title={query ? t('No matching extensions') : t('No extensions available')}
-                    description={query ? t('Try another search keyword') : t('Resources will appear here after loading')}
+                    title={query || sceneFilter !== 'all' ? t('No matching extensions') : t('No extensions available')}
+                    description={query || sceneFilter !== 'all' ? t('Try another search keyword') : t('Resources will appear here after loading')}
                   />
+                  {(query || sceneFilter !== 'all') && (
+                    <div className="mt-3 text-center">
+                      <button
+                        type="button"
+                        onClick={handleClearFilters}
+                        className="px-3 py-1.5 text-xs rounded-lg bg-secondary/80 hover:bg-secondary text-muted-foreground"
+                      >
+                        {t('Clear filters')}
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : activeFilter === 'all' ? (
                 <div className="space-y-8">
@@ -451,4 +464,3 @@ export function TemplateLibraryViewer({ tab }: TemplateLibraryViewerProps): JSX.
     </div>
   )
 }
-

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Copy, X } from 'lucide-react'
 import { api } from '../../api'
@@ -10,6 +10,7 @@ import { copyResourceWithConflict, resolveActionButtonState, type CopyResourceRe
 import { shouldLoadResourceContent } from './resource-content-loading'
 import { fetchResourceContent, getSourceColor, getSourceLabel, mapResourceMeta } from './resource-meta'
 import type { AnyResource, ResourceActionMode, ResourceType } from './types'
+import { normalizeSceneTags, SCENE_TAG_CLASS, SCENE_TAG_LABEL_KEY } from './scene-tag-meta'
 
 export interface ResourceCardProps {
   resource: AnyResource
@@ -36,6 +37,31 @@ function toResourceRef(resource: AnyResource, type: ResourceType) {
   }
 }
 
+function getTypeLabel(type: ResourceType, t: (key: string) => string): string {
+  if (type === 'skill') return t('Skill')
+  if (type === 'agent') return t('Agent')
+  return t('Command')
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      reject(new Error(`Resource content request timed out after ${timeoutMs}ms`))
+    }, timeoutMs)
+
+    promise.then(
+      (value) => {
+        window.clearTimeout(timeoutId)
+        resolve(value)
+      },
+      (error) => {
+        window.clearTimeout(timeoutId)
+        reject(error)
+      }
+    )
+  })
+}
+
 export function ResourceCard({
   resource,
   type,
@@ -54,6 +80,7 @@ export function ResourceCard({
   const [hasAttemptedLoadInCurrentOpen, setHasAttemptedLoadInCurrentOpen] = useState(false)
   const [isUpdatingToolkit, setIsUpdatingToolkit] = useState(false)
   const [isCopyingToSpace, setIsCopyingToSpace] = useState(false)
+  const contentRequestIdRef = useRef(0)
 
   const currentSpace = useSpaceStore((state) => state.currentSpace)
   const { getToolkit, isInToolkit, addResource, removeResource, loadToolkit, isToolkitLoaded } = useToolkitStore()
@@ -113,7 +140,9 @@ export function ResourceCard({
 
   useEffect(() => {
     if (isOpen) return
+    contentRequestIdRef.current += 1
     setHasAttemptedLoadInCurrentOpen(false)
+    setIsLoadingContent(false)
   }, [isOpen])
 
   useEffect(() => {
@@ -125,16 +154,16 @@ export function ResourceCard({
       hasAttemptedInCurrentOpen: hasAttemptedLoadInCurrentOpen
     })) return
 
-    let isCancelled = false
+    const requestId = contentRequestIdRef.current + 1
+    contentRequestIdRef.current = requestId
 
     const loadContent = async (): Promise<void> => {
       try {
-        setHasAttemptedLoadInCurrentOpen(true)
         setIsLoadingContent(true)
         setContentError(null)
 
-        const response = await fetchResourceContent(resource, type, workDir)
-        if (isCancelled) return
+        const response = await withTimeout(fetchResourceContent(resource, type, workDir), 8000)
+        if (contentRequestIdRef.current !== requestId) return
 
         if (!response.success || !response.data) {
           setContentError(response.error || t('Failed to load details'))
@@ -147,19 +176,18 @@ export function ResourceCard({
           : response.data as string
         setContent(text)
       } catch {
-        if (isCancelled) return
+        if (contentRequestIdRef.current !== requestId) return
         setContentError(t('Failed to load details'))
         setContent('')
       } finally {
-        if (!isCancelled) setIsLoadingContent(false)
+        if (contentRequestIdRef.current === requestId) {
+          setIsLoadingContent(false)
+          setHasAttemptedLoadInCurrentOpen(true)
+        }
       }
     }
 
     void loadContent()
-
-    return () => {
-      isCancelled = true
-    }
   }, [content, contentError, hasAttemptedLoadInCurrentOpen, isOpen, resource, t, type, workDir])
 
   const copyPath = async (event: React.MouseEvent): Promise<void> => {
@@ -232,6 +260,11 @@ export function ResourceCard({
     && actionState.disabled
 
   const Icon = meta.icon
+  const sceneTags = useMemo(
+    () => normalizeSceneTags((resource as { sceneTags?: unknown }).sceneTags),
+    [resource]
+  )
+  const typeLabel = getTypeLabel(type, t)
 
   const modal = isOpen ? (
     <div
@@ -335,6 +368,7 @@ export function ResourceCard({
               <div className="font-medium text-sm truncate">{meta.title}</div>
               <p
                 className="text-xs text-muted-foreground mt-1 leading-relaxed overflow-hidden"
+                title={meta.subtitle || t('No description')}
                 style={{
                   display: '-webkit-box',
                   WebkitLineClamp: 2,
@@ -345,7 +379,24 @@ export function ResourceCard({
               </p>
             </div>
           </div>
-          <span className={`text-[10px] px-2 py-0.5 rounded-md flex-shrink-0 ${getSourceColor(meta.source)}`}>
+          <span className="text-[10px] px-2 py-0.5 rounded-md flex-shrink-0 bg-foreground/5 text-foreground/70 border border-border/60">
+            {typeLabel}
+          </span>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {sceneTags.map((tag) => (
+            <span
+              key={tag}
+              className={`text-[10px] px-2 py-0.5 rounded-full border ${SCENE_TAG_CLASS[tag]}`}
+            >
+              {t(SCENE_TAG_LABEL_KEY[tag])}
+            </span>
+          ))}
+        </div>
+
+        <div className="mt-2">
+          <span className={`text-[10px] px-2 py-0.5 rounded-md ${getSourceColor(meta.source)} opacity-70`}>
             {getSourceLabel(meta.source, t)}
           </span>
         </div>

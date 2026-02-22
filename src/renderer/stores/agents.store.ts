@@ -14,6 +14,7 @@ import { getCacheKey, getAllCacheKeys, GLOBAL_CACHE_KEY } from './cache-keys'
 import { useSpaceStore } from './space.store'
 import { useToolkitStore } from './toolkit.store'
 import { buildDirective } from '../utils/directive-helpers'
+import type { SceneTag } from '../../shared/extension-taxonomy'
 
 // ============================================
 // Types
@@ -24,6 +25,7 @@ export interface AgentDefinition {
   path: string
   source: 'app' | 'global' | 'space' | 'plugin'
   description?: string
+  sceneTags?: SceneTag[]
   namespace?: string
 }
 

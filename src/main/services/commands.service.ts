@@ -17,6 +17,9 @@ import { listEnabledPlugins } from './plugins.service'
 import { FileCache } from '../utils/file-cache'
 import type { ResourceRef, CopyToSpaceOptions, CopyToSpaceResult } from './resource-ref.service'
 import { commandKey } from '../../shared/command-utils'
+import type { SceneTag } from '../../shared/extension-taxonomy'
+import { parseResourceMetadata } from './resource-metadata.service'
+import { resolveSceneTags } from './resource-scene-tags.service'
 
 // ============================================
 // Command Types
@@ -27,6 +30,7 @@ export interface CommandDefinition {
   path: string
   source: 'app' | 'space' | 'plugin'
   description?: string
+  sceneTags: SceneTag[]
   pluginRoot?: string
   namespace?: string
 }
@@ -54,19 +58,21 @@ function resolveWorkDirForCommandPath(commandPath: string): string | null {
   return null
 }
 
-function extractDescriptionFromContent(content: string): string | undefined {
-  const firstLine = content.split('\n')[0]?.trim()
-  if (!firstLine) return undefined
-  if (firstLine.startsWith('# ')) return firstLine.slice(2).trim().slice(0, 100)
-  if (!firstLine.startsWith('#')) return firstLine.slice(0, 100)
-  return undefined
-}
-
-function extractDescription(filePath: string): string | undefined {
+function readCommandMetadata(filePath: string, name: string): { description?: string; sceneTags: SceneTag[] } {
   try {
-    return extractDescriptionFromContent(readFileSync(filePath, 'utf-8'))
+    const content = readFileSync(filePath, 'utf-8')
+    const metadata = parseResourceMetadata(content)
+    return {
+      description: metadata.description,
+      sceneTags: resolveSceneTags({
+        name,
+        description: metadata.description,
+        content,
+        frontmatter: metadata.frontmatter
+      })
+    }
   } catch {
-    return undefined
+    return { sceneTags: ['office'] }
   }
 }
 
@@ -85,11 +91,14 @@ function scanCommandDir(
       const filePath = join(dirPath, file)
       try {
         if (!statSync(filePath).isFile()) continue
+        const name = file.slice(0, -3)
+        const metadata = readCommandMetadata(filePath, name)
         commands.push({
-          name: file.slice(0, -3),
+          name,
           path: filePath,
           source,
-          description: extractDescription(filePath),
+          description: metadata.description,
+          sceneTags: metadata.sceneTags,
           ...(pluginRoot && { pluginRoot }),
           ...(namespace && { namespace })
         })
@@ -283,12 +292,19 @@ export function createCommand(workDir: string, name: string, content: string): C
   mkdirSync(commandsDir, { recursive: true })
   writeFileSync(commandPath, content, 'utf-8')
   invalidateCommandsCache(workDir)
+  const metadata = parseResourceMetadata(content)
 
   return {
     name,
     path: commandPath,
     source: 'space',
-    description: extractDescriptionFromContent(content)
+    description: metadata.description,
+    sceneTags: resolveSceneTags({
+      name,
+      description: metadata.description,
+      content,
+      frontmatter: metadata.frontmatter
+    })
   }
 }
 

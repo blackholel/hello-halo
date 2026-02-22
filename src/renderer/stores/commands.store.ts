@@ -10,12 +10,14 @@ import { api } from '../api'
 import { useSpaceStore } from './space.store'
 import { useToolkitStore } from './toolkit.store'
 import { buildDirective } from '../utils/directive-helpers'
+import type { SceneTag } from '../../shared/extension-taxonomy'
 
 export interface CommandDefinition {
   name: string
   path: string
   source: 'app' | 'space' | 'plugin'
   description?: string
+  sceneTags?: SceneTag[]
   pluginRoot?: string
   namespace?: string
 }
