@@ -7,15 +7,18 @@
 
 import { create } from 'zustand'
 import { api } from '../api'
+import i18n from '../i18n'
 import { useSpaceStore } from './space.store'
 import { useToolkitStore } from './toolkit.store'
 import { buildDirective } from '../utils/directive-helpers'
+import type { SceneTag } from '../../shared/extension-taxonomy'
 
 export interface CommandDefinition {
   name: string
   path: string
   source: 'app' | 'space' | 'plugin'
   description?: string
+  sceneTags?: SceneTag[]
   pluginRoot?: string
   namespace?: string
 }
@@ -225,5 +228,10 @@ export function initCommandsStoreListeners(): void {
     if (changedWorkDir == null || changedWorkDir === loadedWorkDir) {
       loadCommands(loadedWorkDir ?? undefined, true)
     }
+  })
+
+  i18n.on('languageChanged', () => {
+    const { loadedWorkDir, loadCommands } = useCommandsStore.getState()
+    void loadCommands(loadedWorkDir ?? undefined, true)
   })
 }

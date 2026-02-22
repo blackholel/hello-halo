@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Copy, X } from 'lucide-react'
 import { api } from '../../api'
 import { useTranslation } from '../../i18n'
+import { getCurrentLanguage } from '../../i18n'
 import { useSpaceStore } from '../../stores/space.store'
 import { useToolkitStore } from '../../stores/toolkit.store'
 import { buildDirective } from '../../utils/directive-helpers'
@@ -10,12 +11,21 @@ import { copyResourceWithConflict, resolveActionButtonState, type CopyResourceRe
 import { shouldLoadResourceContent } from './resource-content-loading'
 import { fetchResourceContent, getSourceColor, getSourceLabel, mapResourceMeta } from './resource-meta'
 import type { AnyResource, ResourceActionMode, ResourceType } from './types'
+import {
+  getDefaultSceneDefinitions,
+  getSceneClassName,
+  getSceneLabel,
+  normalizeSceneDefinitions,
+  normalizeSceneTags
+} from './scene-tag-meta'
+import type { SceneDefinition } from '../../../shared/scene-taxonomy'
 
 export interface ResourceCardProps {
   resource: AnyResource
   type: ResourceType
   index: number
   actionMode: ResourceActionMode
+  sceneDefinitions?: SceneDefinition[]
   workDir?: string
   onAfterAction?: () => void
   isActionDisabled?: boolean
@@ -36,11 +46,37 @@ function toResourceRef(resource: AnyResource, type: ResourceType) {
   }
 }
 
+function getTypeLabel(type: ResourceType, t: (key: string) => string): string {
+  if (type === 'skill') return t('Skill')
+  if (type === 'agent') return t('Agent')
+  return t('Command')
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      reject(new Error(`Resource content request timed out after ${timeoutMs}ms`))
+    }, timeoutMs)
+
+    promise.then(
+      (value) => {
+        window.clearTimeout(timeoutId)
+        resolve(value)
+      },
+      (error) => {
+        window.clearTimeout(timeoutId)
+        reject(error)
+      }
+    )
+  })
+}
+
 export function ResourceCard({
   resource,
   type,
   index,
   actionMode,
+  sceneDefinitions,
   workDir,
   onAfterAction,
   isActionDisabled,
@@ -54,6 +90,7 @@ export function ResourceCard({
   const [hasAttemptedLoadInCurrentOpen, setHasAttemptedLoadInCurrentOpen] = useState(false)
   const [isUpdatingToolkit, setIsUpdatingToolkit] = useState(false)
   const [isCopyingToSpace, setIsCopyingToSpace] = useState(false)
+  const contentRequestIdRef = useRef(0)
 
   const currentSpace = useSpaceStore((state) => state.currentSpace)
   const { getToolkit, isInToolkit, addResource, removeResource, loadToolkit, isToolkitLoaded } = useToolkitStore()
@@ -113,7 +150,9 @@ export function ResourceCard({
 
   useEffect(() => {
     if (isOpen) return
+    contentRequestIdRef.current += 1
     setHasAttemptedLoadInCurrentOpen(false)
+    setIsLoadingContent(false)
   }, [isOpen])
 
   useEffect(() => {
@@ -125,16 +164,16 @@ export function ResourceCard({
       hasAttemptedInCurrentOpen: hasAttemptedLoadInCurrentOpen
     })) return
 
-    let isCancelled = false
+    const requestId = contentRequestIdRef.current + 1
+    contentRequestIdRef.current = requestId
 
     const loadContent = async (): Promise<void> => {
       try {
-        setHasAttemptedLoadInCurrentOpen(true)
         setIsLoadingContent(true)
         setContentError(null)
 
-        const response = await fetchResourceContent(resource, type, workDir)
-        if (isCancelled) return
+        const response = await withTimeout(fetchResourceContent(resource, type, workDir), 8000)
+        if (contentRequestIdRef.current !== requestId) return
 
         if (!response.success || !response.data) {
           setContentError(response.error || t('Failed to load details'))
@@ -147,19 +186,18 @@ export function ResourceCard({
           : response.data as string
         setContent(text)
       } catch {
-        if (isCancelled) return
+        if (contentRequestIdRef.current !== requestId) return
         setContentError(t('Failed to load details'))
         setContent('')
       } finally {
-        if (!isCancelled) setIsLoadingContent(false)
+        if (contentRequestIdRef.current === requestId) {
+          setIsLoadingContent(false)
+          setHasAttemptedLoadInCurrentOpen(true)
+        }
       }
     }
 
     void loadContent()
-
-    return () => {
-      isCancelled = true
-    }
   }, [content, contentError, hasAttemptedLoadInCurrentOpen, isOpen, resource, t, type, workDir])
 
   const copyPath = async (event: React.MouseEvent): Promise<void> => {
@@ -232,6 +270,19 @@ export function ResourceCard({
     && actionState.disabled
 
   const Icon = meta.icon
+  const effectiveSceneDefinitions = useMemo(
+    () => normalizeSceneDefinitions(sceneDefinitions ?? getDefaultSceneDefinitions()),
+    [sceneDefinitions]
+  )
+  const sceneDefinitionMap = useMemo(
+    () => new Map(effectiveSceneDefinitions.map((item) => [item.key, item])),
+    [effectiveSceneDefinitions]
+  )
+  const sceneTags = useMemo(
+    () => normalizeSceneTags((resource as { sceneTags?: unknown }).sceneTags, effectiveSceneDefinitions),
+    [effectiveSceneDefinitions, resource]
+  )
+  const typeLabel = getTypeLabel(type, t)
 
   const modal = isOpen ? (
     <div
@@ -335,6 +386,7 @@ export function ResourceCard({
               <div className="font-medium text-sm truncate">{meta.title}</div>
               <p
                 className="text-xs text-muted-foreground mt-1 leading-relaxed overflow-hidden"
+                title={meta.subtitle || t('No description')}
                 style={{
                   display: '-webkit-box',
                   WebkitLineClamp: 2,
@@ -345,7 +397,26 @@ export function ResourceCard({
               </p>
             </div>
           </div>
-          <span className={`text-[10px] px-2 py-0.5 rounded-md flex-shrink-0 ${getSourceColor(meta.source)}`}>
+          <span className="text-[10px] px-2 py-0.5 rounded-md flex-shrink-0 bg-foreground/5 text-foreground/70 border border-border/60">
+            {typeLabel}
+          </span>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {sceneTags.map((tag) => (
+            <span
+              key={tag}
+              className={`text-[10px] px-2 py-0.5 rounded-full border ${getSceneClassName(effectiveSceneDefinitions, tag)}`}
+            >
+              {sceneDefinitionMap.has(tag)
+                ? getSceneLabel(sceneDefinitionMap.get(tag)!, getCurrentLanguage())
+                : tag}
+            </span>
+          ))}
+        </div>
+
+        <div className="mt-2">
+          <span className={`text-[10px] px-2 py-0.5 rounded-md ${getSourceColor(meta.source)} opacity-70`}>
             {getSourceLabel(meta.source, t)}
           </span>
         </div>

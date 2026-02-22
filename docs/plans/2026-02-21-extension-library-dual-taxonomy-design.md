@@ -1,0 +1,135 @@
+# 扩展库双维度分类系统设计
+
+> 日期: 2026-02-21
+> 状态: 已确认
+
+## 背景
+
+当前扩展库按类型分类（全部/技能/代理/命令），对非技术用户认知挑战大。需要在保留 AI 领域原生概念的同时，增加任务场景标签帮助普通用户快速发现所需扩展。
+
+## 目标
+
+- 面向非技术用户，兼容 100+ 扩展规模
+- 保留 Skills/Agents/Commands 原生分类（AI 领域共识）
+- 增加任务场景标签作为第二筛选维度
+- 两套分类维度共存，互不取代
+
+## 方案：标签筛选栏（方案 A）
+
+### 整体布局
+
+页面从上到下 4 层：
+
+1. **搜索栏** — 关键词搜索，在当前筛选范围内搜索
+2. **类型标签页**（第一维度）— `全部 | 技能 | 代理 | 命令`
+3. **场景标签芯片**（第二维度）— `全部 | 编程开发 | 写作 | 创意设计 | 数据分析 | 网页操作 | 办公套件`
+4. **扩展网格** — 卡片列表展示筛选结果
+
+### 交互逻辑
+
+- 类型标签页与场景标签芯片为 AND 关系
+- 场景标签单选切换，默认选中"全部"
+- 搜索在当前筛选范围内进行，不重置筛选条件
+- 组合筛选无结果时提示清除条件
+
+### 视觉层次
+
+- 类型标签页：字号稍大，主导航样式
+- 场景标签芯片：字号稍小，chip/pill 样式，颜色更柔和
+- 技术用户一眼认出类型，非技术用户被场景标签吸引
+
+### 场景标签体系
+
+| Key | 中文 | 英文 | 覆盖范围 |
+|-----|------|------|---------|
+| `coding` | 编程开发 | Coding | 写代码、调试、代码审查、重构、TDD、Git |
+| `writing` | 写作 | Writing | 文档、博客、翻译、文案、邮件 |
+| `design` | 创意设计 | Design | UI/UX、画图、原型、可视化图表 |
+| `data` | 数据分析 | Data | 数据处理、报表、BI、数据库查询 |
+| `web` | 网页操作 | Web | 网页抓取、浏览器自动化、API 调用 |
+| `office` | 办公套件 | Office | Word/Excel/PPT、PDF 处理、文件转换 |
+
+- 每个扩展 1-3 个场景标签
+- 标签用英文 key 存储，显示时 i18n 映射
+- 各标签配主题色：coding=蓝、writing=绿、design=紫、data=橙、web=青、office=灰
+- 标签旁显示数量角标，数量为 0 时变灰
+
+### 扩展卡片设计
+
+卡片结构（从上到下）：
+
+1. **图标/头像** — 扩展品牌图标
+2. **名称** — 扩展名称
+3. **一句话描述** — 非技术语言的价值描述
+4. **场景标签芯片** — 1-3 个小芯片，用各自主题色
+5. **类型徽章** — 右上角小字标注 Skill/Agent/Command
+
+设计要点：
+- 场景标签视觉权重 > 类型徽章
+- 类型徽章用小号字体 + 半透明背景
+- 卡片 hover 展示详细描述
+
+### 数据模型
+
+```typescript
+type SceneTag = 'coding' | 'writing' | 'design' | 'data' | 'web' | 'office'
+
+interface ExtensionMeta {
+  id: string
+  name: string
+  description: string
+  type: 'skill' | 'agent' | 'command'
+  icon?: string
+  sceneTags: SceneTag[]  // 1-3 个
+}
+
+interface FilterState {
+  typeFilter: 'all' | 'skill' | 'agent' | 'command'
+  sceneFilter: SceneTag | 'all'
+  searchQuery: string
+}
+```
+
+筛选逻辑：三条件 AND 组合。
+
+### 边界情况
+
+- 组合筛选无结果：提示"没有找到匹配的扩展"，建议清除条件
+- 标签下无扩展：标签仍显示但变灰，角标显示 0
+- 预设扩展标签由维护者分配，社区扩展由作者声明
+
+## 治理系统落地说明（2026-02-22）
+
+本方案已升级为“开发者可管、用户只读”的可治理 taxonomy，实现状态如下：
+
+- 已新增共享契约与种子：
+  - `src/shared/scene-taxonomy.ts`
+  - `src/shared/scene-taxonomy-seed.ts`
+- 已新增主进程治理服务：
+  - `src/main/services/scene-taxonomy.service.ts`
+  - 支持 `merge/replace`、tombstone、导入导出、资源覆盖映射、`resourceKey` 构建。
+- 已完成判定链路统一：
+  - `override > frontmatter(sceneTags/scene_tags) > infer > fallback(office)`
+  - Skill/Agent/Command 全部接入统一逻辑。
+- 已完成权限强校验：
+  - `config.extensionTaxonomy.adminEnabled` 默认 `false`
+  - 所有 taxonomy 写操作在服务端校验，不依赖 UI 隐藏。
+- 已完成 Electron IPC + Remote HTTP 对齐：
+  - IPC：`src/main/ipc/scene-taxonomy.ts`
+  - HTTP：`src/main/controllers/scene-taxonomy.controller.ts` + `src/main/http/routes/index.ts`
+- 前端已改为动态标签字典驱动：
+  - Home 与 Template Library 使用动态 definitions 渲染筛选与计数
+  - `colorToken -> class` 使用静态映射，避免任意 class 注入。
+- 已完成管理页与入口：
+  - `src/renderer/pages/SceneTaxonomyAdminPage.tsx`
+  - 入口受 `adminEnabled` 控制。
+
+### 已验证结果
+
+- `npx vitest run --config tests/vitest.config.ts` 通过
+- `npm run test:unit` 通过
+- `npm run build` 通过
+
+### 兼容策略
+
+- `src/shared/extension-taxonomy.ts` 保留过渡导出（deprecated），避免一次性破坏历史调用方。

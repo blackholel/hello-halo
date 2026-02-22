@@ -19,6 +19,10 @@ import { getAllSpacePaths } from './space.service'
 import type { ResourceRef, CopyToSpaceOptions, CopyToSpaceResult } from './resource-ref.service'
 import { isPathWithinBasePaths, isValidDirectoryPath, isFileNotFoundError } from '../utils/path-validation'
 import { FileCache } from '../utils/file-cache'
+import type { SceneTagKey } from '../../shared/scene-taxonomy'
+import { parseFrontmatter, getFrontmatterString, getFrontmatterStringArray } from './resource-metadata.service'
+import { resolveSceneTags } from './resource-scene-tags.service'
+import { buildResourceSceneKey, getSceneTaxonomy } from './scene-taxonomy.service'
 
 // ============================================
 // Skill Types
@@ -31,6 +35,7 @@ export interface SkillDefinition {
   description?: string
   triggers?: string[]
   category?: string
+  sceneTags: SceneTagKey[]
   pluginRoot?: string
   namespace?: string
 }
@@ -96,51 +101,6 @@ function findSkillByRef(skills: SkillDefinition[], ref: ResourceRef): SkillDefin
 }
 
 // ============================================
-// Frontmatter Parsing
-// ============================================
-
-function parseFrontmatter(content: string): Record<string, unknown> | null {
-  const match = content.match(/^---\n([\s\S]*?)\n---/)
-  if (!match) return null
-
-  const result: Record<string, unknown> = {}
-  let currentKey: string | null = null
-  let currentArray: string[] | null = null
-
-  for (const line of match[1].split('\n')) {
-    if (line.match(/^\s+-\s+/)) {
-      if (currentKey && currentArray) {
-        currentArray.push(line.replace(/^\s+-\s+/, '').trim())
-      }
-      continue
-    }
-
-    if (currentKey && currentArray) {
-      result[currentKey] = currentArray
-      currentArray = null
-      currentKey = null
-    }
-
-    const kvMatch = line.match(/^(\w+):\s*(.*)$/)
-    if (kvMatch) {
-      const [, key, value] = kvMatch
-      if (value.trim() === '') {
-        currentKey = key
-        currentArray = []
-      } else {
-        result[key] = value.trim()
-      }
-    }
-  }
-
-  if (currentKey && currentArray) {
-    result[currentKey] = currentArray
-  }
-
-  return result
-}
-
-// ============================================
 // Directory Scanning
 // ============================================
 
@@ -148,11 +108,13 @@ function scanSkillDir(
   dirPath: string,
   source: SkillDefinition['source'],
   pluginRoot?: string,
-  namespace?: string
+  namespace?: string,
+  workDir?: string
 ): SkillDefinition[] {
   if (!isValidDirectoryPath(dirPath, 'Skills')) return []
 
   const skills: SkillDefinition[] = []
+  const taxonomyConfig = getSceneTaxonomy().config
   try {
     for (const entry of readdirSync(dirPath)) {
       const skillPath = join(dirPath, entry)
@@ -165,13 +127,34 @@ function scanSkillDir(
         let description: string | undefined
         let triggers: string[] | undefined
         let category: string | undefined
+        let sceneTags: SceneTagKey[] = ['office']
         try {
-          const frontmatter = parseFrontmatter(readFileSync(skillMdPath, 'utf-8'))
+          const content = readFileSync(skillMdPath, 'utf-8')
+          const frontmatter = parseFrontmatter(content)
           if (frontmatter) {
-            description = frontmatter.description as string | undefined
-            triggers = frontmatter.triggers as string[] | undefined
-            category = frontmatter.category as string | undefined
+            description = getFrontmatterString(frontmatter, ['description'])
+            triggers = getFrontmatterStringArray(frontmatter, ['triggers'])
+            category = getFrontmatterString(frontmatter, ['category'])
           }
+
+          const resourceKey = buildResourceSceneKey({
+            type: 'skill',
+            source,
+            workDir,
+            namespace,
+            name: entry
+          })
+          sceneTags = resolveSceneTags({
+            name: entry,
+            description,
+            category,
+            triggers,
+            content,
+            frontmatter: frontmatter ?? undefined,
+            resourceKey,
+            definitions: taxonomyConfig.definitions,
+            resourceOverrides: taxonomyConfig.resourceOverrides
+          })
         } catch {
           // Ignore read errors for metadata
         }
@@ -183,6 +166,7 @@ function scanSkillDir(
           description,
           triggers,
           category,
+          sceneTags,
           ...(pluginRoot && { pluginRoot }),
           ...(namespace && { namespace })
         })
@@ -249,7 +233,7 @@ function buildGlobalSkills(): SkillDefinition[] {
 }
 
 function buildSpaceSkills(workDir: string): SkillDefinition[] {
-  return scanSkillDir(join(workDir, '.claude', 'skills'), 'space')
+  return scanSkillDir(join(workDir, '.claude', 'skills'), 'space', undefined, undefined, workDir)
 }
 
 function logFound(items: SkillDefinition[]): void {
@@ -365,13 +349,32 @@ export function createSkill(workDir: string, name: string, content: string): Ski
   invalidateSkillsCache(workDir)
 
   const frontmatter = parseFrontmatter(content)
+  const description = getFrontmatterString(frontmatter, ['description'])
+  const triggers = getFrontmatterStringArray(frontmatter, ['triggers'])
+  const category = getFrontmatterString(frontmatter, ['category'])
   return {
     name,
     path: skillDir,
     source: 'space',
-    description: frontmatter?.description as string | undefined,
-    triggers: frontmatter?.triggers as string[] | undefined,
-    category: frontmatter?.category as string | undefined
+    description,
+    triggers,
+    category,
+    sceneTags: resolveSceneTags({
+      name,
+      description,
+      category,
+      triggers,
+      content,
+      frontmatter: frontmatter ?? undefined,
+      resourceKey: buildResourceSceneKey({
+        type: 'skill',
+        source: 'space',
+        workDir,
+        name
+      }),
+      definitions: getSceneTaxonomy().config.definitions,
+      resourceOverrides: getSceneTaxonomy().config.resourceOverrides
+    })
   }
 }
 

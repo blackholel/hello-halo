@@ -11,9 +11,6 @@ import { v4 as uuidv4 } from 'uuid'
 import { isPathWithinBasePaths } from '../utils/path-validation'
 import { ensureSpaceResourcePolicy } from './agent/space-resource-policy.service'
 import type { ResourceRef } from './resource-ref.service'
-import { copySkillToSpaceByRef } from './skills.service'
-import { copyAgentToSpaceByRef } from './agents.service'
-import { copyCommandToSpaceByRef } from './commands.service'
 
 interface Space {
   id: string
@@ -69,6 +66,14 @@ interface SpaceMeta {
 interface SpaceIndex {
   customPaths: string[]  // Array of paths to spaces outside the default spaces root.
 }
+
+type SpaceResourceMigrationHandlers = {
+  copySkillToSpaceByRef: (ref: ResourceRef, workDir: string, options?: { overwrite?: boolean }) => unknown
+  copyAgentToSpaceByRef: (ref: ResourceRef, workDir: string, options?: { overwrite?: boolean }) => unknown
+  copyCommandToSpaceByRef: (ref: ResourceRef, workDir: string, options?: { overwrite?: boolean }) => unknown
+}
+
+let migrationHandlersPromise: Promise<SpaceResourceMigrationHandlers> | null = null
 
 const WINDOWS_RESERVED_FOLDER_NAMES = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i
 
@@ -339,22 +344,40 @@ function loadSpaceFromPath(spacePath: string): Space | null {
   return null
 }
 
-function migrateToolkitRefToSpace(workDir: string, ref: ResourceRef): void {
-  try {
-    if (ref.type === 'skill') {
-      copySkillToSpaceByRef(ref, workDir)
-      return
-    }
-    if (ref.type === 'agent') {
-      copyAgentToSpaceByRef(ref, workDir)
-      return
-    }
-    if (ref.type === 'command') {
-      copyCommandToSpaceByRef(ref, workDir)
-    }
-  } catch (error) {
-    console.warn('[Space] Failed to migrate toolkit resource to space:', ref, error)
+async function getSpaceResourceMigrationHandlers(): Promise<SpaceResourceMigrationHandlers> {
+  if (!migrationHandlersPromise) {
+    migrationHandlersPromise = Promise.all([
+      import('./skills.service'),
+      import('./agents.service'),
+      import('./commands.service')
+    ]).then(([skills, agents, commands]) => ({
+      copySkillToSpaceByRef: skills.copySkillToSpaceByRef,
+      copyAgentToSpaceByRef: agents.copyAgentToSpaceByRef,
+      copyCommandToSpaceByRef: commands.copyCommandToSpaceByRef
+    }))
   }
+
+  return migrationHandlersPromise
+}
+
+function migrateToolkitRefToSpace(workDir: string, ref: ResourceRef): void {
+  void getSpaceResourceMigrationHandlers()
+    .then((handlers) => {
+      if (ref.type === 'skill') {
+        handlers.copySkillToSpaceByRef(ref, workDir)
+        return
+      }
+      if (ref.type === 'agent') {
+        handlers.copyAgentToSpaceByRef(ref, workDir)
+        return
+      }
+      if (ref.type === 'command') {
+        handlers.copyCommandToSpaceByRef(ref, workDir)
+      }
+    })
+    .catch((error) => {
+      console.warn('[Space] Failed to migrate toolkit resource to space:', ref, error)
+    })
 }
 
 function runSpaceResourceMigration(workDir: string): void {

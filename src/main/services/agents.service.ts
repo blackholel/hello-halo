@@ -18,6 +18,10 @@ import type { ResourceRef, CopyToSpaceOptions, CopyToSpaceResult } from './resou
 import { isPathWithinBasePaths, isValidDirectoryPath, isFileNotFoundError } from '../utils/path-validation'
 import { listEnabledPlugins } from './plugins.service'
 import { FileCache } from '../utils/file-cache'
+import type { SceneTagKey } from '../../shared/scene-taxonomy'
+import { parseResourceMetadata } from './resource-metadata.service'
+import { resolveSceneTags } from './resource-scene-tags.service'
+import { buildResourceSceneKey, getSceneTaxonomy } from './scene-taxonomy.service'
 
 // ============================================
 // Agent Types
@@ -28,6 +32,7 @@ export interface AgentDefinition {
   path: string
   source: 'app' | 'global' | 'space' | 'plugin'
   description?: string
+  sceneTags: SceneTagKey[]
   pluginRoot?: string
   namespace?: string
 }
@@ -59,23 +64,47 @@ function resolveWorkDirForAgentPath(agentPath: string): string | null {
   return null
 }
 
-function extractDescription(filePath: string): string | undefined {
+function readAgentMetadata(
+  filePath: string,
+  name: string,
+  source: AgentDefinition['source'],
+  namespace?: string,
+  workDir?: string
+): { description?: string; sceneTags: SceneTagKey[] } {
   try {
-    const firstLine = readFileSync(filePath, 'utf-8').split('\n')[0]?.trim()
-    if (!firstLine) return undefined
-    if (firstLine.startsWith('# ')) return firstLine.slice(2).trim().slice(0, 100)
-    if (!firstLine.startsWith('#')) return firstLine.slice(0, 100)
+    const content = readFileSync(filePath, 'utf-8')
+    const metadata = parseResourceMetadata(content)
+    const taxonomy = getSceneTaxonomy().config
+    return {
+      description: metadata.description,
+      sceneTags: resolveSceneTags({
+        name,
+        description: metadata.description,
+        content,
+        frontmatter: metadata.frontmatter,
+        resourceKey: buildResourceSceneKey({
+          type: 'agent',
+          source,
+          workDir,
+          namespace,
+          name
+        }),
+        definitions: taxonomy.definitions,
+        resourceOverrides: taxonomy.resourceOverrides
+      })
+    }
   } catch {
     // Ignore read errors
+    return { sceneTags: ['office'] }
   }
-  return undefined
 }
 
 function scanAgentDir(
   dirPath: string,
   source: AgentDefinition['source'],
   pluginRoot?: string,
-  namespace?: string
+  namespace?: string,
+  workDir?: string
 ): AgentDefinition[] {
   if (!isValidDirectoryPath(dirPath, 'Agents')) return []
 
@@ -86,11 +115,14 @@ function scanAgentDir(
       const filePath = join(dirPath, file)
       try {
         if (!statSync(filePath).isFile()) continue
+        const name = file.slice(0, -3)
+        const metadata = readAgentMetadata(filePath, name, source, namespace, workDir)
         agents.push({
-          name: file.slice(0, -3),
+          name,
           path: filePath,
           source,
-          description: extractDescription(filePath),
+          description: metadata.description,
+          sceneTags: metadata.sceneTags,
           ...(pluginRoot && { pluginRoot }),
           ...(namespace && { namespace })
         })
@@ -151,7 +183,7 @@ function buildGlobalAgents(): AgentDefinition[] {
 }
 
 function buildSpaceAgents(workDir: string): AgentDefinition[] {
-  return scanAgentDir(join(workDir, '.claude', 'agents'), 'space')
+  return scanAgentDir(join(workDir, '.claude', 'agents'), 'space', undefined, undefined, workDir)
 }
 
 function findAgent(agents: AgentDefinition[], name: string): AgentDefinition | undefined {
@@ -306,12 +338,25 @@ export function createAgent(workDir: string, name: string, content: string): Age
   writeFileSync(agentPath, content, 'utf-8')
   invalidateAgentsCache(workDir)
 
-  const firstLine = content.split('\n')[0]?.trim()
-  const description = firstLine?.startsWith('# ')
-    ? firstLine.slice(2).trim().slice(0, 100)
-    : firstLine?.slice(0, 100)
+  const metadata = parseResourceMetadata(content)
+  const description = metadata.description
+  const taxonomy = getSceneTaxonomy().config
+  const sceneTags = resolveSceneTags({
+    name,
+    description,
+    content,
+    frontmatter: metadata.frontmatter,
+    resourceKey: buildResourceSceneKey({
+      type: 'agent',
+      source: 'space',
+      workDir,
+      name
+    }),
+    definitions: taxonomy.definitions,
+    resourceOverrides: taxonomy.resourceOverrides
+  })
 
-  return { name, path: agentPath, source: 'space', description }
+  return { name, path: agentPath, source: 'space', description, sceneTags }
 }
 
 /**

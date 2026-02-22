@@ -97,6 +97,9 @@ interface KiteConfig {
   claudeCode?: ClaudeCodeConfig
   // Configuration source mode (runtime lock consumes this on startup)
   configSourceMode: ConfigSourceMode
+  extensionTaxonomy?: {
+    adminEnabled: boolean
+  }
 }
 
 // MCP server configuration types
@@ -231,7 +234,10 @@ const DEFAULT_CONFIG: KiteConfig = {
   },
   mcpServers: {},  // Empty by default
   isFirstLaunch: true,
-  configSourceMode: 'kite'
+  configSourceMode: 'kite',
+  extensionTaxonomy: {
+    adminEnabled: false
+  }
 }
 
 const BUILTIN_SEED_ENV_KEY = 'KITE_BUILTIN_SEED_DIR'
@@ -594,7 +600,11 @@ export function getConfig(): KiteConfig {
       mcpServers: parsed.mcpServers || DEFAULT_CONFIG.mcpServers,
       // analytics: keep as-is (managed by analytics.service.ts)
       analytics: parsed.analytics,
-      configSourceMode: normalizeConfigSourceMode(parsed.configSourceMode)
+      configSourceMode: normalizeConfigSourceMode(parsed.configSourceMode),
+      extensionTaxonomy: {
+        ...DEFAULT_CONFIG.extensionTaxonomy,
+        ...(parsed.extensionTaxonomy || {})
+      }
     }
   } catch (error) {
     console.error('Failed to read config:', error)
@@ -626,6 +636,12 @@ export function saveConfig(config: Partial<KiteConfig>): KiteConfig {
   }
   if (rawUpdates.configSourceMode !== undefined) {
     newConfig.configSourceMode = normalizeConfigSourceMode(rawUpdates.configSourceMode)
+  }
+  if ((config as any).extensionTaxonomy !== undefined) {
+    newConfig.extensionTaxonomy = {
+      ...currentConfig.extensionTaxonomy,
+      ...(config as any).extensionTaxonomy
+    }
   }
   // mcpServers: replace entirely when provided (not merged)
   if (config.mcpServers !== undefined) {

@@ -774,6 +774,59 @@ export const api = {
     return httpRequest('POST', '/api/agents/clear-cache')
   },
 
+  // ===== Scene Taxonomy =====
+  getSceneTaxonomy: async (): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.kite.getSceneTaxonomy()
+    }
+    return httpRequest('GET', '/api/scene-taxonomy')
+  },
+
+  upsertSceneDefinition: async (definition: Record<string, unknown>): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.kite.upsertSceneDefinition(definition)
+    }
+    return httpRequest('PUT', '/api/scene-taxonomy/definitions', definition)
+  },
+
+  removeSceneDefinition: async (key: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.kite.removeSceneDefinition(key)
+    }
+    return httpRequest('DELETE', `/api/scene-taxonomy/definitions/${encodeURIComponent(key)}`)
+  },
+
+  setResourceSceneOverride: async (resourceKey: string, tags: string[]): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.kite.setResourceSceneOverride(resourceKey, tags)
+    }
+    return httpRequest('PUT', '/api/scene-taxonomy/overrides', { resourceKey, tags })
+  },
+
+  removeResourceSceneOverride: async (resourceKey: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.kite.removeResourceSceneOverride(resourceKey)
+    }
+    return httpRequest('DELETE', `/api/scene-taxonomy/overrides?resourceKey=${encodeURIComponent(resourceKey)}`)
+  },
+
+  exportSceneTaxonomy: async (): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.kite.exportSceneTaxonomy()
+    }
+    return httpRequest('GET', '/api/scene-taxonomy/export')
+  },
+
+  importSceneTaxonomy: async (
+    payload: Record<string, unknown>,
+    mode: 'merge' | 'replace' = 'merge'
+  ): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.kite.importSceneTaxonomy(payload, mode)
+    }
+    return httpRequest('POST', '/api/scene-taxonomy/import', { payload, mode })
+  },
+
   // ===== Toolkit =====
   getToolkit: async (spaceId: string): Promise<ApiResponse> => {
     if (isElectron()) {
