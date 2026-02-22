@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Bot, Puzzle, Search, Terminal, X, Zap } from 'lucide-react'
 import { api } from '../../../api'
-import { useTranslation } from '../../../i18n'
+import { getCurrentLanguage, useTranslation } from '../../../i18n'
 import { useCanvasLifecycle } from '../../../hooks/useCanvasLifecycle'
 import { ResourceCard } from '../../resources/ResourceCard'
 import { resourceKey } from '../../resources/resource-meta'
@@ -23,8 +23,14 @@ import {
   sortExtensions,
   type FilterTab
 } from '../../resources/extension-filtering'
-import { SCENE_TAG_CLASS, SCENE_TAG_LABEL_KEY } from '../../resources/scene-tag-meta'
+import {
+  getDefaultSceneDefinitions,
+  getSceneClassName,
+  getSceneLabel,
+  normalizeSceneDefinitions
+} from '../../resources/scene-tag-meta'
 import type { SceneFilter } from '../../../../shared/extension-taxonomy'
+import type { SceneDefinition } from '../../../../shared/scene-taxonomy'
 
 interface TemplateLibraryViewerProps {
   tab: TabState
@@ -64,6 +70,7 @@ export function TemplateLibraryViewer({ tab }: TemplateLibraryViewerProps): JSX.
   const [activeFilter, setActiveFilter] = useState<FilterTab>(initialState.activeFilter)
   const [sceneFilter, setSceneFilter] = useState<SceneFilter>(initialState.sceneFilter)
   const [query, setQuery] = useState(initialState.query)
+  const [sceneDefinitions, setSceneDefinitions] = useState<SceneDefinition[]>(getDefaultSceneDefinitions())
   const [loading, setLoading] = useState(false)
   const [refreshToken, setRefreshToken] = useState(0)
   const [templateSkills, setTemplateSkills] = useState<SkillDefinition[]>([])
@@ -79,6 +86,26 @@ export function TemplateLibraryViewer({ tab }: TemplateLibraryViewerProps): JSX.
     setSceneFilter(state.sceneFilter)
     setQuery(state.query)
   }, [tab.id, tab.templateLibraryTab])
+
+  useEffect(() => {
+    let cancelled = false
+    const loadSceneTaxonomy = async (): Promise<void> => {
+      const response = await api.getSceneTaxonomy()
+      if (!response.success || !response.data || cancelled) return
+      const data = response.data as { definitions?: unknown; config?: { definitions?: unknown } }
+      setSceneDefinitions(normalizeSceneDefinitions(data.definitions ?? data.config?.definitions))
+    }
+    void loadSceneTaxonomy()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const sceneDefinitionMap = useMemo(
+    () => new Map(sceneDefinitions.map((item) => [item.key, item])),
+    [sceneDefinitions]
+  )
+  const sceneKeys = useMemo(() => getSceneOrder(sceneDefinitions), [sceneDefinitions])
 
   useEffect(() => {
     let cancelled = false
@@ -173,9 +200,10 @@ export function TemplateLibraryViewer({ tab }: TemplateLibraryViewerProps): JSX.
       skills: templateSkills,
       agents: templateAgents,
       commands: templateCommands,
-      isRemote
+      isRemote,
+      sceneDefinitions
     }),
-    [isRemote, templateAgents, templateCommands, templateSkills]
+    [isRemote, sceneDefinitions, templateAgents, templateCommands, templateSkills]
   )
 
   const typeSearchFilteredItems = useMemo(
@@ -184,8 +212,8 @@ export function TemplateLibraryViewer({ tab }: TemplateLibraryViewerProps): JSX.
   )
 
   const sceneCounts = useMemo(
-    () => computeSceneCounts(typeSearchFilteredItems),
-    [typeSearchFilteredItems]
+    () => computeSceneCounts(typeSearchFilteredItems, sceneKeys),
+    [sceneKeys, typeSearchFilteredItems]
   )
 
   const filteredItems = useMemo(
@@ -212,13 +240,15 @@ export function TemplateLibraryViewer({ tab }: TemplateLibraryViewerProps): JSX.
     const allCount = typeSearchFilteredItems.length
     return [
       { key: 'all' as const, label: t('All scenes'), count: allCount },
-      ...getSceneOrder().map((tag) => ({
+      ...sceneKeys.map((tag) => ({
         key: tag,
-        label: t(SCENE_TAG_LABEL_KEY[tag]),
-        count: sceneCounts[tag]
+        label: sceneDefinitionMap.has(tag)
+          ? getSceneLabel(sceneDefinitionMap.get(tag)!, getCurrentLanguage())
+          : tag,
+        count: sceneCounts[tag] ?? 0
       }))
     ]
-  }, [sceneCounts, t, typeSearchFilteredItems.length])
+  }, [sceneCounts, sceneDefinitionMap, sceneKeys, t, typeSearchFilteredItems.length])
 
   const isAdded = useCallback((item: { type: ResourceType; resource: SkillDefinition | AgentDefinition | CommandDefinition }): boolean => {
     const key = resourceKey(item.resource)
@@ -302,7 +332,7 @@ export function TemplateLibraryViewer({ tab }: TemplateLibraryViewerProps): JSX.
                 const canClick = isActive || !isZero
                 const sceneStyle = scene.key === 'all'
                   ? 'text-muted-foreground hover:text-foreground hover:bg-secondary/70'
-                  : SCENE_TAG_CLASS[scene.key]
+                  : getSceneClassName(sceneDefinitions, scene.key)
 
                 return (
                   <button
@@ -375,6 +405,7 @@ export function TemplateLibraryViewer({ tab }: TemplateLibraryViewerProps): JSX.
                             type="skill"
                             index={index}
                             actionMode="copy-to-space"
+                            sceneDefinitions={sceneDefinitions}
                             workDir={workDir}
                             isActionDisabled={!!disabledReason}
                             actionDisabledReason={disabledReason}
@@ -400,6 +431,7 @@ export function TemplateLibraryViewer({ tab }: TemplateLibraryViewerProps): JSX.
                             type="agent"
                             index={index}
                             actionMode="copy-to-space"
+                            sceneDefinitions={sceneDefinitions}
                             workDir={workDir}
                             isActionDisabled={!!disabledReason}
                             actionDisabledReason={disabledReason}
@@ -426,6 +458,7 @@ export function TemplateLibraryViewer({ tab }: TemplateLibraryViewerProps): JSX.
                               type="command"
                               index={index}
                               actionMode="copy-to-space"
+                              sceneDefinitions={sceneDefinitions}
                               workDir={workDir}
                               isActionDisabled={!!disabledReason}
                               actionDisabledReason={disabledReason}
@@ -448,6 +481,7 @@ export function TemplateLibraryViewer({ tab }: TemplateLibraryViewerProps): JSX.
                         type={item.type}
                         index={index}
                         actionMode="copy-to-space"
+                        sceneDefinitions={sceneDefinitions}
                         workDir={workDir}
                         isActionDisabled={!!disabledReason}
                         actionDisabledReason={disabledReason}

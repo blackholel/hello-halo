@@ -1,4 +1,9 @@
-import { SCENE_TAGS, type SceneTag, isSceneTag } from '../../shared/extension-taxonomy'
+import {
+  DEFAULT_SCENE_DEFINITIONS,
+  normalizeSceneTagKeys,
+  type SceneDefinition,
+  type SceneTagKey
+} from '../../shared/scene-taxonomy'
 import { getFrontmatterStringArray, stripFrontmatter, type ResourceFrontmatter } from './resource-metadata.service'
 
 interface ResolveSceneTagInput {
@@ -8,9 +13,12 @@ interface ResolveSceneTagInput {
   triggers?: string[]
   content?: string
   frontmatter?: ResourceFrontmatter
+  resourceKey?: string
+  definitions?: SceneDefinition[]
+  resourceOverrides?: Record<string, SceneTagKey[]>
 }
 
-const TAG_KEYWORDS: Record<SceneTag, string[]> = {
+const BUILTIN_TAG_KEYWORDS: Record<string, string[]> = {
   coding: [
     'coding',
     'code',
@@ -126,105 +134,148 @@ function hasAsciiKeywordMatch(tokens: string[], tokenSet: Set<string>, normalize
   return false
 }
 
-function normalizeSceneTags(value: unknown): SceneTag[] {
-  const rawValues = Array.isArray(value)
-    ? value
-    : typeof value === 'string'
-      ? value.split(/[;,]/)
-      : []
-
-  const deduped: SceneTag[] = []
-  const seen = new Set<SceneTag>()
-
-  for (const item of rawValues) {
-    if (typeof item !== 'string') continue
-    const normalized = item.trim().toLowerCase()
-    if (!isSceneTag(normalized)) continue
-    if (seen.has(normalized)) continue
-    deduped.push(normalized)
-    seen.add(normalized)
-    if (deduped.length >= 3) break
+function getDefinitions(input: ResolveSceneTagInput): SceneDefinition[] {
+  if (input.definitions && input.definitions.length > 0) {
+    return input.definitions
   }
-
-  return deduped
+  return DEFAULT_SCENE_DEFINITIONS
 }
 
-function extractExplicitSceneTags(frontmatter?: ResourceFrontmatter): SceneTag[] {
+function extractExplicitSceneTags(frontmatter: ResourceFrontmatter | undefined, knownKeys: Set<string>): SceneTagKey[] {
   if (!frontmatter) return []
 
-  const direct = normalizeSceneTags(frontmatter.sceneTags)
+  const direct = normalizeSceneTagKeys(frontmatter.sceneTags, knownKeys, { fallback: null })
   if (direct.length > 0) return direct
 
-  return normalizeSceneTags(frontmatter.scene_tags)
+  return normalizeSceneTagKeys(frontmatter.scene_tags, knownKeys, { fallback: null })
 }
 
-function scoreText(scores: Record<SceneTag, number>, text: string, weight: number): void {
+function buildKeywordMap(definitions: SceneDefinition[]): Record<string, string[]> {
+  const map: Record<string, string[]> = {}
+  for (const definition of definitions) {
+    const merged = [
+      definition.key,
+      definition.label.en,
+      definition.label.zhCN,
+      definition.label.zhTW,
+      ...(definition.synonyms || []),
+      ...(BUILTIN_TAG_KEYWORDS[definition.key] || [])
+    ]
+    const normalized = Array.from(new Set(
+      merged
+        .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+        .map((item) => item.trim().toLowerCase())
+    ))
+    map[definition.key] = normalized
+  }
+  return map
+}
+
+function scoreText(
+  scores: Record<string, number>,
+  text: string,
+  weight: number,
+  candidateKeys: string[],
+  keywordMap: Record<string, string[]>
+): void {
   const normalized = text.toLowerCase()
   const tokens = normalized.split(/[^a-z0-9]+/).filter(Boolean)
   const tokenSet = new Set(tokens)
 
-  for (const tag of SCENE_TAGS) {
-    for (const keyword of TAG_KEYWORDS[tag]) {
+  for (const key of candidateKeys) {
+    for (const keyword of keywordMap[key] || []) {
       const normalizedKeyword = keyword.toLowerCase()
       const matched = CJK_CHAR_REGEX.test(normalizedKeyword)
         ? normalized.includes(normalizedKeyword)
         : hasAsciiKeywordMatch(tokens, tokenSet, normalized, normalizedKeyword)
 
       if (matched) {
-        scores[tag] += weight
+        scores[key] += weight
       }
     }
   }
 }
 
-export function inferSceneTags(input: ResolveSceneTagInput): SceneTag[] {
-  const scores: Record<SceneTag, number> = {
-    coding: 0,
-    writing: 0,
-    design: 0,
-    data: 0,
-    web: 0,
-    office: 0
+export function inferSceneTags(input: ResolveSceneTagInput): SceneTagKey[] {
+  const candidates = getDefinitions(input).filter((item) => item.enabled)
+  if (candidates.length === 0) {
+    return ['office']
   }
 
-  if (input.name) scoreText(scores, input.name, 2)
-  if (input.description) scoreText(scores, input.description, 2)
-  if (input.category) scoreText(scores, input.category, 3)
+  const candidateKeys = candidates.map((item) => item.key)
+  const scores: Record<string, number> = {}
+  for (const key of candidateKeys) scores[key] = 0
+  const keywordMap = buildKeywordMap(candidates)
+  const orderMap = new Map(candidates.map((item) => [item.key, item.order]))
+
+  if (input.name) scoreText(scores, input.name, 2, candidateKeys, keywordMap)
+  if (input.description) scoreText(scores, input.description, 2, candidateKeys, keywordMap)
+  if (input.category) scoreText(scores, input.category, 3, candidateKeys, keywordMap)
   if (input.triggers && input.triggers.length > 0) {
-    scoreText(scores, input.triggers.join(' '), 2)
+    scoreText(scores, input.triggers.join(' '), 2, candidateKeys, keywordMap)
   }
 
   if (input.frontmatter) {
     const categoryAliases = getFrontmatterStringArray(input.frontmatter, ['category', 'categories'])
     if (categoryAliases && categoryAliases.length > 0) {
-      scoreText(scores, categoryAliases.join(' '), 2)
+      scoreText(scores, categoryAliases.join(' '), 2, candidateKeys, keywordMap)
     }
   }
 
   if (input.content) {
     const body = stripFrontmatter(input.content)
-    scoreText(scores, body.slice(0, 1200), 1)
+    scoreText(scores, body.slice(0, 1200), 1, candidateKeys, keywordMap)
   }
 
-  return [...SCENE_TAGS]
-    .filter((tag) => scores[tag] > 0)
+  return [...candidateKeys]
+    .filter((key) => scores[key] > 0)
     .sort((a, b) => {
-      const diff = scores[b] - scores[a]
+      const diff = (scores[b] || 0) - (scores[a] || 0)
       if (diff !== 0) return diff
-      return SCENE_TAGS.indexOf(a) - SCENE_TAGS.indexOf(b)
+      const orderDiff = (orderMap.get(a) ?? 999) - (orderMap.get(b) ?? 999)
+      if (orderDiff !== 0) return orderDiff
+      return a.localeCompare(b)
     })
     .slice(0, 3)
 }
 
-export function resolveSceneTags(input: ResolveSceneTagInput): SceneTag[] {
-  const explicit = extractExplicitSceneTags(input.frontmatter)
+export function resolveSceneTags(input: ResolveSceneTagInput): SceneTagKey[] {
+  const definitions = getDefinitions(input)
+  const knownKeys = new Set(definitions.map((item) => item.key))
+
+  if (input.resourceKey && input.resourceOverrides) {
+    const override = input.resourceOverrides[input.resourceKey]
+    const normalizedOverride = normalizeSceneTagKeys(override, knownKeys, { fallback: null })
+    if (normalizedOverride.length > 0) {
+      return normalizedOverride
+    }
+  }
+
+  const explicit = extractExplicitSceneTags(input.frontmatter, knownKeys)
   if (explicit.length > 0) {
     return explicit
   }
 
-  const inferred = inferSceneTags(input)
+  const inferred = inferSceneTags({
+    ...input,
+    definitions
+  })
   if (inferred.length > 0) {
     return inferred
+  }
+
+  if (knownKeys.has('office')) {
+    return ['office']
+  }
+
+  const firstEnabled = definitions.find((item) => item.enabled)
+  if (firstEnabled) {
+    return [firstEnabled.key]
+  }
+
+  const firstKnown = definitions[0]
+  if (firstKnown) {
+    return [firstKnown.key]
   }
 
   return ['office']

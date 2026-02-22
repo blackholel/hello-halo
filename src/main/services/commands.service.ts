@@ -17,9 +17,10 @@ import { listEnabledPlugins } from './plugins.service'
 import { FileCache } from '../utils/file-cache'
 import type { ResourceRef, CopyToSpaceOptions, CopyToSpaceResult } from './resource-ref.service'
 import { commandKey } from '../../shared/command-utils'
-import type { SceneTag } from '../../shared/extension-taxonomy'
+import type { SceneTagKey } from '../../shared/scene-taxonomy'
 import { parseResourceMetadata } from './resource-metadata.service'
 import { resolveSceneTags } from './resource-scene-tags.service'
+import { buildResourceSceneKey, getSceneTaxonomy } from './scene-taxonomy.service'
 
 // ============================================
 // Command Types
@@ -30,7 +31,7 @@ export interface CommandDefinition {
   path: string
   source: 'app' | 'space' | 'plugin'
   description?: string
-  sceneTags: SceneTag[]
+  sceneTags: SceneTagKey[]
   pluginRoot?: string
   namespace?: string
 }
@@ -58,17 +59,33 @@ function resolveWorkDirForCommandPath(commandPath: string): string | null {
   return null
 }
 
-function readCommandMetadata(filePath: string, name: string): { description?: string; sceneTags: SceneTag[] } {
+function readCommandMetadata(
+  filePath: string,
+  name: string,
+  source: CommandDefinition['source'],
+  namespace?: string,
+  workDir?: string
+): { description?: string; sceneTags: SceneTagKey[] } {
   try {
     const content = readFileSync(filePath, 'utf-8')
     const metadata = parseResourceMetadata(content)
+    const taxonomy = getSceneTaxonomy().config
     return {
       description: metadata.description,
       sceneTags: resolveSceneTags({
         name,
         description: metadata.description,
         content,
-        frontmatter: metadata.frontmatter
+        frontmatter: metadata.frontmatter,
+        resourceKey: buildResourceSceneKey({
+          type: 'command',
+          source,
+          workDir,
+          namespace,
+          name
+        }),
+        definitions: taxonomy.definitions,
+        resourceOverrides: taxonomy.resourceOverrides
       })
     }
   } catch {
@@ -80,7 +97,8 @@ function scanCommandDir(
   dirPath: string,
   source: CommandDefinition['source'],
   pluginRoot?: string,
-  namespace?: string
+  namespace?: string,
+  workDir?: string
 ): CommandDefinition[] {
   if (!isValidDirectoryPath(dirPath, 'Commands')) return []
 
@@ -92,7 +110,7 @@ function scanCommandDir(
       try {
         if (!statSync(filePath).isFile()) continue
         const name = file.slice(0, -3)
-        const metadata = readCommandMetadata(filePath, name)
+        const metadata = readCommandMetadata(filePath, name, source, namespace, workDir)
         commands.push({
           name,
           path: filePath,
@@ -145,7 +163,7 @@ function buildGlobalCommands(): CommandDefinition[] {
 }
 
 function buildSpaceCommands(workDir: string): CommandDefinition[] {
-  return scanCommandDir(join(workDir, '.claude', 'commands'), 'space')
+  return scanCommandDir(join(workDir, '.claude', 'commands'), 'space', undefined, undefined, workDir)
 }
 
 function findCommand(commands: CommandDefinition[], name: string): CommandDefinition | undefined {
@@ -173,19 +191,20 @@ function findCommandByRef(commands: CommandDefinition[], ref: ResourceRef): Comm
   })
 }
 
-function logFound(items: CommandDefinition[]): void {
+function logFound(items: CommandDefinition[], locale?: string): void {
   if (items.length > 0) {
-    console.log(`[Commands] Found ${items.length} commands: ${items.map(commandKey).join(', ')}`)
+    const localeSuffix = locale ? ` (locale: ${locale})` : ''
+    console.log(`[Commands] Found ${items.length} commands${localeSuffix}: ${items.map(commandKey).join(', ')}`)
   }
 }
 
-export function listCommands(workDir?: string): CommandDefinition[] {
+export function listCommands(workDir?: string, locale?: string): CommandDefinition[] {
   if (!globalCommandsCache) {
     globalCommandsCache = buildGlobalCommands()
   }
 
   if (!workDir) {
-    logFound(globalCommandsCache)
+    logFound(globalCommandsCache, locale)
     return globalCommandsCache
   }
 
@@ -196,7 +215,7 @@ export function listCommands(workDir?: string): CommandDefinition[] {
   }
 
   const commands = mergeCommands(globalCommandsCache, spaceCommands)
-  logFound(commands)
+  logFound(commands, locale)
   return commands
 }
 
@@ -226,12 +245,14 @@ export function getCommand(name: string, workDir?: string): CommandDefinition | 
 export function getCommandContent(
   name: string,
   workDir?: string,
-  opts?: { silent?: boolean }
+  opts?: { silent?: boolean; locale?: string; executionMode?: 'display' | 'execute' }
 ): string | null {
+  const executionMode = opts?.executionMode === 'execute' ? 'execute' : 'display'
+  const localeSuffix = opts?.locale ? ` (locale: ${opts.locale})` : ''
   const command = getCommand(name, workDir)
 
   if (!command) {
-    if (!opts?.silent) console.warn(`[Commands] Command not found: ${name}`)
+    if (!opts?.silent) console.warn(`[Commands] Command not found: ${name}${localeSuffix} [mode=${executionMode}]`)
     return null
   }
 
@@ -246,7 +267,7 @@ export function getCommandContent(
     if (isFileNotFoundError(error)) {
       console.debug(`[Commands] Command file not found: ${name}`)
     } else {
-      console.warn(`[Commands] Failed to read command ${name}:`, error)
+      console.warn(`[Commands] Failed to read command ${name}${localeSuffix} [mode=${executionMode}]:`, error)
     }
     return null
   }
@@ -294,6 +315,7 @@ export function createCommand(workDir: string, name: string, content: string): C
   invalidateCommandsCache(workDir)
   const metadata = parseResourceMetadata(content)
 
+  const taxonomy = getSceneTaxonomy().config
   return {
     name,
     path: commandPath,
@@ -303,7 +325,15 @@ export function createCommand(workDir: string, name: string, content: string): C
       name,
       description: metadata.description,
       content,
-      frontmatter: metadata.frontmatter
+      frontmatter: metadata.frontmatter,
+      resourceKey: buildResourceSceneKey({
+        type: 'command',
+        source: 'space',
+        workDir,
+        name
+      }),
+      definitions: taxonomy.definitions,
+      resourceOverrides: taxonomy.resourceOverrides
     })
   }
 }

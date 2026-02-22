@@ -196,6 +196,15 @@ export interface KiteAPI {
   ) => Promise<IpcResponse>
   clearAgentsCache: () => Promise<IpcResponse>
 
+  // Scene Taxonomy
+  getSceneTaxonomy: () => Promise<IpcResponse>
+  upsertSceneDefinition: (definition: Record<string, unknown>) => Promise<IpcResponse>
+  removeSceneDefinition: (key: string) => Promise<IpcResponse>
+  setResourceSceneOverride: (resourceKey: string, tags: string[]) => Promise<IpcResponse>
+  removeResourceSceneOverride: (resourceKey: string) => Promise<IpcResponse>
+  exportSceneTaxonomy: () => Promise<IpcResponse>
+  importSceneTaxonomy: (payload: Record<string, unknown>, mode?: 'merge' | 'replace') => Promise<IpcResponse>
+
   // Toolkit
   getToolkit: (spaceId: string) => Promise<IpcResponse>
   addToolkitResource: (spaceId: string, directive: Record<string, unknown>) => Promise<IpcResponse>
@@ -563,6 +572,15 @@ const api: KiteAPI = {
   copyAgentToSpace: (agentName, workDir) => ipcRenderer.invoke('agents:copy-to-space', agentName, workDir),
   copyAgentToSpaceByRef: (ref, workDir, options) => ipcRenderer.invoke('agents:copy-to-space-by-ref', ref, workDir, options),
   clearAgentsCache: () => ipcRenderer.invoke('agents:clear-cache'),
+
+  // Scene Taxonomy
+  getSceneTaxonomy: () => ipcRenderer.invoke('scene-taxonomy:get'),
+  upsertSceneDefinition: (definition) => ipcRenderer.invoke('scene-taxonomy:upsert-definition', definition),
+  removeSceneDefinition: (key) => ipcRenderer.invoke('scene-taxonomy:remove-definition', key),
+  setResourceSceneOverride: (resourceKey, tags) => ipcRenderer.invoke('scene-taxonomy:set-override', resourceKey, tags),
+  removeResourceSceneOverride: (resourceKey) => ipcRenderer.invoke('scene-taxonomy:remove-override', resourceKey),
+  exportSceneTaxonomy: () => ipcRenderer.invoke('scene-taxonomy:export'),
+  importSceneTaxonomy: (payload, mode = 'merge') => ipcRenderer.invoke('scene-taxonomy:import', payload, mode),
 
   // Toolkit
   getToolkit: (spaceId) => ipcRenderer.invoke('toolkit:get', spaceId),

@@ -166,6 +166,9 @@ export interface KiteConfig {
   mcpServers: McpServersConfig;  // MCP servers configuration
   isFirstLaunch: boolean;
   configSourceMode: ConfigSourceMode;
+  extensionTaxonomy?: {
+    adminEnabled: boolean;
+  };
   claudeCode?: ClaudeCodeConfig;  // Claude Code configuration (plugins, hooks, agents)
 }
 
@@ -695,7 +698,7 @@ export type AgentEvent =
 // App State Types
 // ============================================
 
-export type AppView = 'splash' | 'gitBashSetup' | 'setup' | 'home' | 'space' | 'settings';
+export type AppView = 'splash' | 'gitBashSetup' | 'setup' | 'home' | 'space' | 'settings' | 'sceneTaxonomyAdmin';
 
 export interface AppState {
   view: AppView;

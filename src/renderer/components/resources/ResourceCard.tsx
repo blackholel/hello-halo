@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Copy, X } from 'lucide-react'
 import { api } from '../../api'
 import { useTranslation } from '../../i18n'
+import { getCurrentLanguage } from '../../i18n'
 import { useSpaceStore } from '../../stores/space.store'
 import { useToolkitStore } from '../../stores/toolkit.store'
 import { buildDirective } from '../../utils/directive-helpers'
@@ -10,13 +11,21 @@ import { copyResourceWithConflict, resolveActionButtonState, type CopyResourceRe
 import { shouldLoadResourceContent } from './resource-content-loading'
 import { fetchResourceContent, getSourceColor, getSourceLabel, mapResourceMeta } from './resource-meta'
 import type { AnyResource, ResourceActionMode, ResourceType } from './types'
-import { normalizeSceneTags, SCENE_TAG_CLASS, SCENE_TAG_LABEL_KEY } from './scene-tag-meta'
+import {
+  getDefaultSceneDefinitions,
+  getSceneClassName,
+  getSceneLabel,
+  normalizeSceneDefinitions,
+  normalizeSceneTags
+} from './scene-tag-meta'
+import type { SceneDefinition } from '../../../shared/scene-taxonomy'
 
 export interface ResourceCardProps {
   resource: AnyResource
   type: ResourceType
   index: number
   actionMode: ResourceActionMode
+  sceneDefinitions?: SceneDefinition[]
   workDir?: string
   onAfterAction?: () => void
   isActionDisabled?: boolean
@@ -67,6 +76,7 @@ export function ResourceCard({
   type,
   index,
   actionMode,
+  sceneDefinitions,
   workDir,
   onAfterAction,
   isActionDisabled,
@@ -260,9 +270,17 @@ export function ResourceCard({
     && actionState.disabled
 
   const Icon = meta.icon
+  const effectiveSceneDefinitions = useMemo(
+    () => normalizeSceneDefinitions(sceneDefinitions ?? getDefaultSceneDefinitions()),
+    [sceneDefinitions]
+  )
+  const sceneDefinitionMap = useMemo(
+    () => new Map(effectiveSceneDefinitions.map((item) => [item.key, item])),
+    [effectiveSceneDefinitions]
+  )
   const sceneTags = useMemo(
-    () => normalizeSceneTags((resource as { sceneTags?: unknown }).sceneTags),
-    [resource]
+    () => normalizeSceneTags((resource as { sceneTags?: unknown }).sceneTags, effectiveSceneDefinitions),
+    [effectiveSceneDefinitions, resource]
   )
   const typeLabel = getTypeLabel(type, t)
 
@@ -388,9 +406,11 @@ export function ResourceCard({
           {sceneTags.map((tag) => (
             <span
               key={tag}
-              className={`text-[10px] px-2 py-0.5 rounded-full border ${SCENE_TAG_CLASS[tag]}`}
+              className={`text-[10px] px-2 py-0.5 rounded-full border ${getSceneClassName(effectiveSceneDefinitions, tag)}`}
             >
-              {t(SCENE_TAG_LABEL_KEY[tag])}
+              {sceneDefinitionMap.has(tag)
+                ? getSceneLabel(sceneDefinitionMap.get(tag)!, getCurrentLanguage())
+                : tag}
             </span>
           ))}
         </div>

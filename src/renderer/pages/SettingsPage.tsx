@@ -102,7 +102,7 @@ interface RemoteAccessStatus {
 
 export function SettingsPage() {
   const { t } = useTranslation()
-  const { config, setConfig, goBack } = useAppStore()
+  const { config, setConfig, goBack, setView } = useAppStore()
 
   // Python store
   const {
@@ -132,6 +132,7 @@ export function SettingsPage() {
   const [theme, setTheme] = useState<ThemeMode>(config?.appearance.theme || 'system')
   const [configSourceMode, setConfigSourceMode] = useState<ConfigSourceMode>(config?.configSourceMode || 'kite')
   const [configSourceNotice, setConfigSourceNotice] = useState<string | null>(null)
+  const [taxonomyAdminEnabled, setTaxonomyAdminEnabled] = useState<boolean>(config?.extensionTaxonomy?.adminEnabled || false)
   // Custom model toggle: enable by default if current model is not in preset list
   const [useCustomModel, setUseCustomModel] = useState(() => {
     const currentModel = config?.api.model || DEFAULT_MODEL
@@ -176,6 +177,10 @@ export function SettingsPage() {
   useEffect(() => {
     setConfigSourceMode(config?.configSourceMode || 'kite')
   }, [config?.configSourceMode])
+
+  useEffect(() => {
+    setTaxonomyAdminEnabled(config?.extensionTaxonomy?.adminEnabled || false)
+  }, [config?.extensionTaxonomy?.adminEnabled])
 
   // Load system settings
   useEffect(() => {
@@ -356,6 +361,20 @@ export function SettingsPage() {
       console.error('[Settings] Failed to update configuration source mode:', error)
       setConfigSourceMode(previousMode)
       setConfigSourceNotice(t('Save failed'))
+    }
+  }
+
+  const handleTaxonomyAdminToggle = async (enabled: boolean) => {
+    setTaxonomyAdminEnabled(enabled)
+    try {
+      await api.setConfig({ extensionTaxonomy: { adminEnabled: enabled } })
+      setConfig({
+        ...config,
+        extensionTaxonomy: { adminEnabled: enabled }
+      } as KiteConfig)
+    } catch (error) {
+      console.error('[Settings] Failed to set taxonomy admin flag:', error)
+      setTaxonomyAdminEnabled(!enabled)
     }
   }
 
@@ -728,6 +747,43 @@ export function SettingsPage() {
                 <div className="settings-info text-sm">
                   {configSourceNotice}
                 </div>
+              )}
+            </div>
+          </section>
+
+          {/* Scene Taxonomy Section */}
+          <section className="settings-section">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center">
+                <svg className="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2l8 4.5v11L12 22 4 17.5v-11L12 2zm0 2.3L6 7.5l6 3.3 6-3.3-6-3.2zm-6 5.5v6.4l5 2.8v-6.4l-5-2.8zm13 0l-5 2.8v6.4l5-2.8V9.8z" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-base font-semibold tracking-tight">{t('Scene Taxonomy')}</h2>
+                <p className="text-xs text-muted-foreground">{t('Developer governance for scene labels and overrides')}</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">{t('Enable Admin Mode')}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {t('Show scene taxonomy management UI and enable mutation APIs')}
+                  </p>
+                </div>
+                <AppleToggle checked={taxonomyAdminEnabled} onChange={handleTaxonomyAdminToggle} />
+              </div>
+
+              {taxonomyAdminEnabled && (
+                <button
+                  type="button"
+                  onClick={() => setView('sceneTaxonomyAdmin')}
+                  className="px-4 py-2.5 text-sm rounded-xl bg-primary/15 text-primary hover:bg-primary/20 transition-colors"
+                >
+                  {t('Open Scene Taxonomy Manager')}
+                </button>
               )}
             </div>
           </section>

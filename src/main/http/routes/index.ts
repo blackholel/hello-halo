@@ -14,6 +14,7 @@ import * as spaceController from '../../controllers/space.controller'
 import * as conversationController from '../../controllers/conversation.controller'
 import * as configController from '../../controllers/config.controller'
 import * as changeSetController from '../../controllers/change-set.controller'
+import * as sceneTaxonomyController from '../../controllers/scene-taxonomy.controller'
 import { listArtifacts } from '../../services/artifact.service'
 import { getTempSpacePath, getSpacesDir } from '../../services/config.service'
 import { getSpace, getAllSpacePaths } from '../../services/space.service'
@@ -262,6 +263,17 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
     res.json(result)
   })
 
+  app.post('/api/agent/warm', safeRoute(async (req, res) => {
+    const { ensureSessionWarm } = await import('../../services/agent')
+    const { spaceId, conversationId } = req.body ?? {}
+    if (typeof spaceId !== 'string' || typeof conversationId !== 'string') {
+      res.json({ success: false, error: 'spaceId and conversationId are required' })
+      return
+    }
+    await ensureSessionWarm(spaceId, conversationId)
+    res.json({ success: true })
+  }))
+
   app.post('/api/agent/approve', async (req: Request, res: Response) => {
     const { conversationId } = req.body
     const result = agentController.approveTool(conversationId)
@@ -345,6 +357,40 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
       return
     }
     res.json({ success: true, data: preset })
+  }))
+
+  // ===== Scene Taxonomy Routes =====
+  app.get('/api/scene-taxonomy', safeRoute(async (_req, res) => {
+    res.json(sceneTaxonomyController.getSceneTaxonomy())
+  }))
+
+  app.put('/api/scene-taxonomy/definitions', safeRoute(async (req, res) => {
+    res.json(sceneTaxonomyController.upsertSceneDefinition(req.body))
+  }))
+
+  app.delete('/api/scene-taxonomy/definitions/:key', safeRoute(async (req, res) => {
+    res.json(sceneTaxonomyController.removeSceneDefinition(req.params.key))
+  }))
+
+  app.put('/api/scene-taxonomy/overrides', safeRoute(async (req, res) => {
+    const { resourceKey, tags } = req.body
+    res.json(sceneTaxonomyController.setResourceSceneOverride(resourceKey, tags))
+  }))
+
+  app.delete('/api/scene-taxonomy/overrides', safeRoute(async (req, res) => {
+    const resourceKey = typeof req.query.resourceKey === 'string'
+      ? req.query.resourceKey
+      : ''
+    res.json(sceneTaxonomyController.removeResourceSceneOverride(resourceKey))
+  }))
+
+  app.get('/api/scene-taxonomy/export', safeRoute(async (_req, res) => {
+    res.json(sceneTaxonomyController.exportSceneTaxonomy())
+  }))
+
+  app.post('/api/scene-taxonomy/import', safeRoute(async (req, res) => {
+    const mode = req.body?.mode === 'replace' ? 'replace' : 'merge'
+    res.json(sceneTaxonomyController.importSceneTaxonomy(req.body?.payload, mode))
   }))
 
   // ===== Skills Routes =====
@@ -502,7 +548,8 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
     const workDir = validateWorkDir(req, res)
     if (workDir === null) return
     const { listCommands } = await import('../../services/commands.service')
-    res.json({ success: true, data: listCommands(workDir || undefined) })
+    const locale = typeof req.query.locale === 'string' ? req.query.locale : undefined
+    res.json({ success: true, data: listCommands(workDir || undefined, locale) })
   }))
 
   app.get('/api/commands/content', safeRoute(async (req, res) => {
@@ -510,7 +557,9 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
     if (workDir === null) return
     const { getCommandContent } = await import('../../services/commands.service')
     const name = (req.query.name as string) || ''
-    const content = getCommandContent(name, workDir || undefined)
+    const locale = typeof req.query.locale === 'string' ? req.query.locale : undefined
+    const executionMode = req.query.executionMode === 'execute' ? 'execute' : 'display'
+    const content = getCommandContent(name, workDir || undefined, { locale, executionMode })
     if (!content) {
       res.json({ success: false, error: `Command not found: ${name}` })
       return

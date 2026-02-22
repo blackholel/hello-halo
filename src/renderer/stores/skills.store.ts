@@ -10,6 +10,7 @@
 
 import { create } from 'zustand'
 import { api } from '../api'
+import i18n from '../i18n'
 import { getCacheKey, getAllCacheKeys, GLOBAL_CACHE_KEY } from './cache-keys'
 import { useSpaceStore } from './space.store'
 import { useToolkitStore } from './toolkit.store'
@@ -387,6 +388,12 @@ export function initSkillsStoreListeners(): void {
     if (payload.workDir === loadedWorkDir) {
       loadSkills(loadedWorkDir ?? undefined)
     }
+  })
+
+  i18n.on('languageChanged', () => {
+    const { loadedWorkDir, loadSkills, markAllDirty } = useSkillsStore.getState()
+    markAllDirty()
+    void loadSkills(loadedWorkDir ?? undefined)
   })
 }
 

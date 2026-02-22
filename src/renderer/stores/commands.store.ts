@@ -7,6 +7,7 @@
 
 import { create } from 'zustand'
 import { api } from '../api'
+import i18n from '../i18n'
 import { useSpaceStore } from './space.store'
 import { useToolkitStore } from './toolkit.store'
 import { buildDirective } from '../utils/directive-helpers'
@@ -227,5 +228,10 @@ export function initCommandsStoreListeners(): void {
     if (changedWorkDir == null || changedWorkDir === loadedWorkDir) {
       loadCommands(loadedWorkDir ?? undefined, true)
     }
+  })
+
+  i18n.on('languageChanged', () => {
+    const { loadedWorkDir, loadCommands } = useCommandsStore.getState()
+    void loadCommands(loadedWorkDir ?? undefined, true)
   })
 }

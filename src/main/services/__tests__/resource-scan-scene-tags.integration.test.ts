@@ -17,6 +17,7 @@ vi.mock('../plugins.service', () => ({
 import { clearSkillsCache, listSkills } from '../skills.service'
 import { clearAgentsCache, listAgents } from '../agents.service'
 import { clearCommandsCache, listCommands } from '../commands.service'
+import { getSceneTaxonomy } from '../scene-taxonomy.service'
 
 function ensureDir(pathValue: string): void {
   mkdirSync(pathValue, { recursive: true })
@@ -33,6 +34,9 @@ afterEach(() => {
 
 describe('resource scan scene tags integration', () => {
   it('keeps frontmatter description and sceneTags effective for skills/agents/commands', () => {
+    const taxonomy = getSceneTaxonomy()
+    expect(taxonomy.config.definitions.map((item) => item.key)).toContain('coding')
+
     ensureDir(join(APP_ROOT, 'skills', 'review'))
     writeFileSync(join(APP_ROOT, 'skills', 'review', 'SKILL.md'), [
       '---',

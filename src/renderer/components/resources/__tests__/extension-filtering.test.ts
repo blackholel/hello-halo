@@ -4,6 +4,7 @@ import {
   computeSceneCounts,
   normalizeExtensionItems
 } from '../extension-filtering'
+import { DEFAULT_SCENE_DEFINITIONS } from '../../../../shared/scene-taxonomy'
 
 describe('extension-filtering', () => {
   it('hides commands when in remote mode', () => {
@@ -17,7 +18,8 @@ describe('extension-filtering', () => {
       commands: [
         { name: 'command-a', path: '/tmp/command-a', source: 'app', sceneTags: ['web'] }
       ],
-      isRemote: true
+      isRemote: true,
+      sceneDefinitions: DEFAULT_SCENE_DEFINITIONS
     })
 
     expect(items.map((item) => item.type)).toEqual(['skill', 'agent'])
@@ -30,11 +32,12 @@ describe('extension-filtering', () => {
       ],
       agents: [],
       commands: [],
-      isRemote: false
+      isRemote: false,
+      sceneDefinitions: DEFAULT_SCENE_DEFINITIONS
     })
 
     expect(items[0]?.sceneTags).toEqual(['office'])
-    expect(computeSceneCounts(items).office).toBe(1)
+    expect(computeSceneCounts(items, DEFAULT_SCENE_DEFINITIONS.map((item) => item.key)).office).toBe(1)
     expect(applySceneFilter(items, 'office')).toHaveLength(1)
     expect(applySceneFilter(items, 'coding')).toHaveLength(0)
   })

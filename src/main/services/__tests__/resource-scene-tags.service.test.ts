@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { inferSceneTags, resolveSceneTags } from '../resource-scene-tags.service'
+import type { SceneDefinition } from '../../../shared/scene-taxonomy'
 
 describe('resource-scene-tags.service', () => {
   it('prefers explicit frontmatter scene tags', () => {
@@ -52,5 +53,79 @@ describe('resource-scene-tags.service', () => {
     })
 
     expect(tags).toEqual(['office'])
+  })
+
+  it('prioritizes resource override over frontmatter and inference', () => {
+    const tags = resolveSceneTags({
+      name: 'demo',
+      frontmatter: { sceneTags: ['writing'] },
+      resourceKey: 'skill:app:-:-:demo',
+      resourceOverrides: {
+        'skill:app:-:-:demo': ['coding']
+      },
+      definitions: [
+        {
+          key: 'coding',
+          label: { en: 'Coding', zhCN: '编程开发', zhTW: '程式開發' },
+          colorToken: 'blue',
+          order: 10,
+          enabled: true,
+          builtin: true
+        },
+        {
+          key: 'writing',
+          label: { en: 'Writing', zhCN: '写作', zhTW: '寫作' },
+          colorToken: 'green',
+          order: 20,
+          enabled: true,
+          builtin: true
+        },
+        {
+          key: 'office',
+          label: { en: 'Office', zhCN: '办公套件', zhTW: '辦公套件' },
+          colorToken: 'slate',
+          order: 60,
+          enabled: true,
+          builtin: true
+        }
+      ]
+    })
+
+    expect(tags).toEqual(['coding'])
+  })
+
+  it('inference only considers enabled definitions', () => {
+    const definitions: SceneDefinition[] = [
+      {
+        key: 'coding',
+        label: { en: 'Coding', zhCN: '编程开发', zhTW: '程式開發' },
+        colorToken: 'blue',
+        order: 10,
+        enabled: false,
+        builtin: true
+      },
+      {
+        key: 'writing',
+        label: { en: 'Writing', zhCN: '写作', zhTW: '寫作' },
+        colorToken: 'green',
+        order: 20,
+        enabled: true,
+        builtin: true
+      },
+      {
+        key: 'office',
+        label: { en: 'Office', zhCN: '办公套件', zhTW: '辦公套件' },
+        colorToken: 'slate',
+        order: 60,
+        enabled: true,
+        builtin: true
+      }
+    ]
+    const tags = inferSceneTags({
+      name: 'code-helper',
+      description: 'coding assistant',
+      definitions
+    })
+    expect(tags).not.toContain('coding')
   })
 })

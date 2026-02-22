@@ -2,8 +2,9 @@ import type { AgentDefinition } from '../../stores/agents.store'
 import type { CommandDefinition } from '../../stores/commands.store'
 import type { SkillDefinition } from '../../stores/skills.store'
 import { commandKey } from '../../../shared/command-utils'
-import { SCENE_TAGS, type SceneFilter, type SceneTag } from '../../../shared/extension-taxonomy'
-import { normalizeSceneTags } from './scene-tag-meta'
+import type { SceneFilter } from '../../../shared/extension-taxonomy'
+import type { SceneDefinition } from '../../../shared/scene-taxonomy'
+import { getSceneOptions, normalizeSceneTags } from './scene-tag-meta'
 import type { ResourceType } from './types'
 import type { TemplateLibraryTab } from '../../types/template-library'
 
@@ -15,7 +16,7 @@ export interface ExtensionItem {
   resource: SkillDefinition | AgentDefinition | CommandDefinition
   searchable: string
   displayName: string
-  sceneTags: SceneTag[]
+  sceneTags: string[]
 }
 
 const FILTER_TO_TYPE: Record<FilterTab, ResourceType | null> = {
@@ -66,6 +67,7 @@ export function normalizeExtensionItems(params: {
   agents: AgentDefinition[]
   commands: CommandDefinition[]
   isRemote: boolean
+  sceneDefinitions: SceneDefinition[]
 }): ExtensionItem[] {
   const skillItems: ExtensionItem[] = params.skills.map((skill) => {
     const displayName = skill.namespace ? `${skill.namespace}:${skill.name}` : skill.name
@@ -81,7 +83,7 @@ export function normalizeExtensionItems(params: {
         ...(skill.triggers || [])
       ].filter(Boolean).join(' ').toLowerCase(),
       displayName,
-      sceneTags: normalizeSceneTags(skill.sceneTags)
+      sceneTags: normalizeSceneTags(skill.sceneTags, params.sceneDefinitions)
     }
   })
 
@@ -93,7 +95,7 @@ export function normalizeExtensionItems(params: {
       resource: agent,
       searchable: [agent.name, agent.namespace, agent.description].filter(Boolean).join(' ').toLowerCase(),
       displayName,
-      sceneTags: normalizeSceneTags(agent.sceneTags)
+      sceneTags: normalizeSceneTags(agent.sceneTags, params.sceneDefinitions)
     }
   })
 
@@ -105,7 +107,7 @@ export function normalizeExtensionItems(params: {
       resource: command,
       searchable: [commandKey(command), command.description].filter(Boolean).join(' ').toLowerCase(),
       displayName,
-      sceneTags: normalizeSceneTags(command.sceneTags)
+      sceneTags: normalizeSceneTags(command.sceneTags, params.sceneDefinitions)
     }
   })
 
@@ -128,18 +130,13 @@ export function applySceneFilter(items: ExtensionItem[], sceneFilter: SceneFilte
   return items.filter((item) => item.sceneTags.includes(sceneFilter))
 }
 
-export function computeSceneCounts(items: ExtensionItem[]): Record<SceneTag, number> {
-  const counts: Record<SceneTag, number> = {
-    coding: 0,
-    writing: 0,
-    design: 0,
-    data: 0,
-    web: 0,
-    office: 0
-  }
+export function computeSceneCounts(items: ExtensionItem[], sceneKeys: string[]): Record<string, number> {
+  const counts: Record<string, number> = {}
+  for (const key of sceneKeys) counts[key] = 0
 
   for (const item of items) {
     for (const tag of item.sceneTags) {
+      if (counts[tag] === undefined) continue
       counts[tag] += 1
     }
   }
@@ -175,19 +172,16 @@ export function groupByType(items: ExtensionItem[]): Record<ResourceType, Extens
   return groups
 }
 
-export function emptySceneCounts(): Record<SceneTag, number> {
-  return {
-    coding: 0,
-    writing: 0,
-    design: 0,
-    data: 0,
-    web: 0,
-    office: 0
+export function emptySceneCounts(sceneKeys: string[]): Record<string, number> {
+  const counts: Record<string, number> = {}
+  for (const key of sceneKeys) {
+    counts[key] = 0
   }
+  return counts
 }
 
-export function getSceneOrder(): SceneTag[] {
-  return [...SCENE_TAGS]
+export function getSceneOrder(definitions: SceneDefinition[]): string[] {
+  return getSceneOptions(definitions).map((item) => item.key)
 }
 
 export function computeTypeCounts(items: ExtensionItem[]): Record<ResourceType, number> {

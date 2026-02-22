@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Bot, Puzzle, Search, Terminal, Zap } from 'lucide-react'
 import { api } from '../../api'
-import { useTranslation } from '../../i18n'
+import { getCurrentLanguage, useTranslation } from '../../i18n'
 import { type AgentDefinition, useAgentsStore } from '../../stores/agents.store'
 import { type CommandDefinition, useCommandsStore } from '../../stores/commands.store'
 import { type SkillDefinition, useSkillsStore } from '../../stores/skills.store'
@@ -20,8 +20,14 @@ import {
   sortExtensions,
   type FilterTab
 } from '../resources/extension-filtering'
-import { SCENE_TAG_CLASS, SCENE_TAG_LABEL_KEY } from '../resources/scene-tag-meta'
+import {
+  getDefaultSceneDefinitions,
+  getSceneClassName,
+  getSceneLabel,
+  normalizeSceneDefinitions
+} from '../resources/scene-tag-meta'
 import type { SceneFilter } from '../../../shared/extension-taxonomy'
+import type { SceneDefinition } from '../../../shared/scene-taxonomy'
 
 interface EmptyStateProps {
   icon: typeof Puzzle
@@ -46,6 +52,7 @@ export function ExtensionsView(): JSX.Element {
   const [activeFilter, setActiveFilter] = useState<FilterTab>('all')
   const [sceneFilter, setSceneFilter] = useState<SceneFilter>('all')
   const [query, setQuery] = useState('')
+  const [sceneDefinitions, setSceneDefinitions] = useState<SceneDefinition[]>(getDefaultSceneDefinitions())
   const isRemote = api.isRemoteMode()
   const hasRequestedGlobalResources = useRef(false)
   const currentSpace = useSpaceStore((state) => state.currentSpace)
@@ -85,12 +92,34 @@ export function ExtensionsView(): JSX.Element {
     }
   }, [currentSpace, loadToolkit])
 
+  useEffect(() => {
+    let cancelled = false
+    const loadSceneTaxonomy = async (): Promise<void> => {
+      const response = await api.getSceneTaxonomy()
+      if (!response.success || !response.data || cancelled) return
+      const data = response.data as { definitions?: unknown; config?: { definitions?: unknown } }
+      const definitions = normalizeSceneDefinitions(data.definitions ?? data.config?.definitions)
+      setSceneDefinitions(definitions)
+    }
+    void loadSceneTaxonomy()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const sceneDefinitionMap = useMemo(
+    () => new Map(sceneDefinitions.map((item) => [item.key, item])),
+    [sceneDefinitions]
+  )
+  const sceneKeys = useMemo(() => getSceneOrder(sceneDefinitions), [sceneDefinitions])
+
   const normalizedItems = useMemo(() => normalizeExtensionItems({
     skills: skills as SkillDefinition[],
     agents: agents as AgentDefinition[],
     commands: commands as CommandDefinition[],
-    isRemote
-  }), [agents, commands, isRemote, skills])
+    isRemote,
+    sceneDefinitions
+  }), [agents, commands, isRemote, sceneDefinitions, skills])
 
   const typeSearchFilteredItems = useMemo(
     () => sortExtensions(applyTypeAndSearchFilter(normalizedItems, activeFilter, query)),
@@ -98,8 +127,8 @@ export function ExtensionsView(): JSX.Element {
   )
 
   const sceneCounts = useMemo(
-    () => computeSceneCounts(typeSearchFilteredItems),
-    [typeSearchFilteredItems]
+    () => computeSceneCounts(typeSearchFilteredItems, sceneKeys),
+    [sceneKeys, typeSearchFilteredItems]
   )
 
   const filteredItems = useMemo(
@@ -130,13 +159,15 @@ export function ExtensionsView(): JSX.Element {
     const allCount = typeSearchFilteredItems.length
     return [
       { key: 'all' as const, label: t('All scenes'), count: allCount },
-      ...getSceneOrder().map((tag) => ({
+      ...sceneKeys.map((tag) => ({
         key: tag,
-        label: t(SCENE_TAG_LABEL_KEY[tag]),
-        count: sceneCounts[tag]
+        label: sceneDefinitionMap.has(tag)
+          ? getSceneLabel(sceneDefinitionMap.get(tag)!, getCurrentLanguage())
+          : tag,
+        count: sceneCounts[tag] ?? 0
       }))
     ]
-  }, [sceneCounts, t, typeSearchFilteredItems.length])
+  }, [sceneCounts, sceneDefinitionMap, sceneKeys, t, typeSearchFilteredItems.length])
 
   const handleClearFilters = (): void => {
     setSceneFilter('all')
@@ -193,7 +224,7 @@ export function ExtensionsView(): JSX.Element {
 
               const sceneStyle = scene.key === 'all'
                 ? 'text-muted-foreground hover:text-foreground hover:bg-secondary/70'
-                : SCENE_TAG_CLASS[scene.key]
+                : getSceneClassName(sceneDefinitions, scene.key)
 
               return (
                 <button
@@ -264,6 +295,7 @@ export function ExtensionsView(): JSX.Element {
                         type="skill"
                         index={index}
                         actionMode="toolkit"
+                        sceneDefinitions={sceneDefinitions}
                       />
                     ))}
                   </div>
@@ -282,6 +314,7 @@ export function ExtensionsView(): JSX.Element {
                         type="agent"
                         index={index}
                         actionMode="toolkit"
+                        sceneDefinitions={sceneDefinitions}
                       />
                     ))}
                   </div>
@@ -301,6 +334,7 @@ export function ExtensionsView(): JSX.Element {
                           type="command"
                           index={index}
                           actionMode="toolkit"
+                          sceneDefinitions={sceneDefinitions}
                         />
                       ))}
                     </div>
@@ -316,6 +350,7 @@ export function ExtensionsView(): JSX.Element {
                     type={item.type}
                     index={index}
                     actionMode="toolkit"
+                    sceneDefinitions={sceneDefinitions}
                   />
                 ))}
               </div>

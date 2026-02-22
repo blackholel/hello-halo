@@ -1,16 +1,12 @@
-export const SCENE_TAGS = [
-  'coding',
-  'writing',
-  'design',
-  'data',
-  'web',
-  'office'
-] as const
+import { BUILTIN_SCENE_TAG_KEYS } from './scene-taxonomy'
 
-export type SceneTag = typeof SCENE_TAGS[number]
+// Deprecated compatibility exports.
+export const SCENE_TAGS = [...BUILTIN_SCENE_TAG_KEYS]
+
+export type SceneTag = string
 
 export type SceneFilter = SceneTag | 'all'
 
 export function isSceneTag(value: unknown): value is SceneTag {
-  return typeof value === 'string' && (SCENE_TAGS as readonly string[]).includes(value)
+  return typeof value === 'string' && value.trim().length > 0
 }
