@@ -59,6 +59,7 @@ export function TemplateLibraryViewer({ tab }: TemplateLibraryViewerProps): JSX.
   const { closeTab } = useCanvasLifecycle()
   const isRemote = api.isRemoteMode()
   const workDir = tab.workDir
+  const locale = getCurrentLanguage()
 
   const loadSkills = useSkillsStore((state) => state.loadSkills)
   const markSkillsDirty = useSkillsStore((state) => state.markDirty)
@@ -114,20 +115,20 @@ export function TemplateLibraryViewer({ tab }: TemplateLibraryViewerProps): JSX.
       setLoading(true)
 
       const [globalSkillsRes, globalAgentsRes, globalCommandsRes] = await Promise.all([
-        api.listSkills(),
-        api.listAgents(),
+        api.listSkills(undefined, locale),
+        api.listAgents(undefined, locale),
         isRemote
           ? Promise.resolve({ success: true, data: [] as CommandDefinition[] })
-          : api.listCommands()
+          : api.listCommands(undefined, locale)
       ])
 
       const [spaceSkillsRes, spaceAgentsRes, spaceCommandsRes] = workDir
         ? await Promise.all([
-          api.listSkills(workDir),
-          api.listAgents(workDir),
+          api.listSkills(workDir, locale),
+          api.listAgents(workDir, locale),
           isRemote
             ? Promise.resolve({ success: true, data: [] as CommandDefinition[] })
-            : api.listCommands(workDir)
+            : api.listCommands(workDir, locale)
         ])
         : [
           { success: true, data: [] as SkillDefinition[] },
@@ -172,7 +173,7 @@ export function TemplateLibraryViewer({ tab }: TemplateLibraryViewerProps): JSX.
     return () => {
       cancelled = true
     }
-  }, [isRemote, refreshToken, workDir])
+  }, [isRemote, locale, refreshToken, workDir])
 
   const refreshStores = useCallback(async (targetWorkDir: string): Promise<void> => {
     markSkillsDirty(targetWorkDir)

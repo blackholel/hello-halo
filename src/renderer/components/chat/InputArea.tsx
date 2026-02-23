@@ -62,6 +62,11 @@ interface ImageError {
   message: string
 }
 
+function getLocalizedName(item: { name: string; displayName?: string; namespace?: string }): string {
+  const base = item.displayName || item.name
+  return item.namespace ? `${item.namespace}:${base}` : base
+}
+
 export function InputArea({
   onSend,
   onStop,
@@ -215,6 +220,7 @@ export function InputArea({
     return items.filter((skill) => matchesTriggerQuery(
       toResourceKey(skill),
       skill.name,
+      skill.displayName,
       skill.description
     ))
   }, [enabledSkills, matchesTriggerQuery, skills])
@@ -224,6 +230,7 @@ export function InputArea({
     return items.filter((command) => matchesTriggerQuery(
       commandKey(command),
       command.name,
+      command.displayName,
       command.description
     ))
   }, [commands, matchesTriggerQuery])
@@ -236,6 +243,7 @@ export function InputArea({
     return items.filter((agent) => matchesTriggerQuery(
       toResourceKey(agent),
       agent.name,
+      agent.displayName,
       agent.description
     ))
   }, [agents, enabledAgents, matchesTriggerQuery])
@@ -246,7 +254,7 @@ export function InputArea({
       return {
         id: `skill:${skill.path}`,
         type: 'skill',
-        displayName: key,
+        displayName: getLocalizedName(skill),
         insertText: `/${key}`,
         description: skill.description
       }
@@ -259,7 +267,7 @@ export function InputArea({
       return {
         id: `command:${command.path}`,
         type: 'command',
-        displayName: key,
+        displayName: getLocalizedName(command),
         insertText: `/${key}`,
         description: command.description
       }
@@ -272,7 +280,7 @@ export function InputArea({
       return {
         id: `agent:${agent.path}`,
         type: 'agent',
-        displayName: key,
+        displayName: getLocalizedName(agent),
         insertText: `@${key}`,
         description: agent.description
       }

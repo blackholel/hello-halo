@@ -15,6 +15,11 @@ interface SkillsDropdownProps {
   onOpenPanel?: () => void
 }
 
+function getSkillDisplayName(skill: SkillDefinition): string {
+  const base = skill.displayName || skill.name
+  return skill.namespace ? `${skill.namespace}:${base}` : base
+}
+
 export function SkillsDropdown({ workDir, onInsertSkill, onOpenPanel }: SkillsDropdownProps) {
   const { t } = useTranslation()
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -148,7 +153,7 @@ export function SkillsDropdown({ workDir, onInsertSkill, onOpenPanel }: SkillsDr
                         text-foreground hover:bg-muted/50 transition-colors"
                     >
                       <Zap size={14} className="text-primary flex-shrink-0" />
-                      <span className="truncate font-mono">/{skill.name}</span>
+                      <span className="truncate font-mono">/{getSkillDisplayName(skill)}</span>
                     </button>
                   ))}
                 </div>
@@ -168,7 +173,7 @@ export function SkillsDropdown({ workDir, onInsertSkill, onOpenPanel }: SkillsDr
                         text-foreground hover:bg-muted/50 transition-colors"
                     >
                       <Zap size={14} className="text-muted-foreground flex-shrink-0" />
-                      <span className="truncate font-mono">/{skill.name}</span>
+                      <span className="truncate font-mono">/{getSkillDisplayName(skill)}</span>
                     </button>
                   ))}
                 </div>

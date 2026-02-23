@@ -16,9 +16,9 @@ import {
 import type { ResourceRef } from '../services/resource-ref.service'
 
 export function registerCommandsHandlers(): void {
-  ipcMain.handle('commands:list', async (_event, workDir?: string) => {
+  ipcMain.handle('commands:list', async (_event, workDir?: string, locale?: string) => {
     try {
-      return { success: true, data: listCommands(workDir) }
+      return { success: true, data: listCommands(workDir, locale) }
     } catch (error: unknown) {
       return { success: false, error: (error as Error).message }
     }

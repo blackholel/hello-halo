@@ -14,6 +14,8 @@ import {
   XCircle,
 } from 'lucide-react'
 import { useTranslation } from '../../i18n'
+import { useSkillsStore } from '../../stores/skills.store'
+import { toResourceKey } from '../../utils/resource-key'
 import {
   truncateText,
   stripErrorTags,
@@ -41,6 +43,14 @@ export const SkillCard = memo(function SkillCard({
 }: SkillCardProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const { t } = useTranslation()
+  const skills = useSkillsStore((state) => state.skills)
+
+  const localizedSkillName = useMemo(() => {
+    const direct = skills.find((skill) => toResourceKey(skill) === skillName || skill.name === skillName)
+    if (!direct) return skillName
+    const base = direct.displayName || direct.name
+    return direct.namespace ? `${direct.namespace}:${base}` : base
+  }, [skillName, skills])
 
   // Use extracted pure functions for status colors
   const statusColor = getSkillStatusColor(isRunning, hasError)
@@ -48,8 +58,8 @@ export const SkillCard = memo(function SkillCard({
 
   // Format skill display: /skill-name args
   const skillDisplay = skillArgs
-    ? `/${skillName} ${truncateText(skillArgs, 40)}`
-    : `/${skillName}`
+    ? `/${localizedSkillName} ${truncateText(skillArgs, 40)}`
+    : `/${localizedSkillName}`
 
   // Memoize summary text to avoid recalculation on every render
   const summaryText = useMemo(

@@ -20,7 +20,12 @@ import type { ResourceRef, CopyToSpaceOptions, CopyToSpaceResult } from './resou
 import { isPathWithinBasePaths, isValidDirectoryPath, isFileNotFoundError } from '../utils/path-validation'
 import { FileCache } from '../utils/file-cache'
 import type { SceneTagKey } from '../../shared/scene-taxonomy'
-import { parseFrontmatter, getFrontmatterString, getFrontmatterStringArray } from './resource-metadata.service'
+import {
+  parseFrontmatter,
+  getFrontmatterString,
+  getFrontmatterStringArray,
+  getLocalizedFrontmatterString
+} from './resource-metadata.service'
 import { resolveSceneTags } from './resource-scene-tags.service'
 import { buildResourceSceneKey, getSceneTaxonomy } from './scene-taxonomy.service'
 
@@ -30,6 +35,7 @@ import { buildResourceSceneKey, getSceneTaxonomy } from './scene-taxonomy.servic
 
 export interface SkillDefinition {
   name: string
+  displayName?: string
   path: string
   source: 'app' | 'global' | 'space' | 'installed'
   description?: string
@@ -47,8 +53,9 @@ export interface SkillContent {
 }
 
 // Cache
-let globalSkillsCache: SkillDefinition[] | null = null
-const spaceSkillsCache = new Map<string, SkillDefinition[]>()
+const DEFAULT_LOCALE_CACHE_KEY = '__default__'
+const globalSkillsCacheByLocale = new Map<string, SkillDefinition[]>()
+const spaceSkillsCacheByLocale = new Map<string, Map<string, SkillDefinition[]>>()
 const contentCache = new FileCache<string>({ maxSize: 200 })
 
 // ============================================
@@ -65,6 +72,12 @@ function getAllowedSkillBaseDirs(): string[] {
 
 function normalizePath(path: string): string {
   return path.replace(/\\/g, '/')
+}
+
+function toLocaleCacheKey(locale?: string): string {
+  const trimmed = locale?.trim()
+  if (!trimmed) return DEFAULT_LOCALE_CACHE_KEY
+  return trimmed.toLowerCase()
 }
 
 function resolveWorkDirForSkillPath(skillMdPath: string): string | null {
@@ -109,7 +122,8 @@ function scanSkillDir(
   source: SkillDefinition['source'],
   pluginRoot?: string,
   namespace?: string,
-  workDir?: string
+  workDir?: string,
+  locale?: string
 ): SkillDefinition[] {
   if (!isValidDirectoryPath(dirPath, 'Skills')) return []
 
@@ -125,14 +139,18 @@ function scanSkillDir(
         if (!existsSync(skillMdPath)) continue
 
         let description: string | undefined
+        let displayName: string | undefined
         let triggers: string[] | undefined
         let category: string | undefined
         let sceneTags: SceneTagKey[] = ['office']
+        let sceneDescription: string | undefined
         try {
           const content = readFileSync(skillMdPath, 'utf-8')
           const frontmatter = parseFrontmatter(content)
           if (frontmatter) {
-            description = getFrontmatterString(frontmatter, ['description'])
+            sceneDescription = getFrontmatterString(frontmatter, ['description'])
+            description = getLocalizedFrontmatterString(frontmatter, ['description'], locale) ?? sceneDescription
+            displayName = getLocalizedFrontmatterString(frontmatter, ['name', 'title'], locale)
             triggers = getFrontmatterStringArray(frontmatter, ['triggers'])
             category = getFrontmatterString(frontmatter, ['category'])
           }
@@ -146,7 +164,7 @@ function scanSkillDir(
           })
           sceneTags = resolveSceneTags({
             name: entry,
-            description,
+            description: sceneDescription,
             category,
             triggers,
             content,
@@ -167,6 +185,7 @@ function scanSkillDir(
           triggers,
           category,
           sceneTags,
+          ...(displayName && { displayName }),
           ...(pluginRoot && { pluginRoot }),
           ...(namespace && { namespace })
         })
@@ -187,7 +206,7 @@ function mergeSkills(globalSkills: SkillDefinition[], spaceSkills: SkillDefiniti
   return Array.from(merged.values())
 }
 
-function buildGlobalSkills(): SkillDefinition[] {
+function buildGlobalSkills(locale?: string): SkillDefinition[] {
   const sourceMode = getLockedConfigSourceMode()
   const skills: SkillDefinition[] = []
   const seenNames = new Set<string>()
@@ -208,12 +227,12 @@ function buildGlobalSkills(): SkillDefinition[] {
   for (const plugin of listEnabledPlugins()) {
     const skillsSubdir = join(plugin.installPath, 'skills')
     if (existsSync(skillsSubdir)) {
-      addSkills(scanSkillDir(skillsSubdir, 'installed', plugin.installPath, plugin.name))
+      addSkills(scanSkillDir(skillsSubdir, 'installed', plugin.installPath, plugin.name, undefined, locale))
     }
   }
 
   // 1. App-level skills ({locked-user-root}/skills/)
-  addSkills(scanSkillDir(join(getLockedUserConfigRootDir(), 'skills'), 'app'))
+  addSkills(scanSkillDir(join(getLockedUserConfigRootDir(), 'skills'), 'app', undefined, undefined, undefined, locale))
 
   // 2. Kite mode only: global custom paths from config.claudeCode.plugins.globalPaths
   if (sourceMode === 'kite') {
@@ -224,7 +243,7 @@ function buildGlobalSkills(): SkillDefinition[] {
         : join(require('os').homedir(), globalPath)
       const skillsSubdir = join(resolvedPath, 'skills')
       if (existsSync(skillsSubdir)) {
-        addSkills(scanSkillDir(skillsSubdir, 'global'))
+        addSkills(scanSkillDir(skillsSubdir, 'global', undefined, undefined, undefined, locale))
       }
     }
   }
@@ -232,8 +251,8 @@ function buildGlobalSkills(): SkillDefinition[] {
   return skills
 }
 
-function buildSpaceSkills(workDir: string): SkillDefinition[] {
-  return scanSkillDir(join(workDir, '.claude', 'skills'), 'space', undefined, undefined, workDir)
+function buildSpaceSkills(workDir: string, locale?: string): SkillDefinition[] {
+  return scanSkillDir(join(workDir, '.claude', 'skills'), 'space', undefined, undefined, workDir, locale)
 }
 
 function logFound(items: SkillDefinition[]): void {
@@ -249,23 +268,32 @@ function logFound(items: SkillDefinition[]): void {
 /**
  * List all available skills from all sources
  */
-export function listSkills(workDir?: string): SkillDefinition[] {
-  if (!globalSkillsCache) {
-    globalSkillsCache = buildGlobalSkills()
+export function listSkills(workDir?: string, locale?: string): SkillDefinition[] {
+  const localeKey = toLocaleCacheKey(locale)
+  let globalSkills = globalSkillsCacheByLocale.get(localeKey)
+  if (!globalSkills) {
+    globalSkills = buildGlobalSkills(locale)
+    globalSkillsCacheByLocale.set(localeKey, globalSkills)
   }
 
   if (!workDir) {
-    logFound(globalSkillsCache)
-    return globalSkillsCache
+    logFound(globalSkills)
+    return globalSkills
   }
 
-  let spaceSkills = spaceSkillsCache.get(workDir)
+  let spaceCache = spaceSkillsCacheByLocale.get(workDir)
+  if (!spaceCache) {
+    spaceCache = new Map<string, SkillDefinition[]>()
+    spaceSkillsCacheByLocale.set(workDir, spaceCache)
+  }
+
+  let spaceSkills = spaceCache.get(localeKey)
   if (!spaceSkills) {
-    spaceSkills = buildSpaceSkills(workDir)
-    spaceSkillsCache.set(workDir, spaceSkills)
+    spaceSkills = buildSpaceSkills(workDir, locale)
+    spaceCache.set(localeKey, spaceSkills)
   }
 
-  const skills = mergeSkills(globalSkillsCache, spaceSkills)
+  const skills = mergeSkills(globalSkills, spaceSkills)
   logFound(skills)
   return skills
 }
@@ -275,18 +303,26 @@ export function listSpaceSkills(workDir: string): SkillDefinition[] {
 }
 
 function listSkillsForRefLookup(workDir: string): SkillDefinition[] {
-  if (!globalSkillsCache) {
-    globalSkillsCache = buildGlobalSkills()
+  let globalSkills = globalSkillsCacheByLocale.get(DEFAULT_LOCALE_CACHE_KEY)
+  if (!globalSkills) {
+    globalSkills = buildGlobalSkills()
+    globalSkillsCacheByLocale.set(DEFAULT_LOCALE_CACHE_KEY, globalSkills)
   }
 
-  let spaceSkills = spaceSkillsCache.get(workDir)
+  let spaceCache = spaceSkillsCacheByLocale.get(workDir)
+  if (!spaceCache) {
+    spaceCache = new Map<string, SkillDefinition[]>()
+    spaceSkillsCacheByLocale.set(workDir, spaceCache)
+  }
+
+  let spaceSkills = spaceCache.get(DEFAULT_LOCALE_CACHE_KEY)
   if (!spaceSkills) {
     spaceSkills = buildSpaceSkills(workDir)
-    spaceSkillsCache.set(workDir, spaceSkills)
+    spaceCache.set(DEFAULT_LOCALE_CACHE_KEY, spaceSkills)
   }
 
   // Keep source-distinct entries for by-ref copy lookup; do not merge by key.
-  return [...spaceSkills, ...globalSkillsCache]
+  return [...spaceSkills, ...globalSkills]
 }
 
 export function getSkillDefinition(
@@ -350,6 +386,7 @@ export function createSkill(workDir: string, name: string, content: string): Ski
 
   const frontmatter = parseFrontmatter(content)
   const description = getFrontmatterString(frontmatter, ['description'])
+  const displayName = getLocalizedFrontmatterString(frontmatter, ['name', 'title'])
   const triggers = getFrontmatterStringArray(frontmatter, ['triggers'])
   const category = getFrontmatterString(frontmatter, ['category'])
   return {
@@ -359,6 +396,7 @@ export function createSkill(workDir: string, name: string, content: string): Ski
     description,
     triggers,
     category,
+    ...(displayName && { displayName }),
     sceneTags: resolveSceneTags({
       name,
       description,
@@ -493,8 +531,8 @@ export function copySkillToSpaceByRef(
  * Clear skills cache
  */
 export function clearSkillsCache(): void {
-  globalSkillsCache = null
-  spaceSkillsCache.clear()
+  globalSkillsCacheByLocale.clear()
+  spaceSkillsCacheByLocale.clear()
   contentCache.clear()
 }
 
@@ -503,10 +541,10 @@ export function clearSkillsCache(): void {
  */
 export function invalidateSkillsCache(workDir?: string | null): void {
   if (!workDir) {
-    globalSkillsCache = null
+    globalSkillsCacheByLocale.clear()
     contentCache.clear()
     return
   }
-  spaceSkillsCache.delete(workDir)
+  spaceSkillsCacheByLocale.delete(workDir)
   contentCache.clearForDir(workDir)
 }

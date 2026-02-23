@@ -19,9 +19,9 @@ import type { ResourceRef } from '../services/resource-ref.service'
 
 export function registerAgentsHandlers(): void {
   // List all available agents
-  ipcMain.handle('agents:list', async (_event, workDir?: string) => {
+  ipcMain.handle('agents:list', async (_event, workDir?: string, locale?: string) => {
     try {
-      const agents = listAgents(workDir)
+      const agents = listAgents(workDir, locale)
       return { success: true, data: agents }
     } catch (error: unknown) {
       const err = error as Error

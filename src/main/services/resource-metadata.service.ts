@@ -90,6 +90,82 @@ export function getFrontmatterString(
   return undefined
 }
 
+function normalizeLocaleCandidates(locale?: string): string[] {
+  if (!locale) return []
+  const normalized = locale.trim()
+  if (!normalized) return []
+
+  const candidates = new Set<string>([
+    normalized,
+    normalized.toLowerCase(),
+    normalized.replace(/-/g, '_'),
+    normalized.toLowerCase().replace(/-/g, '_'),
+    normalized.replace(/_/g, '-'),
+    normalized.toLowerCase().replace(/_/g, '-')
+  ])
+
+  const separatorIndex = normalized.search(/[-_]/)
+  if (separatorIndex > 0) {
+    const language = normalized.slice(0, separatorIndex)
+    if (language) {
+      candidates.add(language)
+      candidates.add(language.toLowerCase())
+    }
+  }
+
+  return Array.from(candidates).filter(Boolean)
+}
+
+function buildFrontmatterStringLookup(
+  frontmatter: ResourceFrontmatter | null | undefined
+): Map<string, string> {
+  const lookup = new Map<string, string>()
+  if (!frontmatter) return lookup
+
+  for (const [key, value] of Object.entries(frontmatter)) {
+    if (typeof value !== 'string') continue
+    const trimmed = value.trim()
+    if (!trimmed) continue
+    lookup.set(key.toLowerCase(), trimmed)
+  }
+
+  return lookup
+}
+
+export function getLocalizedFrontmatterString(
+  frontmatter: ResourceFrontmatter | null | undefined,
+  keys: string[],
+  locale?: string
+): string | undefined {
+  if (!frontmatter) return undefined
+
+  const lookup = buildFrontmatterStringLookup(frontmatter)
+  const localeCandidates = normalizeLocaleCandidates(locale)
+
+  for (const rawKey of keys) {
+    const key = rawKey.trim()
+    if (!key) continue
+
+    for (const candidate of localeCandidates) {
+      const localizedValue = lookup.get(`${key}_${candidate}`.toLowerCase())
+      if (localizedValue) {
+        return localizedValue
+      }
+    }
+  }
+
+  for (const rawKey of keys) {
+    const key = rawKey.trim()
+    if (!key) continue
+    const fallbackValue = lookup.get(key.toLowerCase())
+    if (fallbackValue) {
+      return fallbackValue
+    }
+  }
+
+  return undefined
+}
+
 export function getFrontmatterStringArray(
   frontmatter: ResourceFrontmatter | null | undefined,
   keys: string[]

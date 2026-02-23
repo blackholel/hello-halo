@@ -70,13 +70,15 @@ export function normalizeExtensionItems(params: {
   sceneDefinitions: SceneDefinition[]
 }): ExtensionItem[] {
   const skillItems: ExtensionItem[] = params.skills.map((skill) => {
-    const displayName = skill.namespace ? `${skill.namespace}:${skill.name}` : skill.name
+    const displayBase = skill.displayName || skill.name
+    const displayName = skill.namespace ? `${skill.namespace}:${displayBase}` : displayBase
     return {
       id: `skill:${skill.namespace ?? '-'}:${skill.name}`,
       type: 'skill',
       resource: skill,
       searchable: [
         skill.name,
+        skill.displayName,
         skill.namespace,
         skill.description,
         skill.category,
@@ -88,24 +90,27 @@ export function normalizeExtensionItems(params: {
   })
 
   const agentItems: ExtensionItem[] = params.agents.map((agent) => {
-    const displayName = agent.namespace ? `${agent.namespace}:${agent.name}` : agent.name
+    const displayBase = agent.displayName || agent.name
+    const displayName = agent.namespace ? `${agent.namespace}:${displayBase}` : displayBase
     return {
       id: `agent:${agent.namespace ?? '-'}:${agent.name}`,
       type: 'agent',
       resource: agent,
-      searchable: [agent.name, agent.namespace, agent.description].filter(Boolean).join(' ').toLowerCase(),
+      searchable: [agent.name, agent.displayName, agent.namespace, agent.description].filter(Boolean).join(' ').toLowerCase(),
       displayName,
       sceneTags: normalizeSceneTags(agent.sceneTags, params.sceneDefinitions)
     }
   })
 
   const commandItems: ExtensionItem[] = (params.isRemote ? [] : params.commands).map((command) => {
-    const displayName = `/${commandKey(command)}`
+    const displayBase = command.displayName || command.name
+    const namespacedDisplay = command.namespace ? `${command.namespace}:${displayBase}` : displayBase
+    const displayName = `/${namespacedDisplay}`
     return {
       id: `command:${command.namespace ?? '-'}:${command.name}`,
       type: 'command',
       resource: command,
-      searchable: [commandKey(command), command.description].filter(Boolean).join(' ').toLowerCase(),
+      searchable: [commandKey(command), command.displayName, command.description].filter(Boolean).join(' ').toLowerCase(),
       displayName,
       sceneTags: normalizeSceneTags(command.sceneTags, params.sceneDefinitions)
     }
