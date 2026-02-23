@@ -12,6 +12,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useSpaceStore } from '../../stores/space.store'
 import { useChatStore } from '../../stores/chat.store'
+import { useAppStore } from '../../stores/app.store'
 import { useOnboardingStore } from '../../stores/onboarding.store'
 import { useAIBrowserStore } from '../../stores/ai-browser.store'
 import { useCanvasLifecycle } from '../../hooks/useCanvasLifecycle'
@@ -29,7 +30,7 @@ import {
   getOnboardingPrompt,
 } from '../onboarding/onboardingData'
 import { api } from '../../api'
-import type { ImageAttachment, FileContextAttachment } from '../../types'
+import type { ConversationAiConfig, FileContextAttachment, ImageAttachment } from '../../types'
 import { useTranslation } from '../../i18n'
 
 interface ChatViewProps {
@@ -43,6 +44,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     currentSpaceId,
     changeSets,
     getCurrentConversation,
+    getCurrentConversationMeta,
     getCurrentConversationId,
     getCurrentSession,
     loadChangeSets,
@@ -55,6 +57,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     setPlanEnabled
   } = useChatStore()
   const { openPlan } = useCanvasLifecycle()
+  const appConfig = useAppStore(state => state.config)
 
   // Onboarding state
   const {
@@ -162,7 +165,14 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
 
   // Get current conversation and its session state
   const currentConversation = getCurrentConversation()
+  const currentConversationMeta = getCurrentConversationMeta() as ({ id: string; ai?: ConversationAiConfig } | null)
   const currentConversationId = getCurrentConversationId()
+  const modelSwitcherConversation = currentConversationId
+    ? {
+        id: currentConversationId,
+        ai: (currentConversation as ({ ai?: ConversationAiConfig } | null))?.ai ?? currentConversationMeta?.ai
+      }
+    : null
   const isLoadingConversation = useChatStore(state =>
     currentConversationId ? state.isConversationLoading(currentConversationId) : false
   )
@@ -445,6 +455,8 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
         workDir={currentSpace?.path}
         planEnabled={planEnabled}
         onPlanEnabledChange={handlePlanEnabledChange}
+        conversation={modelSwitcherConversation}
+        config={appConfig}
       />
     </div>
   )

@@ -9,18 +9,30 @@ import { getConfigDir } from '../utils/instance'
 
 // Import analytics config type
 import type { AnalyticsConfig } from './analytics/types'
+import {
+  createAiConfigFromLegacyApi,
+  ensureAiConfig,
+  ensureLegacyApiConfig,
+  mirrorAiToLegacyApi,
+  mirrorLegacyApiToAi,
+  type AiConfig,
+  type LegacyApiConfig,
+  type ProviderProtocol
+} from '../../shared/types/ai-profile'
 
 // ============================================================================
-// API Config Change Notification (Callback Pattern)
+// Config Change Notification (Callback Pattern)
 // ============================================================================
-// When API config changes (provider/apiKey/apiUrl), subscribers are notified.
+// When API/AI config changes, subscribers are notified.
 // This allows agent.service to invalidate sessions without circular dependency.
 // agent.service imports onApiConfigChange (agent → config, existing direction)
 // config.service calls registered callbacks (no import from agent)
 // ============================================================================
 
 type ApiConfigChangeHandler = () => void
+type AiConfigChangeHandler = () => void
 const apiConfigChangeHandlers: ApiConfigChangeHandler[] = []
+const aiConfigChangeHandlers: AiConfigChangeHandler[] = []
 const CONFIG_SOURCE_MODE_VALUES = ['kite', 'claude'] as const
 
 export type ConfigSourceMode = (typeof CONFIG_SOURCE_MODE_VALUES)[number]
@@ -46,21 +58,22 @@ export function onApiConfigChange(handler: ApiConfigChangeHandler): () => void {
   }
 }
 
-// Types (shared with renderer)
-// Provider types:
-// - 'anthropic': Official Anthropic API (api.anthropic.com)
-// - 'anthropic-compat': Anthropic-compatible backends (OpenRouter, etc.) - direct connection, no protocol conversion
-// - 'openai': OpenAI-compatible backends (GPT, Ollama, vLLM) - requires protocol conversion via Router
-// - 'zhipu': ZhipuAI (智谱) - Anthropic-compatible, direct connection
-// - 'minimax': MiniMax - Anthropic-compatible, direct connection
-// - 'custom': Legacy custom provider (treated as anthropic-compat)
-interface KiteConfig {
-  api: {
-    provider: 'anthropic' | 'anthropic-compat' | 'openai' | 'zhipu' | 'minimax' | 'custom'
-    apiKey: string
-    apiUrl: string
-    model: string
+/**
+ * Register a callback to be notified when AI profile config changes.
+ *
+ * @returns Unsubscribe function
+ */
+export function onAiConfigChange(handler: AiConfigChangeHandler): () => void {
+  aiConfigChangeHandlers.push(handler)
+  return () => {
+    const idx = aiConfigChangeHandlers.indexOf(handler)
+    if (idx >= 0) aiConfigChangeHandlers.splice(idx, 1)
   }
+}
+
+interface KiteConfig {
+  api: LegacyApiConfig
+  ai: AiConfig
   permissions: {
     fileAccess: 'allow' | 'ask' | 'deny'
     commandExecution: 'allow' | 'ask' | 'deny'
@@ -203,15 +216,17 @@ export function getLegacySpacesDir(
 
 // Default model (Opus 4.5)
 const DEFAULT_MODEL = 'claude-opus-4-5-20251101'
+const DEFAULT_API_CONFIG: LegacyApiConfig = {
+  provider: 'anthropic',
+  apiKey: '',
+  apiUrl: 'https://api.anthropic.com',
+  model: DEFAULT_MODEL
+}
 
 // Default configuration
 const DEFAULT_CONFIG: KiteConfig = {
-  api: {
-    provider: 'anthropic',
-    apiKey: '',
-    apiUrl: 'https://api.anthropic.com',
-    model: DEFAULT_MODEL
-  },
+  api: DEFAULT_API_CONFIG,
+  ai: createAiConfigFromLegacyApi(DEFAULT_API_CONFIG),
   permissions: {
     fileAccess: 'allow',
     commandExecution: 'ask',
@@ -586,12 +601,17 @@ export function getConfig(): KiteConfig {
 
   try {
     const content = readFileSync(configPath, 'utf-8')
-    const parsed = JSON.parse(content)
+    const parsed = JSON.parse(content) as Partial<KiteConfig> & Record<string, unknown>
+    const legacyApi = ensureLegacyApiConfig(parsed.api, DEFAULT_CONFIG.api)
+    const ai = ensureAiConfig(parsed.ai, legacyApi)
+    const mirroredApi = mirrorAiToLegacyApi(ai, legacyApi)
+
     // Deep merge to ensure all nested defaults are applied
     return {
       ...DEFAULT_CONFIG,
       ...parsed,
-      api: { ...DEFAULT_CONFIG.api, ...parsed.api },
+      api: mirroredApi,
+      ai,
       permissions: { ...DEFAULT_CONFIG.permissions, ...parsed.permissions },
       appearance: { ...DEFAULT_CONFIG.appearance, ...parsed.appearance },
       system: { ...DEFAULT_CONFIG.system, ...parsed.system },
@@ -602,8 +622,10 @@ export function getConfig(): KiteConfig {
       analytics: parsed.analytics,
       configSourceMode: normalizeConfigSourceMode(parsed.configSourceMode),
       extensionTaxonomy: {
-        ...DEFAULT_CONFIG.extensionTaxonomy,
-        ...(parsed.extensionTaxonomy || {})
+        adminEnabled:
+          typeof parsed.extensionTaxonomy?.adminEnabled === 'boolean'
+            ? parsed.extensionTaxonomy.adminEnabled
+            : DEFAULT_CONFIG.extensionTaxonomy?.adminEnabled || false
       }
     }
   } catch (error) {
@@ -615,12 +637,23 @@ export function getConfig(): KiteConfig {
 // Save configuration
 export function saveConfig(config: Partial<KiteConfig>): KiteConfig {
   const currentConfig = getConfig()
-  const newConfig = { ...currentConfig, ...config }
+  const newConfig = { ...currentConfig, ...config } as KiteConfig
   const rawUpdates = config as Record<string, unknown>
+  const hasApiUpdate = config.api !== undefined
+  const hasAiUpdate = rawUpdates.ai !== undefined
 
   // Deep merge for nested objects
   if (config.api) {
-    newConfig.api = { ...currentConfig.api, ...config.api }
+    newConfig.api = ensureLegacyApiConfig({ ...currentConfig.api, ...config.api }, currentConfig.api)
+  }
+  if (hasAiUpdate) {
+    const aiUpdate = isPlainObject(rawUpdates.ai) ? (rawUpdates.ai as Partial<AiConfig>) : undefined
+    const mergedAiInput: Partial<AiConfig> = {
+      ...currentConfig.ai,
+      ...(aiUpdate || {}),
+      profiles: Array.isArray(aiUpdate?.profiles) ? aiUpdate.profiles : currentConfig.ai.profiles
+    }
+    newConfig.ai = ensureAiConfig(mergedAiInput, newConfig.api)
   }
   if (config.permissions) {
     newConfig.permissions = { ...currentConfig.permissions, ...config.permissions }
@@ -656,22 +689,35 @@ export function saveConfig(config: Partial<KiteConfig>): KiteConfig {
     (newConfig as any).gitBash = (config as any).gitBash
   }
 
+  // Keep ai <-> api mirrored for backward compatibility.
+  // If both ai and api are updated together, ai takes precedence.
+  if (hasAiUpdate) {
+    newConfig.api = mirrorAiToLegacyApi(newConfig.ai, newConfig.api)
+  } else if (hasApiUpdate) {
+    newConfig.ai = mirrorLegacyApiToAi(newConfig.api, currentConfig.ai)
+    newConfig.api = mirrorAiToLegacyApi(newConfig.ai, newConfig.api)
+  } else {
+    newConfig.ai = ensureAiConfig(newConfig.ai, newConfig.api)
+    newConfig.api = mirrorAiToLegacyApi(newConfig.ai, newConfig.api)
+  }
+
   const configPath = getConfigPath()
   writeFileSync(configPath, JSON.stringify(newConfig, null, 2))
 
-  // Detect API config changes and notify subscribers
-  // This allows agent.service to invalidate sessions when API config changes
-  if (config.api) {
-    const apiChanged =
-      config.api.provider !== currentConfig.api.provider ||
-      config.api.apiKey !== currentConfig.api.apiKey ||
-      config.api.apiUrl !== currentConfig.api.apiUrl
+  // Detect config changes and notify subscribers.
+  const apiChanged =
+    newConfig.api.provider !== currentConfig.api.provider ||
+    newConfig.api.apiKey !== currentConfig.api.apiKey ||
+    newConfig.api.apiUrl !== currentConfig.api.apiUrl
+  const aiChanged = JSON.stringify(newConfig.ai) !== JSON.stringify(currentConfig.ai)
 
-    if (apiChanged && apiConfigChangeHandlers.length > 0) {
-      console.log('[Config] API config changed, notifying subscribers...')
-      // Use setTimeout to avoid blocking the save operation
-      // and ensure all handlers are called asynchronously
-      setTimeout(() => {
+  const shouldNotifyApi = apiChanged && apiConfigChangeHandlers.length > 0
+  const shouldNotifyAi = aiChanged && aiConfigChangeHandlers.length > 0
+
+  if (shouldNotifyApi || shouldNotifyAi) {
+    setTimeout(() => {
+      if (shouldNotifyApi) {
+        console.log('[Config] API config changed, notifying subscribers...')
         apiConfigChangeHandlers.forEach(handler => {
           try {
             handler()
@@ -679,8 +725,19 @@ export function saveConfig(config: Partial<KiteConfig>): KiteConfig {
             console.error('[Config] Error in API config change handler:', e)
           }
         })
-      }, 0)
-    }
+      }
+
+      if (shouldNotifyAi) {
+        console.log('[Config] AI config changed, notifying subscribers...')
+        aiConfigChangeHandlers.forEach(handler => {
+          try {
+            handler()
+          } catch (e) {
+            console.error('[Config] Error in AI config change handler:', e)
+          }
+        })
+      }
+    }, 0)
   }
 
   return newConfig
@@ -690,36 +747,59 @@ export function saveConfig(config: Partial<KiteConfig>): KiteConfig {
 export async function validateApiConnection(
   apiKey: string,
   apiUrl: string,
-  provider: string
+  provider: string,
+  protocol?: ProviderProtocol
 ): Promise<{ valid: boolean; message?: string; model?: string }> {
   try {
+    const isProviderProtocol = (value: unknown): value is ProviderProtocol =>
+      value === 'anthropic_official' || value === 'anthropic_compat' || value === 'openai_compat'
+
+    const resolveProtocol = (legacyProvider: string, explicitProtocol?: ProviderProtocol): ProviderProtocol => {
+      if (isProviderProtocol(explicitProtocol)) return explicitProtocol
+      if (isProviderProtocol(legacyProvider)) return legacyProvider
+      if (legacyProvider === 'anthropic') return 'anthropic_official'
+      if (legacyProvider === 'openai') return 'openai_compat'
+      return 'anthropic_compat'
+    }
+
     const trimSlash = (s: string) => s.replace(/\/+$/, '')
-    const normalizeOpenAIV1Base = (input: string) => {
-      // Accept:
-      // - https://host
-      // - https://host/v1
-      // - https://host/v1/chat/completions
-      // - https://host/chat/completions
-      let base = trimSlash(input)
-      // If user pasted full chat/completions endpoint, strip it
-      if (base.endsWith('/chat/completions')) {
-        base = base.slice(0, -'/chat/completions'.length)
-        base = trimSlash(base)
+
+    const resolvedProtocol = resolveProtocol(provider, protocol)
+
+    const resolveOpenAIModelsUrl = (endpointUrl: string): string | null => {
+      const normalizedEndpoint = trimSlash(endpointUrl.trim())
+      let endpointSuffix: '/chat/completions' | '/responses' | null = null
+      if (normalizedEndpoint.endsWith('/chat/completions')) {
+        endpointSuffix = '/chat/completions'
+      } else if (normalizedEndpoint.endsWith('/responses')) {
+        endpointSuffix = '/responses'
       }
-      // If already contains /v1 anywhere, normalize to ".../v1"
-      const v1Idx = base.indexOf('/v1')
-      if (v1Idx >= 0) {
-        base = base.slice(0, v1Idx + 3) // include "/v1"
-        base = trimSlash(base)
-        return base
+
+      if (!endpointSuffix) return null
+
+      const endpointBase = trimSlash(normalizedEndpoint.slice(0, -endpointSuffix.length))
+      const hasV1Segment = endpointBase.endsWith('/v1') || endpointBase.includes('/v1/')
+      const baseV1 = hasV1Segment ? endpointBase : `${endpointBase}/v1`
+      return `${baseV1}/models`
+    }
+
+    const resolveAnthropicMessagesUrl = (url: string): string => {
+      const normalized = trimSlash(url.trim())
+      if (normalized.endsWith('/v1/messages')) {
+        return normalized
       }
-      return `${base}/v1`
+      return `${normalized}/v1/messages`
     }
 
     // OpenAI compatible validation: GET /v1/models (does not depend on user-selected model)
-    if (provider === 'openai') {
-      const baseV1 = normalizeOpenAIV1Base(apiUrl)
-      const modelsUrl = `${baseV1}/models`
+    if (resolvedProtocol === 'openai_compat') {
+      const modelsUrl = resolveOpenAIModelsUrl(apiUrl)
+      if (!modelsUrl) {
+        return {
+          valid: false,
+          message: 'OpenAI compatible API URL must end with /chat/completions or /responses'
+        }
+      }
 
       const response = await fetch(modelsUrl, {
         method: 'GET',
@@ -745,8 +825,7 @@ export async function validateApiConnection(
     }
 
     // Anthropic compatible validation: POST /v1/messages
-    const base = trimSlash(apiUrl)
-    const messagesUrl = `${base}/v1/messages`
+    const messagesUrl = resolveAnthropicMessagesUrl(apiUrl)
     const response = await fetch(messagesUrl, {
       method: 'POST',
       headers: {

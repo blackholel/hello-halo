@@ -4,6 +4,7 @@
 
 import { ipcMain } from 'electron'
 import { getConfig, saveConfig, validateApiConnection } from '../services/config.service'
+import type { ProviderProtocol } from '../../shared/types/ai-profile'
 
 export function registerConfigHandlers(): void {
   // Get configuration
@@ -31,9 +32,15 @@ export function registerConfigHandlers(): void {
   // Validate API connection
   ipcMain.handle(
     'config:validate-api',
-    async (_event, apiKey: string, apiUrl: string, provider: string) => {
+    async (
+      _event,
+      apiKey: string,
+      apiUrl: string,
+      provider: string,
+      protocol?: ProviderProtocol
+    ) => {
       try {
-        const result = await validateApiConnection(apiKey, apiUrl, provider)
+        const result = await validateApiConnection(apiKey, apiUrl, provider, protocol)
         return { success: true, data: result }
       } catch (error: unknown) {
         const err = error as Error

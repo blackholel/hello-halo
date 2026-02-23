@@ -16,7 +16,12 @@ export interface KiteAPI {
   // Config
   getConfig: () => Promise<IpcResponse>
   setConfig: (updates: Record<string, unknown>) => Promise<IpcResponse>
-  validateApi: (apiKey: string, apiUrl: string, provider: string) => Promise<IpcResponse>
+  validateApi: (
+    apiKey: string,
+    apiUrl: string,
+    provider: string,
+    protocol?: string
+  ) => Promise<IpcResponse>
 
   // Space
   getKiteSpace: () => Promise<IpcResponse>
@@ -77,6 +82,8 @@ export interface KiteAPI {
     conversationId: string
     message: string
     resumeSessionId?: string
+    modelOverride?: string
+    model?: string
     images?: Array<{
       id: string
       type: 'image'
@@ -391,8 +398,8 @@ const api: KiteAPI = {
   // Config
   getConfig: () => ipcRenderer.invoke('config:get'),
   setConfig: (updates) => ipcRenderer.invoke('config:set', updates),
-  validateApi: (apiKey, apiUrl, provider) =>
-    ipcRenderer.invoke('config:validate-api', apiKey, apiUrl, provider),
+  validateApi: (apiKey, apiUrl, provider, protocol) =>
+    ipcRenderer.invoke('config:validate-api', apiKey, apiUrl, provider, protocol),
 
   // Space
   getKiteSpace: () => ipcRenderer.invoke('space:get-kite'),

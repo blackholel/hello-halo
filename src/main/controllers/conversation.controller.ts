@@ -12,7 +12,7 @@ import {
   addMessage as serviceAddMessage,
   updateLastMessage as serviceUpdateLastMessage
 } from '../services/conversation.service'
-import { stopGeneration, closeV2Session } from '../services/agent'
+import { stopGeneration, closeV2Session, isGenerating } from '../services/agent'
 
 export interface ControllerResponse<T = unknown> {
   success: boolean
@@ -71,6 +71,13 @@ export function updateConversation(
   updates: Record<string, unknown>
 ): ControllerResponse {
   try {
+    if (updates.ai && isGenerating(conversationId)) {
+      return {
+        success: false,
+        error: 'Cannot update conversation AI config while generation is in progress'
+      }
+    }
+
     const conversation = serviceUpdateConversation(spaceId, conversationId, updates)
     if (conversation) {
       return { success: true, data: conversation }

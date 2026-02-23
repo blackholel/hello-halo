@@ -31,9 +31,10 @@ import { getOnboardingPrompt } from '../onboarding/onboardingData'
 import { ImageAttachmentPreview } from './ImageAttachmentPreview'
 import { FileContextPreview } from './FileContextPreview'
 import { SkillsDropdown } from '../skills/SkillsDropdown'
+import { ModelSwitcher } from './ModelSwitcher'
 import { ComposerTriggerPanel, type ComposerSuggestionItem, type ComposerSuggestionTab } from './ComposerTriggerPanel'
 import { processImage, isValidImageType, formatFileSize } from '../../utils/imageProcessor'
-import type { ImageAttachment, FileContextAttachment } from '../../types'
+import type { ConversationAiConfig, FileContextAttachment, ImageAttachment, KiteConfig } from '../../types'
 import { useTranslation } from '../../i18n'
 import { useComposerStore } from '../../stores/composer.store'
 import { commandKey } from '../../../shared/command-utils'
@@ -50,6 +51,8 @@ interface InputAreaProps {
   workDir?: string  // For skills dropdown
   planEnabled: boolean
   onPlanEnabledChange: (enabled: boolean) => void
+  conversation: { id: string; ai?: ConversationAiConfig } | null
+  config: KiteConfig | null
 }
 
 // Image constraints
@@ -77,6 +80,8 @@ export function InputArea({
   workDir,
   planEnabled,
   onPlanEnabledChange,
+  conversation,
+  config,
 }: InputAreaProps) {
   const { t } = useTranslation()
   const [content, setContent] = useState('')
@@ -801,6 +806,9 @@ export function InputArea({
 
           {/* Bottom toolbar - always visible, industry standard layout */}
           <InputToolbar
+            conversation={conversation}
+            config={config}
+            spaceId={spaceId}
             isGenerating={isGenerating}
             isOnboarding={isOnboardingSendStep}
             isProcessingImages={isProcessingImages}
@@ -835,6 +843,9 @@ export function InputArea({
  * Layout: [+attachment] [skills] ──────────────────── [⚛ thinking] [send]
  */
 interface InputToolbarProps {
+  conversation: { id: string; ai?: ConversationAiConfig } | null
+  config: KiteConfig | null
+  spaceId: string | null
   isGenerating: boolean
   isOnboarding: boolean
   isProcessingImages: boolean
@@ -858,6 +869,9 @@ interface InputToolbarProps {
 }
 
 function InputToolbar({
+  conversation,
+  config,
+  spaceId,
   isGenerating,
   isOnboarding,
   isProcessingImages,
@@ -883,7 +897,13 @@ function InputToolbar({
   return (
     <div className="flex items-center justify-between px-2 pb-2 pt-1">
       {/* Left section: attachment button + mode toggles */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 min-w-0">
+        <ModelSwitcher
+          conversation={conversation}
+          config={config}
+          spaceId={spaceId}
+          isGenerating={isGenerating}
+        />
         {!isGenerating && !isOnboarding && (
           <>
             {/* Attachment menu */}

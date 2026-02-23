@@ -10,7 +10,12 @@ import { getConfig, getTempSpacePath } from '../config.service'
 import { getMainWindow, setMainWindow } from './renderer-comm'
 import { broadcastToAll } from '../../http/websocket'
 import { getHeadlessElectronPath } from './electron-path'
-import { resolveProvider, inferOpenAIWireApi } from './provider-resolver'
+import {
+  buildAnthropicCompatEnvDefaults,
+  resolveProvider,
+  shouldEnableAnthropicCompatEnvDefaults
+} from './provider-resolver'
+import { resolveEffectiveConversationAi } from './ai-config-resolver'
 import { getEnabledMcpServers } from './sdk-config.builder'
 import type { McpServerStatusInfo } from './types'
 
@@ -81,9 +86,6 @@ export async function testMcpConnections(
 
   try {
     const config = getConfig()
-    if (!config?.api?.apiKey) {
-      return { success: false, servers: [], error: 'API key not configured' }
-    }
 
     if (config.claudeCode?.mcpEnabled === false) {
       return { success: true, servers: [], error: 'MCP disabled by configuration' }
@@ -103,8 +105,17 @@ export async function testMcpConnections(
     // Use the same electron path as sendMessage (prevents Dock icon on macOS)
     const electronPath = getHeadlessElectronPath()
 
-    // Resolve provider configuration
-    const resolved = await resolveProvider(config.api, 'claude-sonnet-4-20250514')
+    // Resolve provider configuration from effective conversation AI (falls back to default profile).
+    const effectiveAi = resolveEffectiveConversationAi('kite-temp', 'mcp-status-test')
+    if (!effectiveAi.profile.apiKey || effectiveAi.profile.apiKey.trim().length === 0) {
+      return { success: false, servers: [], error: 'API key not configured' }
+    }
+    const resolved = await resolveProvider(effectiveAi.profile, effectiveAi.effectiveModel)
+    const shouldInjectAnthropicCompatEnvDefaults = shouldEnableAnthropicCompatEnvDefaults(
+      resolved.protocol,
+      resolved.vendor,
+      resolved.useAnthropicCompatModelMapping
+    )
 
     // Create query with proper configuration (matching sendMessage)
     // Use a simple prompt that will get a quick response
@@ -123,7 +134,11 @@ export async function testMcpConnections(
           ELECTRON_RUN_AS_NODE: '1',
           ELECTRON_NO_ATTACH_CONSOLE: '1',
           ANTHROPIC_API_KEY: resolved.anthropicApiKey,
+          ANTHROPIC_AUTH_TOKEN: resolved.anthropicApiKey,
           ANTHROPIC_BASE_URL: resolved.anthropicBaseUrl,
+          ...(shouldInjectAnthropicCompatEnvDefaults
+            ? buildAnthropicCompatEnvDefaults(resolved.effectiveModel)
+            : {}),
           NO_PROXY: 'localhost,127.0.0.1',
           no_proxy: 'localhost,127.0.0.1'
         },

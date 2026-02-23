@@ -182,4 +182,17 @@ describe('sdk-config.builder strict space-only', () => {
     expect(policy.mode).toBe('legacy')
     expect(vi.mocked(updateSpaceConfig)).not.toHaveBeenCalled()
   })
+
+  it('compat 场景会注入 ANTHROPIC_MODEL 与默认模型 env', () => {
+    const sdkOptions = buildSdkOptions({
+      ...createBuildSdkOptionsParams(),
+      useAnthropicCompatModelMapping: true,
+      effectiveModel: 'kimi-k2-0905-preview'
+    })
+
+    expect(sdkOptions.env.ANTHROPIC_MODEL).toBe('kimi-k2-0905-preview')
+    expect(sdkOptions.env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBe('kimi-k2-0905-preview')
+    expect(sdkOptions.env.ANTHROPIC_DEFAULT_SONNET_MODEL).toBe('kimi-k2-0905-preview')
+    expect(sdkOptions.env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe('kimi-k2-0905-preview')
+  })
 })

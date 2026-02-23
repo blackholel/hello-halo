@@ -31,6 +31,8 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
         conversationId: string
         message: string
         resumeSessionId?: string
+        modelOverride?: string
+        model?: string
         images?: Array<{
           id: string
           type: 'image'
@@ -58,7 +60,11 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
       }
     ) => {
       try {
-        await sendMessage(mainWindow, request)
+        const normalizedModelOverride = request.modelOverride || request.model
+        const normalizedRequest = normalizedModelOverride
+          ? { ...request, modelOverride: normalizedModelOverride }
+          : request
+        await sendMessage(mainWindow, normalizedRequest)
         return { success: true }
       } catch (error: unknown) {
         const err = error as Error

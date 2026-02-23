@@ -10,6 +10,7 @@ import { getToolkitHash } from '../toolkit.service'
 import { getConversation } from '../conversation.service'
 import { getHeadlessElectronPath } from './electron-path'
 import { resolveProvider } from './provider-resolver'
+import { resolveEffectiveConversationAi } from './ai-config-resolver'
 import { buildSdkOptions, getWorkingDir, getEffectiveSkillsLazyLoad } from './sdk-config.builder'
 import { createCanUseTool } from './renderer-comm'
 import type { V2SDKSession, V2SessionInfo, SessionConfig, SessionState } from './types'
@@ -24,6 +25,12 @@ const activeSessions = new Map<string, SessionState>()
 // Session cleanup interval (clean up sessions not used for 30 minutes)
 const SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000
 let cleanupIntervalId: NodeJS.Timeout | null = null
+
+function toNonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const normalized = value.trim()
+  return normalized.length > 0 ? normalized : undefined
+}
 
 /**
  * Start session cleanup interval
@@ -55,6 +62,9 @@ function needsSessionRebuild(existing: V2SessionInfo, newConfig: SessionConfig):
   return (
     existing.config.aiBrowserEnabled !== newConfig.aiBrowserEnabled ||
     existing.config.skillsLazyLoad !== newConfig.skillsLazyLoad ||
+    (existing.config.profileId || '') !== (newConfig.profileId || '') ||
+    (existing.config.providerSignature || '') !== (newConfig.providerSignature || '') ||
+    (existing.config.effectiveModel || '') !== (newConfig.effectiveModel || '') ||
     (existing.config.toolkitHash || '') !== (newConfig.toolkitHash || '') ||
     (existing.config.enabledPluginMcpsHash || '') !== (newConfig.enabledPluginMcpsHash || '') ||
     // Rebuild if canUseTool presence changed (needed for AskUserQuestion support)
@@ -93,7 +103,19 @@ export async function getOrCreateV2Session(
   if (existing) {
     if (config && needsSessionRebuild(existing, config)) {
       console.log(
-        `[Agent][${conversationId}] Config changed (aiBrowser: ${existing.config.aiBrowserEnabled} → ${config.aiBrowserEnabled}), rebuilding session`
+        `[Agent][${conversationId}] Session config changed, rebuilding session`,
+        {
+          from: {
+            aiBrowserEnabled: existing.config.aiBrowserEnabled,
+            profileId: existing.config.profileId,
+            effectiveModel: existing.config.effectiveModel
+          },
+          to: {
+            aiBrowserEnabled: config.aiBrowserEnabled,
+            profileId: config.profileId,
+            effectiveModel: config.effectiveModel
+          }
+        }
       )
       closeV2SessionForRebuild(conversationId)
     } else {
@@ -133,14 +155,29 @@ export async function getOrCreateV2Session(
 export async function ensureSessionWarm(spaceId: string, conversationId: string): Promise<void> {
   const config = getConfig()
   const workDir = getWorkingDir(spaceId)
-  const conversation = getConversation(spaceId, conversationId)
+  const conversation = getConversation(spaceId, conversationId) as
+    | ({ ai?: { profileId?: string }; sessionId?: string } & Record<string, unknown>)
+    | null
   const sessionId = conversation?.sessionId
   const electronPath = getHeadlessElectronPath()
   const { effectiveLazyLoad: skillsLazyLoad, toolkit } = getEffectiveSkillsLazyLoad(workDir, config)
   const toolkitHash = getToolkitHash(toolkit)
+  const effectiveAi = resolveEffectiveConversationAi(spaceId, conversationId)
+  const configuredConversationProfileId = toNonEmptyString(conversation?.ai?.profileId)
+  const defaultProfileId = toNonEmptyString(config.ai?.defaultProfileId)
+
+  if (!configuredConversationProfileId) {
+    console.warn(
+      `[Agent][${conversationId}] Warmup: Conversation AI profile missing, fallback to defaultProfileId=${defaultProfileId || effectiveAi.profileId}`
+    )
+  } else if (configuredConversationProfileId !== effectiveAi.profileId) {
+    console.warn(
+      `[Agent][${conversationId}] Warmup: Conversation AI profile "${configuredConversationProfileId}" not found, fallback to defaultProfileId=${defaultProfileId || effectiveAi.profileId}`
+    )
+  }
 
   const abortController = new AbortController()
-  const resolved = await resolveProvider(config.api)
+  const resolved = await resolveProvider(effectiveAi.profile, effectiveAi.effectiveModel)
 
   const sdkOptions = buildSdkOptions({
     spaceId,
@@ -151,9 +188,12 @@ export async function ensureSessionWarm(spaceId: string, conversationId: string)
     anthropicApiKey: resolved.anthropicApiKey,
     anthropicBaseUrl: resolved.anthropicBaseUrl,
     sdkModel: resolved.sdkModel,
+    effectiveModel: resolved.effectiveModel,
+    useAnthropicCompatModelMapping: resolved.useAnthropicCompatModelMapping,
     electronPath,
     aiBrowserEnabled: false,
     thinkingEnabled: false,
+    disableToolsForCompat: effectiveAi.disableToolsForCompat,
     stderrSuffix: ' (warm)',
     canUseTool: createCanUseTool(workDir, spaceId, conversationId, getActiveSession),
     enabledPluginMcps: getEnabledPluginMcpList(conversationId)
@@ -169,6 +209,9 @@ export async function ensureSessionWarm(spaceId: string, conversationId: string)
       {
         aiBrowserEnabled: false,
         skillsLazyLoad,
+        profileId: effectiveAi.profileId,
+        providerSignature: effectiveAi.providerSignature,
+        effectiveModel: effectiveAi.effectiveModel,
         toolkitHash,
         enabledPluginMcpsHash: getEnabledPluginMcpHash(conversationId),
         hasCanUseTool: true // Session has canUseTool callback

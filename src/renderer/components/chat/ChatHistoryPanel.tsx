@@ -4,11 +4,12 @@
  * Supports inline title editing
  */
 
-import { useState, useRef, useEffect } from 'react'
-import type { ConversationMeta } from '../../types'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import type { ApiProfile, ConversationAiConfig, ConversationMeta } from '../../types'
 import { useCanvasLifecycle } from '../../hooks/useCanvasLifecycle'
 import { useTranslation, getCurrentLanguage } from '../../i18n'
 import { ExternalLink } from 'lucide-react'
+import { useAppStore } from '../../stores/app.store'
 
 interface ChatHistoryPanelProps {
   conversations: ConversationMeta[]
@@ -64,6 +65,7 @@ export function ChatHistoryPanel({
   workDir
 }: ChatHistoryPanelProps) {
   const { t } = useTranslation()
+  const aiConfig = useAppStore(state => state.config?.ai)
   const { openChat } = useCanvasLifecycle()
   const [isExpanded, setIsExpanded] = useState(false)
   const [isAnimatingOut, setIsAnimatingOut] = useState(false)
@@ -71,6 +73,20 @@ export function ChatHistoryPanel({
   const [editingTitle, setEditingTitle] = useState('')
   const panelRef = useRef<HTMLDivElement>(null)
   const editInputRef = useRef<HTMLInputElement>(null)
+
+  const resolveConversationModel = useCallback((conversation: ConversationMeta) => {
+    const profiles: ApiProfile[] = aiConfig?.profiles || []
+    const defaultProfileId = aiConfig?.defaultProfileId || profiles[0]?.id
+    const conversationAi = (conversation as ConversationMeta & { ai?: ConversationAiConfig }).ai
+    const profileId = conversationAi?.profileId || defaultProfileId
+    const profile = profiles.find(item => item.id === profileId) || profiles[0]
+    const modelOverride = conversationAi?.modelOverride?.trim() || ''
+    const effectiveModel = modelOverride || profile?.defaultModel || ''
+    return {
+      effectiveModel,
+      profileName: profile?.name || t('Default profile')
+    }
+  }, [aiConfig?.defaultProfileId, aiConfig?.profiles, t])
 
   // Handle click outside to close
   useEffect(() => {
@@ -257,21 +273,23 @@ export function ChatHistoryPanel({
                 </div>
               ) : (
                 <div className="py-2">
-                  {conversations.map((conv, index) => (
-                    <div
-                      key={conv.id}
-                      onClick={() => handleSelectConversation(conv.id)}
-                      className={`
-                        w-full px-4 py-3 text-left transition-all duration-150
-                        hover:bg-white/5 group relative cursor-pointer
-                        ${conv.id === currentConversationId ? 'bg-primary/10' : ''}
-                      `}
-                      style={{
-                        animation: !isAnimatingOut
-                          ? `fade-in 0.2s ease-out ${index * 30}ms forwards`
-                          : undefined
-                      }}
-                    >
+                  {conversations.map((conv, index) => {
+                    const modelInfo = resolveConversationModel(conv)
+                    return (
+                      <div
+                        key={conv.id}
+                        onClick={() => handleSelectConversation(conv.id)}
+                        className={`
+                          w-full px-4 py-3 text-left transition-all duration-150
+                          hover:bg-white/5 group relative cursor-pointer
+                          ${conv.id === currentConversationId ? 'bg-primary/10' : ''}
+                        `}
+                        style={{
+                          animation: !isAnimatingOut
+                            ? `fade-in 0.2s ease-out ${index * 30}ms forwards`
+                            : undefined
+                        }}
+                      >
                       {/* Selection indicator */}
                       {conv.id === currentConversationId && (
                         <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-primary rounded-r" />
@@ -319,22 +337,33 @@ export function ChatHistoryPanel({
                             </p>
                           )}
 
-                          {/* Meta info */}
-                          {editingId !== conv.id && (
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className="text-xs text-muted-foreground">
-                                {formatRelativeTime(conv.updatedAt, t)}
-                              </span>
-                              {conv.messageCount > 0 && (
-                                <>
-                                  <span className="text-muted-foreground/30">·</span>
-                                  <span className="text-xs text-muted-foreground">
-                                    {t('{{count}} messages', { count: conv.messageCount })}
-                                  </span>
-                                </>
-                              )}
-                            </div>
-                          )}
+                            {/* Meta info */}
+                            {editingId !== conv.id && (
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-xs text-muted-foreground">
+                                  {formatRelativeTime(conv.updatedAt, t)}
+                                </span>
+                                {conv.messageCount > 0 && (
+                                  <>
+                                    <span className="text-muted-foreground/30">·</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {t('{{count}} messages', { count: conv.messageCount })}
+                                    </span>
+                                  </>
+                                )}
+                                {modelInfo.effectiveModel && (
+                                  <>
+                                    <span className="text-muted-foreground/30">·</span>
+                                    <span
+                                      className="inline-flex items-center rounded-md border border-border/60 bg-background/60 px-1.5 py-0.5 text-[10px] text-muted-foreground max-w-[130px] truncate"
+                                      title={modelInfo.profileName}
+                                    >
+                                      {modelInfo.effectiveModel}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            )}
                         </div>
 
                         {/* Action buttons (on hover) */}
@@ -386,8 +415,9 @@ export function ChatHistoryPanel({
                           </div>
                         )}
                       </div>
-                    </div>
-                  ))}
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>

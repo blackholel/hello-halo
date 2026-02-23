@@ -75,12 +75,13 @@ export const api = {
   validateApi: async (
     apiKey: string,
     apiUrl: string,
-    provider: string
+    provider: string,
+    protocol?: string
   ): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.kite.validateApi(apiKey, apiUrl, provider)
+      return window.kite.validateApi(apiKey, apiUrl, provider, protocol)
     }
-    return httpRequest('POST', '/api/config/validate', { apiKey, apiUrl, provider })
+    return httpRequest('POST', '/api/config/validate', { apiKey, apiUrl, provider, protocol })
   },
 
   // ===== Space =====
@@ -320,6 +321,8 @@ export const api = {
     conversationId: string
     message: string
     resumeSessionId?: string
+    modelOverride?: string
+    model?: string
     images?: Array<{
       id: string
       type: 'image'

@@ -10,7 +10,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import type { ConversationMeta } from '../../types'
+import type { ApiProfile, ConversationAiConfig, ConversationMeta } from '../../types'
 import { MessageSquare, Plus } from '../icons/ToolIcons'
 import { ExternalLink, Pencil, Trash2, MessageCircle } from 'lucide-react'
 import { useCanvasLifecycle } from '../../hooks/useCanvasLifecycle'
@@ -21,6 +21,7 @@ import { CommandsPanel } from '../commands/CommandsPanel'
 import { WorkflowsPanel } from '../workflows/WorkflowsPanel'
 import type { SkillDefinition } from '../../stores/skills.store'
 import type { AgentDefinition } from '../../stores/agents.store'
+import { useAppStore } from '../../stores/app.store'
 import { useSkillsStore } from '../../stores/skills.store'
 import { useAgentsStore } from '../../stores/agents.store'
 import { useCommandsStore } from '../../stores/commands.store'
@@ -77,6 +78,7 @@ export function ConversationList({
   onCreateCommand
 }: ConversationListProps) {
   const { t } = useTranslation()
+  const aiConfig = useAppStore(state => state.config?.ai)
   const { openChat, openTemplateLibrary } = useCanvasLifecycle()
   const [width, setWidth] = useState(DEFAULT_WIDTH)
   const [isDragging, setIsDragging] = useState(false)
@@ -166,6 +168,20 @@ export function ConversationList({
     const localized = localizedSkill || localizedCommand
     return localized ? `${prefix}${localized}${tail}` : text
   }, [agentDisplayMap, commandDisplayMap, skillDisplayMap])
+
+  const resolveConversationModel = useCallback((conversation: ConversationMeta) => {
+    const profiles: ApiProfile[] = aiConfig?.profiles || []
+    const defaultProfileId = aiConfig?.defaultProfileId || profiles[0]?.id
+    const conversationAi = (conversation as ConversationMeta & { ai?: ConversationAiConfig }).ai
+    const profileId = conversationAi?.profileId || defaultProfileId
+    const profile = profiles.find(item => item.id === profileId) || profiles[0]
+    const modelOverride = conversationAi?.modelOverride?.trim() || ''
+    const effectiveModel = modelOverride || profile?.defaultModel || ''
+    return {
+      effectiveModel,
+      profileName: profile?.name || t('Default profile')
+    }
+  }, [aiConfig?.defaultProfileId, aiConfig?.profiles, t])
 
   // Handle drag resize
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -284,104 +300,115 @@ export function ConversationList({
           </div>
         ) : (
           <div className="space-y-0.5">
-            {conversations.map((conversation) => (
-              (() => {
-                const displayTitle = localizeTriggerText(conversation.title)
-                const displayPreview = conversation.preview ? localizeTriggerText(conversation.preview) : undefined
-                return (
-              <div
-                key={conversation.id}
-                onClick={() => editingId !== conversation.id && onSelect(conversation.id)}
-                className={`
-                  w-full px-3 py-2.5 rounded-xl text-left transition-all duration-200 cursor-pointer group relative
-                  ${conversation.id === currentConversationId
-                    ? 'bg-primary/10'
-                    : 'hover:bg-secondary/50'
-                  }
-                `}
-              >
-                {/* Selection indicator */}
-                {conversation.id === currentConversationId && (
-                  <div className="absolute left-0.5 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-primary rounded-full" />
-                )}
+            {conversations.map((conversation) => {
+              const displayTitle = localizeTriggerText(conversation.title)
+              const displayPreview = conversation.preview ? localizeTriggerText(conversation.preview) : undefined
+              const modelInfo = resolveConversationModel(conversation)
 
-                {/* Edit mode */}
-                {editingId === conversation.id ? (
-                  <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                    <input
-                      ref={editInputRef}
-                      type="text"
-                      value={editingTitle}
-                      onChange={(e) => setEditingTitle(e.target.value)}
-                      onKeyDown={handleEditKeyDown}
-                      onBlur={handleSaveEdit}
-                      className="flex-1 text-sm bg-input border border-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 min-w-0 transition-all"
-                      placeholder={t('Conversation title...')}
-                    />
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className={`text-sm truncate flex-1 ${
-                        conversation.id === currentConversationId ? 'font-medium text-foreground' : 'text-foreground/80'
-                      }`}>
-                        {displayTitle.slice(0, 24)}
-                        {displayTitle.length > 24 && '...'}
-                      </span>
-                      <span className="text-[11px] text-muted-foreground/50 flex-shrink-0 tabular-nums">
-                        {formatDate(conversation.updatedAt)}
-                      </span>
+              return (
+                <div
+                  key={conversation.id}
+                  onClick={() => editingId !== conversation.id && onSelect(conversation.id)}
+                  className={`
+                    w-full px-3 py-2.5 rounded-xl text-left transition-all duration-200 cursor-pointer group relative
+                    ${conversation.id === currentConversationId
+                      ? 'bg-primary/10'
+                      : 'hover:bg-secondary/50'
+                    }
+                  `}
+                >
+                  {/* Selection indicator */}
+                  {conversation.id === currentConversationId && (
+                    <div className="absolute left-0.5 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-primary rounded-full" />
+                  )}
+
+                  {/* Edit mode */}
+                  {editingId === conversation.id ? (
+                    <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        ref={editInputRef}
+                        type="text"
+                        value={editingTitle}
+                        onChange={(e) => setEditingTitle(e.target.value)}
+                        onKeyDown={handleEditKeyDown}
+                        onBlur={handleSaveEdit}
+                        className="flex-1 text-sm bg-input border border-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 min-w-0 transition-all"
+                        placeholder={t('Conversation title...')}
+                      />
                     </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={`text-sm truncate flex-1 ${
+                          conversation.id === currentConversationId ? 'font-medium text-foreground' : 'text-foreground/80'
+                        }`}>
+                          {displayTitle.slice(0, 24)}
+                          {displayTitle.length > 24 && '...'}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground/50 flex-shrink-0 tabular-nums">
+                          {formatDate(conversation.updatedAt)}
+                        </span>
+                      </div>
 
-                    {/* Preview text */}
-                    {displayPreview && (
-                      <p className="text-xs text-muted-foreground/50 mt-0.5 truncate">
-                        {displayPreview.slice(0, 40)}
-                      </p>
-                    )}
+                      {(displayPreview || modelInfo.effectiveModel) && (
+                        <div className="mt-0.5 flex items-center gap-1.5">
+                          {displayPreview && (
+                            <p className="text-xs text-muted-foreground/50 truncate flex-1">
+                              {displayPreview.slice(0, 40)}
+                            </p>
+                          )}
+                          {modelInfo.effectiveModel && (
+                            <span
+                              className="inline-flex items-center rounded-md border border-border/60 bg-background/60 px-1.5 py-0.5 text-[10px] text-muted-foreground max-w-[130px] truncate"
+                              title={modelInfo.profileName}
+                            >
+                              {modelInfo.effectiveModel}
+                            </span>
+                          )}
+                        </div>
+                      )}
 
-                    {/* Action buttons (on hover) */}
-                    <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all duration-150">
-                      {spaceId && layoutMode !== 'tabs-only' && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            openChat(spaceId, conversation.id, conversation.title, workDir)
-                          }}
-                          className="p-1 hover:bg-secondary rounded-md transition-colors"
-                          title={t('Open in tab')}
-                        >
-                          <ExternalLink className="w-3 h-3 text-muted-foreground" />
-                        </button>
-                      )}
-                      {onRename && (
-                        <button
-                          onClick={(e) => handleStartEdit(e, conversation)}
-                          className="p-1 hover:bg-secondary rounded-md transition-colors"
-                          title={t('Edit title')}
-                        >
-                          <Pencil className="w-3 h-3 text-muted-foreground" />
-                        </button>
-                      )}
-                      {onDelete && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            onDelete(conversation.id)
-                          }}
-                          className="p-1 hover:bg-destructive/15 rounded-md transition-colors"
-                          title={t('Delete conversation')}
-                        >
-                          <Trash2 className="w-3 h-3 text-destructive/70" />
-                        </button>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
-                )
-              })()
-            ))}
+                      {/* Action buttons (on hover) */}
+                      <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all duration-150">
+                        {spaceId && layoutMode !== 'tabs-only' && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              openChat(spaceId, conversation.id, conversation.title, workDir)
+                            }}
+                            className="p-1 hover:bg-secondary rounded-md transition-colors"
+                            title={t('Open in tab')}
+                          >
+                            <ExternalLink className="w-3 h-3 text-muted-foreground" />
+                          </button>
+                        )}
+                        {onRename && (
+                          <button
+                            onClick={(e) => handleStartEdit(e, conversation)}
+                            className="p-1 hover:bg-secondary rounded-md transition-colors"
+                            title={t('Edit title')}
+                          >
+                            <Pencil className="w-3 h-3 text-muted-foreground" />
+                          </button>
+                        )}
+                        {onDelete && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onDelete(conversation.id)
+                            }}
+                            className="p-1 hover:bg-destructive/15 rounded-md transition-colors"
+                            title={t('Delete conversation')}
+                          >
+                            <Trash2 className="w-3 h-3 text-destructive/70" />
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
       </div>

@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect } from 'react'
 import { useChatStore } from '../../../stores/chat.store'
+import { useAppStore } from '../../../stores/app.store'
 import { useSpaceStore } from '../../../stores/space.store'
 import { useSmartScroll } from '../../../hooks/useSmartScroll'
 import { useCanvasLifecycle } from '../../../hooks/useCanvasLifecycle'
@@ -23,7 +24,7 @@ import { ScrollToBottomButton } from '../../chat/ScrollToBottomButton'
 import { Sparkles } from '../../icons/ToolIcons'
 import { ChangeReviewBar } from '../../diff'
 import type { TabState } from '../../../services/canvas-lifecycle'
-import type { ImageAttachment, FileContextAttachment } from '../../../types'
+import type { ConversationAiConfig, FileContextAttachment, ImageAttachment } from '../../../types'
 import { useTranslation } from '../../../i18n'
 
 interface ChatTabViewerProps {
@@ -34,6 +35,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
   const { t } = useTranslation()
   const { conversationId, spaceId, workDir: tabWorkDir } = tab
   const { openPlan } = useCanvasLifecycle()
+  const appConfig = useAppStore(state => state.config)
   const { currentSpace, spaces, haloSpace } = useSpaceStore((state) => ({
     currentSpace: state.currentSpace,
     spaces: state.spaces,
@@ -58,6 +60,12 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
   const conversation = useChatStore(state =>
     conversationId ? state.conversationCache.get(conversationId) : null
   )
+  const modelSwitcherConversation = conversationId
+    ? {
+        id: conversationId,
+        ai: (conversation as ({ ai?: ConversationAiConfig } | null))?.ai
+      }
+    : null
   const session = useChatStore(state =>
     conversationId ? state.sessions.get(conversationId) : null
   )
@@ -232,8 +240,6 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
                 toolStatusById={toolStatusById}
                 availableToolsSnapshot={availableToolsSnapshot}
                 onOpenPlanInCanvas={handleOpenPlanInCanvas}
-                toolStatusById={toolStatusById}
-                availableToolsSnapshot={availableToolsSnapshot}
               />
               <div ref={bottomRef} />
             </>
@@ -319,6 +325,8 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
         workDir={resolvedWorkDir}
         planEnabled={planEnabled}
         onPlanEnabledChange={handlePlanEnabledChange}
+        conversation={modelSwitcherConversation}
+        config={appConfig}
       />
     </div>
   )
