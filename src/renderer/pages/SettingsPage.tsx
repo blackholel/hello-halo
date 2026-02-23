@@ -6,58 +6,159 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAppStore } from '../stores/app.store'
 import { usePythonStore } from '../stores/python.store'
 import { api } from '../api'
-import type { KiteConfig, ThemeMode, McpServersConfig, ConfigSourceMode } from '../types'
-import { AVAILABLE_MODELS, DEFAULT_MODEL } from '../types'
+import type {
+  KiteConfig,
+  ThemeMode,
+  McpServersConfig,
+  ConfigSourceMode,
+  ApiProfile,
+  ProviderVendor,
+  ProviderProtocol
+} from '../types'
+import { DEFAULT_MODEL } from '../types'
 import { CheckCircle2, XCircle, ArrowLeft, Eye, EyeOff, ChevronDown, ChevronRight, Package, Trash2, Loader2 } from '../components/icons/ToolIcons'
 import { Header } from '../components/layout/Header'
 import { McpServerList } from '../components/settings/McpServerList'
 import { useTranslation, setLanguage, getCurrentLanguage, SUPPORTED_LOCALES, type LocaleCode } from '../i18n'
+import { ensureAiConfig } from '../../shared/types/ai-profile'
 
-// Map provider ID to display name (avoids nested ternaries)
-const PROVIDER_NAMES: Record<string, string> = {
-  anthropic: 'Claude (Recommended)',
-  'anthropic-compat': 'OpenRouter',
-  zhipu: 'ZhipuAI (智谱)',
+interface ProfileTemplate {
+  key: string
+  label: string
+  profile: Omit<ApiProfile, 'id' | 'name' | 'apiKey' | 'enabled'>
+}
+
+const PROFILE_TEMPLATES: ProfileTemplate[] = [
+  {
+    key: 'minimax',
+    label: 'MiniMax',
+    profile: {
+      vendor: 'minimax',
+      protocol: 'anthropic_compat',
+      apiUrl: 'https://api.minimaxi.com/anthropic',
+      defaultModel: 'MiniMax-M2.5',
+      modelCatalog: ['MiniMax-M2.5'],
+      docUrl: 'https://platform.minimaxi.com/docs/coding-plan/claude-code'
+    }
+  },
+  {
+    key: 'moonshot',
+    label: 'Kimi / Moonshot',
+    profile: {
+      vendor: 'moonshot',
+      protocol: 'anthropic_compat',
+      apiUrl: 'https://api.moonshot.cn/anthropic',
+      defaultModel: 'kimi-k2-thinking',
+      modelCatalog: ['kimi-k2-thinking', 'kimi-k2-thinking-turbo', 'kimi-k2-0905-preview', 'kimi-k2-turbo-preview'],
+      docUrl: 'https://platform.moonshot.cn/docs/guide/agent-support'
+    }
+  },
+  {
+    key: 'glm',
+    label: 'GLM',
+    profile: {
+      vendor: 'zhipu',
+      protocol: 'anthropic_compat',
+      apiUrl: 'https://open.bigmodel.cn/api/anthropic',
+      defaultModel: 'glm-4.7',
+      modelCatalog: ['glm-4.7'],
+      docUrl: 'https://open.bigmodel.cn/dev/api'
+    }
+  },
+  {
+    key: 'openai',
+    label: 'OpenAI',
+    profile: {
+      vendor: 'openai',
+      protocol: 'openai_compat',
+      apiUrl: 'https://api.openai.com/v1/responses',
+      defaultModel: 'gpt-4o-mini',
+      modelCatalog: ['gpt-4o-mini', 'gpt-4.1-mini'],
+      docUrl: 'https://platform.openai.com/docs/api-reference/responses'
+    }
+  },
+  {
+    key: 'topic_official',
+    label: 'Topic 官方',
+    profile: {
+      vendor: 'topic',
+      protocol: 'anthropic_official',
+      apiUrl: 'https://api.topic.ai',
+      defaultModel: DEFAULT_MODEL,
+      modelCatalog: [DEFAULT_MODEL],
+      docUrl: 'https://docs.topic.ai'
+    }
+  },
+  {
+    key: 'topic_compat',
+    label: 'Topic 兼容',
+    profile: {
+      vendor: 'topic',
+      protocol: 'anthropic_compat',
+      apiUrl: 'https://api.topic.ai/anthropic',
+      defaultModel: DEFAULT_MODEL,
+      modelCatalog: [DEFAULT_MODEL],
+      docUrl: 'https://docs.topic.ai'
+    }
+  }
+]
+
+const VENDOR_LABELS: Record<ProviderVendor, string> = {
+  anthropic: 'Anthropic',
+  openai: 'OpenAI',
+  zhipu: 'GLM',
   minimax: 'MiniMax',
-  openai: 'OpenAI Compatible',
+  moonshot: 'Kimi / Moonshot',
+  topic: 'Topic',
+  custom: 'Custom'
 }
 
-function getProviderDisplayName(provider: string): string {
-  return PROVIDER_NAMES[provider] ?? 'OpenAI Compatible'
+const PROTOCOL_LABELS: Record<ProviderProtocol, string> = {
+  anthropic_official: 'Anthropic Official',
+  anthropic_compat: 'Anthropic Compatible',
+  openai_compat: 'OpenAI Compatible'
 }
 
-const PROVIDER_DESCRIPTIONS: Record<string, string> = {
-  anthropic: 'Connect directly to Anthropic official or compatible proxy',
-  'anthropic-compat': 'Direct connection to Anthropic-compatible backends (OpenRouter, etc.) - zero overhead',
-  zhipu: 'ZhipuAI Anthropic-compatible API - direct connection',
-  minimax: 'MiniMax Anthropic-compatible API - direct connection',
-  openai: 'Support OpenAI/compatible models via local protocol conversion',
+const API_KEY_PLACEHOLDER_BY_PROTOCOL: Record<ProviderProtocol, string> = {
+  anthropic_official: 'sk-ant-xxxxxxxxxxxxx',
+  anthropic_compat: 'sk-ant-xxxxxxxxxxxxx',
+  openai_compat: 'sk-xxxxxxxxxxxxx'
 }
 
-function getProviderDescription(provider: string): string {
-  return PROVIDER_DESCRIPTIONS[provider] ?? PROVIDER_DESCRIPTIONS.anthropic
+const API_URL_PLACEHOLDER_BY_PROTOCOL: Record<ProviderProtocol, string> = {
+  anthropic_official: 'https://api.anthropic.com',
+  anthropic_compat: 'https://provider.example.com/anthropic',
+  openai_compat: 'https://provider.example.com/v1/chat/completions or /v1/responses'
 }
 
-const API_KEY_PLACEHOLDERS: Record<string, string> = {
-  anthropic: 'sk-ant-xxxxxxxxxxxxx',
-  'anthropic-compat': 'sk-ant-xxxxxxxxxxxxx',
-  zhipu: 'xxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxx',
-  minimax: 'eyJhbGciOiJSUzI1NiIs...',
-  openai: 'sk-xxxxxxxxxxxxx',
+function createProfileId(seed: string): string {
+  const normalized = seed.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'profile'
+  const rand = Math.random().toString(36).slice(2, 7)
+  return `${normalized}-${Date.now().toString(36)}-${rand}`
 }
 
-function getApiKeyPlaceholder(provider: string): string {
-  return API_KEY_PLACEHOLDERS[provider] ?? 'sk-ant-xxxxxxxxxxxxx'
+function toUniqueProfileName(base: string, profiles: ApiProfile[]): string {
+  const trimmed = base.trim() || 'Profile'
+  if (!profiles.some(profile => profile.name === trimmed)) {
+    return trimmed
+  }
+
+  let index = 2
+  while (profiles.some(profile => profile.name === `${trimmed} ${index}`)) {
+    index += 1
+  }
+
+  return `${trimmed} ${index}`
 }
 
-const API_URL_PLACEHOLDERS: Record<string, string> = {
-  anthropic: 'https://api.anthropic.com',
-  'anthropic-compat': 'https://openrouter.ai/api',
-  openai: 'BASE_URL/v1/chat/completions or BASE_URL/v1/responses',
+function isValidOpenAICompatEndpoint(url: string): boolean {
+  const normalized = url.trim().replace(/\/+$/, '')
+  return normalized.endsWith('/chat/completions') || normalized.endsWith('/responses')
 }
 
-function getApiUrlPlaceholder(provider: string): string {
-  return API_URL_PLACEHOLDERS[provider] ?? 'https://api.anthropic.com'
+function selectFirstEnabledProfileId(profiles: ApiProfile[]): string {
+  const enabledProfile = profiles.find(profile => profile.enabled !== false)
+  return enabledProfile?.id || profiles[0]?.id || ''
 }
 
 const THEME_LABELS: Record<string, string> = {
@@ -124,20 +225,16 @@ export function SettingsPage() {
   const [showPythonPackages, setShowPythonPackages] = useState(false)
   const [newPackageName, setNewPackageName] = useState('')
 
-  // Local state for editing
-  const [apiKey, setApiKey] = useState(config?.api.apiKey || '')
-  const [apiUrl, setApiUrl] = useState(config?.api.apiUrl || '')
-  const [provider, setProvider] = useState(config?.api.provider || 'anthropic')
-  const [model, setModel] = useState(config?.api.model || DEFAULT_MODEL)
+  const initialAiConfig = ensureAiConfig(config?.ai, config?.api)
+  const [profiles, setProfiles] = useState<ApiProfile[]>(initialAiConfig.profiles)
+  const [defaultProfileId, setDefaultProfileId] = useState(initialAiConfig.defaultProfileId)
+  const [selectedProfileId, setSelectedProfileId] = useState(initialAiConfig.defaultProfileId)
+  const [templateKey, setTemplateKey] = useState(PROFILE_TEMPLATES[0]?.key || 'minimax')
+
   const [theme, setTheme] = useState<ThemeMode>(config?.appearance.theme || 'system')
   const [configSourceMode, setConfigSourceMode] = useState<ConfigSourceMode>(config?.configSourceMode || 'kite')
   const [configSourceNotice, setConfigSourceNotice] = useState<string | null>(null)
   const [taxonomyAdminEnabled, setTaxonomyAdminEnabled] = useState<boolean>(config?.extensionTaxonomy?.adminEnabled || false)
-  // Custom model toggle: enable by default if current model is not in preset list
-  const [useCustomModel, setUseCustomModel] = useState(() => {
-    const currentModel = config?.api.model || DEFAULT_MODEL
-    return !AVAILABLE_MODELS.some(m => m.id === currentModel)
-  })
 
   // Connection status
   const [isValidating, setIsValidating] = useState(false)
@@ -160,6 +257,11 @@ export function SettingsPage() {
   // API Key visibility state
   const [showApiKey, setShowApiKey] = useState(false)
 
+  const selectedProfile = profiles.find(profile => profile.id === selectedProfileId) || null
+  const selectedProfileUrlInvalid =
+    selectedProfile?.protocol === 'openai_compat' &&
+    !isValidOpenAICompatEndpoint(selectedProfile.apiUrl)
+
   // Load remote access status
   useEffect(() => {
     loadRemoteStatus()
@@ -181,6 +283,18 @@ export function SettingsPage() {
   useEffect(() => {
     setTaxonomyAdminEnabled(config?.extensionTaxonomy?.adminEnabled || false)
   }, [config?.extensionTaxonomy?.adminEnabled])
+
+  useEffect(() => {
+    const nextAiConfig = ensureAiConfig(config?.ai, config?.api)
+    setProfiles(nextAiConfig.profiles)
+    setDefaultProfileId(nextAiConfig.defaultProfileId)
+    setSelectedProfileId((prev) => {
+      if (nextAiConfig.profiles.some(profile => profile.id === prev)) {
+        return prev
+      }
+      return nextAiConfig.defaultProfileId
+    })
+  }, [config?.ai, config?.api])
 
   // Load system settings
   useEffect(() => {
@@ -392,23 +506,200 @@ export function SettingsPage() {
     await uninstallPackage(packageName)
   }
 
-  // Handle save - just save config without validation
-  const handleSave = async () => {
+  const updateSelectedProfile = (updates: Partial<ApiProfile>) => {
+    if (!selectedProfileId) return
+
+    setProfiles(prevProfiles =>
+      prevProfiles.map(profile =>
+        profile.id === selectedProfileId
+          ? {
+              ...profile,
+              ...updates
+            }
+          : profile
+      )
+    )
+  }
+
+  const handleSelectedProfileEnabledChange = (enabled: boolean) => {
+    if (!selectedProfile) return
+
+    const nextProfiles = profiles.map(profile =>
+      profile.id === selectedProfile.id
+        ? {
+            ...profile,
+            enabled
+          }
+        : profile
+    )
+    setProfiles(nextProfiles)
+
+    if (!enabled && selectedProfile.id === defaultProfileId) {
+      setDefaultProfileId(selectFirstEnabledProfileId(nextProfiles))
+    }
+  }
+
+  const handleAddProfileFromTemplate = () => {
+    const template = PROFILE_TEMPLATES.find(item => item.key === templateKey) || PROFILE_TEMPLATES[0]
+    if (!template) return
+
+    const profileName = toUniqueProfileName(template.label, profiles)
+    const profileId = createProfileId(template.key)
+    const nextProfile: ApiProfile = {
+      id: profileId,
+      name: profileName,
+      apiKey: '',
+      enabled: true,
+      ...template.profile
+    }
+
+    setProfiles(prevProfiles => [...prevProfiles, nextProfile])
+    setSelectedProfileId(profileId)
+    if (!defaultProfileId) {
+      setDefaultProfileId(profileId)
+    }
+    setValidationResult(null)
+  }
+
+  const handleRemoveSelectedProfile = () => {
+    if (!selectedProfile) return
+    if (profiles.length <= 1) return
+
+    const nextProfiles = profiles.filter(profile => profile.id !== selectedProfile.id)
+    const nextSelected = nextProfiles[0]?.id || ''
+    const nextDefault =
+      selectedProfile.id === defaultProfileId
+        ? nextSelected
+        : defaultProfileId
+
+    setProfiles(nextProfiles)
+    setSelectedProfileId(nextSelected)
+    setDefaultProfileId(nextDefault)
+    setValidationResult(null)
+  }
+
+  const parseValidationResult = (response: { success: boolean; data?: unknown; error?: string }) => {
+    const data = response.data as { valid?: boolean; message?: string } | undefined
+    const valid = typeof data?.valid === 'boolean' ? data.valid : response.success
+    const message = data?.message || response.error
+    return { valid, message }
+  }
+
+  const handleValidateConnection = async () => {
+    if (!selectedProfile) return
+
+    if (!selectedProfile.apiKey.trim()) {
+      setValidationResult({ valid: false, message: t('Please enter API Key') })
+      return
+    }
+
+    if (selectedProfile.protocol === 'openai_compat' && !selectedProfile.apiUrl.trim()) {
+      setValidationResult({ valid: false, message: t('Please enter API URL') })
+      return
+    }
+
+    if (selectedProfileUrlInvalid) {
+      setValidationResult({ valid: false, message: t('URL must end with /chat/completions or /responses') })
+      return
+    }
+
     setIsValidating(true)
     setValidationResult(null)
 
     try {
-      // Save API config directly
-      const apiConfig = {
-        api: {
-          provider: provider as any,
-          apiKey,
-          apiUrl,
-          model
-        }
+      let response = await api.validateApi(
+        selectedProfile.apiKey.trim(),
+        selectedProfile.apiUrl.trim(),
+        selectedProfile.protocol
+      )
+      let parsed = parseValidationResult(response as { success: boolean; data?: unknown; error?: string })
+
+      // Backward compatibility: old backends only understand provider=openai for OpenAI-compatible validation.
+      if (!parsed.valid && selectedProfile.protocol === 'openai_compat') {
+        response = await api.validateApi(
+          selectedProfile.apiKey.trim(),
+          selectedProfile.apiUrl.trim(),
+          'openai'
+        )
+        parsed = parseValidationResult(response as { success: boolean; data?: unknown; error?: string })
       }
-      await api.setConfig(apiConfig)
-      setConfig({ ...config, ...apiConfig } as KiteConfig)
+
+      setValidationResult({
+        valid: parsed.valid,
+        message: parsed.valid ? t('Connection successful') : (parsed.message || t('Connection failed'))
+      })
+    } catch (error) {
+      setValidationResult({ valid: false, message: t('Connection failed') })
+    } finally {
+      setIsValidating(false)
+    }
+  }
+
+  const handleSave = async () => {
+    if (profiles.length === 0) {
+      setValidationResult({ valid: false, message: t('Please create at least one profile') })
+      return
+    }
+
+    if (!selectedProfile) {
+      setValidationResult({ valid: false, message: t('Please select a profile') })
+      return
+    }
+
+    if (!selectedProfile.apiKey.trim()) {
+      setValidationResult({ valid: false, message: t('Please enter API Key') })
+      return
+    }
+
+    if (selectedProfile.protocol === 'openai_compat' && selectedProfileUrlInvalid) {
+      setValidationResult({ valid: false, message: t('URL must end with /chat/completions or /responses') })
+      return
+    }
+
+    setIsValidating(true)
+    setValidationResult(null)
+
+    try {
+      const normalizedProfiles = profiles.map((profile) => {
+        const normalizedDefaultModel = profile.defaultModel.trim() || DEFAULT_MODEL
+        const normalizedCatalog = profile.modelCatalog
+          .map(item => item.trim())
+          .filter(item => item.length > 0)
+        const modelCatalog = normalizedCatalog.includes(normalizedDefaultModel)
+          ? normalizedCatalog
+          : [normalizedDefaultModel, ...normalizedCatalog]
+
+        return {
+          ...profile,
+          name: profile.name.trim() || 'Profile',
+          apiKey: profile.apiKey.trim(),
+          apiUrl: profile.apiUrl.trim(),
+          defaultModel: normalizedDefaultModel,
+          modelCatalog,
+          docUrl: profile.docUrl?.trim() || undefined
+        }
+      })
+
+      const normalizedDefaultProfileId =
+        (() => {
+          const selectedDefault = normalizedProfiles.find(profile => profile.id === defaultProfileId)
+          if (selectedDefault && selectedDefault.enabled !== false) {
+            return selectedDefault.id
+          }
+          return selectFirstEnabledProfileId(normalizedProfiles)
+        })()
+
+      const aiConfig = {
+        profiles: normalizedProfiles,
+        defaultProfileId: normalizedDefaultProfileId
+      }
+
+      await api.setConfig({ ai: aiConfig })
+      const nextConfig = {
+        ...config,
+        ai: aiConfig
+      } as KiteConfig
+      setConfig(nextConfig)
       setValidationResult({ valid: true, message: t('Saved') })
     } catch (error) {
       setValidationResult({ valid: false, message: t('Save failed') })
@@ -443,7 +734,7 @@ export function SettingsPage() {
       {/* Content */}
       <main className="flex-1 overflow-auto relative z-10">
         <div className="max-w-2xl mx-auto px-6 py-8 space-y-5">
-          {/* AI Connection Section */}
+          {/* AI Profiles Section */}
           <section className="settings-section">
             <div className="flex items-center gap-3 mb-5">
               <div className="w-9 h-9 rounded-xl bg-[#da7756]/15 flex items-center justify-center">
@@ -452,189 +743,269 @@ export function SettingsPage() {
                 </svg>
               </div>
               <div>
-                <h2 className="text-base font-semibold tracking-tight">
-                  {t(getProviderDisplayName(provider))}
-                </h2>
-                <p className="text-xs text-muted-foreground">{t('AI Connection Configuration')}</p>
+                <h2 className="text-base font-semibold tracking-tight">{t('AI Profiles')}</h2>
+                <p className="text-xs text-muted-foreground">{t('Manage provider profiles and default profile')}</p>
               </div>
             </div>
 
             <div className="space-y-5">
-              {/* Provider */}
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">Provider</label>
-                <select
-                  value={provider}
-                  onChange={(e) => {
-                    const next = e.target.value as any
-                    const prev = provider
-                    setProvider(next)
-                    setValidationResult(null)
-
-                    // Clear API Key when switching between different provider categories
-                    // This prevents using wrong credentials for different platforms
-                    const isSameCategory = (a: string, b: string) => {
-                      // anthropic and anthropic-compat share keys
-                      if ((a === 'anthropic' || a === 'anthropic-compat') &&
-                          (b === 'anthropic' || b === 'anthropic-compat')) return true
-                      return a === b
-                    }
-                    if (!isSameCategory(prev, next)) {
-                      setApiKey('')
-                    }
-
-                    // Set sensible defaults when switching
-                    if (next === 'anthropic') {
-                      setApiUrl('https://api.anthropic.com')
-                      setModel(DEFAULT_MODEL)
-                      setUseCustomModel(false)
-                    } else if (next === 'anthropic-compat') {
-                      setApiUrl('https://openrouter.ai/api')
-                      // Keep model as-is for generic anthropic-compat
-                    } else if (next === 'zhipu') {
-                      // ZhipuAI (智谱): Anthropic-compatible
-                      setApiUrl('https://open.bigmodel.cn/api/anthropic')
-                      setModel('glm-4.7')
-                      setUseCustomModel(true)
-                    } else if (next === 'minimax') {
-                      // MiniMax: Anthropic-compatible
-                      setApiUrl('https://api.minimaxi.com/anthropic')
-                      setModel('MiniMax-M2.1')
-                      setUseCustomModel(true)
-                    } else if (next === 'openai') {
-                      setApiUrl('https://api.openai.com/v1/chat/completions')
-                      setModel('gpt-4o-mini')
-                      setUseCustomModel(true)
-                    }
-                  }}
-                  className="w-full select-apple text-sm"
+              <div className="flex items-end gap-3">
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">{t('Preset Template')}</label>
+                  <select
+                    value={templateKey}
+                    onChange={(event) => setTemplateKey(event.target.value)}
+                    className="w-full select-apple text-sm"
+                  >
+                    {PROFILE_TEMPLATES.map(template => (
+                      <option key={template.key} value={template.key}>
+                        {t(template.label)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  onClick={handleAddProfileFromTemplate}
+                  className="px-4 py-2.5 btn-apple text-sm"
                 >
-                  <option value="anthropic">{t('Claude (Recommended)')}</option>
-                  <option value="zhipu">{t('ZhipuAI (智谱)')}</option>
-                  <option value="minimax">{t('MiniMax')}</option>
-                  <option value="anthropic-compat">{t('OpenRouter')}</option>
-                  <option value="openai">{t('OpenAI Compatible')}</option>
-                </select>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {t(getProviderDescription(provider))}
-                </p>
+                  {t('Add Profile')}
+                </button>
               </div>
 
-              {/* API Key */}
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">API Key</label>
-                <div className="relative">
-                  <input
-                    type={showApiKey ? 'text' : 'password'}
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder={getApiKeyPlaceholder(provider)}
-                    className="w-full px-4 py-2.5 pr-12 input-apple text-sm"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowApiKey(!showApiKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors"
-                    title={showApiKey ? t('Hide API Key') : t('Show API Key')}
-                  >
-                    {showApiKey ? (
-                      <EyeOff className="w-4 h-4" />
-                    ) : (
-                      <Eye className="w-4 h-4" />
-                    )}
-                  </button>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wider">{t('Profile List')}</label>
+                  <div className="space-y-2">
+                    {profiles.map(profile => {
+                      const active = profile.id === selectedProfileId
+                      const isDefault = profile.id === defaultProfileId
+                      return (
+                        <div
+                          key={profile.id}
+                          onClick={() => {
+                            setSelectedProfileId(profile.id)
+                            setValidationResult(null)
+                          }}
+                          className={`w-full text-left p-3 rounded-xl border transition-colors cursor-pointer ${
+                            active
+                              ? 'border-primary/50 bg-primary/10'
+                              : 'border-border/50 bg-secondary/20 hover:bg-secondary/40'
+                          }`}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              setSelectedProfileId(profile.id)
+                              setValidationResult(null)
+                            }
+                          }}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="font-medium text-sm truncate">{profile.name}</p>
+                            <span className="text-[11px] text-muted-foreground">{t(PROTOCOL_LABELS[profile.protocol])}</span>
+                          </div>
+                          <div className="mt-2 flex items-center justify-between">
+                            <span className="text-xs text-muted-foreground">{t(VENDOR_LABELS[profile.vendor])}</span>
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                setValidationResult(null)
+                                setDefaultProfileId(profile.id)
+                              }}
+                              disabled={!isDefault && profile.enabled === false}
+                              className={`text-xs px-2 py-1 rounded-lg transition-colors ${
+                                isDefault
+                                  ? 'bg-green-500/20 text-green-500'
+                                  : 'bg-secondary/60 text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed'
+                              }`}
+                            >
+                              {isDefault ? t('Default') : t('Set Default')}
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {selectedProfile ? (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wider">{t('Profile Details')}</label>
+                        <button
+                          type="button"
+                          onClick={handleRemoveSelectedProfile}
+                          disabled={profiles.length <= 1}
+                          className="text-xs px-2.5 py-1.5 rounded-lg bg-red-500/15 text-red-500 hover:bg-red-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          {t('Delete')}
+                        </button>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">{t('Profile Name')}</label>
+                        <input
+                          type="text"
+                          value={selectedProfile.name}
+                          onChange={(event) => updateSelectedProfile({ name: event.target.value })}
+                          className="w-full px-4 py-2.5 input-apple text-sm"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">{t('Vendor')}</label>
+                          <select
+                            value={selectedProfile.vendor}
+                            onChange={(event) => updateSelectedProfile({ vendor: event.target.value as ProviderVendor })}
+                            className="w-full select-apple text-sm"
+                          >
+                            {Object.entries(VENDOR_LABELS).map(([vendor, label]) => (
+                              <option key={vendor} value={vendor}>
+                                {t(label)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">{t('Protocol')}</label>
+                          <select
+                            value={selectedProfile.protocol}
+                            onChange={(event) => updateSelectedProfile({ protocol: event.target.value as ProviderProtocol })}
+                            className="w-full select-apple text-sm"
+                          >
+                            {Object.entries(PROTOCOL_LABELS).map(([protocol, label]) => (
+                              <option key={protocol} value={protocol}>
+                                {t(label)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">API Key</label>
+                        <div className="relative">
+                          <input
+                            type={showApiKey ? 'text' : 'password'}
+                            value={selectedProfile.apiKey}
+                            onChange={(event) => updateSelectedProfile({ apiKey: event.target.value })}
+                            placeholder={API_KEY_PLACEHOLDER_BY_PROTOCOL[selectedProfile.protocol]}
+                            className="w-full px-4 py-2.5 pr-12 input-apple text-sm"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowApiKey(!showApiKey)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors"
+                            title={showApiKey ? t('Hide API Key') : t('Show API Key')}
+                          >
+                            {showApiKey ? (
+                              <EyeOff className="w-4 h-4" />
+                            ) : (
+                              <Eye className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">API URL</label>
+                        <input
+                          type="text"
+                          value={selectedProfile.apiUrl}
+                          onChange={(event) => updateSelectedProfile({ apiUrl: event.target.value })}
+                          placeholder={API_URL_PLACEHOLDER_BY_PROTOCOL[selectedProfile.protocol]}
+                          className="w-full px-4 py-2.5 input-apple text-sm"
+                        />
+                        {selectedProfileUrlInvalid && (
+                          <p className="mt-1 text-xs text-destructive">
+                            {t('URL must end with /chat/completions or /responses')}
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">{t('Default Model')}</label>
+                        <input
+                          type="text"
+                          value={selectedProfile.defaultModel}
+                          onChange={(event) => {
+                            const nextDefaultModel = event.target.value
+                            const nextCatalog = selectedProfile.modelCatalog.includes(nextDefaultModel)
+                              ? selectedProfile.modelCatalog
+                              : [nextDefaultModel, ...selectedProfile.modelCatalog.filter(item => item !== nextDefaultModel)]
+                            updateSelectedProfile({
+                              defaultModel: nextDefaultModel,
+                              modelCatalog: nextCatalog.filter(item => item.trim().length > 0)
+                            })
+                          }}
+                          className="w-full px-4 py-2.5 input-apple text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">{t('Model Catalog (comma separated)')}</label>
+                        <input
+                          type="text"
+                          value={selectedProfile.modelCatalog.join(', ')}
+                          onChange={(event) => {
+                            const parsed = event.target.value
+                              .split(',')
+                              .map(item => item.trim())
+                              .filter(item => item.length > 0)
+                            const normalized = selectedProfile.defaultModel && !parsed.includes(selectedProfile.defaultModel)
+                              ? [selectedProfile.defaultModel, ...parsed]
+                              : parsed
+                            updateSelectedProfile({ modelCatalog: normalized })
+                          }}
+                          className="w-full px-4 py-2.5 input-apple text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">{t('Doc URL')}</label>
+                        <input
+                          type="text"
+                          value={selectedProfile.docUrl || ''}
+                          onChange={(event) => updateSelectedProfile({ docUrl: event.target.value })}
+                          className="w-full px-4 py-2.5 input-apple text-sm"
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-sm">{t('Enabled')}</p>
+                          <p className="text-xs text-muted-foreground">{t('Disable to keep profile but skip it')}</p>
+                        </div>
+                        <AppleToggle
+                          checked={selectedProfile.enabled}
+                          onChange={handleSelectedProfileEnabledChange}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">{t('Please create or select a profile')}</p>
+                  )}
                 </div>
               </div>
 
-              {/* API URL */}
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">API URL</label>
-                <input
-                  type="text"
-                  value={apiUrl}
-                  onChange={(e) => setApiUrl(e.target.value)}
-                  placeholder={getApiUrlPlaceholder(provider)}
-                  className="w-full px-4 py-2.5 input-apple text-sm"
-                />
-                {provider === 'openai' && apiUrl && !apiUrl.endsWith('/chat/completions') && !apiUrl.endsWith('responses') && (
-                  <p className="mt-1 text-xs text-destructive">
-                    {t('URL must end with /v1/chat/completions or /v1/responses')}
-                  </p>
-                )}
-              </div>
-
-              {/* Model Selection */}
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">{t('Model')}</label>
-                {(provider === 'anthropic' || provider === 'anthropic-compat') ? (
-                  <>
-                    {useCustomModel ? (
-                      <input
-                        type="text"
-                        value={model}
-                        onChange={(e) => setModel(e.target.value)}
-                        placeholder="claude-sonnet-4-5-20250929"
-                        className="w-full px-4 py-2.5 input-apple text-sm"
-                      />
-                    ) : (
-                      <select
-                        value={model}
-                        onChange={(e) => setModel(e.target.value)}
-                        className="w-full px-4 py-2.5 input-apple text-sm"
-                      >
-                        {AVAILABLE_MODELS.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.name}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                    <div className="mt-1 flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">
-                        {useCustomModel
-                          ? t('Enter official Claude model name')
-                          : AVAILABLE_MODELS.find((m) => m.id === model)?.description}
-                      </span>
-                      <label className="flex items-center gap-1.5 text-xs text-muted-foreground/70 cursor-pointer hover:text-muted-foreground transition-colors">
-                        <input
-                          type="checkbox"
-                          checked={useCustomModel}
-                          onChange={(e) => {
-                            setUseCustomModel(e.target.checked)
-                            if (!e.target.checked) {
-                              if (!AVAILABLE_MODELS.some(m => m.id === model)) {
-                                setModel(DEFAULT_MODEL)
-                              }
-                            }
-                          }}
-                          className="w-3 h-3 rounded border-border"
-                        />
-                        {t('Custom')}
-                      </label>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <input
-                      type="text"
-                      value={model}
-                      onChange={(e) => setModel(e.target.value)}
-                      placeholder="gpt-4o-mini / deepseek-chat"
-                      className="w-full px-4 py-2.5 input-apple text-sm"
-                    />
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {t('Enter OpenAI compatible service model name')}
-                    </p>
-                  </>
-                )}
-              </div>
-
-              {/* Save */}
               <div className="flex items-center gap-4">
                 <button
+                  onClick={handleValidateConnection}
+                  disabled={isValidating || !selectedProfile || selectedProfileUrlInvalid}
+                  className="px-5 py-2.5 rounded-xl bg-secondary/80 hover:bg-secondary text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isValidating ? t('Testing...') : t('Test Connection')}
+                </button>
+
+                <button
                   onClick={handleSave}
-                  disabled={isValidating || !apiKey}
-                  className="px-5 py-2.5 btn-apple text-sm"
+                  disabled={isValidating || !selectedProfile || !selectedProfile.apiKey.trim() || selectedProfileUrlInvalid}
+                  className="px-5 py-2.5 btn-apple text-sm disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {isValidating ? t('Saving...') : t('Save')}
                 </button>
