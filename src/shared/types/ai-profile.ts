@@ -29,7 +29,6 @@ export type ProviderVendor =
   | 'zhipu'
   | 'minimax'
   | 'moonshot'
-  | 'topic'
   | 'custom'
 export type ProviderProtocol = 'anthropic_official' | 'anthropic_compat' | 'openai_compat'
 
@@ -86,7 +85,6 @@ function isVendor(value: unknown): value is ProviderVendor {
     value === 'zhipu' ||
     value === 'minimax' ||
     value === 'moonshot' ||
-    value === 'topic' ||
     value === 'custom'
   )
 }

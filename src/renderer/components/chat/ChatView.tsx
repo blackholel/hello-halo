@@ -30,7 +30,7 @@ import {
   getOnboardingPrompt,
 } from '../onboarding/onboardingData'
 import { api } from '../../api'
-import type { ConversationAiConfig, FileContextAttachment, ImageAttachment } from '../../types'
+import type { FileContextAttachment, ImageAttachment } from '../../types'
 import { useTranslation } from '../../i18n'
 
 interface ChatViewProps {
@@ -165,12 +165,12 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
 
   // Get current conversation and its session state
   const currentConversation = getCurrentConversation()
-  const currentConversationMeta = getCurrentConversationMeta() as ({ id: string; ai?: ConversationAiConfig } | null)
+  const currentConversationMeta = getCurrentConversationMeta()
   const currentConversationId = getCurrentConversationId()
   const modelSwitcherConversation = currentConversationId
     ? {
         id: currentConversationId,
-        ai: (currentConversation as ({ ai?: ConversationAiConfig } | null))?.ai ?? currentConversationMeta?.ai
+        ai: currentConversation?.ai ?? currentConversationMeta?.ai
       }
     : null
   const isLoadingConversation = useChatStore(state =>

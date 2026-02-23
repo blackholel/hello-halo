@@ -250,6 +250,7 @@ export interface ConversationMeta {
   updatedAt: string;
   messageCount: number;
   preview?: string;  // Last message preview (truncated)
+  ai?: ConversationAiConfig;
 }
 
 // Full conversation with messages

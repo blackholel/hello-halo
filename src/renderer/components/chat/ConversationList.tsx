@@ -10,8 +10,8 @@
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import type { ApiProfile, ConversationAiConfig, ConversationMeta } from '../../types'
-import { MessageSquare, Plus } from '../icons/ToolIcons'
+import type { ConversationMeta } from '../../types'
+import { Plus } from '../icons/ToolIcons'
 import { ExternalLink, Pencil, Trash2, MessageCircle } from 'lucide-react'
 import { useCanvasLifecycle } from '../../hooks/useCanvasLifecycle'
 import { useTranslation } from '../../i18n'
@@ -21,7 +21,6 @@ import { CommandsPanel } from '../commands/CommandsPanel'
 import { WorkflowsPanel } from '../workflows/WorkflowsPanel'
 import type { SkillDefinition } from '../../stores/skills.store'
 import type { AgentDefinition } from '../../stores/agents.store'
-import { useAppStore } from '../../stores/app.store'
 import { useSkillsStore } from '../../stores/skills.store'
 import { useAgentsStore } from '../../stores/agents.store'
 import { useCommandsStore } from '../../stores/commands.store'
@@ -78,7 +77,6 @@ export function ConversationList({
   onCreateCommand
 }: ConversationListProps) {
   const { t } = useTranslation()
-  const aiConfig = useAppStore(state => state.config?.ai)
   const { openChat, openTemplateLibrary } = useCanvasLifecycle()
   const [width, setWidth] = useState(DEFAULT_WIDTH)
   const [isDragging, setIsDragging] = useState(false)
@@ -168,20 +166,6 @@ export function ConversationList({
     const localized = localizedSkill || localizedCommand
     return localized ? `${prefix}${localized}${tail}` : text
   }, [agentDisplayMap, commandDisplayMap, skillDisplayMap])
-
-  const resolveConversationModel = useCallback((conversation: ConversationMeta) => {
-    const profiles: ApiProfile[] = aiConfig?.profiles || []
-    const defaultProfileId = aiConfig?.defaultProfileId || profiles[0]?.id
-    const conversationAi = (conversation as ConversationMeta & { ai?: ConversationAiConfig }).ai
-    const profileId = conversationAi?.profileId || defaultProfileId
-    const profile = profiles.find(item => item.id === profileId) || profiles[0]
-    const modelOverride = conversationAi?.modelOverride?.trim() || ''
-    const effectiveModel = modelOverride || profile?.defaultModel || ''
-    return {
-      effectiveModel,
-      profileName: profile?.name || t('Default profile')
-    }
-  }, [aiConfig?.defaultProfileId, aiConfig?.profiles, t])
 
   // Handle drag resize
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -303,7 +287,6 @@ export function ConversationList({
             {conversations.map((conversation) => {
               const displayTitle = localizeTriggerText(conversation.title)
               const displayPreview = conversation.preview ? localizeTriggerText(conversation.preview) : undefined
-              const modelInfo = resolveConversationModel(conversation)
 
               return (
                 <div
@@ -350,21 +333,11 @@ export function ConversationList({
                         </span>
                       </div>
 
-                      {(displayPreview || modelInfo.effectiveModel) && (
+                      {displayPreview && (
                         <div className="mt-0.5 flex items-center gap-1.5">
-                          {displayPreview && (
-                            <p className="text-xs text-muted-foreground/50 truncate flex-1">
-                              {displayPreview.slice(0, 40)}
-                            </p>
-                          )}
-                          {modelInfo.effectiveModel && (
-                            <span
-                              className="inline-flex items-center rounded-md border border-border/60 bg-background/60 px-1.5 py-0.5 text-[10px] text-muted-foreground max-w-[130px] truncate"
-                              title={modelInfo.profileName}
-                            >
-                              {modelInfo.effectiveModel}
-                            </span>
-                          )}
+                          <p className="text-xs text-muted-foreground/50 truncate flex-1">
+                            {displayPreview.slice(0, 40)}
+                          </p>
                         </div>
                       )}
 

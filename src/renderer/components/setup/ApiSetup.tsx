@@ -14,122 +14,24 @@ import { api } from '../../api'
 import { Lightbulb } from '../icons/ToolIcons'
 import { Globe, ChevronDown } from 'lucide-react'
 import type { ApiProfile, ProviderProtocol, ProviderVendor } from '../../types'
-import { DEFAULT_MODEL } from '../../types'
 import { ensureAiConfig } from '../../../shared/types/ai-profile'
 import { useTranslation, setLanguage, getCurrentLanguage, SUPPORTED_LOCALES, type LocaleCode } from '../../i18n'
+import {
+  AI_PROFILE_TEMPLATES,
+  API_KEY_PLACEHOLDER_BY_PROTOCOL,
+  API_URL_PLACEHOLDER_BY_PROTOCOL,
+  isValidOpenAICompatEndpoint,
+  normalizeModelCatalog,
+  PROTOCOL_LABELS,
+  VENDOR_LABELS,
+  type AiProfileTemplate
+} from '../settings/aiProfileDomain'
 
-interface SetupTemplate {
-  key: string
-  label: string
-  vendor: ProviderVendor
-  protocol: ProviderProtocol
-  apiUrl: string
-  defaultModel: string
-  modelCatalog: string[]
-  docUrl: string
-}
-
-const SETUP_TEMPLATES: SetupTemplate[] = [
-  {
-    key: 'minimax',
-    label: 'MiniMax',
-    vendor: 'minimax',
-    protocol: 'anthropic_compat',
-    apiUrl: 'https://api.minimaxi.com/anthropic',
-    defaultModel: 'MiniMax-M2.5',
-    modelCatalog: ['MiniMax-M2.5'],
-    docUrl: 'https://platform.minimaxi.com/docs/coding-plan/claude-code'
-  },
-  {
-    key: 'moonshot',
-    label: 'Kimi / Moonshot',
-    vendor: 'moonshot',
-    protocol: 'anthropic_compat',
-    apiUrl: 'https://api.moonshot.cn/anthropic',
-    defaultModel: 'kimi-k2-thinking',
-    modelCatalog: ['kimi-k2-thinking', 'kimi-k2-thinking-turbo', 'kimi-k2-0905-preview', 'kimi-k2-turbo-preview'],
-    docUrl: 'https://platform.moonshot.cn/docs/guide/agent-support'
-  },
-  {
-    key: 'glm',
-    label: 'GLM',
-    vendor: 'zhipu',
-    protocol: 'anthropic_compat',
-    apiUrl: 'https://open.bigmodel.cn/api/anthropic',
-    defaultModel: 'glm-4.7',
-    modelCatalog: ['glm-4.7'],
-    docUrl: 'https://open.bigmodel.cn/dev/api'
-  },
-  {
-    key: 'openai',
-    label: 'OpenAI',
-    vendor: 'openai',
-    protocol: 'openai_compat',
-    apiUrl: 'https://api.openai.com/v1/responses',
-    defaultModel: 'gpt-4o-mini',
-    modelCatalog: ['gpt-4o-mini', 'gpt-4.1-mini'],
-    docUrl: 'https://platform.openai.com/docs/api-reference/responses'
-  },
-  {
-    key: 'topic_official',
-    label: 'Topic 官方',
-    vendor: 'topic',
-    protocol: 'anthropic_official',
-    apiUrl: 'https://api.topic.ai',
-    defaultModel: DEFAULT_MODEL,
-    modelCatalog: [DEFAULT_MODEL],
-    docUrl: 'https://docs.topic.ai'
-  },
-  {
-    key: 'topic_compat',
-    label: 'Topic 兼容',
-    vendor: 'topic',
-    protocol: 'anthropic_compat',
-    apiUrl: 'https://api.topic.ai/anthropic',
-    defaultModel: DEFAULT_MODEL,
-    modelCatalog: [DEFAULT_MODEL],
-    docUrl: 'https://docs.topic.ai'
-  }
-]
-
-const VENDOR_LABELS: Record<ProviderVendor, string> = {
-  anthropic: 'Anthropic',
-  openai: 'OpenAI',
-  zhipu: 'GLM',
-  minimax: 'MiniMax',
-  moonshot: 'Kimi / Moonshot',
-  topic: 'Topic',
-  custom: 'Custom'
-}
-
-const PROTOCOL_LABELS: Record<ProviderProtocol, string> = {
-  anthropic_official: 'Anthropic Official',
-  anthropic_compat: 'Anthropic Compatible',
-  openai_compat: 'OpenAI Compatible'
-}
-
-const API_KEY_PLACEHOLDER_BY_PROTOCOL: Record<ProviderProtocol, string> = {
-  anthropic_official: 'sk-ant-xxxxxxxxxxxxx',
-  anthropic_compat: 'sk-ant-xxxxxxxxxxxxx',
-  openai_compat: 'sk-xxxxxxxxxxxxx'
-}
-
-const API_URL_PLACEHOLDER_BY_PROTOCOL: Record<ProviderProtocol, string> = {
-  anthropic_official: 'https://api.anthropic.com',
-  anthropic_compat: 'https://provider.example.com/anthropic',
-  openai_compat: 'https://provider.example.com/v1/chat/completions or /v1/responses'
-}
-
-function isValidOpenAICompatEndpoint(url: string): boolean {
-  const normalized = url.trim().replace(/\/+$/, '')
-  return normalized.endsWith('/chat/completions') || normalized.endsWith('/responses')
-}
-
-function matchTemplate(profile: ApiProfile | null): SetupTemplate {
-  if (!profile) return SETUP_TEMPLATES[0]
+function matchTemplate(profile: ApiProfile | null): AiProfileTemplate {
+  if (!profile) return AI_PROFILE_TEMPLATES[0]
   return (
-    SETUP_TEMPLATES.find(template => template.vendor === profile.vendor && template.protocol === profile.protocol) ||
-    SETUP_TEMPLATES[0]
+    AI_PROFILE_TEMPLATES.find(template => template.vendor === profile.vendor && template.protocol === profile.protocol) ||
+    AI_PROFILE_TEMPLATES[0]
   )
 }
 
@@ -152,7 +54,10 @@ export function ApiSetup() {
   const [apiUrl, setApiUrl] = useState(currentProfile?.apiUrl || initialTemplate.apiUrl)
   const [defaultModel, setDefaultModel] = useState(currentProfile?.defaultModel || initialTemplate.defaultModel)
   const [modelCatalogInput, setModelCatalogInput] = useState(
-    (currentProfile?.modelCatalog?.length ? currentProfile.modelCatalog : initialTemplate.modelCatalog).join(', ')
+    normalizeModelCatalog(
+      currentProfile?.defaultModel || initialTemplate.defaultModel,
+      currentProfile?.modelCatalog?.length ? currentProfile.modelCatalog : initialTemplate.modelCatalog
+    ).join(', ')
   )
   const [docUrl, setDocUrl] = useState(currentProfile?.docUrl || initialTemplate.docUrl)
 
@@ -171,7 +76,7 @@ export function ApiSetup() {
   }
 
   const handleTemplateChange = (nextTemplateKey: string) => {
-    const template = SETUP_TEMPLATES.find(item => item.key === nextTemplateKey)
+    const template = AI_PROFILE_TEMPLATES.find(item => item.key === nextTemplateKey)
     if (!template) return
 
     setTemplateKey(nextTemplateKey)
@@ -179,7 +84,7 @@ export function ApiSetup() {
     setProtocol(template.protocol)
     setApiUrl(template.apiUrl)
     setDefaultModel(template.defaultModel)
-    setModelCatalogInput(template.modelCatalog.join(', '))
+    setModelCatalogInput(normalizeModelCatalog(template.defaultModel, template.modelCatalog).join(', '))
     setDocUrl(template.docUrl)
     setError(null)
   }
@@ -200,14 +105,8 @@ export function ApiSetup() {
     setError(null)
 
     try {
-      const normalizedModel = defaultModel.trim() || DEFAULT_MODEL
-      const parsedCatalog = modelCatalogInput
-        .split(',')
-        .map(item => item.trim())
-        .filter(item => item.length > 0)
-      const modelCatalog = parsedCatalog.includes(normalizedModel)
-        ? parsedCatalog
-        : [normalizedModel, ...parsedCatalog]
+      const normalizedModel = defaultModel.trim() || initialTemplate.defaultModel
+      const modelCatalog = normalizeModelCatalog(normalizedModel, modelCatalogInput)
 
       const profileId = currentProfile?.id || 'default-profile'
       const profile: ApiProfile = {
@@ -246,6 +145,8 @@ export function ApiSetup() {
       setIsSaving(false)
     }
   }
+
+  const currentStep = apiKey.trim() ? 3 : 2
 
   return (
     <div className="h-full w-full flex flex-col items-center justify-center bg-background p-8 relative overflow-hidden">
@@ -311,18 +212,47 @@ export function ApiSetup() {
         {/* Form card */}
         <div className="glass-dialog p-6 stagger-item" style={{ animationDelay: '80ms' }}>
           <div className="mb-4">
-            <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">{t('Preset Template')}</label>
-            <select
-              value={templateKey}
-              onChange={(event) => handleTemplateChange(event.target.value)}
-              className="w-full select-apple text-sm"
-            >
-              {SETUP_TEMPLATES.map(template => (
-                <option key={template.key} value={template.key}>
-                  {t(template.label)}
-                </option>
+            <div className="mb-3 flex items-center justify-center gap-2">
+              {[1, 2, 3].map((step, index) => (
+                <div key={step} className="flex items-center gap-2">
+                  <span
+                    className={[
+                      'inline-flex h-6 w-6 items-center justify-center rounded-full border text-xs font-semibold transition-colors',
+                      currentStep >= step
+                        ? 'border-primary/50 bg-primary/20 text-primary'
+                        : 'border-border/50 bg-secondary/40 text-muted-foreground'
+                    ].join(' ')}
+                  >
+                    {step}
+                  </span>
+                  {index < 2 && (
+                    <span className={`h-px w-8 ${currentStep > step ? 'bg-primary/50' : 'bg-border/60'}`} />
+                  )}
+                </div>
               ))}
-            </select>
+            </div>
+
+            <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">{t('Choose Provider')}</label>
+            <div className="grid grid-cols-3 gap-2">
+              {AI_PROFILE_TEMPLATES.map(template => {
+                const selected = templateKey === template.key
+                return (
+                  <button
+                    key={template.key}
+                    type="button"
+                    onClick={() => handleTemplateChange(template.key)}
+                    className={[
+                      'rounded-xl border px-2 py-2 text-xs transition-colors',
+                      selected
+                        ? 'border-primary/60 bg-primary/10 text-primary'
+                        : 'border-border/50 bg-secondary/30 text-foreground/80 hover:bg-secondary/45'
+                    ].join(' ')}
+                  >
+                    {t(template.label)}
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
           <div className="mb-4">
@@ -382,7 +312,11 @@ export function ApiSetup() {
             <input
               type="text"
               value={defaultModel}
-              onChange={(event) => setDefaultModel(event.target.value)}
+              onChange={(event) => {
+                const nextDefaultModel = event.target.value
+                setDefaultModel(nextDefaultModel)
+                setModelCatalogInput(normalizeModelCatalog(nextDefaultModel, modelCatalogInput).join(', '))
+              }}
               className="w-full px-4 py-2.5 input-apple text-sm"
             />
           </div>

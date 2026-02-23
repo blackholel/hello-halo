@@ -895,7 +895,7 @@ function InputToolbar({
 }: InputToolbarProps) {
   const { t } = useTranslation()
   return (
-    <div className="flex items-center justify-between px-2 pb-2 pt-1">
+    <div className="flex items-center justify-between gap-2 px-2.5 pb-2.5 pt-1.5">
       {/* Left section: attachment button + mode toggles */}
       <div className="flex items-center gap-1 min-w-0">
         <ModelSwitcher

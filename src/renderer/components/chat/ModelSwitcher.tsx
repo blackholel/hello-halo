@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChevronDown } from 'lucide-react'
+import { Check, ChevronDown, Cpu, Info, Repeat2 } from 'lucide-react'
 import { useChatStore } from '../../stores/chat.store'
 import { useTranslation } from '../../i18n'
 import type { ApiProfile, ConversationAiConfig, KiteConfig } from '../../types'
@@ -159,21 +159,34 @@ export function ModelSwitcher({
         onClick={() => !isDisabled && setIsOpen(prev => !prev)}
         disabled={isDisabled}
         className={`
-          h-8 max-w-[250px] flex items-center gap-1.5 px-2.5 rounded-lg
-          transition-colors duration-200 text-xs
+          h-8 max-w-[260px] flex items-center gap-1.5 px-2.5 rounded-lg border text-xs
+          transition-colors duration-200
           ${isDisabled
-            ? 'text-muted-foreground/50 bg-muted/30 cursor-not-allowed'
-            : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+            ? 'text-muted-foreground/50 bg-muted/30 border-border/50 cursor-not-allowed'
+            : 'bg-primary/10 border-primary/40 text-primary hover:bg-primary/15'
           }
         `}
         title={disableReason || t('Switch profile and model')}
       >
+        <Cpu size={13} className="flex-shrink-0" />
         <span className="truncate">{displayLabel}</span>
         <ChevronDown size={14} className={`flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
+      {isGenerating && (
+        <div className="mt-1 flex items-center gap-1 text-[11px] text-amber-500">
+          <Info size={12} />
+          <span>{t('Model switching is disabled while generating a response')}</span>
+        </div>
+      )}
+
       {isOpen && !isDisabled && (
         <div className="absolute bottom-full left-0 mb-2 w-[340px] max-w-[80vw] bg-popover border border-border rounded-xl shadow-xl z-30 p-3 space-y-3">
+          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <Repeat2 size={12} />
+            <span>{t('Switch model for this session')}</span>
+          </div>
+
           <div>
             <div className="text-[11px] font-medium text-muted-foreground mb-1.5">{t('Profile')}</div>
             <div className="space-y-1 max-h-28 overflow-auto pr-1">
@@ -189,7 +202,10 @@ export function ModelSwitcher({
                       ${selected ? 'bg-primary/10 text-primary' : 'hover:bg-muted/50 text-foreground'}
                     `}
                   >
-                    <span className="truncate">{profile.name}</span>
+                    <span className="truncate">
+                      {profile.name}
+                      {profile.enabled === false && <span className="ml-1 text-amber-500">({t('Disabled')})</span>}
+                    </span>
                     {selected && <Check size={13} className="flex-shrink-0" />}
                   </button>
                 )

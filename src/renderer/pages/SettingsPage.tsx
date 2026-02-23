@@ -11,125 +11,20 @@ import type {
   ThemeMode,
   McpServersConfig,
   ConfigSourceMode,
-  ApiProfile,
-  ProviderVendor,
-  ProviderProtocol
+  ApiProfile
 } from '../types'
-import { DEFAULT_MODEL } from '../types'
-import { CheckCircle2, XCircle, ArrowLeft, Eye, EyeOff, ChevronDown, ChevronRight, Package, Trash2, Loader2 } from '../components/icons/ToolIcons'
+import { CheckCircle2, XCircle, ArrowLeft, ChevronDown, ChevronRight, Package, Trash2, Loader2 } from '../components/icons/ToolIcons'
 import { Header } from '../components/layout/Header'
 import { McpServerList } from '../components/settings/McpServerList'
 import { useTranslation, setLanguage, getCurrentLanguage, SUPPORTED_LOCALES, type LocaleCode } from '../i18n'
 import { ensureAiConfig } from '../../shared/types/ai-profile'
-
-interface ProfileTemplate {
-  key: string
-  label: string
-  profile: Omit<ApiProfile, 'id' | 'name' | 'apiKey' | 'enabled'>
-}
-
-const PROFILE_TEMPLATES: ProfileTemplate[] = [
-  {
-    key: 'minimax',
-    label: 'MiniMax',
-    profile: {
-      vendor: 'minimax',
-      protocol: 'anthropic_compat',
-      apiUrl: 'https://api.minimaxi.com/anthropic',
-      defaultModel: 'MiniMax-M2.5',
-      modelCatalog: ['MiniMax-M2.5'],
-      docUrl: 'https://platform.minimaxi.com/docs/coding-plan/claude-code'
-    }
-  },
-  {
-    key: 'moonshot',
-    label: 'Kimi / Moonshot',
-    profile: {
-      vendor: 'moonshot',
-      protocol: 'anthropic_compat',
-      apiUrl: 'https://api.moonshot.cn/anthropic',
-      defaultModel: 'kimi-k2-thinking',
-      modelCatalog: ['kimi-k2-thinking', 'kimi-k2-thinking-turbo', 'kimi-k2-0905-preview', 'kimi-k2-turbo-preview'],
-      docUrl: 'https://platform.moonshot.cn/docs/guide/agent-support'
-    }
-  },
-  {
-    key: 'glm',
-    label: 'GLM',
-    profile: {
-      vendor: 'zhipu',
-      protocol: 'anthropic_compat',
-      apiUrl: 'https://open.bigmodel.cn/api/anthropic',
-      defaultModel: 'glm-4.7',
-      modelCatalog: ['glm-4.7'],
-      docUrl: 'https://open.bigmodel.cn/dev/api'
-    }
-  },
-  {
-    key: 'openai',
-    label: 'OpenAI',
-    profile: {
-      vendor: 'openai',
-      protocol: 'openai_compat',
-      apiUrl: 'https://api.openai.com/v1/responses',
-      defaultModel: 'gpt-4o-mini',
-      modelCatalog: ['gpt-4o-mini', 'gpt-4.1-mini'],
-      docUrl: 'https://platform.openai.com/docs/api-reference/responses'
-    }
-  },
-  {
-    key: 'topic_official',
-    label: 'Topic 官方',
-    profile: {
-      vendor: 'topic',
-      protocol: 'anthropic_official',
-      apiUrl: 'https://api.topic.ai',
-      defaultModel: DEFAULT_MODEL,
-      modelCatalog: [DEFAULT_MODEL],
-      docUrl: 'https://docs.topic.ai'
-    }
-  },
-  {
-    key: 'topic_compat',
-    label: 'Topic 兼容',
-    profile: {
-      vendor: 'topic',
-      protocol: 'anthropic_compat',
-      apiUrl: 'https://api.topic.ai/anthropic',
-      defaultModel: DEFAULT_MODEL,
-      modelCatalog: [DEFAULT_MODEL],
-      docUrl: 'https://docs.topic.ai'
-    }
-  }
-]
-
-const VENDOR_LABELS: Record<ProviderVendor, string> = {
-  anthropic: 'Anthropic',
-  openai: 'OpenAI',
-  zhipu: 'GLM',
-  minimax: 'MiniMax',
-  moonshot: 'Kimi / Moonshot',
-  topic: 'Topic',
-  custom: 'Custom'
-}
-
-const PROTOCOL_LABELS: Record<ProviderProtocol, string> = {
-  anthropic_official: 'Anthropic Official',
-  anthropic_compat: 'Anthropic Compatible',
-  openai_compat: 'OpenAI Compatible'
-}
-
-const API_KEY_PLACEHOLDER_BY_PROTOCOL: Record<ProviderProtocol, string> = {
-  anthropic_official: 'sk-ant-xxxxxxxxxxxxx',
-  anthropic_compat: 'sk-ant-xxxxxxxxxxxxx',
-  openai_compat: 'sk-xxxxxxxxxxxxx'
-}
-
-const API_URL_PLACEHOLDER_BY_PROTOCOL: Record<ProviderProtocol, string> = {
-  anthropic_official: 'https://api.anthropic.com',
-  anthropic_compat: 'https://provider.example.com/anthropic',
-  openai_compat: 'https://provider.example.com/v1/chat/completions or /v1/responses'
-}
+import { ProfileCard } from '../components/settings/ProfileCard'
+import { ProfileEditor } from '../components/settings/ProfileEditor'
+import {
+  AI_PROFILE_TEMPLATES,
+  isValidOpenAICompatEndpoint,
+  normalizeProfileForSave
+} from '../components/settings/aiProfileDomain'
 
 function createProfileId(seed: string): string {
   const normalized = seed.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'profile'
@@ -149,11 +44,6 @@ function toUniqueProfileName(base: string, profiles: ApiProfile[]): string {
   }
 
   return `${trimmed} ${index}`
-}
-
-function isValidOpenAICompatEndpoint(url: string): boolean {
-  const normalized = url.trim().replace(/\/+$/, '')
-  return normalized.endsWith('/chat/completions') || normalized.endsWith('/responses')
 }
 
 function selectFirstEnabledProfileId(profiles: ApiProfile[]): string {
@@ -229,7 +119,7 @@ export function SettingsPage() {
   const [profiles, setProfiles] = useState<ApiProfile[]>(initialAiConfig.profiles)
   const [defaultProfileId, setDefaultProfileId] = useState(initialAiConfig.defaultProfileId)
   const [selectedProfileId, setSelectedProfileId] = useState(initialAiConfig.defaultProfileId)
-  const [templateKey, setTemplateKey] = useState(PROFILE_TEMPLATES[0]?.key || 'minimax')
+  const [templateKey, setTemplateKey] = useState(AI_PROFILE_TEMPLATES[0]?.key || 'minimax')
 
   const [theme, setTheme] = useState<ThemeMode>(config?.appearance.theme || 'system')
   const [configSourceMode, setConfigSourceMode] = useState<ConfigSourceMode>(config?.configSourceMode || 'kite')
@@ -253,9 +143,6 @@ export function SettingsPage() {
   // System settings state
   const [autoLaunch, setAutoLaunch] = useState(config?.system?.autoLaunch || false)
   const [minimizeToTray, setMinimizeToTray] = useState(config?.system?.minimizeToTray || false)
-
-  // API Key visibility state
-  const [showApiKey, setShowApiKey] = useState(false)
 
   const selectedProfile = profiles.find(profile => profile.id === selectedProfileId) || null
   const selectedProfileUrlInvalid =
@@ -428,6 +315,10 @@ export function SettingsPage() {
     })
   }
 
+  const handleLanguageChange = (locale: LocaleCode) => {
+    setLanguage(locale)
+  }
+
   // Handle auto launch change
   const handleAutoLaunchChange = async (enabled: boolean) => {
     setAutoLaunch(enabled)
@@ -540,7 +431,7 @@ export function SettingsPage() {
   }
 
   const handleAddProfileFromTemplate = () => {
-    const template = PROFILE_TEMPLATES.find(item => item.key === templateKey) || PROFILE_TEMPLATES[0]
+    const template = AI_PROFILE_TEMPLATES.find(item => item.key === templateKey) || AI_PROFILE_TEMPLATES[0]
     if (!template) return
 
     const profileName = toUniqueProfileName(template.label, profiles)
@@ -550,7 +441,12 @@ export function SettingsPage() {
       name: profileName,
       apiKey: '',
       enabled: true,
-      ...template.profile
+      vendor: template.vendor,
+      protocol: template.protocol,
+      apiUrl: template.apiUrl,
+      defaultModel: template.defaultModel,
+      modelCatalog: template.modelCatalog,
+      docUrl: template.docUrl
     }
 
     setProfiles(prevProfiles => [...prevProfiles, nextProfile])
@@ -660,25 +556,7 @@ export function SettingsPage() {
     setValidationResult(null)
 
     try {
-      const normalizedProfiles = profiles.map((profile) => {
-        const normalizedDefaultModel = profile.defaultModel.trim() || DEFAULT_MODEL
-        const normalizedCatalog = profile.modelCatalog
-          .map(item => item.trim())
-          .filter(item => item.length > 0)
-        const modelCatalog = normalizedCatalog.includes(normalizedDefaultModel)
-          ? normalizedCatalog
-          : [normalizedDefaultModel, ...normalizedCatalog]
-
-        return {
-          ...profile,
-          name: profile.name.trim() || 'Profile',
-          apiKey: profile.apiKey.trim(),
-          apiUrl: profile.apiUrl.trim(),
-          defaultModel: normalizedDefaultModel,
-          modelCatalog,
-          docUrl: profile.docUrl?.trim() || undefined
-        }
-      })
+      const normalizedProfiles = profiles.map(normalizeProfileForSave)
 
       const normalizedDefaultProfileId =
         (() => {
@@ -708,6 +586,9 @@ export function SettingsPage() {
     }
   }
 
+  const currentLanguage = getCurrentLanguage()
+  const localeEntries = Object.entries(SUPPORTED_LOCALES) as [LocaleCode, string][]
+
   return (
     <div className="h-full w-full flex flex-col relative">
       {/* Ambient background */}
@@ -733,7 +614,7 @@ export function SettingsPage() {
 
       {/* Content */}
       <main className="flex-1 overflow-auto relative z-10">
-        <div className="max-w-2xl mx-auto px-6 py-8 space-y-5">
+        <div className="max-w-[1560px] mx-auto px-6 py-8 space-y-5">
           {/* AI Profiles Section */}
           <section className="settings-section">
             <div className="flex items-center gap-3 mb-5">
@@ -757,7 +638,7 @@ export function SettingsPage() {
                     onChange={(event) => setTemplateKey(event.target.value)}
                     className="w-full select-apple text-sm"
                   >
-                    {PROFILE_TEMPLATES.map(template => (
+                    {AI_PROFILE_TEMPLATES.map(template => (
                       <option key={template.key} value={template.key}>
                         {t(template.label)}
                       </option>
@@ -772,263 +653,47 @@ export function SettingsPage() {
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-[380px_minmax(0,1fr)]">
+                <aside className="space-y-2">
                   <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wider">{t('Profile List')}</label>
                   <div className="space-y-2">
-                    {profiles.map(profile => {
-                      const active = profile.id === selectedProfileId
-                      const isDefault = profile.id === defaultProfileId
-                      return (
-                        <div
-                          key={profile.id}
-                          onClick={() => {
-                            setSelectedProfileId(profile.id)
-                            setValidationResult(null)
-                          }}
-                          className={`w-full text-left p-3 rounded-xl border transition-colors cursor-pointer ${
-                            active
-                              ? 'border-primary/50 bg-primary/10'
-                              : 'border-border/50 bg-secondary/20 hover:bg-secondary/40'
-                          }`}
-                          role="button"
-                          tabIndex={0}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter' || event.key === ' ') {
-                              event.preventDefault()
-                              setSelectedProfileId(profile.id)
-                              setValidationResult(null)
-                            }
-                          }}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="font-medium text-sm truncate">{profile.name}</p>
-                            <span className="text-[11px] text-muted-foreground">{t(PROTOCOL_LABELS[profile.protocol])}</span>
-                          </div>
-                          <div className="mt-2 flex items-center justify-between">
-                            <span className="text-xs text-muted-foreground">{t(VENDOR_LABELS[profile.vendor])}</span>
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                setValidationResult(null)
-                                setDefaultProfileId(profile.id)
-                              }}
-                              disabled={!isDefault && profile.enabled === false}
-                              className={`text-xs px-2 py-1 rounded-lg transition-colors ${
-                                isDefault
-                                  ? 'bg-green-500/20 text-green-500'
-                                  : 'bg-secondary/60 text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed'
-                              }`}
-                            >
-                              {isDefault ? t('Default') : t('Set Default')}
-                            </button>
-                          </div>
-                        </div>
-                      )
-                    })}
+                    {profiles.map((profile) => (
+                      <ProfileCard
+                        key={profile.id}
+                        profile={profile}
+                        isActive={profile.id === selectedProfileId}
+                        isDefault={profile.id === defaultProfileId}
+                        onClick={() => {
+                          setSelectedProfileId(profile.id)
+                          setValidationResult(null)
+                        }}
+                      />
+                    ))}
                   </div>
-                </div>
+                </aside>
 
-                <div className="space-y-4">
-                  {selectedProfile ? (
-                    <>
-                      <div className="flex items-center justify-between">
-                        <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wider">{t('Profile Details')}</label>
-                        <button
-                          type="button"
-                          onClick={handleRemoveSelectedProfile}
-                          disabled={profiles.length <= 1}
-                          className="text-xs px-2.5 py-1.5 rounded-lg bg-red-500/15 text-red-500 hover:bg-red-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          {t('Delete')}
-                        </button>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">{t('Profile Name')}</label>
-                        <input
-                          type="text"
-                          value={selectedProfile.name}
-                          onChange={(event) => updateSelectedProfile({ name: event.target.value })}
-                          className="w-full px-4 py-2.5 input-apple text-sm"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">{t('Vendor')}</label>
-                          <select
-                            value={selectedProfile.vendor}
-                            onChange={(event) => updateSelectedProfile({ vendor: event.target.value as ProviderVendor })}
-                            className="w-full select-apple text-sm"
-                          >
-                            {Object.entries(VENDOR_LABELS).map(([vendor, label]) => (
-                              <option key={vendor} value={vendor}>
-                                {t(label)}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">{t('Protocol')}</label>
-                          <select
-                            value={selectedProfile.protocol}
-                            onChange={(event) => updateSelectedProfile({ protocol: event.target.value as ProviderProtocol })}
-                            className="w-full select-apple text-sm"
-                          >
-                            {Object.entries(PROTOCOL_LABELS).map(([protocol, label]) => (
-                              <option key={protocol} value={protocol}>
-                                {t(label)}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">API Key</label>
-                        <div className="relative">
-                          <input
-                            type={showApiKey ? 'text' : 'password'}
-                            value={selectedProfile.apiKey}
-                            onChange={(event) => updateSelectedProfile({ apiKey: event.target.value })}
-                            placeholder={API_KEY_PLACEHOLDER_BY_PROTOCOL[selectedProfile.protocol]}
-                            className="w-full px-4 py-2.5 pr-12 input-apple text-sm"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowApiKey(!showApiKey)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors"
-                            title={showApiKey ? t('Hide API Key') : t('Show API Key')}
-                          >
-                            {showApiKey ? (
-                              <EyeOff className="w-4 h-4" />
-                            ) : (
-                              <Eye className="w-4 h-4" />
-                            )}
-                          </button>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">API URL</label>
-                        <input
-                          type="text"
-                          value={selectedProfile.apiUrl}
-                          onChange={(event) => updateSelectedProfile({ apiUrl: event.target.value })}
-                          placeholder={API_URL_PLACEHOLDER_BY_PROTOCOL[selectedProfile.protocol]}
-                          className="w-full px-4 py-2.5 input-apple text-sm"
-                        />
-                        {selectedProfileUrlInvalid && (
-                          <p className="mt-1 text-xs text-destructive">
-                            {t('URL must end with /chat/completions or /responses')}
-                          </p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">{t('Default Model')}</label>
-                        <input
-                          type="text"
-                          value={selectedProfile.defaultModel}
-                          onChange={(event) => {
-                            const nextDefaultModel = event.target.value
-                            const nextCatalog = selectedProfile.modelCatalog.includes(nextDefaultModel)
-                              ? selectedProfile.modelCatalog
-                              : [nextDefaultModel, ...selectedProfile.modelCatalog.filter(item => item !== nextDefaultModel)]
-                            updateSelectedProfile({
-                              defaultModel: nextDefaultModel,
-                              modelCatalog: nextCatalog.filter(item => item.trim().length > 0)
-                            })
-                          }}
-                          className="w-full px-4 py-2.5 input-apple text-sm"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">{t('Model Catalog (comma separated)')}</label>
-                        <input
-                          type="text"
-                          value={selectedProfile.modelCatalog.join(', ')}
-                          onChange={(event) => {
-                            const parsed = event.target.value
-                              .split(',')
-                              .map(item => item.trim())
-                              .filter(item => item.length > 0)
-                            const normalized = selectedProfile.defaultModel && !parsed.includes(selectedProfile.defaultModel)
-                              ? [selectedProfile.defaultModel, ...parsed]
-                              : parsed
-                            updateSelectedProfile({ modelCatalog: normalized })
-                          }}
-                          className="w-full px-4 py-2.5 input-apple text-sm"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">{t('Doc URL')}</label>
-                        <input
-                          type="text"
-                          value={selectedProfile.docUrl || ''}
-                          onChange={(event) => updateSelectedProfile({ docUrl: event.target.value })}
-                          className="w-full px-4 py-2.5 input-apple text-sm"
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium text-sm">{t('Enabled')}</p>
-                          <p className="text-xs text-muted-foreground">{t('Disable to keep profile but skip it')}</p>
-                        </div>
-                        <AppleToggle
-                          checked={selectedProfile.enabled}
-                          onChange={handleSelectedProfileEnabledChange}
-                        />
-                      </div>
-                    </>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">{t('Please create or select a profile')}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={handleValidateConnection}
-                  disabled={isValidating || !selectedProfile || selectedProfileUrlInvalid}
-                  className="px-5 py-2.5 rounded-xl bg-secondary/80 hover:bg-secondary text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  {isValidating ? t('Testing...') : t('Test Connection')}
-                </button>
-
-                <button
-                  onClick={handleSave}
-                  disabled={isValidating || !selectedProfile || !selectedProfile.apiKey.trim() || selectedProfileUrlInvalid}
-                  className="px-5 py-2.5 btn-apple text-sm disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {isValidating ? t('Saving...') : t('Save')}
-                </button>
-
-                {validationResult && (
-                  <span
-                    className={`text-sm flex items-center gap-1 ${
-                      validationResult.valid ? 'text-green-500' : 'text-red-500'
-                    }`}
-                  >
-                    {validationResult.valid ? (
-                      <>
-                        <CheckCircle2 className="w-4 h-4" />
-                        {validationResult.message || t('Saved')}
-                      </>
-                    ) : (
-                      <>
-                        <XCircle className="w-4 h-4" />
-                        {validationResult.message}
-                      </>
-                    )}
-                  </span>
-                )}
+                <ProfileEditor
+                  profile={selectedProfile}
+                  isDefault={selectedProfile?.id === defaultProfileId}
+                  canDelete={profiles.length > 1}
+                  isBusy={isValidating}
+                  validationResult={validationResult}
+                  onUpdate={(patch) => {
+                    updateSelectedProfile(patch)
+                    setValidationResult(null)
+                  }}
+                  onDelete={handleRemoveSelectedProfile}
+                  onSetDefault={() => {
+                    if (!selectedProfile || selectedProfile.enabled === false) {
+                      return
+                    }
+                    setDefaultProfileId(selectedProfile.id)
+                    setValidationResult(null)
+                  }}
+                  onValidate={handleValidateConnection}
+                  onSave={handleSave}
+                  onEnabledChange={handleSelectedProfileEnabledChange}
+                />
               </div>
             </div>
           </section>
@@ -1339,14 +1004,31 @@ export function SettingsPage() {
           <section className="settings-section">
             <h2 className="text-base font-semibold tracking-tight mb-5">{t('Language')}</h2>
 
-            <div>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                {localeEntries.map(([code, name]) => (
+                  <button
+                    key={code}
+                    type="button"
+                    onClick={() => handleLanguageChange(code)}
+                    className={`rounded-xl px-3 py-2 text-sm text-left transition-all duration-200 ${
+                      currentLanguage === code
+                        ? 'bg-primary/15 text-primary ring-2 ring-primary/30'
+                        : 'bg-secondary/50 hover:bg-secondary/80 text-foreground/75'
+                    }`}
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+
               <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">{t('Language')}</label>
               <select
-                value={getCurrentLanguage()}
-                onChange={(e) => setLanguage(e.target.value as LocaleCode)}
+                value={currentLanguage}
+                onChange={(e) => handleLanguageChange(e.target.value as LocaleCode)}
                 className="w-full px-4 py-2.5 input-apple text-sm"
               >
-                {Object.entries(SUPPORTED_LOCALES).map(([code, name]) => (
+                {localeEntries.map(([code, name]) => (
                   <option key={code} value={code}>
                     {name}
                   </option>
