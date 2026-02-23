@@ -102,7 +102,9 @@ export function ComposerTriggerPanel({
                   <ItemIcon type={item.type} />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-mono text-foreground">{item.insertText}</p>
+                  <p className="truncate text-xs font-mono text-foreground">
+                    {item.type === 'agent' ? '@' : '/'}{item.displayName}
+                  </p>
                   {item.description && (
                     <p className="truncate text-[11px] text-muted-foreground">{item.description}</p>
                   )}

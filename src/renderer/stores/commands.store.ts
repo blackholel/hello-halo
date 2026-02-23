@@ -15,6 +15,7 @@ import type { SceneTag } from '../../shared/extension-taxonomy'
 
 export interface CommandDefinition {
   name: string
+  displayName?: string
   path: string
   source: 'app' | 'space' | 'plugin'
   description?: string
@@ -59,7 +60,7 @@ export const useCommandsStore = create<CommandsState>((set, get) => ({
     set({ isLoading: true, error: null })
 
     try {
-      const response = await api.listCommands(workDir)
+      const response = await api.listCommands(workDir, i18n.language)
       if (response.success) {
         set({
           commands: response.data as CommandDefinition[],

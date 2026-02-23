@@ -13,6 +13,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAppStore } from '../stores/app.store'
 import { useSpaceStore } from '../stores/space.store'
 import { useToolkitStore } from '../stores/toolkit.store'
+import { useSkillsStore } from '../stores/skills.store'
+import { useAgentsStore } from '../stores/agents.store'
+import { useCommandsStore } from '../stores/commands.store'
 import { SPACE_ICONS, DEFAULT_SPACE_ICON } from '../types'
 import type { Space, CreateSpaceInput, SpaceIconId, DirectiveRef } from '../types'
 import { formatDirectiveName } from '../utils/directive-helpers'
@@ -37,6 +40,20 @@ import { normalizeEnabledValues } from '../utils/resource-key'
 
 // Check if running in web mode
 const isWebMode = api.isRemoteMode()
+
+function getLocalizedResourceName(item: { name: string; displayName?: string; namespace?: string }): string {
+  const base = item.displayName || item.name
+  return item.namespace ? `${item.namespace}:${base}` : base
+}
+
+function directiveLookupKeys(ref: DirectiveRef): string[] {
+  const source = ref.source ?? '-'
+  const namespace = ref.namespace ?? '-'
+  return [
+    `${ref.type}:${source}:${namespace}:${ref.name}`,
+    `${ref.type}:${namespace}:${ref.name}`
+  ]
+}
 
 export function HomePage(): JSX.Element {
   const { t } = useTranslation()
@@ -72,6 +89,21 @@ export function HomePage(): JSX.Element {
     migrateFromPreferences,
     isToolkitLoaded
   } = useToolkitStore()
+  const { skills, loadedWorkDir: loadedSkillsWorkDir, loadSkills } = useSkillsStore((state) => ({
+    skills: state.skills,
+    loadedWorkDir: state.loadedWorkDir,
+    loadSkills: state.loadSkills
+  }))
+  const { agents, loadedWorkDir: loadedAgentsWorkDir, loadAgents } = useAgentsStore((state) => ({
+    agents: state.agents,
+    loadedWorkDir: state.loadedWorkDir,
+    loadAgents: state.loadAgents
+  }))
+  const { commands, loadedWorkDir: loadedCommandsWorkDir, loadCommands } = useCommandsStore((state) => ({
+    commands: state.commands,
+    loadedWorkDir: state.loadedWorkDir,
+    loadCommands: state.loadCommands
+  }))
 
   // Path selection state
   const [useCustomPath, setUseCustomPath] = useState(false)
@@ -122,6 +154,31 @@ export function HomePage(): JSX.Element {
     void loadToolkit(editingSpace.id)
   }, [editingSpace, isToolkitLoaded, loadToolkit])
 
+  useEffect(() => {
+    if (!editingSpace || editingSpace.isTemp) return
+    const workDir = editingSpace.path
+    if (skills.length === 0 || loadedSkillsWorkDir !== workDir) {
+      void loadSkills(workDir)
+    }
+    if (agents.length === 0 || loadedAgentsWorkDir !== workDir) {
+      void loadAgents(workDir)
+    }
+    if (commands.length === 0 || loadedCommandsWorkDir !== workDir) {
+      void loadCommands(workDir, true)
+    }
+  }, [
+    agents.length,
+    commands.length,
+    editingSpace,
+    loadAgents,
+    loadCommands,
+    loadSkills,
+    loadedAgentsWorkDir,
+    loadedCommandsWorkDir,
+    loadedSkillsWorkDir,
+    skills.length
+  ])
+
   const editingToolkitLoaded = !!editingSpace && isToolkitLoaded(editingSpace.id)
   const editingToolkit = editingSpace ? getToolkit(editingSpace.id) : null
   const editingPreferences = editingSpace ? getSpacePreferences(editingSpace.id) : undefined
@@ -136,6 +193,41 @@ export function HomePage(): JSX.Element {
     [legacyEnabledAgents]
   )
   const canImportToolkit = legacyEnabledSkills.length > 0 || legacyEnabledAgents.length > 0
+
+  const directiveDisplayMap = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const skill of skills) {
+      const namespace = skill.namespace ?? '-'
+      const source = skill.source ?? '-'
+      const display = `/${getLocalizedResourceName(skill)}`
+      map.set(`skill:${source}:${namespace}:${skill.name}`, display)
+      map.set(`skill:${namespace}:${skill.name}`, display)
+    }
+    for (const agent of agents) {
+      const namespace = agent.namespace ?? '-'
+      const source = agent.source ?? '-'
+      const display = `@${getLocalizedResourceName(agent)}`
+      map.set(`agent:${source}:${namespace}:${agent.name}`, display)
+      map.set(`agent:${namespace}:${agent.name}`, display)
+    }
+    for (const command of commands) {
+      const namespace = command.namespace ?? '-'
+      const source = command.source ?? '-'
+      const display = `/${getLocalizedResourceName(command)}`
+      map.set(`command:${source}:${namespace}:${command.name}`, display)
+      map.set(`command:${namespace}:${command.name}`, display)
+    }
+    return map
+  }, [agents, commands, skills])
+
+  const formatDirectiveDisplayName = useCallback((ref: DirectiveRef): string => {
+    const keys = directiveLookupKeys(ref)
+    for (const key of keys) {
+      const localized = directiveDisplayMap.get(key)
+      if (localized) return localized
+    }
+    return formatDirectiveName(ref)
+  }, [directiveDisplayMap])
 
   const toolkitGroups = useMemo((): Array<{ key: string; title: string; items: DirectiveRef[] }> => {
     if (!editingToolkit) return []
@@ -804,7 +896,7 @@ export function HomePage(): JSX.Element {
                               key={`${group.key}-${ref.id || `${ref.type}:${ref.namespace ?? '-'}:${ref.name}`}`}
                               className="px-2 py-0.5 rounded-md text-[11px] font-mono bg-muted/60 text-foreground"
                             >
-                              {formatDirectiveName(ref)}
+                              {formatDirectiveDisplayName(ref)}
                             </span>
                           ))}
                         </div>

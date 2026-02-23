@@ -3,7 +3,7 @@ import { ArrowLeft } from '../components/icons/ToolIcons'
 import { Header } from '../components/layout/Header'
 import { api } from '../api'
 import { useAppStore } from '../stores/app.store'
-import { useTranslation } from '../i18n'
+import { getCurrentLanguage, useTranslation } from '../i18n'
 import { getDefaultSceneDefinitions } from '../components/resources/scene-tag-meta'
 import type {
   SceneColorToken,
@@ -209,12 +209,13 @@ export function SceneTaxonomyAdminPage(): JSX.Element {
     setIsLoadingResources(true)
     setError(null)
     try {
+      const locale = getCurrentLanguage()
       const targetWorkDir = source === 'space' ? workDir : undefined
       const response = type === 'skill'
-        ? await api.listSkills(targetWorkDir)
+        ? await api.listSkills(targetWorkDir, locale)
         : type === 'agent'
-          ? await api.listAgents(targetWorkDir)
-          : await api.listCommands(targetWorkDir)
+          ? await api.listAgents(targetWorkDir, locale)
+          : await api.listCommands(targetWorkDir, locale)
 
       if (!response.success || !Array.isArray(response.data)) {
         setError(response.error || 'Failed to load resources')

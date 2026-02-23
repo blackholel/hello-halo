@@ -19,9 +19,9 @@ import type { ResourceRef } from '../services/resource-ref.service'
 
 export function registerSkillsHandlers(): void {
   // List all available skills
-  ipcMain.handle('skills:list', async (_event, workDir?: string) => {
+  ipcMain.handle('skills:list', async (_event, workDir?: string, locale?: string) => {
     try {
-      const skills = listSkills(workDir)
+      const skills = listSkills(workDir, locale)
       return { success: true, data: skills }
     } catch (error: unknown) {
       const err = error as Error

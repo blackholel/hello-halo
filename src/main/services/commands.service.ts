@@ -18,7 +18,7 @@ import { FileCache } from '../utils/file-cache'
 import type { ResourceRef, CopyToSpaceOptions, CopyToSpaceResult } from './resource-ref.service'
 import { commandKey } from '../../shared/command-utils'
 import type { SceneTagKey } from '../../shared/scene-taxonomy'
-import { parseResourceMetadata } from './resource-metadata.service'
+import { parseResourceMetadata, getLocalizedFrontmatterString } from './resource-metadata.service'
 import { resolveSceneTags } from './resource-scene-tags.service'
 import { buildResourceSceneKey, getSceneTaxonomy } from './scene-taxonomy.service'
 
@@ -28,6 +28,7 @@ import { buildResourceSceneKey, getSceneTaxonomy } from './scene-taxonomy.servic
 
 export interface CommandDefinition {
   name: string
+  displayName?: string
   path: string
   source: 'app' | 'space' | 'plugin'
   description?: string
@@ -37,8 +38,9 @@ export interface CommandDefinition {
 }
 
 // Cache for commands list (in-memory only)
-let globalCommandsCache: CommandDefinition[] | null = null
-const spaceCommandsCache = new Map<string, CommandDefinition[]>()
+const DEFAULT_LOCALE_CACHE_KEY = '__default__'
+const globalCommandsCacheByLocale = new Map<string, CommandDefinition[]>()
+const spaceCommandsCacheByLocale = new Map<string, Map<string, CommandDefinition[]>>()
 const contentCache = new FileCache<string>({ maxSize: 200 })
 
 function getAllowedCommandBaseDirs(): string[] {
@@ -47,6 +49,12 @@ function getAllowedCommandBaseDirs(): string[] {
 
 function normalizePath(path: string): string {
   return path.replace(/\\/g, '/')
+}
+
+function toLocaleCacheKey(locale?: string): string {
+  const trimmed = locale?.trim()
+  if (!trimmed) return DEFAULT_LOCALE_CACHE_KEY
+  return trimmed.toLowerCase()
 }
 
 function resolveWorkDirForCommandPath(commandPath: string): string | null {
@@ -64,14 +72,19 @@ function readCommandMetadata(
   name: string,
   source: CommandDefinition['source'],
   namespace?: string,
-  workDir?: string
-): { description?: string; sceneTags: SceneTagKey[] } {
+  workDir?: string,
+  locale?: string
+): { displayName?: string; description?: string; sceneTags: SceneTagKey[] } {
   try {
     const content = readFileSync(filePath, 'utf-8')
     const metadata = parseResourceMetadata(content)
     const taxonomy = getSceneTaxonomy().config
+    const localizedDescription =
+      getLocalizedFrontmatterString(metadata.frontmatter, ['description'], locale) ?? metadata.description
+    const displayName = getLocalizedFrontmatterString(metadata.frontmatter, ['name', 'title'], locale)
     return {
-      description: metadata.description,
+      displayName,
+      description: localizedDescription,
       sceneTags: resolveSceneTags({
         name,
         description: metadata.description,
@@ -98,7 +111,8 @@ function scanCommandDir(
   source: CommandDefinition['source'],
   pluginRoot?: string,
   namespace?: string,
-  workDir?: string
+  workDir?: string,
+  locale?: string
 ): CommandDefinition[] {
   if (!isValidDirectoryPath(dirPath, 'Commands')) return []
 
@@ -110,13 +124,14 @@ function scanCommandDir(
       try {
         if (!statSync(filePath).isFile()) continue
         const name = file.slice(0, -3)
-        const metadata = readCommandMetadata(filePath, name, source, namespace, workDir)
+        const metadata = readCommandMetadata(filePath, name, source, namespace, workDir, locale)
         commands.push({
           name,
           path: filePath,
           source,
           description: metadata.description,
           sceneTags: metadata.sceneTags,
+          ...(metadata.displayName && { displayName: metadata.displayName }),
           ...(pluginRoot && { pluginRoot }),
           ...(namespace && { namespace })
         })
@@ -137,7 +152,7 @@ function mergeCommands(globalCommands: CommandDefinition[], spaceCommands: Comma
   return Array.from(merged.values())
 }
 
-function buildGlobalCommands(): CommandDefinition[] {
+function buildGlobalCommands(locale?: string): CommandDefinition[] {
   const commands: CommandDefinition[] = []
   const seenNames = new Set<string>()
 
@@ -154,16 +169,16 @@ function buildGlobalCommands(): CommandDefinition[] {
   }
 
   for (const plugin of listEnabledPlugins()) {
-    addCommands(scanCommandDir(join(plugin.installPath, 'commands'), 'plugin', plugin.installPath, plugin.name))
+    addCommands(scanCommandDir(join(plugin.installPath, 'commands'), 'plugin', plugin.installPath, plugin.name, undefined, locale))
   }
 
-  addCommands(scanCommandDir(join(getLockedUserConfigRootDir(), 'commands'), 'app'))
+  addCommands(scanCommandDir(join(getLockedUserConfigRootDir(), 'commands'), 'app', undefined, undefined, undefined, locale))
 
   return commands
 }
 
-function buildSpaceCommands(workDir: string): CommandDefinition[] {
-  return scanCommandDir(join(workDir, '.claude', 'commands'), 'space', undefined, undefined, workDir)
+function buildSpaceCommands(workDir: string, locale?: string): CommandDefinition[] {
+  return scanCommandDir(join(workDir, '.claude', 'commands'), 'space', undefined, undefined, workDir, locale)
 }
 
 function findCommand(commands: CommandDefinition[], name: string): CommandDefinition | undefined {
@@ -199,22 +214,31 @@ function logFound(items: CommandDefinition[], locale?: string): void {
 }
 
 export function listCommands(workDir?: string, locale?: string): CommandDefinition[] {
-  if (!globalCommandsCache) {
-    globalCommandsCache = buildGlobalCommands()
+  const localeKey = toLocaleCacheKey(locale)
+  let globalCommands = globalCommandsCacheByLocale.get(localeKey)
+  if (!globalCommands) {
+    globalCommands = buildGlobalCommands(locale)
+    globalCommandsCacheByLocale.set(localeKey, globalCommands)
   }
 
   if (!workDir) {
-    logFound(globalCommandsCache, locale)
-    return globalCommandsCache
+    logFound(globalCommands, locale)
+    return globalCommands
   }
 
-  let spaceCommands = spaceCommandsCache.get(workDir)
+  let spaceCache = spaceCommandsCacheByLocale.get(workDir)
+  if (!spaceCache) {
+    spaceCache = new Map<string, CommandDefinition[]>()
+    spaceCommandsCacheByLocale.set(workDir, spaceCache)
+  }
+
+  let spaceCommands = spaceCache.get(localeKey)
   if (!spaceCommands) {
-    spaceCommands = buildSpaceCommands(workDir)
-    spaceCommandsCache.set(workDir, spaceCommands)
+    spaceCommands = buildSpaceCommands(workDir, locale)
+    spaceCache.set(localeKey, spaceCommands)
   }
 
-  const commands = mergeCommands(globalCommandsCache, spaceCommands)
+  const commands = mergeCommands(globalCommands, spaceCommands)
   logFound(commands, locale)
   return commands
 }
@@ -224,18 +248,26 @@ export function listSpaceCommands(workDir: string): CommandDefinition[] {
 }
 
 function listCommandsForRefLookup(workDir: string): CommandDefinition[] {
-  if (!globalCommandsCache) {
-    globalCommandsCache = buildGlobalCommands()
+  let globalCommands = globalCommandsCacheByLocale.get(DEFAULT_LOCALE_CACHE_KEY)
+  if (!globalCommands) {
+    globalCommands = buildGlobalCommands()
+    globalCommandsCacheByLocale.set(DEFAULT_LOCALE_CACHE_KEY, globalCommands)
   }
 
-  let spaceCommands = spaceCommandsCache.get(workDir)
+  let spaceCache = spaceCommandsCacheByLocale.get(workDir)
+  if (!spaceCache) {
+    spaceCache = new Map<string, CommandDefinition[]>()
+    spaceCommandsCacheByLocale.set(workDir, spaceCache)
+  }
+
+  let spaceCommands = spaceCache.get(DEFAULT_LOCALE_CACHE_KEY)
   if (!spaceCommands) {
     spaceCommands = buildSpaceCommands(workDir)
-    spaceCommandsCache.set(workDir, spaceCommands)
+    spaceCache.set(DEFAULT_LOCALE_CACHE_KEY, spaceCommands)
   }
 
   // Keep source-distinct entries for by-ref copy lookup; do not merge by key.
-  return [...spaceCommands, ...globalCommandsCache]
+  return [...spaceCommands, ...globalCommands]
 }
 
 export function getCommand(name: string, workDir?: string): CommandDefinition | null {
@@ -314,6 +346,7 @@ export function createCommand(workDir: string, name: string, content: string): C
   writeFileSync(commandPath, content, 'utf-8')
   invalidateCommandsCache(workDir)
   const metadata = parseResourceMetadata(content)
+  const displayName = getLocalizedFrontmatterString(metadata.frontmatter, ['name', 'title'])
 
   const taxonomy = getSceneTaxonomy().config
   return {
@@ -321,6 +354,7 @@ export function createCommand(workDir: string, name: string, content: string): C
     path: commandPath,
     source: 'space',
     description: metadata.description,
+    ...(displayName && { displayName }),
     sceneTags: resolveSceneTags({
       name,
       description: metadata.description,
@@ -407,18 +441,18 @@ export function copyCommandToSpaceByRef(
 }
 
 export function clearCommandsCache(): void {
-  globalCommandsCache = null
-  spaceCommandsCache.clear()
+  globalCommandsCacheByLocale.clear()
+  spaceCommandsCacheByLocale.clear()
   contentCache.clear()
 }
 
 export function invalidateCommandsCache(workDir?: string | null): void {
   if (!workDir) {
-    globalCommandsCache = null
+    globalCommandsCacheByLocale.clear()
     contentCache.clear()
     return
   }
-  spaceCommandsCache.delete(workDir)
+  spaceCommandsCacheByLocale.delete(workDir)
   contentCache.clearForDir(workDir)
 }
 

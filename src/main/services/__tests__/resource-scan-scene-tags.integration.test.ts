@@ -40,7 +40,9 @@ describe('resource scan scene tags integration', () => {
     ensureDir(join(APP_ROOT, 'skills', 'review'))
     writeFileSync(join(APP_ROOT, 'skills', 'review', 'SKILL.md'), [
       '---',
+      'name_zh-CN: 代码审查',
       'description: Skill from frontmatter',
+      'description_zh-CN: 技能中文描述',
       'triggers:',
       '  - code-review',
       'sceneTags:',
@@ -53,7 +55,9 @@ describe('resource scan scene tags integration', () => {
     ensureDir(join(APP_ROOT, 'agents'))
     writeFileSync(join(APP_ROOT, 'agents', 'planner.md'), [
       '---',
+      'title_zh-CN: 规划助手',
       'description: Agent from frontmatter',
+      'description_zh-CN: 代理中文描述',
       'scene_tags:',
       '  - writing',
       '---',
@@ -63,7 +67,9 @@ describe('resource scan scene tags integration', () => {
     ensureDir(join(APP_ROOT, 'commands'))
     writeFileSync(join(APP_ROOT, 'commands', 'report.md'), [
       '---',
+      'name_zh-CN: 报告',
       'description: Command from frontmatter',
+      'description_zh-CN: 命令中文描述',
       'sceneTags:',
       '  - data',
       '---',
@@ -73,17 +79,35 @@ describe('resource scan scene tags integration', () => {
     const skill = listSkills().find((item) => item.name === 'review')
     const agent = listAgents().find((item) => item.name === 'planner')
     const command = listCommands().find((item) => item.name === 'report')
+    const zhSkill = listSkills(undefined, 'zh-CN').find((item) => item.name === 'review')
+    const zhAgent = listAgents(undefined, 'zh-CN').find((item) => item.name === 'planner')
+    const zhCommand = listCommands(undefined, 'zh-CN').find((item) => item.name === 'report')
 
     expect(skill).toBeDefined()
     expect(skill?.description).toBe('Skill from frontmatter')
     expect(skill?.sceneTags).toEqual(['coding', 'writing'])
+    expect(skill?.displayName).toBeUndefined()
 
     expect(agent).toBeDefined()
     expect(agent?.description).toBe('Agent from frontmatter')
     expect(agent?.sceneTags).toEqual(['writing'])
+    expect(agent?.displayName).toBeUndefined()
 
     expect(command).toBeDefined()
     expect(command?.description).toBe('Command from frontmatter')
     expect(command?.sceneTags).toEqual(['data'])
+    expect(command?.displayName).toBeUndefined()
+
+    expect(zhSkill?.displayName).toBe('代码审查')
+    expect(zhSkill?.description).toBe('技能中文描述')
+    expect(zhSkill?.sceneTags).toEqual(['coding', 'writing'])
+
+    expect(zhAgent?.displayName).toBe('规划助手')
+    expect(zhAgent?.description).toBe('代理中文描述')
+    expect(zhAgent?.sceneTags).toEqual(['writing'])
+
+    expect(zhCommand?.displayName).toBe('报告')
+    expect(zhCommand?.description).toBe('命令中文描述')
+    expect(zhCommand?.sceneTags).toEqual(['data'])
   })
 })

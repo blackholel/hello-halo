@@ -155,7 +155,7 @@ export interface KiteAPI {
   saveOnboardingConversation: (spaceId: string, userPrompt: string, aiResponse: string) => Promise<IpcResponse>
 
   // Skills
-  listSkills: (workDir?: string) => Promise<IpcResponse>
+  listSkills: (workDir?: string, locale?: string) => Promise<IpcResponse>
   getSkillContent: (name: string, workDir?: string) => Promise<IpcResponse>
   createSkill: (workDir: string, name: string, content: string) => Promise<IpcResponse>
   updateSkill: (skillPath: string, content: string) => Promise<IpcResponse>
@@ -169,7 +169,7 @@ export interface KiteAPI {
   clearSkillsCache: () => Promise<IpcResponse>
 
   // Commands
-  listCommands: (workDir?: string) => Promise<IpcResponse>
+  listCommands: (workDir?: string, locale?: string) => Promise<IpcResponse>
   getCommandContent: (name: string, workDir?: string) => Promise<IpcResponse>
   createCommand: (workDir: string, name: string, content: string) => Promise<IpcResponse>
   updateCommand: (commandPath: string, content: string) => Promise<IpcResponse>
@@ -183,7 +183,7 @@ export interface KiteAPI {
   clearCommandsCache: () => Promise<IpcResponse>
 
   // Agents
-  listAgents: (workDir?: string) => Promise<IpcResponse>
+  listAgents: (workDir?: string, locale?: string) => Promise<IpcResponse>
   getAgentContent: (name: string, workDir?: string) => Promise<IpcResponse>
   createAgent: (workDir: string, name: string, content: string) => Promise<IpcResponse>
   updateAgent: (agentPath: string, content: string) => Promise<IpcResponse>
@@ -544,7 +544,7 @@ const api: KiteAPI = {
     ipcRenderer.invoke('onboarding:save-conversation', spaceId, userPrompt, aiResponse),
 
   // Skills
-  listSkills: (workDir) => ipcRenderer.invoke('skills:list', workDir),
+  listSkills: (workDir, locale) => ipcRenderer.invoke('skills:list', workDir, locale),
   getSkillContent: (name, workDir) => ipcRenderer.invoke('skills:get-content', name, workDir),
   createSkill: (workDir, name, content) => ipcRenderer.invoke('skills:create', workDir, name, content),
   updateSkill: (skillPath, content) => ipcRenderer.invoke('skills:update', skillPath, content),
@@ -554,7 +554,7 @@ const api: KiteAPI = {
   clearSkillsCache: () => ipcRenderer.invoke('skills:clear-cache'),
 
   // Commands
-  listCommands: (workDir) => ipcRenderer.invoke('commands:list', workDir),
+  listCommands: (workDir, locale) => ipcRenderer.invoke('commands:list', workDir, locale),
   getCommandContent: (name, workDir) => ipcRenderer.invoke('commands:get-content', name, workDir),
   createCommand: (workDir, name, content) => ipcRenderer.invoke('commands:create', workDir, name, content),
   updateCommand: (commandPath, content) => ipcRenderer.invoke('commands:update', commandPath, content),
@@ -564,7 +564,7 @@ const api: KiteAPI = {
   clearCommandsCache: () => ipcRenderer.invoke('commands:clear-cache'),
 
   // Agents
-  listAgents: (workDir) => ipcRenderer.invoke('agents:list', workDir),
+  listAgents: (workDir, locale) => ipcRenderer.invoke('agents:list', workDir, locale),
   getAgentContent: (name, workDir) => ipcRenderer.invoke('agents:get-content', name, workDir),
   createAgent: (workDir, name, content) => ipcRenderer.invoke('agents:create', workDir, name, content),
   updateAgent: (agentPath, content) => ipcRenderer.invoke('agents:update', agentPath, content),

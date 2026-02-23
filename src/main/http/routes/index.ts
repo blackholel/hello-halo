@@ -398,7 +398,8 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
     const workDir = validateWorkDir(req, res)
     if (workDir === null) return
     const { listSkills } = await import('../../services/skills.service')
-    res.json({ success: true, data: listSkills(workDir || undefined) })
+    const locale = typeof req.query.locale === 'string' ? req.query.locale : undefined
+    res.json({ success: true, data: listSkills(workDir || undefined, locale) })
   }))
 
   app.get('/api/skills/content', safeRoute(async (req, res) => {
@@ -473,7 +474,8 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
     const workDir = validateWorkDir(req, res)
     if (workDir === null) return
     const { listAgents } = await import('../../services/agents.service')
-    res.json({ success: true, data: listAgents(workDir || undefined) })
+    const locale = typeof req.query.locale === 'string' ? req.query.locale : undefined
+    res.json({ success: true, data: listAgents(workDir || undefined, locale) })
   }))
 
   app.get('/api/agents/content', safeRoute(async (req, res) => {

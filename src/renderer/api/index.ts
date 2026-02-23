@@ -586,11 +586,15 @@ export const api = {
   },
 
   // ===== Skills =====
-  listSkills: async (workDir?: string): Promise<ApiResponse> => {
+  listSkills: async (workDir?: string, locale?: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.kite.listSkills(workDir)
+      return window.kite.listSkills(workDir, locale)
     }
-    return httpRequest('GET', `/api/skills${workDir ? `?workDir=${encodeURIComponent(workDir)}` : ''}`)
+    const params = new URLSearchParams()
+    if (workDir) params.append('workDir', workDir)
+    if (locale) params.append('locale', locale)
+    const query = params.toString()
+    return httpRequest('GET', `/api/skills${query ? `?${query}` : ''}`)
   },
 
   getSkillContent: async (name: string, workDir?: string): Promise<ApiResponse> => {
@@ -649,11 +653,15 @@ export const api = {
   },
 
   // ===== Commands =====
-  listCommands: async (workDir?: string): Promise<ApiResponse> => {
+  listCommands: async (workDir?: string, locale?: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.kite.listCommands(workDir)
+      return window.kite.listCommands(workDir, locale)
     }
-    return httpRequest('GET', `/api/commands${workDir ? `?workDir=${encodeURIComponent(workDir)}` : ''}`)
+    const params = new URLSearchParams()
+    if (workDir) params.append('workDir', workDir)
+    if (locale) params.append('locale', locale)
+    const query = params.toString()
+    return httpRequest('GET', `/api/commands${query ? `?${query}` : ''}`)
   },
 
   getCommandContent: async (name: string, workDir?: string): Promise<ApiResponse> => {
@@ -712,11 +720,15 @@ export const api = {
   },
 
   // ===== Agents =====
-  listAgents: async (workDir?: string): Promise<ApiResponse> => {
+  listAgents: async (workDir?: string, locale?: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.kite.listAgents(workDir)
+      return window.kite.listAgents(workDir, locale)
     }
-    return httpRequest('GET', `/api/agents${workDir ? `?workDir=${encodeURIComponent(workDir)}` : ''}`)
+    const params = new URLSearchParams()
+    if (workDir) params.append('workDir', workDir)
+    if (locale) params.append('locale', locale)
+    const query = params.toString()
+    return httpRequest('GET', `/api/agents${query ? `?${query}` : ''}`)
   },
 
   getAgentContent: async (name: string, workDir?: string): Promise<ApiResponse> => {

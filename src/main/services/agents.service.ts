@@ -19,7 +19,7 @@ import { isPathWithinBasePaths, isValidDirectoryPath, isFileNotFoundError } from
 import { listEnabledPlugins } from './plugins.service'
 import { FileCache } from '../utils/file-cache'
 import type { SceneTagKey } from '../../shared/scene-taxonomy'
-import { parseResourceMetadata } from './resource-metadata.service'
+import { parseResourceMetadata, getLocalizedFrontmatterString } from './resource-metadata.service'
 import { resolveSceneTags } from './resource-scene-tags.service'
 import { buildResourceSceneKey, getSceneTaxonomy } from './scene-taxonomy.service'
 
@@ -29,6 +29,7 @@ import { buildResourceSceneKey, getSceneTaxonomy } from './scene-taxonomy.servic
 
 export interface AgentDefinition {
   name: string
+  displayName?: string
   path: string
   source: 'app' | 'global' | 'space' | 'plugin'
   description?: string
@@ -38,8 +39,9 @@ export interface AgentDefinition {
 }
 
 // Cache for agents list (in-memory only)
-let globalAgentsCache: AgentDefinition[] | null = null
-const spaceAgentsCache = new Map<string, AgentDefinition[]>()
+const DEFAULT_LOCALE_CACHE_KEY = '__default__'
+const globalAgentsCacheByLocale = new Map<string, AgentDefinition[]>()
+const spaceAgentsCacheByLocale = new Map<string, Map<string, AgentDefinition[]>>()
 const contentCache = new FileCache<string>({ maxSize: 200 })
 
 function agentKey(agent: AgentDefinition): string {
@@ -52,6 +54,12 @@ function getAllowedAgentBaseDirs(): string[] {
 
 function normalizePath(path: string): string {
   return path.replace(/\\/g, '/')
+}
+
+function toLocaleCacheKey(locale?: string): string {
+  const trimmed = locale?.trim()
+  if (!trimmed) return DEFAULT_LOCALE_CACHE_KEY
+  return trimmed.toLowerCase()
 }
 
 function resolveWorkDirForAgentPath(agentPath: string): string | null {
@@ -69,14 +77,19 @@ function readAgentMetadata(
   name: string,
   source: AgentDefinition['source'],
   namespace?: string,
-  workDir?: string
-): { description?: string; sceneTags: SceneTagKey[] } {
+  workDir?: string,
+  locale?: string
+): { displayName?: string; description?: string; sceneTags: SceneTagKey[] } {
   try {
     const content = readFileSync(filePath, 'utf-8')
     const metadata = parseResourceMetadata(content)
     const taxonomy = getSceneTaxonomy().config
+    const localizedDescription =
+      getLocalizedFrontmatterString(metadata.frontmatter, ['description'], locale) ?? metadata.description
+    const displayName = getLocalizedFrontmatterString(metadata.frontmatter, ['name', 'title'], locale)
     return {
-      description: metadata.description,
+      displayName,
+      description: localizedDescription,
       sceneTags: resolveSceneTags({
         name,
         description: metadata.description,
@@ -104,7 +117,8 @@ function scanAgentDir(
   source: AgentDefinition['source'],
   pluginRoot?: string,
   namespace?: string,
-  workDir?: string
+  workDir?: string,
+  locale?: string
 ): AgentDefinition[] {
   if (!isValidDirectoryPath(dirPath, 'Agents')) return []
 
@@ -116,13 +130,14 @@ function scanAgentDir(
       try {
         if (!statSync(filePath).isFile()) continue
         const name = file.slice(0, -3)
-        const metadata = readAgentMetadata(filePath, name, source, namespace, workDir)
+        const metadata = readAgentMetadata(filePath, name, source, namespace, workDir, locale)
         agents.push({
           name,
           path: filePath,
           source,
           description: metadata.description,
           sceneTags: metadata.sceneTags,
+          ...(metadata.displayName && { displayName: metadata.displayName }),
           ...(pluginRoot && { pluginRoot }),
           ...(namespace && { namespace })
         })
@@ -143,7 +158,7 @@ function mergeAgents(globalAgents: AgentDefinition[], spaceAgents: AgentDefiniti
   return Array.from(merged.values())
 }
 
-function buildGlobalAgents(): AgentDefinition[] {
+function buildGlobalAgents(locale?: string): AgentDefinition[] {
   const sourceMode = getLockedConfigSourceMode()
   const agents: AgentDefinition[] = []
   const seenNames = new Set<string>()
@@ -162,11 +177,11 @@ function buildGlobalAgents(): AgentDefinition[] {
 
   // 0. Enabled plugin agents (lowest priority)
   for (const plugin of listEnabledPlugins()) {
-    addAgents(scanAgentDir(join(plugin.installPath, 'agents'), 'plugin', plugin.installPath, plugin.name))
+    addAgents(scanAgentDir(join(plugin.installPath, 'agents'), 'plugin', plugin.installPath, plugin.name, undefined, locale))
   }
 
   // 1. App-level agents ({locked-user-root}/agents/)
-  addAgents(scanAgentDir(join(getLockedUserConfigRootDir(), 'agents'), 'app'))
+  addAgents(scanAgentDir(join(getLockedUserConfigRootDir(), 'agents'), 'app', undefined, undefined, undefined, locale))
 
   // 2. Kite mode only: global custom paths from config.claudeCode.agents.paths
   if (sourceMode === 'kite') {
@@ -175,15 +190,15 @@ function buildGlobalAgents(): AgentDefinition[] {
       const resolvedPath = globalPath.startsWith('/')
         ? globalPath
         : join(require('os').homedir(), globalPath)
-      addAgents(scanAgentDir(resolvedPath, 'global'))
+      addAgents(scanAgentDir(resolvedPath, 'global', undefined, undefined, undefined, locale))
     }
   }
 
   return agents
 }
 
-function buildSpaceAgents(workDir: string): AgentDefinition[] {
-  return scanAgentDir(join(workDir, '.claude', 'agents'), 'space', undefined, undefined, workDir)
+function buildSpaceAgents(workDir: string, locale?: string): AgentDefinition[] {
+  return scanAgentDir(join(workDir, '.claude', 'agents'), 'space', undefined, undefined, workDir, locale)
 }
 
 function findAgent(agents: AgentDefinition[], name: string): AgentDefinition | undefined {
@@ -209,33 +224,43 @@ function findAgentByRef(agents: AgentDefinition[], ref: ResourceRef): AgentDefin
   })
 }
 
-function logFound(label: string, items: AgentDefinition[]): void {
+function logFound(label: string, items: AgentDefinition[], locale?: string): void {
   if (items.length > 0) {
-    console.log(`[Agents] Found ${items.length} ${label}: ${items.map(agentKey).join(', ')}`)
+    const localeSuffix = locale ? ` (locale: ${locale})` : ''
+    console.log(`[Agents] Found ${items.length} ${label}${localeSuffix}: ${items.map(agentKey).join(', ')}`)
   }
 }
 
 /**
  * List all available agents from all sources
  */
-export function listAgents(workDir?: string): AgentDefinition[] {
-  if (!globalAgentsCache) {
-    globalAgentsCache = buildGlobalAgents()
+export function listAgents(workDir?: string, locale?: string): AgentDefinition[] {
+  const localeKey = toLocaleCacheKey(locale)
+  let globalAgents = globalAgentsCacheByLocale.get(localeKey)
+  if (!globalAgents) {
+    globalAgents = buildGlobalAgents(locale)
+    globalAgentsCacheByLocale.set(localeKey, globalAgents)
   }
 
   if (!workDir) {
-    logFound('agents', globalAgentsCache)
-    return globalAgentsCache
+    logFound('agents', globalAgents, locale)
+    return globalAgents
   }
 
-  let spaceAgents = spaceAgentsCache.get(workDir)
+  let spaceCache = spaceAgentsCacheByLocale.get(workDir)
+  if (!spaceCache) {
+    spaceCache = new Map<string, AgentDefinition[]>()
+    spaceAgentsCacheByLocale.set(workDir, spaceCache)
+  }
+
+  let spaceAgents = spaceCache.get(localeKey)
   if (!spaceAgents) {
-    spaceAgents = buildSpaceAgents(workDir)
-    spaceAgentsCache.set(workDir, spaceAgents)
+    spaceAgents = buildSpaceAgents(workDir, locale)
+    spaceCache.set(localeKey, spaceAgents)
   }
 
-  const agents = mergeAgents(globalAgentsCache, spaceAgents)
-  logFound('agents', agents)
+  const agents = mergeAgents(globalAgents, spaceAgents)
+  logFound('agents', agents, locale)
   return agents
 }
 
@@ -244,18 +269,26 @@ export function listSpaceAgents(workDir: string): AgentDefinition[] {
 }
 
 function listAgentsForRefLookup(workDir: string): AgentDefinition[] {
-  if (!globalAgentsCache) {
-    globalAgentsCache = buildGlobalAgents()
+  let globalAgents = globalAgentsCacheByLocale.get(DEFAULT_LOCALE_CACHE_KEY)
+  if (!globalAgents) {
+    globalAgents = buildGlobalAgents()
+    globalAgentsCacheByLocale.set(DEFAULT_LOCALE_CACHE_KEY, globalAgents)
   }
 
-  let spaceAgents = spaceAgentsCache.get(workDir)
+  let spaceCache = spaceAgentsCacheByLocale.get(workDir)
+  if (!spaceCache) {
+    spaceCache = new Map<string, AgentDefinition[]>()
+    spaceAgentsCacheByLocale.set(workDir, spaceCache)
+  }
+
+  let spaceAgents = spaceCache.get(DEFAULT_LOCALE_CACHE_KEY)
   if (!spaceAgents) {
     spaceAgents = buildSpaceAgents(workDir)
-    spaceAgentsCache.set(workDir, spaceAgents)
+    spaceCache.set(DEFAULT_LOCALE_CACHE_KEY, spaceAgents)
   }
 
   // Keep source-distinct entries for by-ref copy lookup; do not merge by key.
-  return [...spaceAgents, ...globalAgentsCache]
+  return [...spaceAgents, ...globalAgents]
 }
 
 /**
@@ -297,8 +330,8 @@ export function getAgent(name: string, workDir?: string): AgentDefinition | null
  * Call this when agent files are modified
  */
 export function clearAgentsCache(): void {
-  globalAgentsCache = null
-  spaceAgentsCache.clear()
+  globalAgentsCacheByLocale.clear()
+  spaceAgentsCacheByLocale.clear()
   contentCache.clear()
 }
 
@@ -307,11 +340,11 @@ export function clearAgentsCache(): void {
  */
 export function invalidateAgentsCache(workDir?: string | null): void {
   if (!workDir) {
-    globalAgentsCache = null
+    globalAgentsCacheByLocale.clear()
     contentCache.clear()
     return
   }
-  spaceAgentsCache.delete(workDir)
+  spaceAgentsCacheByLocale.delete(workDir)
   contentCache.clearForDir(workDir)
 }
 
@@ -340,6 +373,7 @@ export function createAgent(workDir: string, name: string, content: string): Age
 
   const metadata = parseResourceMetadata(content)
   const description = metadata.description
+  const displayName = getLocalizedFrontmatterString(metadata.frontmatter, ['name', 'title'])
   const taxonomy = getSceneTaxonomy().config
   const sceneTags = resolveSceneTags({
     name,
@@ -356,7 +390,14 @@ export function createAgent(workDir: string, name: string, content: string): Age
     resourceOverrides: taxonomy.resourceOverrides
   })
 
-  return { name, path: agentPath, source: 'space', description, sceneTags }
+  return {
+    name,
+    path: agentPath,
+    source: 'space',
+    description,
+    sceneTags,
+    ...(displayName && { displayName })
+  }
 }
 
 /**

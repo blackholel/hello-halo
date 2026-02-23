@@ -36,7 +36,10 @@
     "test:e2e:headed": "playwright test --config tests/playwright.config.ts --headed",
     "i18n:extract": "i18next",
     "i18n:translate": "node scripts/translate-i18n.mjs",
-    "i18n": "npm run i18n:extract && npm run i18n:translate"
+    "i18n": "npm run i18n:extract && npm run i18n:translate",
+    "migrate:kite-resource-i18n": "node scripts/migrate-kite-resource-i18n.mjs",
+    "migrate:kite-resource-i18n:scan-new": "node scripts/migrate-kite-resource-i18n.mjs --pending-only",
+    "migrate:kite-resource-i18n:apply-gpt": "node scripts/migrate-kite-resource-i18n.mjs --apply"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.2.22",

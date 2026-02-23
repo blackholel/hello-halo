@@ -41,4 +41,26 @@ describe('extension-filtering', () => {
     expect(applySceneFilter(items, 'office')).toHaveLength(1)
     expect(applySceneFilter(items, 'coding')).toHaveLength(0)
   })
+
+  it('prefers localized displayName for extension cards and search', () => {
+    const items = normalizeExtensionItems({
+      skills: [
+        {
+          name: 'review',
+          displayName: '代码审查',
+          description: '技能描述',
+          path: '/tmp/review',
+          source: 'app',
+          sceneTags: ['coding']
+        }
+      ],
+      agents: [],
+      commands: [],
+      isRemote: false,
+      sceneDefinitions: DEFAULT_SCENE_DEFINITIONS
+    })
+
+    expect(items[0]?.displayName).toBe('代码审查')
+    expect(items[0]?.searchable.includes('代码审查'.toLowerCase())).toBe(true)
+  })
 })

@@ -37,6 +37,11 @@ export function resourceKey(item: { name: string; namespace?: string }): string 
   return item.namespace ? `${item.namespace}:${item.name}` : item.name
 }
 
+function resourceDisplayKey(item: { name: string; displayName?: string; namespace?: string }): string {
+  const base = item.displayName || item.name
+  return item.namespace ? `${item.namespace}:${base}` : base
+}
+
 export function getSourceLabel(source: AnySource, t: (key: string) => string): string {
   return t(DISPLAY_LABEL[source])
 }
@@ -48,7 +53,7 @@ export function getSourceColor(source: AnySource): string {
 export function mapResourceMeta(resource: AnyResource, type: ResourceType): ResourceMeta {
   if (type === 'skill') {
     return {
-      title: resourceKey(resource),
+      title: resourceDisplayKey(resource),
       subtitle: resource.description,
       path: resource.path,
       source: resource.source as AnySource,
@@ -61,7 +66,7 @@ export function mapResourceMeta(resource: AnyResource, type: ResourceType): Reso
 
   if (type === 'agent') {
     return {
-      title: resourceKey(resource),
+      title: resourceDisplayKey(resource),
       subtitle: resource.description,
       path: resource.path,
       source: resource.source as AnySource,
@@ -72,7 +77,7 @@ export function mapResourceMeta(resource: AnyResource, type: ResourceType): Reso
   }
 
   return {
-    title: `/${commandKey(resource)}`,
+    title: `/${resourceDisplayKey(resource)}`,
     subtitle: resource.description,
     path: resource.path,
     source: resource.source as AnySource,
@@ -97,4 +102,3 @@ export function fetchResourceContent(
   }
   return api.getCommandContent(commandKey(resource), spaceWorkDir)
 }
-

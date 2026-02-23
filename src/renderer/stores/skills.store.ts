@@ -23,6 +23,7 @@ import type { SceneTag } from '../../shared/extension-taxonomy'
 
 export interface SkillDefinition {
   name: string
+  displayName?: string
   path: string
   source: 'app' | 'global' | 'space' | 'installed'
   description?: string
@@ -112,7 +113,7 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
     try {
       set({ isLoading: true, error: null })
 
-      const response = await api.listSkills(workDir)
+      const response = await api.listSkills(workDir, i18n.language)
 
       if (response.success && response.data) {
         const nextByWorkDir = {
@@ -351,6 +352,7 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
     const query = searchQuery.toLowerCase()
     return skills.filter(skill =>
       skill.name.toLowerCase().includes(query) ||
+      skill.displayName?.toLowerCase().includes(query) ||
       skill.description?.toLowerCase().includes(query) ||
       skill.category?.toLowerCase().includes(query) ||
       skill.triggers?.some(t => t.toLowerCase().includes(query))

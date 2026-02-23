@@ -9,7 +9,7 @@
  * - Inline title editing
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { ConversationMeta } from '../../types'
 import { MessageSquare, Plus } from '../icons/ToolIcons'
 import { ExternalLink, Pencil, Trash2, MessageCircle } from 'lucide-react'
@@ -21,11 +21,21 @@ import { CommandsPanel } from '../commands/CommandsPanel'
 import { WorkflowsPanel } from '../workflows/WorkflowsPanel'
 import type { SkillDefinition } from '../../stores/skills.store'
 import type { AgentDefinition } from '../../stores/agents.store'
+import { useSkillsStore } from '../../stores/skills.store'
+import { useAgentsStore } from '../../stores/agents.store'
+import { useCommandsStore } from '../../stores/commands.store'
+import { toResourceKey } from '../../utils/resource-key'
+import { commandKey } from '../../../shared/command-utils'
 
 // Width constraints (in pixels)
 const MIN_WIDTH = 200
 const MAX_WIDTH = 340
 const DEFAULT_WIDTH = 240
+
+function localizedResourceName(item: { name: string; displayName?: string; namespace?: string }): string {
+  const base = item.displayName || item.name
+  return item.namespace ? `${item.namespace}:${base}` : base
+}
 
 interface ConversationListProps {
   conversations: ConversationMeta[]
@@ -74,6 +84,88 @@ export function ConversationList({
   const [editingTitle, setEditingTitle] = useState('')
   const containerRef = useRef<HTMLDivElement>(null)
   const editInputRef = useRef<HTMLInputElement>(null)
+  const { skills, loadedWorkDir: loadedSkillsWorkDir, loadSkills } = useSkillsStore((state) => ({
+    skills: state.skills,
+    loadedWorkDir: state.loadedWorkDir,
+    loadSkills: state.loadSkills
+  }))
+  const { agents, loadedWorkDir: loadedAgentsWorkDir, loadAgents } = useAgentsStore((state) => ({
+    agents: state.agents,
+    loadedWorkDir: state.loadedWorkDir,
+    loadAgents: state.loadAgents
+  }))
+  const { commands, loadedWorkDir: loadedCommandsWorkDir, loadCommands } = useCommandsStore((state) => ({
+    commands: state.commands,
+    loadedWorkDir: state.loadedWorkDir,
+    loadCommands: state.loadCommands
+  }))
+
+  useEffect(() => {
+    if (skills.length === 0 || loadedSkillsWorkDir !== (workDir ?? null)) {
+      void loadSkills(workDir)
+    }
+  }, [loadSkills, loadedSkillsWorkDir, skills.length, workDir])
+
+  useEffect(() => {
+    if (agents.length === 0 || loadedAgentsWorkDir !== (workDir ?? null)) {
+      void loadAgents(workDir)
+    }
+  }, [agents.length, loadAgents, loadedAgentsWorkDir, workDir])
+
+  useEffect(() => {
+    if (commands.length === 0 || loadedCommandsWorkDir !== (workDir ?? null)) {
+      void loadCommands(workDir)
+    }
+  }, [commands.length, loadCommands, loadedCommandsWorkDir, workDir])
+
+  const skillDisplayMap = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const item of skills) {
+      map.set(toResourceKey(item), localizedResourceName(item))
+    }
+    return map
+  }, [skills])
+
+  const agentDisplayMap = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const item of agents) {
+      map.set(toResourceKey(item), localizedResourceName(item))
+    }
+    return map
+  }, [agents])
+
+  const commandDisplayMap = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const item of commands) {
+      map.set(commandKey(item), localizedResourceName(item))
+    }
+    return map
+  }, [commands])
+
+  const localizeTriggerText = useCallback((text: string): string => {
+    const match = text.match(/^([/@])([^\s]+)([\s\S]*)$/)
+    if (!match) return text
+
+    const prefix = match[1]
+    const key = match[2]
+    const tail = match[3] || ''
+
+    if (prefix === '@') {
+      const localized = agentDisplayMap.get(key)
+      return localized ? `${prefix}${localized}${tail}` : text
+    }
+
+    const localizedSkill = skillDisplayMap.get(key)
+    const localizedCommand = commandDisplayMap.get(key)
+
+    // Keep original text when both resource types share the same key but map to different localized names.
+    if (localizedSkill && localizedCommand && localizedSkill !== localizedCommand) {
+      return text
+    }
+
+    const localized = localizedSkill || localizedCommand
+    return localized ? `${prefix}${localized}${tail}` : text
+  }, [agentDisplayMap, commandDisplayMap, skillDisplayMap])
 
   // Handle drag resize
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -193,6 +285,10 @@ export function ConversationList({
         ) : (
           <div className="space-y-0.5">
             {conversations.map((conversation) => (
+              (() => {
+                const displayTitle = localizeTriggerText(conversation.title)
+                const displayPreview = conversation.preview ? localizeTriggerText(conversation.preview) : undefined
+                return (
               <div
                 key={conversation.id}
                 onClick={() => editingId !== conversation.id && onSelect(conversation.id)}
@@ -229,8 +325,8 @@ export function ConversationList({
                       <span className={`text-sm truncate flex-1 ${
                         conversation.id === currentConversationId ? 'font-medium text-foreground' : 'text-foreground/80'
                       }`}>
-                        {conversation.title.slice(0, 24)}
-                        {conversation.title.length > 24 && '...'}
+                        {displayTitle.slice(0, 24)}
+                        {displayTitle.length > 24 && '...'}
                       </span>
                       <span className="text-[11px] text-muted-foreground/50 flex-shrink-0 tabular-nums">
                         {formatDate(conversation.updatedAt)}
@@ -238,9 +334,9 @@ export function ConversationList({
                     </div>
 
                     {/* Preview text */}
-                    {conversation.preview && (
+                    {displayPreview && (
                       <p className="text-xs text-muted-foreground/50 mt-0.5 truncate">
-                        {conversation.preview.slice(0, 40)}
+                        {displayPreview.slice(0, 40)}
                       </p>
                     )}
 
@@ -283,6 +379,8 @@ export function ConversationList({
                   </>
                 )}
               </div>
+                )
+              })()
             ))}
           </div>
         )}

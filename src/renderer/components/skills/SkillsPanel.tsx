@@ -13,6 +13,11 @@ interface SkillsPanelProps {
   preferInsertOnClick?: boolean
 }
 
+function getSkillDisplayName(skill: SkillDefinition): string {
+  const base = skill.displayName || skill.name
+  return skill.namespace ? `${skill.namespace}:${base}` : base
+}
+
 export function SkillsPanel({
   workDir,
   onSelectSkill,
@@ -44,6 +49,7 @@ export function SkillsPanel({
     const searched = q
       ? spaceSkills.filter(skill => (
         skill.name.toLowerCase().includes(q) ||
+        skill.displayName?.toLowerCase().includes(q) ||
         skill.description?.toLowerCase().includes(q)
       ))
       : spaceSkills
@@ -141,7 +147,7 @@ export function SkillsPanel({
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="text-xs font-medium truncate">/{skill.name}</div>
+                      <div className="text-xs font-medium truncate">/{getSkillDisplayName(skill)}</div>
                       {skill.description && (
                         <div className="text-[11px] text-muted-foreground truncate">{skill.description}</div>
                       )}

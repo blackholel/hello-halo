@@ -4,6 +4,7 @@
 
 import { create } from 'zustand'
 import { api } from '../api'
+import { getCurrentLanguage } from '../i18n'
 import type { Workflow, WorkflowMeta, WorkflowStep } from '../types'
 import { useChatStore } from './chat.store'
 import { useSpaceStore } from './space.store'
@@ -208,9 +209,10 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
       ? currentSpace
       : useSpaceStore.getState().spaces.find(space => space.id === spaceId)
     if (knownSpace?.path) {
+      const locale = getCurrentLanguage()
       const [skillsResponse, agentsResponse] = await Promise.all([
-        api.listSkills(knownSpace.path),
-        api.listAgents(knownSpace.path)
+        api.listSkills(knownSpace.path, locale),
+        api.listAgents(knownSpace.path, locale)
       ])
 
       const spaceSkills = (skillsResponse.success ? (skillsResponse.data as Array<{ name: string; namespace?: string; source: string }>) : [])

@@ -12,6 +12,11 @@ interface CommandsPanelProps {
   preferInsertOnClick?: boolean
 }
 
+function getCommandDisplayKey(command: CommandDefinition): string {
+  const base = command.displayName || command.name
+  return command.namespace ? `${command.namespace}:${base}` : base
+}
+
 export function CommandsPanel({
   workDir,
   onInsertCommand,
@@ -40,6 +45,7 @@ export function CommandsPanel({
 
     return spaceCommands.filter(command => (
       commandKey(command).toLowerCase().includes(q) ||
+      command.displayName?.toLowerCase().includes(q) ||
       command.description?.toLowerCase().includes(q)
     ))
   }, [commands, query])
@@ -85,6 +91,7 @@ export function CommandsPanel({
             ) : (
               visibleCommands.map((command) => {
                 const key = commandKey(command)
+                const displayKey = getCommandDisplayKey(command)
                 return (
                   <div
                     key={command.path}
@@ -97,7 +104,7 @@ export function CommandsPanel({
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <div className="text-xs font-medium truncate">/{key}</div>
+                        <div className="text-xs font-medium truncate">/{displayKey}</div>
                         {command.description && <div className="text-[11px] text-muted-foreground truncate">{command.description}</div>}
                       </div>
                       <button

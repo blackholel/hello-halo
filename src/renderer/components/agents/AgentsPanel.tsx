@@ -12,6 +12,11 @@ interface AgentsPanelProps {
   preferInsertOnClick?: boolean
 }
 
+function getAgentDisplayName(agent: AgentDefinition): string {
+  const base = agent.displayName || agent.name
+  return agent.namespace ? `${agent.namespace}:${base}` : base
+}
+
 export function AgentsPanel({
   workDir,
   onSelectAgent,
@@ -41,6 +46,7 @@ export function AgentsPanel({
 
     return spaceAgents.filter(agent => (
       agent.name.toLowerCase().includes(q) ||
+      agent.displayName?.toLowerCase().includes(q) ||
       agent.description?.toLowerCase().includes(q)
     ))
   }, [agents, query])
@@ -98,7 +104,7 @@ export function AgentsPanel({
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="text-xs font-medium truncate">@{agent.name}</div>
+                      <div className="text-xs font-medium truncate">@{getAgentDisplayName(agent)}</div>
                       {agent.description && <div className="text-[11px] text-muted-foreground truncate">{agent.description}</div>}
                     </div>
                     <button

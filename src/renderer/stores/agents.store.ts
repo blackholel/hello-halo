@@ -23,6 +23,7 @@ import type { SceneTag } from '../../shared/extension-taxonomy'
 
 export interface AgentDefinition {
   name: string
+  displayName?: string
   path: string
   source: 'app' | 'global' | 'space' | 'plugin'
   description?: string
@@ -108,7 +109,7 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
     try {
       set({ isLoading: true, error: null })
 
-      const response = await api.listAgents(workDir)
+      const response = await api.listAgents(workDir, i18n.language)
 
       if (response.success && response.data) {
         const nextByWorkDir = {
@@ -333,6 +334,7 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
     const query = searchQuery.toLowerCase()
     return agents.filter(agent =>
       agent.name.toLowerCase().includes(query) ||
+      agent.displayName?.toLowerCase().includes(query) ||
       agent.description?.toLowerCase().includes(query)
     )
   },
