@@ -13,24 +13,151 @@ import { useAppStore } from '../../stores/app.store'
 import { api } from '../../api'
 import { Lightbulb } from '../icons/ToolIcons'
 import { Globe, ChevronDown } from 'lucide-react'
-import { AVAILABLE_MODELS, DEFAULT_MODEL } from '../../types'
+import type { ApiProfile, ProviderProtocol, ProviderVendor } from '../../types'
+import { DEFAULT_MODEL } from '../../types'
+import { ensureAiConfig } from '../../../shared/types/ai-profile'
 import { useTranslation, setLanguage, getCurrentLanguage, SUPPORTED_LOCALES, type LocaleCode } from '../../i18n'
+
+interface SetupTemplate {
+  key: string
+  label: string
+  vendor: ProviderVendor
+  protocol: ProviderProtocol
+  apiUrl: string
+  defaultModel: string
+  modelCatalog: string[]
+  docUrl: string
+}
+
+const SETUP_TEMPLATES: SetupTemplate[] = [
+  {
+    key: 'minimax',
+    label: 'MiniMax',
+    vendor: 'minimax',
+    protocol: 'anthropic_compat',
+    apiUrl: 'https://api.minimaxi.com/anthropic',
+    defaultModel: 'MiniMax-M2.5',
+    modelCatalog: ['MiniMax-M2.5'],
+    docUrl: 'https://platform.minimaxi.com/docs/coding-plan/claude-code'
+  },
+  {
+    key: 'moonshot',
+    label: 'Kimi / Moonshot',
+    vendor: 'moonshot',
+    protocol: 'anthropic_compat',
+    apiUrl: 'https://api.moonshot.cn/anthropic',
+    defaultModel: 'kimi-k2-thinking',
+    modelCatalog: ['kimi-k2-thinking', 'kimi-k2-thinking-turbo', 'kimi-k2-0905-preview', 'kimi-k2-turbo-preview'],
+    docUrl: 'https://platform.moonshot.cn/docs/guide/agent-support'
+  },
+  {
+    key: 'glm',
+    label: 'GLM',
+    vendor: 'zhipu',
+    protocol: 'anthropic_compat',
+    apiUrl: 'https://open.bigmodel.cn/api/anthropic',
+    defaultModel: 'glm-4.7',
+    modelCatalog: ['glm-4.7'],
+    docUrl: 'https://open.bigmodel.cn/dev/api'
+  },
+  {
+    key: 'openai',
+    label: 'OpenAI',
+    vendor: 'openai',
+    protocol: 'openai_compat',
+    apiUrl: 'https://api.openai.com/v1/responses',
+    defaultModel: 'gpt-4o-mini',
+    modelCatalog: ['gpt-4o-mini', 'gpt-4.1-mini'],
+    docUrl: 'https://platform.openai.com/docs/api-reference/responses'
+  },
+  {
+    key: 'topic_official',
+    label: 'Topic 官方',
+    vendor: 'topic',
+    protocol: 'anthropic_official',
+    apiUrl: 'https://api.topic.ai',
+    defaultModel: DEFAULT_MODEL,
+    modelCatalog: [DEFAULT_MODEL],
+    docUrl: 'https://docs.topic.ai'
+  },
+  {
+    key: 'topic_compat',
+    label: 'Topic 兼容',
+    vendor: 'topic',
+    protocol: 'anthropic_compat',
+    apiUrl: 'https://api.topic.ai/anthropic',
+    defaultModel: DEFAULT_MODEL,
+    modelCatalog: [DEFAULT_MODEL],
+    docUrl: 'https://docs.topic.ai'
+  }
+]
+
+const VENDOR_LABELS: Record<ProviderVendor, string> = {
+  anthropic: 'Anthropic',
+  openai: 'OpenAI',
+  zhipu: 'GLM',
+  minimax: 'MiniMax',
+  moonshot: 'Kimi / Moonshot',
+  topic: 'Topic',
+  custom: 'Custom'
+}
+
+const PROTOCOL_LABELS: Record<ProviderProtocol, string> = {
+  anthropic_official: 'Anthropic Official',
+  anthropic_compat: 'Anthropic Compatible',
+  openai_compat: 'OpenAI Compatible'
+}
+
+const API_KEY_PLACEHOLDER_BY_PROTOCOL: Record<ProviderProtocol, string> = {
+  anthropic_official: 'sk-ant-xxxxxxxxxxxxx',
+  anthropic_compat: 'sk-ant-xxxxxxxxxxxxx',
+  openai_compat: 'sk-xxxxxxxxxxxxx'
+}
+
+const API_URL_PLACEHOLDER_BY_PROTOCOL: Record<ProviderProtocol, string> = {
+  anthropic_official: 'https://api.anthropic.com',
+  anthropic_compat: 'https://provider.example.com/anthropic',
+  openai_compat: 'https://provider.example.com/v1/chat/completions or /v1/responses'
+}
+
+function isValidOpenAICompatEndpoint(url: string): boolean {
+  const normalized = url.trim().replace(/\/+$/, '')
+  return normalized.endsWith('/chat/completions') || normalized.endsWith('/responses')
+}
+
+function matchTemplate(profile: ApiProfile | null): SetupTemplate {
+  if (!profile) return SETUP_TEMPLATES[0]
+  return (
+    SETUP_TEMPLATES.find(template => template.vendor === profile.vendor && template.protocol === profile.protocol) ||
+    SETUP_TEMPLATES[0]
+  )
+}
 
 export function ApiSetup() {
   const { t } = useTranslation()
   const { config, setConfig, setView } = useAppStore()
 
-  // Form state
-  const [provider, setProvider] = useState(config?.api.provider || 'anthropic')
-  const [apiKey, setApiKey] = useState(config?.api.apiKey || '')
-  const [apiUrl, setApiUrl] = useState(config?.api.apiUrl || 'https://api.anthropic.com')
-  const [model, setModel] = useState(config?.api.model || DEFAULT_MODEL)
+  const aiConfig = ensureAiConfig(config?.ai, config?.api)
+  const currentProfile =
+    aiConfig.profiles.find(profile => profile.id === aiConfig.defaultProfileId) ||
+    aiConfig.profiles[0] ||
+    null
+  const initialTemplate = matchTemplate(currentProfile)
+
+  const [templateKey, setTemplateKey] = useState(initialTemplate.key)
+  const [profileName, setProfileName] = useState(currentProfile?.name || 'Default Profile')
+  const [vendor, setVendor] = useState<ProviderVendor>(currentProfile?.vendor || initialTemplate.vendor)
+  const [protocol, setProtocol] = useState<ProviderProtocol>(currentProfile?.protocol || initialTemplate.protocol)
+  const [apiKey, setApiKey] = useState(currentProfile?.apiKey || '')
+  const [apiUrl, setApiUrl] = useState(currentProfile?.apiUrl || initialTemplate.apiUrl)
+  const [defaultModel, setDefaultModel] = useState(currentProfile?.defaultModel || initialTemplate.defaultModel)
+  const [modelCatalogInput, setModelCatalogInput] = useState(
+    (currentProfile?.modelCatalog?.length ? currentProfile.modelCatalog : initialTemplate.modelCatalog).join(', ')
+  )
+  const [docUrl, setDocUrl] = useState(currentProfile?.docUrl || initialTemplate.docUrl)
+
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [useCustomModel, setUseCustomModel] = useState(() => {
-    const currentModel = config?.api.model || DEFAULT_MODEL
-    return !AVAILABLE_MODELS.some(m => m.id === currentModel)
-  })
 
   // Language selector state
   const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false)
@@ -43,20 +170,18 @@ export function ApiSetup() {
     setIsLangDropdownOpen(false)
   }
 
-  const handleProviderChange = (next: string) => {
-    setProvider(next)
-    setError(null)
+  const handleTemplateChange = (nextTemplateKey: string) => {
+    const template = SETUP_TEMPLATES.find(item => item.key === nextTemplateKey)
+    if (!template) return
 
-    if (next === 'anthropic') {
-      if (!apiUrl || apiUrl.includes('openai')) setApiUrl('https://api.anthropic.com')
-      if (!model || !model.startsWith('claude-')) {
-        setModel(DEFAULT_MODEL)
-        setUseCustomModel(false)
-      }
-    } else if (next === 'openai') {
-      if (!apiUrl || apiUrl.includes('anthropic')) setApiUrl('https://api.openai.com')
-      if (!model || model.startsWith('claude-')) setModel('gpt-4o-mini')
-    }
+    setTemplateKey(nextTemplateKey)
+    setVendor(template.vendor)
+    setProtocol(template.protocol)
+    setApiUrl(template.apiUrl)
+    setDefaultModel(template.defaultModel)
+    setModelCatalogInput(template.modelCatalog.join(', '))
+    setDocUrl(template.docUrl)
+    setError(null)
   }
 
   // Handle save and enter
@@ -66,22 +191,54 @@ export function ApiSetup() {
       return
     }
 
+    if (protocol === 'openai_compat' && !isValidOpenAICompatEndpoint(apiUrl)) {
+      setError(t('URL must end with /chat/completions or /responses'))
+      return
+    }
+
     setIsSaving(true)
     setError(null)
 
     try {
+      const normalizedModel = defaultModel.trim() || DEFAULT_MODEL
+      const parsedCatalog = modelCatalogInput
+        .split(',')
+        .map(item => item.trim())
+        .filter(item => item.length > 0)
+      const modelCatalog = parsedCatalog.includes(normalizedModel)
+        ? parsedCatalog
+        : [normalizedModel, ...parsedCatalog]
+
+      const profileId = currentProfile?.id || 'default-profile'
+      const profile: ApiProfile = {
+        id: profileId,
+        name: profileName.trim() || 'Default Profile',
+        vendor,
+        protocol,
+        apiKey: apiKey.trim(),
+        apiUrl: apiUrl.trim(),
+        defaultModel: normalizedModel,
+        modelCatalog,
+        docUrl: docUrl.trim() || undefined,
+        enabled: true
+      }
+
+      const ai = {
+        profiles: [profile],
+        defaultProfileId: profile.id
+      }
+
+      await api.setConfig({
+        ai,
+        isFirstLaunch: false
+      })
+
       const newConfig = {
         ...config,
-        api: {
-          provider: provider as any,
-          apiKey,
-          apiUrl: apiUrl || 'https://api.anthropic.com',
-          model
-        },
+        ai,
         isFirstLaunch: false
       }
 
-      await api.setConfig(newConfig)
       setConfig(newConfig as any)
       setView('home')
     } catch (err) {
@@ -148,36 +305,45 @@ export function ApiSetup() {
             <div className="absolute -inset-4 rounded-[2rem] bg-primary/5 blur-xl -z-10" />
           </div>
           <h1 className="mt-5 text-2xl font-semibold tracking-tight">Kite</h1>
-          <p className="mt-1.5 text-sm text-muted-foreground">{t('Before you start, configure your AI')}</p>
+          <p className="mt-1.5 text-sm text-muted-foreground">{t('Before you start, create your default AI profile')}</p>
         </div>
 
         {/* Form card */}
         <div className="glass-dialog p-6 stagger-item" style={{ animationDelay: '80ms' }}>
-          {/* Provider */}
-          <div className="mb-5 flex items-center gap-3 p-3.5 rounded-xl bg-secondary/30">
-            <div className="w-9 h-9 rounded-xl bg-[#da7756]/15 flex items-center justify-center flex-shrink-0">
-              <svg className="w-5 h-5 text-[#da7756]" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M4.709 15.955l4.72-2.647.08-.08 2.726-1.529.08-.08 6.206-3.48a.25.25 0 00.125-.216V6.177a.25.25 0 00-.375-.217l-6.206 3.48-.08.08-2.726 1.53-.08.079-4.72 2.647a.25.25 0 00-.125.217v1.746c0 .18.193.294.354.216h.001zm13.937-3.584l-4.72 2.647-.08.08-2.726 1.529-.08.08-6.206 3.48a.25.25 0 00-.125.216v1.746a.25.25 0 00.375.217l6.206-3.48.08-.08 2.726-1.53.08-.079 4.72-2.647a.25.25 0 00.125-.217v-1.746a.25.25 0 00-.375-.216z"/>
-              </svg>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-medium text-sm">
-                {provider === 'anthropic' ? t('Claude (Recommended)') : t('OpenAI Compatible')}
-              </p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {provider === 'openai'
-                  ? t('Support OpenAI/compatible models via local protocol conversion')
-                  : t('Connect directly to Anthropic official or compatible proxy')}
-              </p>
-            </div>
+          <div className="mb-4">
+            <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">{t('Preset Template')}</label>
             <select
-              value={provider}
-              onChange={(e) => handleProviderChange(e.target.value)}
-              className="select-apple text-sm w-auto"
+              value={templateKey}
+              onChange={(event) => handleTemplateChange(event.target.value)}
+              className="w-full select-apple text-sm"
             >
-              <option value="anthropic">{t('Claude (Recommended)')}</option>
-              <option value="openai">{t('OpenAI Compatible')}</option>
+              {SETUP_TEMPLATES.map(template => (
+                <option key={template.key} value={template.key}>
+                  {t(template.label)}
+                </option>
+              ))}
             </select>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">{t('Profile Name')}</label>
+            <input
+              type="text"
+              value={profileName}
+              onChange={(event) => setProfileName(event.target.value)}
+              className="w-full px-4 py-2.5 input-apple text-sm"
+            />
+          </div>
+
+          <div className="mb-4 grid grid-cols-2 gap-3">
+            <div className="px-3 py-2.5 rounded-xl bg-secondary/40 text-sm">
+              <span className="text-muted-foreground mr-1">{t('Vendor')}:</span>
+              <span>{t(VENDOR_LABELS[vendor])}</span>
+            </div>
+            <div className="px-3 py-2.5 rounded-xl bg-secondary/40 text-sm">
+              <span className="text-muted-foreground mr-1">{t('Protocol')}:</span>
+              <span>{t(PROTOCOL_LABELS[protocol])}</span>
+            </div>
           </div>
 
           {/* API Key */}
@@ -186,8 +352,8 @@ export function ApiSetup() {
             <input
               type="password"
               value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder={provider === 'openai' ? 'sk-xxxxxxxxxxxxx' : 'sk-ant-xxxxxxxxxxxxx'}
+              onChange={(event) => setApiKey(event.target.value)}
+              placeholder={API_KEY_PLACEHOLDER_BY_PROTOCOL[protocol]}
               className="w-full px-4 py-2.5 input-apple text-sm"
               autoFocus
             />
@@ -195,90 +361,57 @@ export function ApiSetup() {
 
           {/* API URL */}
           <div className="mb-4">
-            <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">{t('API URL (optional)')}</label>
+            <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">API URL</label>
             <input
               type="text"
               value={apiUrl}
-              onChange={(e) => setApiUrl(e.target.value)}
-              placeholder={provider === 'openai' ? 'https://api.openai.com or https://xx/v1' : 'https://api.anthropic.com'}
+              onChange={(event) => setApiUrl(event.target.value)}
+              placeholder={API_URL_PLACEHOLDER_BY_PROTOCOL[protocol]}
               className="w-full px-4 py-2.5 input-apple text-sm"
             />
-            <p className="mt-1.5 text-xs text-muted-foreground/60">
-              {provider === 'openai'
-                ? t('Enter OpenAI compatible service URL (supports /v1/chat/completions)')
-                : t('Default official URL, modify for custom proxy')}
-            </p>
+            {protocol === 'openai_compat' && apiUrl && !isValidOpenAICompatEndpoint(apiUrl) && (
+              <p className="mt-1.5 text-xs text-destructive">
+                {t('URL must end with /chat/completions or /responses')}
+              </p>
+            )}
           </div>
 
-          {/* Model */}
+          {/* Default Model */}
+          <div className="mb-4">
+            <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">{t('Default Model')}</label>
+            <input
+              type="text"
+              value={defaultModel}
+              onChange={(event) => setDefaultModel(event.target.value)}
+              className="w-full px-4 py-2.5 input-apple text-sm"
+            />
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">{t('Model Catalog (comma separated)')}</label>
+            <input
+              type="text"
+              value={modelCatalogInput}
+              onChange={(event) => setModelCatalogInput(event.target.value)}
+              className="w-full px-4 py-2.5 input-apple text-sm"
+            />
+          </div>
+
           <div className="mb-2">
-            <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">{t('Model')}</label>
-            {provider === 'anthropic' ? (
-              <>
-                {useCustomModel ? (
-                  <input
-                    type="text"
-                    value={model}
-                    onChange={(e) => setModel(e.target.value)}
-                    placeholder="claude-sonnet-4-5-20250929"
-                    className="w-full px-4 py-2.5 input-apple text-sm"
-                  />
-                ) : (
-                  <select
-                    value={model}
-                    onChange={(e) => setModel(e.target.value)}
-                    className="w-full select-apple text-sm"
-                  >
-                    {AVAILABLE_MODELS.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                <div className="mt-1.5 flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground/60">
-                    {useCustomModel
-                      ? t('Enter official Claude model name')
-                      : AVAILABLE_MODELS.find((m) => m.id === model)?.description}
-                  </span>
-                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground/50 cursor-pointer hover:text-muted-foreground transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={useCustomModel}
-                      onChange={(e) => {
-                        setUseCustomModel(e.target.checked)
-                        if (!e.target.checked && !AVAILABLE_MODELS.some(m => m.id === model)) {
-                          setModel(DEFAULT_MODEL)
-                        }
-                      }}
-                      className="w-3 h-3 rounded border-border"
-                    />
-                    {t('Custom')}
-                  </label>
-                </div>
-              </>
-            ) : (
-              <>
-                <input
-                  type="text"
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  placeholder="gpt-4o-mini / deepseek-chat"
-                  className="w-full px-4 py-2.5 input-apple text-sm"
-                />
-                <p className="mt-1.5 text-xs text-muted-foreground/60">
-                  {t('Enter OpenAI compatible service model name')}
-                </p>
-              </>
-            )}
+            <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">{t('Doc URL')}</label>
+            <input
+              type="text"
+              value={docUrl}
+              onChange={(event) => setDocUrl(event.target.value)}
+              className="w-full px-4 py-2.5 input-apple text-sm"
+            />
           </div>
         </div>
 
         {/* Help link */}
         <p className="text-center mt-5 text-sm text-muted-foreground stagger-item" style={{ animationDelay: '140ms' }}>
           <a
-            href="https://console.anthropic.com/"
+            href={docUrl || 'https://console.anthropic.com/'}
             target="_blank"
             rel="noopener noreferrer"
             className="text-primary cursor-pointer hover:underline inline-flex items-center gap-1.5"
@@ -300,7 +433,7 @@ export function ApiSetup() {
           className="w-full mt-6 px-8 py-3 btn-apple text-sm stagger-item"
           style={{ animationDelay: '180ms' }}
         >
-          {isSaving ? t('Saving...') : t('Save and enter')}
+          {isSaving ? t('Saving...') : t('Create default profile and enter')}
         </button>
       </div>
     </div>

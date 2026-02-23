@@ -5,6 +5,7 @@
 import { create } from 'zustand'
 import { api } from '../api'
 import type { KiteConfig, AppView, McpServerStatus } from '../types'
+import { selectDefaultApiProfile } from '../../shared/types/ai-profile'
 
 // Git Bash installation progress
 interface GitBashInstallProgress {
@@ -200,11 +201,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       if (response.success && response.data) {
         const config = response.data as KiteConfig
+        const defaultProfile = selectDefaultApiProfile(config.ai, config.api)
+        const hasApiKey = typeof defaultProfile?.apiKey === 'string' && defaultProfile.apiKey.trim().length > 0
 
         set({ config })
 
         // Determine initial view based on config
-        if (config.isFirstLaunch || !config.api.apiKey) {
+        if (config.isFirstLaunch || !hasApiKey) {
           // Show setup if first launch or no API key
           set({ view: 'setup' })
         } else {

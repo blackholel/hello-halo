@@ -31,6 +31,8 @@ export interface SendMessageRequest {
   conversationId: string
   message: string
   resumeSessionId?: string
+  modelOverride?: string
+  model?: string
   images?: ImageAttachment[]  // Optional images for multi-modal messages
   thinkingEnabled?: boolean   // Enable extended thinking mode
   aiBrowserEnabled?: boolean  // Enable AI Browser tools
@@ -50,7 +52,11 @@ export async function sendMessage(
   request: SendMessageRequest
 ): Promise<ControllerResponse> {
   try {
-    await agentSendMessage(mainWindow, request)
+    const normalizedModelOverride = request.modelOverride || request.model
+    const normalizedRequest = normalizedModelOverride
+      ? { ...request, modelOverride: normalizedModelOverride }
+      : request
+    await agentSendMessage(mainWindow, normalizedRequest)
     return { success: true }
   } catch (error: unknown) {
     const err = error as Error

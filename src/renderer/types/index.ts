@@ -2,14 +2,29 @@
 // Kite Type Definitions
 // ============================================
 
+import {
+  createAiConfigFromLegacyApi,
+  type AiConfig,
+  type LegacyApiConfig
+} from '../../shared/types/ai-profile';
+import type { ClaudeCodeConfig } from '../../shared/types/claude-code';
+
+export type {
+  ProviderVendor,
+  ProviderProtocol,
+  ApiProfile,
+  ConversationAiConfig
+} from '../../shared/types/ai-profile';
+
 // API Provider Configuration
 // - 'anthropic': Official Anthropic API (api.anthropic.com)
 // - 'anthropic-compat': Anthropic-compatible backends (OpenRouter, etc.) - direct connection, zero overhead
 // - 'openai': OpenAI-compatible backends (GPT, Ollama, vLLM) - requires protocol conversion
 // - 'zhipu': ZhipuAI (智谱) - Anthropic-compatible, direct connection
 // - 'minimax': MiniMax - Anthropic-compatible, direct connection
+// - 'moonshot': Kimi/Moonshot - Anthropic-compatible, direct connection
 // - 'custom': Legacy custom provider (treated as anthropic-compat)
-export type ApiProvider = 'anthropic' | 'anthropic-compat' | 'openai' | 'zhipu' | 'minimax' | 'custom';
+export type ApiProvider = LegacyApiConfig['provider'];
 
 // Available Claude models
 export interface ModelOption {
@@ -62,12 +77,7 @@ export type MessageRole = 'user' | 'assistant' | 'system';
 // Configuration Types
 // ============================================
 
-export interface ApiConfig {
-  provider: ApiProvider;
-  apiKey: string;
-  apiUrl: string;
-  model: string;
-}
+export interface ApiConfig extends LegacyApiConfig {}
 
 export interface PermissionConfig {
   fileAccess: PermissionLevel;
@@ -159,6 +169,7 @@ export type {
 
 export interface KiteConfig {
   api: ApiConfig;
+  ai: AiConfig;
   permissions: PermissionConfig;
   appearance: AppearanceConfig;
   system: SystemConfig;
@@ -728,13 +739,16 @@ export interface ValidationResult {
 }
 
 // Default values
+const DEFAULT_API_CONFIG: ApiConfig = {
+  provider: 'anthropic',
+  apiKey: '',
+  apiUrl: 'https://api.anthropic.com',
+  model: DEFAULT_MODEL
+};
+
 export const DEFAULT_CONFIG: KiteConfig = {
-  api: {
-    provider: 'anthropic',
-    apiKey: '',
-    apiUrl: 'https://api.anthropic.com',
-    model: DEFAULT_MODEL
-  },
+  api: DEFAULT_API_CONFIG,
+  ai: createAiConfigFromLegacyApi(DEFAULT_API_CONFIG),
   permissions: {
     fileAccess: 'allow',
     commandExecution: 'ask',

@@ -69,6 +69,8 @@ export interface AgentRequest {
   aiBrowserEnabled?: boolean
   thinkingEnabled?: boolean
   planEnabled?: boolean
+  modelOverride?: string
+  /** @deprecated Use modelOverride instead. */
   model?: string
   canvasContext?: CanvasContext
   fileContexts?: FileContextAttachment[]
@@ -207,6 +209,9 @@ export interface V2SDKSession {
 export interface SessionConfig {
   aiBrowserEnabled: boolean
   skillsLazyLoad: boolean
+  profileId?: string
+  providerSignature?: string
+  effectiveModel?: string
   toolkitHash?: string
   enabledPluginMcpsHash?: string
   hasCanUseTool?: boolean // Track if session has canUseTool callback

@@ -21,6 +21,11 @@ import { SKILLS_LAZY_SYSTEM_PROMPT } from '../skills-mcp-server'
 import { buildPluginMcpServers } from '../plugin-mcp.service'
 import { getLockedConfigSourceMode, getLockedUserConfigRootDir } from '../config-source-mode.service'
 import { getSpaceResourcePolicy, isStrictSpaceOnlyPolicy } from './space-resource-policy.service'
+import { resolveEffectiveConversationAi } from './ai-config-resolver'
+import {
+  buildAnthropicCompatEnvDefaults,
+  shouldEnableAnthropicCompatEnvDefaults
+} from './provider-resolver'
 import type { PluginConfig, SettingSource, ToolCall } from './types'
 
 // Re-export types for convenience
@@ -373,9 +378,12 @@ export interface BuildSdkOptionsParams {
   anthropicApiKey: string
   anthropicBaseUrl: string
   sdkModel: string
+  effectiveModel?: string
+  useAnthropicCompatModelMapping?: boolean
   electronPath: string
   aiBrowserEnabled?: boolean
   thinkingEnabled?: boolean
+  disableToolsForCompat?: boolean
   stderrSuffix?: string // Optional suffix for stderr logs (e.g., "(warm)")
   canUseTool?: CanUseToolHandler
   enabledPluginMcps?: string[]
@@ -395,9 +403,12 @@ export function buildSdkOptions(params: BuildSdkOptionsParams): Record<string, a
     anthropicApiKey,
     anthropicBaseUrl,
     sdkModel,
+    effectiveModel,
+    useAnthropicCompatModelMapping,
     electronPath,
     aiBrowserEnabled,
     thinkingEnabled,
+    disableToolsForCompat,
     stderrSuffix = '',
     canUseTool,
     enabledPluginMcps
@@ -405,6 +416,19 @@ export function buildSdkOptions(params: BuildSdkOptionsParams): Record<string, a
 
   const spaceConfig = getSpaceConfig(workDir)
   const { effectiveLazyLoad, toolkit, strictSpaceOnly } = getEffectiveSkillsLazyLoad(workDir, config)
+  const shouldInjectAnthropicCompatEnvDefaults = (() => {
+    try {
+      const effectiveAi = resolveEffectiveConversationAi(spaceId, conversationId, effectiveModel)
+      return shouldEnableAnthropicCompatEnvDefaults(
+        effectiveAi.profile.protocol,
+        effectiveAi.profile.vendor,
+        useAnthropicCompatModelMapping
+      )
+    } catch {
+      return Boolean(useAnthropicCompatModelMapping)
+    }
+  })()
+  const compatEnvModel = effectiveModel || sdkModel
 
   const configDir = (() => {
     if (effectiveLazyLoad) {
@@ -431,10 +455,14 @@ export function buildSdkOptions(params: BuildSdkOptionsParams): Record<string, a
       ELECTRON_RUN_AS_NODE: 1,
       ELECTRON_NO_ATTACH_CONSOLE: 1,
       ANTHROPIC_API_KEY: anthropicApiKey,
+      ANTHROPIC_AUTH_TOKEN: anthropicApiKey,
       ANTHROPIC_BASE_URL: anthropicBaseUrl,
       // Ensure localhost bypasses proxy
       NO_PROXY: 'localhost,127.0.0.1',
-      no_proxy: 'localhost,127.0.0.1'
+      no_proxy: 'localhost,127.0.0.1',
+      ...(shouldInjectAnthropicCompatEnvDefaults
+        ? buildAnthropicCompatEnvDefaults(compatEnvModel)
+        : {})
     },
     extraArgs: {
       'dangerously-skip-permissions': null
@@ -472,8 +500,8 @@ export function buildSdkOptions(params: BuildSdkOptionsParams): Record<string, a
     )
   }
 
-  // MiniMax Anthropic-compatible backends can reject tool schemas; disable tools to keep chat usable.
-  if (config.api.provider === 'minimax') {
+  // Some Anthropic-compatible backends can reject tool schemas; caller can force-disable tools.
+  if (disableToolsForCompat) {
     sdkOptions.tools = []
   }
 

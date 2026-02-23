@@ -9,9 +9,10 @@
 
 import { join } from 'path'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, rmSync } from 'fs'
-import { getTempSpacePath } from './config.service'
+import { getConfig, getTempSpacePath } from './config.service'
 import { getSpace } from './space.service'
 import { v4 as uuidv4 } from 'uuid'
+import type { ConversationAiConfig } from '../../shared/types/ai-profile'
 
 // Thought types for agent reasoning
 type ProcessVisibility = 'user' | 'debug'
@@ -109,6 +110,7 @@ export interface ConversationMeta {
   updatedAt: string
   messageCount: number
   preview?: string  // Last message preview (truncated)
+  ai?: ConversationAiConfig
 }
 
 // Full conversation with messages
@@ -124,7 +126,7 @@ interface ConversationIndex {
   conversations: ConversationMeta[]
 }
 
-const INDEX_VERSION = 1
+const INDEX_VERSION = 2
 const PREVIEW_LENGTH = 50
 
 // ============================================================================
@@ -198,7 +200,8 @@ function toMeta(conversation: Conversation): ConversationMeta {
     createdAt: conversation.createdAt,
     updatedAt: conversation.updatedAt,
     messageCount: conversation.messages.length,
-    preview
+    preview,
+    ai: conversation.ai
   }
 }
 
@@ -330,6 +333,7 @@ export function listConversations(spaceId: string): ConversationMeta[] {
 export function createConversation(spaceId: string, title?: string): Conversation {
   const id = uuidv4()
   const now = new Date().toISOString()
+  const defaultProfileId = getConfig().ai.defaultProfileId
 
   const conversation: Conversation = {
     id,
@@ -338,7 +342,11 @@ export function createConversation(spaceId: string, title?: string): Conversatio
     createdAt: now,
     updatedAt: now,
     messageCount: 0,
-    messages: []
+    messages: [],
+    ai: {
+      profileId: defaultProfileId,
+      modelOverride: ''
+    }
   }
 
   const conversationsDir = getConversationsDir(spaceId)

@@ -25,6 +25,7 @@ import { useTaskStore } from './task.store'
 import type {
   Conversation,
   ConversationMeta,
+  ConversationAiConfig,
   Message,
   ToolCall,
   Artifact,
@@ -50,6 +51,8 @@ import i18n from '../i18n'
 // LRU cache size limit
 const CONVERSATION_CACHE_SIZE = 10
 const PRE_RUN_BUFFER_TTL_MS = 2000
+type ConversationWithAi = Conversation & { ai?: ConversationAiConfig }
+type ConversationMetaWithAi = ConversationMeta & { ai?: ConversationAiConfig }
 
 type TerminalReason = 'completed' | 'stopped' | 'error' | 'no_text'
 type PendingRunEventKind =
@@ -380,6 +383,7 @@ interface ChatState {
   hydrateConversation: (spaceId: string, conversationId: string) => Promise<void>
   deleteConversation: (spaceId: string, conversationId: string) => Promise<boolean>
   renameConversation: (spaceId: string, conversationId: string, newTitle: string) => Promise<boolean>
+  updateConversationAi: (spaceId: string, conversationId: string, ai: ConversationAiConfig) => Promise<boolean>
 
   // Messaging
   sendMessage: (content: string, images?: ImageAttachment[], aiBrowserEnabled?: boolean, thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[], planEnabled?: boolean) => Promise<void>
@@ -727,7 +731,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       if (response.success && response.data) {
         // Now receives ConversationMeta[] (lightweight, no messages)
-        const conversations = response.data as ConversationMeta[]
+        const conversations = response.data as ConversationMetaWithAi[]
 
         set((state) => {
           const newSpaceStates = new Map(state.spaceStates)
@@ -754,17 +758,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const response = await api.createConversation(spaceId, title)
 
       if (response.success && response.data) {
-        const newConversation = response.data as Conversation
+        const newConversation = response.data as ConversationWithAi
 
         // Extract metadata for the list
-        const meta: ConversationMeta = {
+        const meta: ConversationMetaWithAi = {
           id: newConversation.id,
           spaceId: newConversation.spaceId,
           title: newConversation.title,
           createdAt: newConversation.createdAt,
           updatedAt: newConversation.updatedAt,
           messageCount: newConversation.messages?.length || 0,
-          preview: undefined
+          preview: undefined,
+          ai: newConversation.ai
         }
 
         set((state) => {
@@ -921,6 +926,57 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return false
     } catch (error) {
       console.error('Failed to rename conversation:', error)
+      return false
+    }
+  },
+
+  updateConversationAi: async (spaceId, conversationId, ai) => {
+    try {
+      const response = await api.updateConversation(spaceId, conversationId, { ai })
+
+      if (response.success && response.data) {
+        const updatedConversation = response.data as ConversationWithAi
+
+        set((state) => {
+          const newCache = new Map(state.conversationCache)
+          const cached = newCache.get(conversationId)
+          if (cached) {
+            newCache.set(conversationId, {
+              ...cached,
+              ai: updatedConversation.ai,
+              updatedAt: updatedConversation.updatedAt
+            } as Conversation)
+          }
+
+          const newSpaceStates = new Map(state.spaceStates)
+          const existingState = newSpaceStates.get(spaceId)
+          if (existingState) {
+            newSpaceStates.set(spaceId, {
+              ...existingState,
+              conversations: existingState.conversations.map((conversation) =>
+                conversation.id === conversationId
+                  ? {
+                      ...conversation,
+                      ai: updatedConversation.ai,
+                      updatedAt: updatedConversation.updatedAt
+                    }
+                  : conversation
+              )
+            })
+          }
+
+          return {
+            spaceStates: newSpaceStates,
+            conversationCache: newCache
+          }
+        })
+
+        return true
+      }
+
+      return false
+    } catch (error) {
+      console.error('Failed to update conversation ai config:', error)
       return false
     }
   },
@@ -1955,10 +2011,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       ])
       if (conversationResponse.success && conversationResponse.data) {
         conversationReloaded = true
-        const updatedConversation = conversationResponse.data as Conversation
+        const updatedConversation = conversationResponse.data as ConversationWithAi
 
         // Extract updated metadata
-        const updatedMeta: ConversationMeta = {
+        const updatedMeta: ConversationMetaWithAi = {
           id: updatedConversation.id,
           spaceId: updatedConversation.spaceId,
           title: updatedConversation.title,
@@ -1967,7 +2023,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           messageCount: updatedConversation.messages?.length || 0,
           preview: updatedConversation.messages?.length
             ? updatedConversation.messages[updatedConversation.messages.length - 1].content.slice(0, 50)
-            : undefined
+            : undefined,
+          ai: updatedConversation.ai
         }
 
         // Now atomically: update cache, metadata, AND clear session state
