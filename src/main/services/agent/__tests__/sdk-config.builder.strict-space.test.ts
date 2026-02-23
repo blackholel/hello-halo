@@ -55,11 +55,6 @@ vi.mock('../../config-source-mode.service', () => ({
   getLockedUserConfigRootDir: vi.fn(() => '/home/test/.kite')
 }))
 
-vi.mock('../../python.service', () => ({
-  getEmbeddedPythonDir: vi.fn(() => '/python'),
-  getPythonEnhancedPath: vi.fn(() => '/python/bin:/usr/bin')
-}))
-
 vi.mock('../../space.service', () => ({
   getSpace: vi.fn(() => null)
 }))

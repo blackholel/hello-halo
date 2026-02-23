@@ -12,7 +12,6 @@ import { getConfig, getTempSpacePath } from '../config.service'
 import { getSpaceConfig, type SpaceToolkit } from '../space-config.service'
 import { buildHooksConfig } from '../hooks.service'
 import { listEnabledPlugins } from '../plugins.service'
-import { getEmbeddedPythonDir, getPythonEnhancedPath } from '../python.service'
 import { isValidDirectoryPath } from '../../utils/path-validation'
 import { getSpace } from '../space.service'
 import { getSpaceToolkit } from '../toolkit.service'
@@ -301,7 +300,7 @@ function buildMcpServersConfig(
 }
 
 /**
- * Build system prompt append with Python environment instructions
+ * Build system prompt append.
  */
 function formatToolkitList(items: Array<{ name: string; namespace?: string }>): string {
   if (items.length === 0) return '[]'
@@ -312,24 +311,9 @@ function formatToolkitList(items: Array<{ name: string; namespace?: string }>): 
 }
 
 export function buildSystemPromptAppend(workDir: string, toolkit?: SpaceToolkit | null): string {
-  const pythonDir = getEmbeddedPythonDir()
-  const pythonBinDir = process.platform === 'win32' ? pythonDir : join(pythonDir, 'bin')
-  const pythonExecutable =
-    process.platform === 'win32' ? join(pythonDir, 'python.exe') : join(pythonBinDir, 'python3')
-
-  console.log(`[Agent] System prompt Python executable: ${pythonExecutable}`)
-
   const base = `
 You are Kite, an AI assistant that helps users accomplish real work.
 All created files will be saved in the user's workspace. Current workspace: ${workDir}.
-
-## Built-in Python Environment
-This application has a built-in Python 3.11.9 environment. Always use the full path: ${pythonExecutable}
-
-Examples:
-- Check version: \`${pythonExecutable} --version\`
-- Run script: \`${pythonExecutable} script.py\`
-- Install package: \`${pythonExecutable} -m pip install package_name\`
 `
 
   if (!toolkit) {
@@ -426,8 +410,6 @@ export function buildSdkOptions(params: BuildSdkOptionsParams): Record<string, a
       // Set CLAUDE_CONFIG_DIR to control which Claude Code config directory is used.
       // In lazy skills mode, use an isolated empty config dir to avoid preloading skills/plugins/hooks.
       CLAUDE_CONFIG_DIR: configDir,
-      // Add embedded Python to PATH (prepend to ensure it's found first)
-      PATH: getPythonEnhancedPath(),
       ELECTRON_RUN_AS_NODE: 1,
       ELECTRON_NO_ATTACH_CONSOLE: 1,
       ANTHROPIC_API_KEY: anthropicApiKey,
@@ -496,7 +478,6 @@ export function buildSdkOptions(params: BuildSdkOptionsParams): Record<string, a
 export function _testBuildSdkOptionsEnv(): Record<string, any> {
   return {
     CLAUDE_CONFIG_DIR: getLockedUserConfigRootDir(),
-    PATH: getPythonEnhancedPath(),
     ELECTRON_RUN_AS_NODE: 1,
     ELECTRON_NO_ATTACH_CONSOLE: 1,
     NO_PROXY: 'localhost,127.0.0.1',

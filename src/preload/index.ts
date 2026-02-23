@@ -341,71 +341,6 @@ export interface KiteAPI {
     error?: string
   }) => void) => Promise<{ success: boolean; path?: string; error?: string }>
   openExternal: (url: string) => Promise<void>
-
-  // Python Environment
-  pythonDetect: () => Promise<IpcResponse<{
-    found: boolean
-    environment: {
-      type: 'embedded' | 'venv'
-      pythonPath: string
-      pipPath: string
-      version: string
-      sitePackages: string
-    } | null
-    error?: string
-  }>>
-  pythonExecute: (request: {
-    code: string
-    spaceId?: string
-    cwd?: string
-    timeout?: number
-  }) => Promise<IpcResponse<{
-    success: boolean
-    stdout: string
-    stderr: string
-    exitCode: number | null
-    duration: number
-    error?: string
-  }>>
-  pythonInstallPackage: (
-    packageName: string,
-    options: { spaceId?: string; version?: string },
-    onProgress: (progress: {
-      phase: 'downloading' | 'installing' | 'done' | 'error'
-      package: string
-      progress: number
-      message: string
-      error?: string
-    }) => void
-  ) => Promise<{ success: boolean; error?: string }>
-  pythonUninstallPackage: (
-    packageName: string,
-    options: { spaceId?: string }
-  ) => Promise<{ success: boolean; error?: string }>
-  pythonListPackages: (spaceId?: string) => Promise<IpcResponse<{
-    packages?: Array<{ name: string; version: string }>
-    error?: string
-  }>>
-  pythonCreateVenv: (
-    spaceId: string,
-    onProgress: (progress: {
-      phase: 'creating' | 'configuring' | 'done' | 'error'
-      progress: number
-      message: string
-      error?: string
-    }) => void
-  ) => Promise<{ success: boolean; path?: string; error?: string }>
-  pythonDeleteVenv: (spaceId: string) => Promise<{ success: boolean; error?: string }>
-  pythonHasVenv: (spaceId: string) => Promise<IpcResponse<boolean>>
-  pythonGetEnvironment: (spaceId?: string) => Promise<IpcResponse<{
-    type: 'embedded' | 'venv'
-    pythonPath: string
-    pipPath: string
-    version: string
-    sitePackages: string
-  } | null>>
-  onPythonStdout: (callback: (data: { spaceId?: string; data: string }) => void) => () => void
-  onPythonStderr: (callback: (data: { spaceId?: string; data: string }) => void) => () => void
 }
 
 interface IpcResponse<T = unknown> {
@@ -688,28 +623,6 @@ const api: KiteAPI = {
       Parameters<typeof onProgress>[0]
     >('git-bash:install', {}, onProgress, 'git-bash:install-progress'),
   openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),
-
-  // Python Environment
-  pythonDetect: () => ipcRenderer.invoke('python:detect'),
-  pythonExecute: (request) => ipcRenderer.invoke('python:execute', request),
-  pythonInstallPackage: (packageName, options, onProgress) =>
-    invokeWithProgress<
-      { success: boolean; error?: string },
-      Parameters<typeof onProgress>[0]
-    >('python:install-package', { packageName, ...options }, onProgress, 'python:install-progress'),
-  pythonUninstallPackage: (packageName, options) =>
-    ipcRenderer.invoke('python:uninstall-package', { packageName, ...options }),
-  pythonListPackages: (spaceId) => ipcRenderer.invoke('python:list-packages', spaceId),
-  pythonCreateVenv: (spaceId, onProgress) =>
-    invokeWithProgress<
-      { success: boolean; path?: string; error?: string },
-      Parameters<typeof onProgress>[0]
-    >('python:create-venv', { spaceId }, onProgress, 'python:venv-progress'),
-  pythonDeleteVenv: (spaceId) => ipcRenderer.invoke('python:delete-venv', spaceId),
-  pythonHasVenv: (spaceId) => ipcRenderer.invoke('python:has-venv', spaceId),
-  pythonGetEnvironment: (spaceId) => ipcRenderer.invoke('python:get-environment', spaceId),
-  onPythonStdout: (callback) => createEventListener('python:stdout', callback as (data: unknown) => void),
-  onPythonStderr: (callback) => createEventListener('python:stderr', callback as (data: unknown) => void),
 }
 
 contextBridge.exposeInMainWorld('kite', api)

@@ -80,11 +80,6 @@ vi.mock('../../../src/main/services/space.service', () => ({
   getSpace: vi.fn(() => ({ id: 'test-space', name: 'Test', path: '/test/workspace' }))
 }))
 
-vi.mock('../../../src/main/services/python.service', () => ({
-  getEmbeddedPythonDir: vi.fn(() => '/mock/python'),
-  getPythonEnhancedPath: vi.fn(() => '/mock/python/bin:/usr/bin')
-}))
-
 vi.mock('../../../src/main/http/websocket', () => ({
   broadcastToAll: vi.fn(),
   broadcastToWebSocket: vi.fn()

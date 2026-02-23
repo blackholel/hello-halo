@@ -29,7 +29,6 @@ import { registerOverlayHandlers, cleanupOverlayHandlers } from '../ipc/overlay'
 import { initializeSearchHandlers, cleanupSearchHandlers } from '../ipc/search'
 import { registerPerfHandlers } from '../ipc/perf'
 import { registerGitBashHandlers, initializeGitBashOnStartup } from '../ipc/git-bash'
-import { registerPythonHandlers, cleanupPythonHandlers } from '../ipc/python'
 import { registerWorkflowHandlers } from '../ipc/workflow'
 import { initSkillAgentWatchers, cleanupSkillAgentWatchers } from '../services/skills-agents-watch.service'
 
@@ -79,9 +78,6 @@ export function initializeExtendedServices(mainWindow: BrowserWindow): void {
   // GitBash: Windows Git Bash detection and setup
   registerGitBashHandlers(mainWindow)
 
-  // Python: Embedded Python environment for code execution
-  registerPythonHandlers(mainWindow)
-
   // Skills/Agents: Watch for changes and notify renderer
   initSkillAgentWatchers(mainWindow)
 
@@ -114,9 +110,6 @@ export function cleanupExtendedServices(): void {
 
   // Search: Cancel any ongoing searches
   cleanupSearchHandlers()
-
-  // Python: Cleanup handlers and kill active processes
-  cleanupPythonHandlers()
 
   // Skills/Agents: Cleanup watchers
   cleanupSkillAgentWatchers()

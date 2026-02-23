@@ -4,11 +4,10 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useAppStore } from '../stores/app.store'
-import { usePythonStore } from '../stores/python.store'
 import { api } from '../api'
 import type { KiteConfig, ThemeMode, McpServersConfig, ConfigSourceMode } from '../types'
 import { AVAILABLE_MODELS, DEFAULT_MODEL } from '../types'
-import { CheckCircle2, XCircle, ArrowLeft, Eye, EyeOff, ChevronDown, ChevronRight, Package, Trash2, Loader2 } from '../components/icons/ToolIcons'
+import { CheckCircle2, XCircle, ArrowLeft, Eye, EyeOff } from '../components/icons/ToolIcons'
 import { Header } from '../components/layout/Header'
 import { McpServerList } from '../components/settings/McpServerList'
 import { useTranslation, setLanguage, getCurrentLanguage, SUPPORTED_LOCALES, type LocaleCode } from '../i18n'
@@ -104,26 +103,6 @@ export function SettingsPage() {
   const { t } = useTranslation()
   const { config, setConfig, goBack, setView } = useAppStore()
 
-  // Python store
-  const {
-    isAvailable: pythonAvailable,
-    isDetecting: pythonDetecting,
-    globalEnvironment: pythonEnvironment,
-    globalPackages: pythonPackages,
-    isLoadingGlobalPackages: loadingPythonPackages,
-    detectionError: pythonError,
-    isInstallingPackage,
-    installProgress,
-    detectPython,
-    loadGlobalPackages,
-    installPackage,
-    uninstallPackage
-  } = usePythonStore()
-
-  // Python UI state
-  const [showPythonPackages, setShowPythonPackages] = useState(false)
-  const [newPackageName, setNewPackageName] = useState('')
-
   // Local state for editing
   const [apiKey, setApiKey] = useState(config?.api.apiKey || '')
   const [apiUrl, setApiUrl] = useState(config?.api.apiUrl || '')
@@ -186,18 +165,6 @@ export function SettingsPage() {
   useEffect(() => {
     loadSystemSettings()
   }, [])
-
-  // Load Python environment on mount
-  useEffect(() => {
-    detectPython()
-  }, [detectPython])
-
-  // Load Python packages when environment is available
-  useEffect(() => {
-    if (pythonAvailable && showPythonPackages) {
-      loadGlobalPackages()
-    }
-  }, [pythonAvailable, showPythonPackages, loadGlobalPackages])
 
   const loadSystemSettings = async () => {
     try {
@@ -376,20 +343,6 @@ export function SettingsPage() {
       console.error('[Settings] Failed to set taxonomy admin flag:', error)
       setTaxonomyAdminEnabled(!enabled)
     }
-  }
-
-  // Handle Python package install
-  const handleInstallPackage = async () => {
-    if (!newPackageName.trim()) return
-    const success = await installPackage(newPackageName.trim())
-    if (success) {
-      setNewPackageName('')
-    }
-  }
-
-  // Handle Python package uninstall
-  const handleUninstallPackage = async (packageName: string) => {
-    await uninstallPackage(packageName)
   }
 
   // Handle save - just save config without validation
@@ -784,158 +737,6 @@ export function SettingsPage() {
                 >
                   {t('Open Scene Taxonomy Manager')}
                 </button>
-              )}
-            </div>
-          </section>
-
-          {/* Python Environment Section */}
-          <section className="settings-section">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-9 h-9 rounded-xl bg-[#3776ab]/15 flex items-center justify-center">
-                <svg className="w-5 h-5 text-[#3776ab]" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M14.25.18l.9.2.73.26.59.3.45.32.34.34.25.34.16.33.1.3.04.26.02.2-.01.13V8.5l-.05.63-.13.55-.21.46-.26.38-.3.31-.33.25-.35.19-.35.14-.33.1-.3.07-.26.04-.21.02H8.77l-.69.05-.59.14-.5.22-.41.27-.33.32-.27.35-.2.36-.15.37-.1.35-.07.32-.04.27-.02.21v3.06H3.17l-.21-.03-.28-.07-.32-.12-.35-.18-.36-.26-.36-.36-.35-.46-.32-.59-.28-.73-.21-.88-.14-1.05-.05-1.23.06-1.22.16-1.04.24-.87.32-.71.36-.57.4-.44.42-.33.42-.24.4-.16.36-.1.32-.05.24-.01h.16l.06.01h8.16v-.83H6.18l-.01-2.75-.02-.37.05-.34.11-.31.17-.28.25-.26.31-.23.38-.2.44-.18.51-.15.58-.12.64-.1.71-.06.77-.04.84-.02 1.27.05zm-6.3 1.98l-.23.33-.08.41.08.41.23.34.33.22.41.09.41-.09.33-.22.23-.34.08-.41-.08-.41-.23-.33-.33-.22-.41-.09-.41.09zm13.09 3.95l.28.06.32.12.35.18.36.27.36.35.35.47.32.59.28.73.21.88.14 1.04.05 1.23-.06 1.23-.16 1.04-.24.86-.32.71-.36.57-.4.45-.42.33-.42.24-.4.16-.36.09-.32.05-.24.02-.16-.01h-8.22v.82h5.84l.01 2.76.02.36-.05.34-.11.31-.17.29-.25.25-.31.24-.38.2-.44.17-.51.15-.58.13-.64.09-.71.07-.77.04-.84.01-1.27-.04-1.07-.14-.9-.2-.73-.25-.59-.3-.45-.33-.34-.34-.25-.34-.16-.33-.1-.3-.04-.25-.02-.2.01-.13v-5.34l.05-.64.13-.54.21-.46.26-.38.3-.32.33-.24.35-.2.35-.14.33-.1.3-.06.26-.04.21-.02.13-.01h5.84l.69-.05.59-.14.5-.21.41-.28.33-.32.27-.35.2-.36.15-.36.1-.35.07-.32.04-.28.02-.21V6.07h2.09l.14.01zm-6.47 14.25l-.23.33-.08.41.08.41.23.33.33.23.41.08.41-.08.33-.23.23-.33.08-.41-.08-.41-.23-.33-.33-.23-.41-.08-.41.08z"/>
-                </svg>
-              </div>
-              <div>
-                <h2 className="text-base font-semibold tracking-tight">{t('Python Environment')}</h2>
-                <p className="text-xs text-muted-foreground">{t('Built-in Python for code execution')}</p>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              {/* Status */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">{t('Status')}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {pythonDetecting
-                      ? t('Detecting...')
-                      : pythonAvailable
-                      ? `Python ${pythonEnvironment?.version || ''}`
-                      : pythonError || t('Not available')}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {pythonDetecting ? (
-                    <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
-                  ) : pythonAvailable ? (
-                    <CheckCircle2 className="w-5 h-5 text-green-500" />
-                  ) : (
-                    <XCircle className="w-5 h-5 text-red-500" />
-                  )}
-                </div>
-              </div>
-
-              {/* Environment Info */}
-              {pythonAvailable && pythonEnvironment && (
-                <div className="bg-secondary/50 rounded-lg p-3 space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">{t('Type')}</span>
-                    <span>{pythonEnvironment.type === 'embedded' ? t('Built-in') : t('Virtual Environment')}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">{t('Path')}</span>
-                    <span className="text-xs font-mono truncate max-w-[200px]" title={pythonEnvironment.pythonPath}>
-                      {pythonEnvironment.pythonPath}
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* Packages Section */}
-              {pythonAvailable && (
-                <div className="pt-4 border-t border-border/50">
-                  <button
-                    onClick={() => setShowPythonPackages(!showPythonPackages)}
-                    className="flex items-center gap-2 w-full text-left"
-                  >
-                    {showPythonPackages ? (
-                      <ChevronDown className="w-4 h-4" />
-                    ) : (
-                      <ChevronRight className="w-4 h-4" />
-                    )}
-                    <Package className="w-4 h-4" />
-                    <span className="font-medium">{t('Installed Packages')}</span>
-                    <span className="text-xs text-muted-foreground">
-                      ({pythonPackages.length})
-                    </span>
-                  </button>
-
-                  {showPythonPackages && (
-                    <div className="mt-3 space-y-3">
-                      {/* Install new package */}
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={newPackageName}
-                          onChange={(e) => setNewPackageName(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && handleInstallPackage()}
-                          placeholder={t('Package name (e.g., requests)')}
-                          className="flex-1 px-3 py-1.5 text-sm input-apple"
-                          disabled={isInstallingPackage}
-                        />
-                        <button
-                          onClick={handleInstallPackage}
-                          disabled={isInstallingPackage || !newPackageName.trim()}
-                          className="px-4 py-1.5 text-sm btn-apple"
-                        >
-                          {isInstallingPackage ? t('Installing...') : t('Install')}
-                        </button>
-                      </div>
-
-                      {/* Install progress */}
-                      {installProgress && (
-                        <div className="bg-secondary/50 rounded-lg p-3 text-sm">
-                          <div className="flex items-center gap-2">
-                            {installProgress.phase === 'error' ? (
-                              <XCircle className="w-4 h-4 text-red-500" />
-                            ) : installProgress.phase === 'done' ? (
-                              <CheckCircle2 className="w-4 h-4 text-green-500" />
-                            ) : (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            )}
-                            <span>{installProgress.message}</span>
-                          </div>
-                          {installProgress.error && (
-                            <p className="mt-2 text-xs text-red-500">{installProgress.error}</p>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Package list */}
-                      {loadingPythonPackages ? (
-                        <div className="flex items-center justify-center py-4">
-                          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-                        </div>
-                      ) : pythonPackages.length > 0 ? (
-                        <div className="max-h-48 overflow-y-auto space-y-1">
-                          {pythonPackages.map((pkg) => (
-                            <div
-                              key={pkg.name}
-                              className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-secondary/50 group"
-                            >
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm">{pkg.name}</span>
-                                <span className="text-xs text-muted-foreground">{pkg.version}</span>
-                              </div>
-                              <button
-                                onClick={() => handleUninstallPackage(pkg.name)}
-                                className="opacity-0 group-hover:opacity-100 p-1 text-muted-foreground hover:text-red-500 transition-opacity"
-                                title={t('Uninstall')}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-muted-foreground text-center py-4">
-                          {t('No packages installed')}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
               )}
             </div>
           </section>
