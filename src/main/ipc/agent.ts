@@ -19,6 +19,15 @@ import type { AskUserQuestionAnswerInput } from '../services/agent'
 
 let mainWindow: BrowserWindow | null = null
 
+function toErrorResponse(error: unknown): { success: false; error: string; errorCode?: string } {
+  const err = error as Error & { errorCode?: string }
+  return {
+    success: false,
+    error: err?.message || String(error),
+    errorCode: typeof err?.errorCode === 'string' ? err.errorCode : undefined
+  }
+}
+
 export function registerAgentHandlers(window: BrowserWindow | null): void {
   mainWindow = window
 
@@ -69,8 +78,7 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
         await sendMessage(mainWindow, normalizedRequest)
         return { success: true }
       } catch (error: unknown) {
-        const err = error as Error
-        return { success: false, error: err.message }
+        return toErrorResponse(error)
       }
     }
   )
@@ -97,8 +105,7 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
       await stopGeneration(conversationId)
       return { success: true }
     } catch (error: unknown) {
-      const err = error as Error
-      return { success: false, error: err.message }
+      return toErrorResponse(error)
     }
   })
 
@@ -108,8 +115,7 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
       handleToolApproval(conversationId, true)
       return { success: true }
     } catch (error: unknown) {
-      const err = error as Error
-      return { success: false, error: err.message }
+      return toErrorResponse(error)
     }
   })
 
@@ -119,8 +125,7 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
       handleToolApproval(conversationId, false)
       return { success: true }
     } catch (error: unknown) {
-      const err = error as Error
-      return { success: false, error: err.message }
+      return toErrorResponse(error)
     }
   })
 
@@ -130,8 +135,7 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
       await handleAskUserQuestionResponse(conversationId, answer)
       return { success: true }
     } catch (error: unknown) {
-      const err = error as Error
-      return { success: false, error: err.message }
+      return toErrorResponse(error)
     }
   })
 
@@ -141,8 +145,7 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
       const state = getSessionState(conversationId)
       return { success: true, data: state }
     } catch (error: unknown) {
-      const err = error as Error
-      return { success: false, error: err.message }
+      return toErrorResponse(error)
     }
   })
 
@@ -155,8 +158,7 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
       })
       return { success: true }
     } catch (error: unknown) {
-      const err = error as Error
-      return { success: false, error: err.message }
+      return toErrorResponse(error)
     }
   })
 
@@ -166,8 +168,8 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
       const result = await testMcpConnections(mainWindow)
       return result
     } catch (error: unknown) {
-      const err = error as Error
-      return { success: false, servers: [], error: err.message }
+      const errorResponse = toErrorResponse(error)
+      return { ...errorResponse, servers: [] }
     }
   })
 
@@ -177,8 +179,7 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
       const result = await reconnectMcpServer(conversationId, serverName)
       return result
     } catch (error: unknown) {
-      const err = error as Error
-      return { success: false, error: err.message }
+      return toErrorResponse(error)
     }
   })
 
@@ -188,8 +189,7 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
       const result = await toggleMcpServer(conversationId, serverName, enabled)
       return result
     } catch (error: unknown) {
-      const err = error as Error
-      return { success: false, error: err.message }
+      return toErrorResponse(error)
     }
   })
 }

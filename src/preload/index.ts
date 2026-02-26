@@ -370,6 +370,7 @@ interface IpcResponse<T = unknown> {
   success: boolean
   data?: T
   error?: string
+  errorCode?: string
 }
 
 // Create event listener with cleanup

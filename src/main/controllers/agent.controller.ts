@@ -64,6 +64,16 @@ export interface ControllerResponse<T = unknown> {
   success: boolean
   data?: T
   error?: string
+  errorCode?: string
+}
+
+function toErrorResponse(error: unknown): ControllerResponse {
+  const err = error as Error & { errorCode?: string }
+  return {
+    success: false,
+    error: err?.message || String(error),
+    errorCode: typeof err?.errorCode === 'string' ? err.errorCode : undefined
+  }
 }
 
 /**
@@ -81,8 +91,7 @@ export async function sendMessage(
     await agentSendMessage(mainWindow, normalizedRequest)
     return { success: true }
   } catch (error: unknown) {
-    const err = error as Error
-    return { success: false, error: err.message }
+    return toErrorResponse(error)
   }
 }
 
@@ -104,8 +113,7 @@ export async function stopGeneration(conversationId?: string): Promise<Controlle
     await agentStopGeneration(conversationId)
     return { success: true }
   } catch (error: unknown) {
-    const err = error as Error
-    return { success: false, error: err.message }
+    return toErrorResponse(error)
   }
 }
 
@@ -117,8 +125,7 @@ export function approveTool(conversationId: string): ControllerResponse {
     agentHandleToolApproval(conversationId, true)
     return { success: true }
   } catch (error: unknown) {
-    const err = error as Error
-    return { success: false, error: err.message }
+    return toErrorResponse(error)
   }
 }
 
@@ -130,8 +137,7 @@ export function rejectTool(conversationId: string): ControllerResponse {
     agentHandleToolApproval(conversationId, false)
     return { success: true }
   } catch (error: unknown) {
-    const err = error as Error
-    return { success: false, error: err.message }
+    return toErrorResponse(error)
   }
 }
 
@@ -146,8 +152,7 @@ export async function answerQuestion(
     await agentHandleAskUserQuestionResponse(conversationId, answer)
     return { success: true }
   } catch (error: unknown) {
-    const err = error as Error
-    return { success: false, error: err.message }
+    return toErrorResponse(error)
   }
 }
 
@@ -158,8 +163,7 @@ export function checkGenerating(conversationId: string): ControllerResponse<bool
   try {
     return { success: true, data: isGenerating(conversationId) }
   } catch (error: unknown) {
-    const err = error as Error
-    return { success: false, error: err.message }
+    return toErrorResponse(error)
   }
 }
 
@@ -170,8 +174,7 @@ export function listActiveSessions(): ControllerResponse<string[]> {
   try {
     return { success: true, data: getActiveSessions() }
   } catch (error: unknown) {
-    const err = error as Error
-    return { success: false, error: err.message }
+    return toErrorResponse(error)
   }
 }
 
@@ -182,8 +185,7 @@ export function getSessionState(conversationId: string): ControllerResponse {
   try {
     return { success: true, data: agentGetSessionState(conversationId) }
   } catch (error: unknown) {
-    const err = error as Error
-    return { success: false, error: err.message }
+    return toErrorResponse(error)
   }
 }
 
@@ -195,7 +197,6 @@ export async function testMcpConnections(mainWindow?: BrowserWindow | null): Pro
     const result = await agentTestMcpConnections(mainWindow)
     return result
   } catch (error: unknown) {
-    const err = error as Error
-    return { success: false, error: err.message }
+    return toErrorResponse(error)
   }
 }

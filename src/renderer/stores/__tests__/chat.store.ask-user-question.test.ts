@@ -50,6 +50,29 @@ function createAskUserQuestionPayload(toolCallId = 'tool-ask-1'): AskUserQuestio
   }
 }
 
+function getAskUserQuestionByStatus(
+  conversationId: string,
+  status: 'pending' | 'failed'
+): ToolCall | null {
+  const session = useChatStore.getState().getSession(conversationId)
+  const activeId = session.activeAskUserQuestionId
+  if (activeId) {
+    const activeItem = session.askUserQuestionsById[activeId]
+    if (activeItem?.status === status) {
+      return activeItem.toolCall
+    }
+  }
+
+  for (const id of session.askUserQuestionOrder) {
+    const item = session.askUserQuestionsById[id]
+    if (item?.status === status) {
+      return item.toolCall
+    }
+  }
+
+  return null
+}
+
 describe('Chat Store - AskUserQuestion Flow', () => {
   beforeEach(() => {
     useChatStore.getState().reset()
@@ -77,8 +100,9 @@ describe('Chat Store - AskUserQuestion Flow', () => {
     )
 
     const session = useChatStore.getState().getSession(conversationId)
-    expect(session.pendingAskUserQuestion).toBeNull()
-    expect(session.failedAskUserQuestion).toBeNull()
+    expect(getAskUserQuestionByStatus(conversationId, 'pending')).toBeNull()
+    expect(getAskUserQuestionByStatus(conversationId, 'failed')).toBeNull()
+    expect(session.askUserQuestionOrder).toEqual([])
   })
 
   it('injects active runId into AskUserQuestion answer payload', async () => {
@@ -128,9 +152,10 @@ describe('Chat Store - AskUserQuestion Flow', () => {
     await useChatStore.getState().answerQuestion(conversationId, createAskUserQuestionPayload())
 
     const session = useChatStore.getState().getSession(conversationId)
-    expect(session.pendingAskUserQuestion).toBeNull()
-    expect(session.failedAskUserQuestion?.status).toBe('error')
-    expect(session.failedAskUserQuestion?.error).toBe('No active session found')
+    const failedAskUserQuestion = getAskUserQuestionByStatus(conversationId, 'failed')
+    expect(getAskUserQuestionByStatus(conversationId, 'pending')).toBeNull()
+    expect(failedAskUserQuestion?.status).toBe('error')
+    expect(failedAskUserQuestion?.error).toBe('No active session found')
     expect(session.isGenerating).toBe(false)
     expect(session.isStreaming).toBe(false)
   })
@@ -148,9 +173,9 @@ describe('Chat Store - AskUserQuestion Flow', () => {
       )
     ).rejects.toThrow('Network unavailable')
 
-    const session = useChatStore.getState().getSession(conversationId)
-    expect(session.pendingAskUserQuestion?.id).toBe('tool-transport')
-    expect(session.failedAskUserQuestion).toBeNull()
+    const pendingAskUserQuestion = getAskUserQuestionByStatus(conversationId, 'pending')
+    expect(pendingAskUserQuestion?.id).toBe('tool-transport')
+    expect(getAskUserQuestionByStatus(conversationId, 'failed')).toBeNull()
   })
 
   it('updates pending AskUserQuestion state from matching tool_result', () => {
@@ -166,9 +191,10 @@ describe('Chat Store - AskUserQuestion Flow', () => {
     })
 
     let session = useChatStore.getState().getSession(conversationId)
-    expect(session.pendingAskUserQuestion).toBeNull()
-    expect(session.failedAskUserQuestion?.status).toBe('error')
-    expect(session.failedAskUserQuestion?.error).toBe('Tool failed')
+    const failedAskUserQuestion = getAskUserQuestionByStatus(conversationId, 'failed')
+    expect(getAskUserQuestionByStatus(conversationId, 'pending')).toBeNull()
+    expect(failedAskUserQuestion?.status).toBe('error')
+    expect(failedAskUserQuestion?.error).toBe('Tool failed')
 
     seedPendingAskUserQuestion(conversationId, 'tool-match-success')
     useChatStore.getState().handleAgentToolResult({
@@ -180,8 +206,9 @@ describe('Chat Store - AskUserQuestion Flow', () => {
     })
 
     session = useChatStore.getState().getSession(conversationId)
-    expect(session.pendingAskUserQuestion).toBeNull()
-    expect(session.failedAskUserQuestion).toBeNull()
+    expect(getAskUserQuestionByStatus(conversationId, 'pending')).toBeNull()
+    expect(getAskUserQuestionByStatus(conversationId, 'failed')).toBeNull()
+    expect(session.askUserQuestionOrder).toEqual([])
   })
 
   it('handles out-of-order tool_result before tool_call and converges status', () => {
@@ -254,8 +281,8 @@ describe('Chat Store - AskUserQuestion Flow', () => {
 
     const session = useChatStore.getState().getSession(conversationId)
     expect(session.toolStatusById['tool-ask']).toBe('success')
-    expect(session.pendingAskUserQuestion).toBeNull()
-    expect(session.failedAskUserQuestion).toBeNull()
+    expect(getAskUserQuestionByStatus(conversationId, 'pending')).toBeNull()
+    expect(getAskUserQuestionByStatus(conversationId, 'failed')).toBeNull()
   })
 
   it('drops stale events from previous run after new run starts', () => {
@@ -413,7 +440,7 @@ describe('Chat Store - AskUserQuestion Flow', () => {
     })
 
     let session = useChatStore.getState().getSession(conversationId)
-    expect(session.pendingAskUserQuestion?.id).toBe('tool-ask-process')
+    expect(getAskUserQuestionByStatus(conversationId, 'pending')?.id).toBe('tool-ask-process')
 
     useChatStore.getState().handleAgentProcess({
       type: 'process',
@@ -429,8 +456,9 @@ describe('Chat Store - AskUserQuestion Flow', () => {
     })
 
     session = useChatStore.getState().getSession(conversationId)
-    expect(session.pendingAskUserQuestion).toBeNull()
-    expect(session.failedAskUserQuestion).toBeNull()
+    expect(getAskUserQuestionByStatus(conversationId, 'pending')).toBeNull()
+    expect(getAskUserQuestionByStatus(conversationId, 'failed')).toBeNull()
+    expect(session.askUserQuestionOrder).toEqual([])
   })
 
   it('uses complete.finalContent as fallback when conversation reload fails', async () => {

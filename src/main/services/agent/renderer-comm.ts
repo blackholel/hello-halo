@@ -6,6 +6,7 @@
  */
 
 import { BrowserWindow } from 'electron'
+import { createHash } from 'crypto'
 import { resolve } from 'path'
 import { broadcastToWebSocket } from '../../http/websocket'
 import { getConfig } from '../config.service'
@@ -16,6 +17,7 @@ import {
   isPathInProtectedResourceDir
 } from './resource-dir-guard.service'
 import { getSpaceResourcePolicy, isStrictSpaceOnlyPolicy } from './space-resource-policy.service'
+import { ASK_USER_QUESTION_ERROR_CODES } from './types'
 import type {
   ToolCall,
   SessionState,
@@ -54,6 +56,30 @@ function normalizeStringArray(values: unknown): string[] {
     }
   }
   return Array.from(unique)
+}
+
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => stableStringify(entry)).join(',')}]`
+  }
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    const keys = Object.keys(record).sort((a, b) => a.localeCompare(b))
+    return `{${keys.map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`).join(',')}}`
+  }
+  return JSON.stringify(value)
+}
+
+export function getAskUserQuestionInputFingerprint(
+  input: Record<string, unknown>
+): string {
+  const encoded = stableStringify(input)
+  const digest = createHash('sha1').update(encoded).digest('hex')
+  return `aqf_${digest}`
+}
+
+function getAskUserQuestionFingerprintKey(runId: string, fingerprint: string): string {
+  return `${runId}:${fingerprint}`
 }
 
 interface AskUserQuestionNormalizedQuestion {
@@ -351,24 +377,53 @@ export function createCanUseTool(
         return { behavior: 'deny' as const, message: 'Session not found' }
       }
 
-      if (session.pendingAskUserQuestion) {
+      const normalizedInput = normalizeAskUserQuestionInput(input)
+      const fingerprint = getAskUserQuestionInputFingerprint(normalizedInput)
+      const hasDuplicatePending = session.pendingAskUserQuestionOrder.some((pendingId) => {
+        const context = session.pendingAskUserQuestionsById.get(pendingId)
+        if (!context) return false
+        if (context.runId !== session.runId) return false
+        if (context.inputFingerprint !== fingerprint) return false
+        return context.status === 'awaiting_bind' || context.status === 'awaiting_answer'
+      })
+      if (hasDuplicatePending) {
         return {
           behavior: 'deny' as const,
-          message: 'Another AskUserQuestion is already pending'
+          message: `${ASK_USER_QUESTION_ERROR_CODES.DUPLICATE_PENDING_SIGNATURE}: Duplicate AskUserQuestion fingerprint in current run`
         }
       }
 
-      const normalizedInput = normalizeAskUserQuestionInput(input)
+      const pendingId = `aq_${session.runId}_${++session.askUserQuestionSeq}`
       const mode: AskUserQuestionMode = 'sdk_allow_updated_input'
       return new Promise((resolveDecision) => {
-        session.pendingAskUserQuestion = {
+        const context = {
+          pendingId,
           resolve: resolveDecision,
           inputSnapshot: normalizedInput,
+          inputFingerprint: fingerprint,
+          sessionId: conversationId,
           expectedToolCallId: null,
           runId: session.runId,
           createdAt: Date.now(),
+          status: 'awaiting_bind' as const,
           mode
         }
+        const fingerprintKey = getAskUserQuestionFingerprintKey(session.runId, fingerprint)
+        const queuedToolCalls = session.unmatchedAskUserQuestionToolCalls.get(fingerprintKey) || []
+        if (queuedToolCalls.length > 0) {
+          const [toolCallId, ...remaining] = queuedToolCalls
+          context.expectedToolCallId = toolCallId
+          context.status = 'awaiting_answer'
+          session.pendingAskUserQuestionIdByToolCallId.set(toolCallId, pendingId)
+          session.askUserQuestionModeByToolCallId.set(toolCallId, mode)
+          if (remaining.length > 0) {
+            session.unmatchedAskUserQuestionToolCalls.set(fingerprintKey, remaining)
+          } else {
+            session.unmatchedAskUserQuestionToolCalls.delete(fingerprintKey)
+          }
+        }
+        session.pendingAskUserQuestionsById.set(pendingId, context)
+        session.pendingAskUserQuestionOrder.push(pendingId)
       })
     }
 

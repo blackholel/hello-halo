@@ -89,6 +89,17 @@ interface OrphanToolResult {
   isError: boolean
 }
 
+type AskUserQuestionItemStatus = 'pending' | 'failed' | 'resolved'
+
+interface AskUserQuestionItem {
+  id: string
+  toolCall: ToolCall
+  status: AskUserQuestionItemStatus
+  runId: string | null
+  updatedAt: number
+  errorCode?: string
+}
+
 function normalizeToolStatus(status: unknown): ToolStatus {
   switch (status) {
     case 'pending':
@@ -139,8 +150,9 @@ interface SessionState {
   processTrace: ProcessTraceNode[]
   isThinking: boolean
   pendingToolApproval: ToolCall | null
-  pendingAskUserQuestion: ToolCall | null
-  failedAskUserQuestion: ToolCall | null
+  askUserQuestionsById: Record<string, AskUserQuestionItem>
+  askUserQuestionOrder: string[]
+  activeAskUserQuestionId: string | null
   error: string | null
   // Compact notification
   compactInfo: CompactInfo | null
@@ -175,8 +187,9 @@ function createEmptySessionState(): SessionState {
     processTrace: [],
     isThinking: false,
     pendingToolApproval: null,
-    pendingAskUserQuestion: null,
-    failedAskUserQuestion: null,
+    askUserQuestionsById: {},
+    askUserQuestionOrder: [],
+    activeAskUserQuestionId: null,
     error: null,
     compactInfo: null,
     textBlockVersion: 0,
@@ -241,6 +254,34 @@ function isThoughtLike(value: unknown): value is Thought {
     typeof candidate.content === 'string' &&
     typeof candidate.timestamp === 'string'
   )
+}
+
+function ensureAskUserQuestionOrder(
+  order: string[],
+  byId: Record<string, AskUserQuestionItem>
+): string[] {
+  return order.filter((id) => Boolean(byId[id]))
+}
+
+function resolveActiveAskUserQuestionId(
+  currentActiveId: string | null,
+  order: string[],
+  byId: Record<string, AskUserQuestionItem>
+): string | null {
+  if (currentActiveId && byId[currentActiveId]) {
+    return currentActiveId
+  }
+  for (const id of order) {
+    const item = byId[id]
+    if (!item) continue
+    if (item.status === 'pending') return id
+  }
+  for (const id of order) {
+    const item = byId[id]
+    if (!item) continue
+    if (item.status === 'failed') return id
+  }
+  return order[0] || null
 }
 
 function toProcessTraceNode(event: AgentProcessEvent): ProcessTraceNode {
@@ -402,7 +443,8 @@ interface ChatState {
   approveTool: (conversationId: string) => Promise<void>
   rejectTool: (conversationId: string) => Promise<void>
   answerQuestion: (conversationId: string, answer: AskUserQuestionAnswerPayload) => Promise<void>
-  dismissAskUserQuestion: (conversationId: string) => void
+  dismissAskUserQuestion: (conversationId: string, toolCallId?: string) => void
+  setActiveAskUserQuestion: (conversationId: string, toolCallId: string) => void
 
   // Event handlers (called from App component) - with session IDs
   handleAgentRunStart: (data: AgentEventBase & { runId: string; startedAt: string }) => void
@@ -1501,8 +1543,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
               isThinking: false,
               isStreaming: false,
               toolStatusById: cancelledTools,
-              pendingAskUserQuestion: null,
-              failedAskUserQuestion: null
+              askUserQuestionsById: {},
+              askUserQuestionOrder: [],
+              activeAskUserQuestionId: null
             })
           }
           return { sessions: newSessions }
@@ -1564,21 +1607,39 @@ export const useChatStore = create<ChatState>((set, get) => ({
           const session = newSessions.get(conversationId)
           if (!session) return state
 
-          const failedToolCall = session.pendingAskUserQuestion
-            ? {
-                ...session.pendingAskUserQuestion,
-                status: 'error' as const,
+          const askUserQuestionsById = { ...session.askUserQuestionsById }
+          const existingItem = askUserQuestionsById[answer.toolCallId]
+          if (existingItem) {
+            askUserQuestionsById[answer.toolCallId] = {
+              ...existingItem,
+              status: 'failed',
+              updatedAt: Date.now(),
+              errorCode: response.errorCode,
+              toolCall: {
+                ...existingItem.toolCall,
+                status: 'error',
                 error: reason,
                 output: reason
               }
-            : session.failedAskUserQuestion
+            }
+          }
+          const askUserQuestionOrder = ensureAskUserQuestionOrder(
+            session.askUserQuestionOrder,
+            askUserQuestionsById
+          )
+          const activeAskUserQuestionId = resolveActiveAskUserQuestionId(
+            session.activeAskUserQuestionId,
+            askUserQuestionOrder,
+            askUserQuestionsById
+          )
 
           newSessions.set(conversationId, {
             ...session,
             isGenerating: false,
             isStreaming: false,
-            pendingAskUserQuestion: null,
-            failedAskUserQuestion: failedToolCall
+            askUserQuestionsById,
+            askUserQuestionOrder,
+            activeAskUserQuestionId
           })
           return { sessions: newSessions }
         })
@@ -1589,10 +1650,32 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const newSessions = new Map(state.sessions)
         const session = newSessions.get(conversationId)
         if (session) {
+          const askUserQuestionsById = { ...session.askUserQuestionsById }
+          const existingItem = askUserQuestionsById[answer.toolCallId]
+          if (existingItem) {
+            askUserQuestionsById[answer.toolCallId] = {
+              ...existingItem,
+              status: 'resolved',
+              updatedAt: Date.now()
+            }
+            delete askUserQuestionsById[answer.toolCallId]
+          }
+          const askUserQuestionOrder = ensureAskUserQuestionOrder(
+            session.askUserQuestionOrder.filter((id) => id !== answer.toolCallId),
+            askUserQuestionsById
+          )
+          const activeAskUserQuestionId = resolveActiveAskUserQuestionId(
+            session.activeAskUserQuestionId === answer.toolCallId
+              ? null
+              : session.activeAskUserQuestionId,
+            askUserQuestionOrder,
+            askUserQuestionsById
+          )
           newSessions.set(conversationId, {
             ...session,
-            pendingAskUserQuestion: null,
-            failedAskUserQuestion: null
+            askUserQuestionsById,
+            askUserQuestionOrder,
+            activeAskUserQuestionId
           })
         }
         return { sessions: newSessions }
@@ -1603,16 +1686,54 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  dismissAskUserQuestion: (conversationId: string) => {
+  dismissAskUserQuestion: (conversationId: string, toolCallId?: string) => {
     set((state) => {
       const newSessions = new Map(state.sessions)
       const session = newSessions.get(conversationId)
       if (!session) return state
 
+      if (!toolCallId) {
+        newSessions.set(conversationId, {
+          ...session,
+          askUserQuestionsById: {},
+          askUserQuestionOrder: [],
+          activeAskUserQuestionId: null
+        })
+        return { sessions: newSessions }
+      }
+
+      const askUserQuestionsById = { ...session.askUserQuestionsById }
+      delete askUserQuestionsById[toolCallId]
+      const askUserQuestionOrder = ensureAskUserQuestionOrder(
+        session.askUserQuestionOrder.filter((id) => id !== toolCallId),
+        askUserQuestionsById
+      )
+      const activeAskUserQuestionId = resolveActiveAskUserQuestionId(
+        session.activeAskUserQuestionId === toolCallId ? null : session.activeAskUserQuestionId,
+        askUserQuestionOrder,
+        askUserQuestionsById
+      )
+
       newSessions.set(conversationId, {
         ...session,
-        pendingAskUserQuestion: null,
-        failedAskUserQuestion: null
+        askUserQuestionsById,
+        askUserQuestionOrder,
+        activeAskUserQuestionId
+      })
+      return { sessions: newSessions }
+    })
+  },
+
+  setActiveAskUserQuestion: (conversationId: string, toolCallId: string) => {
+    set((state) => {
+      const newSessions = new Map(state.sessions)
+      const session = newSessions.get(conversationId)
+      if (!session) return state
+      if (!session.askUserQuestionsById[toolCallId]) return state
+
+      newSessions.set(conversationId, {
+        ...session,
+        activeAskUserQuestionId: toolCallId
       })
       return { sessions: newSessions }
     })
@@ -1903,16 +2024,45 @@ export const useChatStore = create<ChatState>((set, get) => ({
         pendingToolApproval = null
       }
 
-      let pendingAskUserQuestion = session.pendingAskUserQuestion
-      let failedAskUserQuestion = session.failedAskUserQuestion
+      const askUserQuestionsById = { ...session.askUserQuestionsById }
+      let askUserQuestionOrder = [...session.askUserQuestionOrder]
       if (isAskUserQuestion) {
         if (isToolStillRunning) {
-          pendingAskUserQuestion = resolvedToolCall
-          failedAskUserQuestion = null
-        } else if (session.pendingAskUserQuestion?.id === toolCallId) {
-          pendingAskUserQuestion = null
+          askUserQuestionsById[toolCallId] = {
+            id: toolCallId,
+            toolCall: resolvedToolCall,
+            status: 'pending',
+            runId: runId ?? session.activeRunId,
+            updatedAt: Date.now()
+          }
+          if (!askUserQuestionOrder.includes(toolCallId)) {
+            askUserQuestionOrder.push(toolCallId)
+          }
+        } else {
+          const finalizedStatus = toolStatusById[toolCallId] === 'error' ? 'failed' : 'resolved'
+          if (finalizedStatus === 'failed') {
+            askUserQuestionsById[toolCallId] = {
+              id: toolCallId,
+              toolCall: resolvedToolCall,
+              status: 'failed',
+              runId: runId ?? session.activeRunId,
+              updatedAt: Date.now()
+            }
+            if (!askUserQuestionOrder.includes(toolCallId)) {
+              askUserQuestionOrder.push(toolCallId)
+            }
+          } else {
+            delete askUserQuestionsById[toolCallId]
+            askUserQuestionOrder = askUserQuestionOrder.filter((id) => id !== toolCallId)
+          }
         }
       }
+      askUserQuestionOrder = ensureAskUserQuestionOrder(askUserQuestionOrder, askUserQuestionsById)
+      const activeAskUserQuestionId = resolveActiveAskUserQuestionId(
+        session.activeAskUserQuestionId,
+        askUserQuestionOrder,
+        askUserQuestionsById
+      )
 
       newSessions.set(conversationId, {
         ...session,
@@ -1923,8 +2073,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         toolCallsById,
         orphanToolResults,
         pendingToolApproval,
-        pendingAskUserQuestion,
-        failedAskUserQuestion
+        askUserQuestionsById,
+        askUserQuestionOrder,
+        activeAskUserQuestionId
       })
       return { sessions: newSessions }
     })
@@ -1985,23 +2136,45 @@ export const useChatStore = create<ChatState>((set, get) => ({
         orphanToolResults[toolCallId] = { result, isError }
       }
 
-      let pendingAskUserQuestion = session.pendingAskUserQuestion
-      let failedAskUserQuestion = session.failedAskUserQuestion
-      const pendingQuestion = session.pendingAskUserQuestion
-      if (pendingQuestion && pendingQuestion.id === toolCallId) {
+      const isAskUserQuestion =
+        existingToolCall?.name?.toLowerCase() === 'askuserquestion' ||
+        session.askUserQuestionsById[toolCallId] != null
+      const askUserQuestionsById = { ...session.askUserQuestionsById }
+      let askUserQuestionOrder = [...session.askUserQuestionOrder]
+      if (isAskUserQuestion) {
+        const baseToolCall = toolCallsById[toolCallId] || {
+          id: toolCallId,
+          name: 'AskUserQuestion',
+          status: isError ? 'error' : 'success',
+          input: {}
+        }
         if (isError) {
-          pendingAskUserQuestion = null
-          failedAskUserQuestion = {
-            ...pendingQuestion,
-            status: 'error',
-            error: result,
-            output: result
+          askUserQuestionsById[toolCallId] = {
+            id: toolCallId,
+            toolCall: {
+              ...baseToolCall,
+              status: 'error',
+              output: result,
+              error: result
+            },
+            status: 'failed',
+            runId: runId ?? session.activeRunId,
+            updatedAt: Date.now()
+          }
+          if (!askUserQuestionOrder.includes(toolCallId)) {
+            askUserQuestionOrder.push(toolCallId)
           }
         } else {
-          pendingAskUserQuestion = null
-          failedAskUserQuestion = null
+          delete askUserQuestionsById[toolCallId]
+          askUserQuestionOrder = askUserQuestionOrder.filter((id) => id !== toolCallId)
         }
       }
+      askUserQuestionOrder = ensureAskUserQuestionOrder(askUserQuestionOrder, askUserQuestionsById)
+      const activeAskUserQuestionId = resolveActiveAskUserQuestionId(
+        session.activeAskUserQuestionId,
+        askUserQuestionOrder,
+        askUserQuestionsById
+      )
 
       newSessions.set(conversationId, {
         ...session,
@@ -2010,8 +2183,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         toolStatusById,
         toolCallsById,
         orphanToolResults,
-        pendingAskUserQuestion,
-        failedAskUserQuestion
+        askUserQuestionsById,
+        askUserQuestionOrder,
+        activeAskUserQuestionId
       })
       return { sessions: newSessions }
     })
@@ -2065,8 +2239,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         isThinking: false,
         isStreaming: false,
         toolStatusById,
-        pendingAskUserQuestion: null,
-        failedAskUserQuestion: null,
+        askUserQuestionsById: {},
+        askUserQuestionOrder: [],
+        activeAskUserQuestionId: null,
         thoughts: [...session.thoughts, errorThought]
       })
       return { sessions: newSessions }
@@ -2144,8 +2319,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
             isStreaming: false,
             isThinking: false,
             streamingContent: '',
-            pendingAskUserQuestion: null,
-            failedAskUserQuestion: null,
+            askUserQuestionsById: {},
+            askUserQuestionOrder: [],
+            activeAskUserQuestionId: null,
             compactInfo: null
           })
         }
@@ -2182,7 +2358,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
 
       shouldFinalizeTasks = true
-      const hasPendingQuestion = session.pendingAskUserQuestion != null
+      const hasPendingQuestion = session.askUserQuestionOrder.some((id) => {
+        const item = session.askUserQuestionsById[id]
+        return item?.status === 'pending'
+      })
       waitForPendingQuestion = hasPendingQuestion && terminalReason === 'completed'
       const lifecycle: AgentRunLifecycle =
         terminalReason === 'stopped'
@@ -2202,7 +2381,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           isThinking: false,
           isGenerating: false,
           toolStatusById: cancelledTools,
-          pendingAskUserQuestion: null
+          askUserQuestionsById: {},
+          askUserQuestionOrder: [],
+          activeAskUserQuestionId: null
         })
       } else {
         newSessions.set(conversationId, {
@@ -2289,7 +2470,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
               mode: updatedConversationMode,
               isGenerating: false,
               streamingContent: '',
-              pendingAskUserQuestion: null,
+              askUserQuestionsById: {},
+              askUserQuestionOrder: [],
+              activeAskUserQuestionId: null,
               compactInfo: null  // Clear temporary compact notification
             })
           }
@@ -2332,8 +2515,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
             ...currentSession,
             isGenerating: false,
             streamingContent: '',
-            pendingAskUserQuestion: null,
-            failedAskUserQuestion: null,
+            askUserQuestionsById: {},
+            askUserQuestionOrder: [],
+            activeAskUserQuestionId: null,
             compactInfo: null  // Clear temporary compact notification
           })
         }
