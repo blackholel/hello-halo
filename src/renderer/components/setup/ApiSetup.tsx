@@ -149,7 +149,7 @@ export function ApiSetup() {
   const currentStep = apiKey.trim() ? 3 : 2
 
   return (
-    <div className="h-full w-full flex flex-col items-center justify-center bg-background p-8 relative overflow-hidden">
+    <div className="h-full w-full flex flex-col items-center justify-start sm:justify-center bg-background px-6 py-8 sm:p-8 relative overflow-y-auto overflow-x-hidden">
       {/* Ambient background */}
       <div className="ambient-bg">
         <div className="ambient-orb ambient-orb-1" />

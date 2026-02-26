@@ -121,7 +121,14 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
   },
 
   finalizeTasksOnTerminal: (reason) => {
-    if (reason !== 'stopped' && reason !== 'error' && reason !== 'no_text') {
+    const terminalStatus =
+      reason === 'completed'
+        ? 'completed'
+        : (reason === 'stopped' || reason === 'error' || reason === 'no_text')
+          ? 'paused'
+          : null
+
+    if (!terminalStatus) {
       return
     }
 
@@ -130,7 +137,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
         task.status === 'in_progress'
           ? {
               ...task,
-              status: 'paused' as const,
+              status: terminalStatus,
               updatedAt: new Date().toISOString()
             }
           : task
