@@ -168,6 +168,8 @@
   "Event": "Evento",
   "Execute Commands": "Ejecutar Comandos",
   "Execute command": "Ejecutar comando",
+  "Execute": "Ejecutar",
+  "Execute Plan": "Ejecutar plan",
   "Execute script": "Ejecutar script",
   "Exit fullscreen": "Salir de pantalla completa",
   "Exit fullscreen and return to chat": "Salir de pantalla completa y volver al chat",
@@ -515,5 +517,7 @@
   "No workflows available": "No hay flujos de trabajo disponibles",
   "Create a new workflow to get started": "Crea un nuevo flujo de trabajo para empezar",
   "Select a skill": "Selecciona una habilidad",
-  "Select an agent": "Selecciona un agente"
+  "Select an agent": "Selecciona un agente",
+  "Open in Canvas": "Abrir en Canvas",
+  "You can execute this plan directly, or reply with adjustments in chat.": "Puedes ejecutar este plan directamente o responder en el chat con ajustes."
 }

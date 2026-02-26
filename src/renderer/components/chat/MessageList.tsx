@@ -559,12 +559,29 @@ export function MessageList({
                   defaultExpanded={false}
                 />
                 {/* Then the message itself (without embedded thoughts) */}
-                <MessageItem message={message} previousCost={previousCost} hideThoughts isInContainer workDir={workDir} onOpenPlanInCanvas={onOpenPlanInCanvas} />
+                <MessageItem
+                  message={message}
+                  previousCost={previousCost}
+                  hideThoughts
+                  isInContainer
+                  workDir={workDir}
+                  onOpenPlanInCanvas={onOpenPlanInCanvas}
+                  onExecutePlan={onExecutePlan}
+                />
               </div>
             </div>
           )
         }
-        return <MessageItem key={message.id} message={message} previousCost={previousCost} workDir={workDir} onOpenPlanInCanvas={onOpenPlanInCanvas} />
+        return (
+          <MessageItem
+            key={message.id}
+            message={message}
+            previousCost={previousCost}
+            workDir={workDir}
+            onOpenPlanInCanvas={onOpenPlanInCanvas}
+            onExecutePlan={onExecutePlan}
+          />
+        )
       })}
 
       {/* Current generation block: Timeline segments + Streaming content below */}

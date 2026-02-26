@@ -168,6 +168,8 @@
   "Event": "イベント",
   "Execute Commands": "コマンドを実行",
   "Execute command": "コマンドを実行",
+  "Execute": "実行",
+  "Execute Plan": "計画を実行",
   "Execute script": "スクリプトを実行",
   "Exit fullscreen": "全画面表示を終了",
   "Exit fullscreen and return to chat": "全画面表示を終了してチャットに戻る",
@@ -496,5 +498,7 @@
   "No workflows available": "利用可能なワークフローがありません",
   "Create a new workflow to get started": "新しいワークフローを作成して開始",
   "Select a skill": "スキルを選択",
-  "Select an agent": "エージェントを選択"
+  "Select an agent": "エージェントを選択",
+  "Open in Canvas": "Canvasで開く",
+  "You can execute this plan directly, or reply with adjustments in chat.": "この計画は直接実行するか、チャットで修正内容を返信できます。"
 }

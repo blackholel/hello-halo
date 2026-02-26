@@ -51,6 +51,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     acceptChangeSet,
     rollbackChangeSet,
     sendMessage,
+    executePlan,
     stopGeneration,
     answerQuestion,
     dismissAskUserQuestion,
@@ -303,6 +304,14 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     await openPlan(planContent, t('Plan'), currentSpaceId, conversationId, currentSpace?.path)
   }
 
+  const handleExecutePlan = useCallback(async (planContent: string) => {
+    const conversationId = getCurrentConversationId()
+    if (!currentSpaceId || !conversationId || isGenerating) {
+      return
+    }
+    await executePlan(currentSpaceId, conversationId, planContent)
+  }, [currentSpaceId, executePlan, getCurrentConversationId, isGenerating])
+
   // Combine real messages with mock onboarding messages
   const realMessages = currentConversation?.messages || []
   const displayMessages = mockUserMessage
@@ -381,6 +390,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
                 availableToolsSnapshot={availableToolsSnapshot}
                 workDir={currentSpace?.path}
                 onOpenPlanInCanvas={handleOpenPlanInCanvas}
+                onExecutePlan={handleExecutePlan}
               />
               <div ref={bottomRef} />
             </>

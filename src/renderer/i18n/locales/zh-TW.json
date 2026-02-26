@@ -168,6 +168,8 @@
   "Event": "事件",
   "Execute Commands": "執行命令",
   "Execute command": "執行命令",
+  "Execute": "執行",
+  "Execute Plan": "執行計畫",
   "Execute script": "執行腳本",
   "Exit fullscreen": "退出全螢幕",
   "Exit fullscreen and return to chat": "退出全螢幕並返回聊天",
@@ -526,5 +528,7 @@
   "Office": "辦公套件",
   "Clear filters": "清除篩選",
   "Search templates...": "搜尋模板...",
-  "Already added. Overwrite existing resource?": "資源已存在，是否覆蓋？"
+  "Already added. Overwrite existing resource?": "資源已存在，是否覆蓋？",
+  "Open in Canvas": "在畫布中開啟",
+  "You can execute this plan directly, or reply with adjustments in chat.": "你可以直接執行這個計畫，或在聊天中回覆調整意見。"
 }

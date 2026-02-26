@@ -168,6 +168,8 @@
   "Event": "Ereignis",
   "Execute Commands": "Befehle ausführen",
   "Execute command": "Befehl ausführen",
+  "Execute": "Ausführen",
+  "Execute Plan": "Plan ausführen",
   "Execute script": "Skript ausführen",
   "Exit fullscreen": "Vollbild verlassen",
   "Exit fullscreen and return to chat": "Vollbild verlassen und zum Chat zurückkehren",
@@ -496,5 +498,7 @@
   "No workflows available": "Keine Workflows verfügbar",
   "Create a new workflow to get started": "Erstellen Sie einen neuen Workflow, um zu starten",
   "Select a skill": "Skill auswählen",
-  "Select an agent": "Agent auswählen"
+  "Select an agent": "Agent auswählen",
+  "Open in Canvas": "In Canvas öffnen",
+  "You can execute this plan directly, or reply with adjustments in chat.": "Sie können diesen Plan direkt ausführen oder im Chat mit Anpassungen antworten."
 }

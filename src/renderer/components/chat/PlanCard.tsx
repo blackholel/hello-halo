@@ -17,13 +17,14 @@
  */
 
 import { useState, useCallback } from 'react'
-import { ClipboardList, ExternalLink, Copy, Save, ChevronDown, Check } from 'lucide-react'
+import { ClipboardList, ExternalLink, Copy, Save, ChevronDown, Check, Play } from 'lucide-react'
 import { MarkdownRenderer } from './MarkdownRenderer'
 import { useTranslation } from '../../i18n'
 
 interface PlanCardProps {
   content: string
   onOpenInCanvas?: (planContent: string) => void
+  onExecutePlan?: (planContent: string) => void
   workDir?: string
 }
 
@@ -51,7 +52,7 @@ function PlanActionButton({
   )
 }
 
-export function PlanCard({ content, onOpenInCanvas, workDir }: PlanCardProps) {
+export function PlanCard({ content, onOpenInCanvas, onExecutePlan, workDir }: PlanCardProps) {
   const { t } = useTranslation()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [copySuccess, setCopySuccess] = useState(false)
@@ -93,6 +94,12 @@ export function PlanCard({ content, onOpenInCanvas, workDir }: PlanCardProps) {
     }
   }, [content, onOpenInCanvas])
 
+  const handleExecutePlan = useCallback(() => {
+    if (onExecutePlan) {
+      onExecutePlan(content)
+    }
+  }, [content, onExecutePlan])
+
   return (
     <div className="rounded-2xl border border-kite-warning/15 bg-kite-warning/[0.03] overflow-hidden">
       {/* Header */}
@@ -127,8 +134,14 @@ export function PlanCard({ content, onOpenInCanvas, workDir }: PlanCardProps) {
 
           {/* Action Buttons */}
           <div className="flex items-center gap-1.5 px-4 py-2.5 border-t border-kite-warning/10">
+            {onExecutePlan && (
+              <PlanActionButton onClick={handleExecutePlan} title={t('Execute Plan')} variant="primary">
+                <Play size={12} />
+                <span>{t('Execute')}</span>
+              </PlanActionButton>
+            )}
             {onOpenInCanvas && (
-              <PlanActionButton onClick={handleOpenInCanvas} title={t('Open in Canvas')} variant="primary">
+              <PlanActionButton onClick={handleOpenInCanvas} title={t('Open in Canvas')}>
                 <ExternalLink size={12} />
                 <span>{t('Open in Canvas')}</span>
               </PlanActionButton>
@@ -141,6 +154,9 @@ export function PlanCard({ content, onOpenInCanvas, workDir }: PlanCardProps) {
               {saveSuccess ? <Check size={12} className="text-kite-success" /> : <Save size={12} />}
               <span>{saveSuccess ? t('Saved') : t('Save')}</span>
             </PlanActionButton>
+          </div>
+          <div className="px-4 pb-3 text-[11px] text-muted-foreground/60">
+            {t('You can execute this plan directly, or reply with adjustments in chat.')}
           </div>
         </>
       )}

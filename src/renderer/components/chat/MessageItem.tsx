@@ -30,9 +30,19 @@ interface MessageItemProps {
   isWaitingMore?: boolean  // True when content paused (e.g., during tool call), show "..." animation
   workDir?: string  // For skill suggestion card creation
   onOpenPlanInCanvas?: (planContent: string) => void
+  onExecutePlan?: (planContent: string) => void
 }
 
-export function MessageItem({ message, previousCost = 0, isInContainer = false, isWorking = false, isWaitingMore = false, workDir, onOpenPlanInCanvas }: MessageItemProps) {
+export function MessageItem({
+  message,
+  previousCost = 0,
+  isInContainer = false,
+  isWorking = false,
+  isWaitingMore = false,
+  workDir,
+  onOpenPlanInCanvas,
+  onExecutePlan
+}: MessageItemProps) {
   const isUser = message.role === 'user'
   const isStreaming = (message as any).isStreaming
   const [copied, setCopied] = useState(false)
@@ -82,7 +92,12 @@ export function MessageItem({ message, previousCost = 0, isInContainer = false, 
             <span className="whitespace-pre-wrap">{message.content}</span>
           ) : message.isPlan ? (
             // Plan mode: structured plan card
-            <PlanCard content={message.content} onOpenInCanvas={onOpenPlanInCanvas} workDir={workDir} />
+            <PlanCard
+              content={message.content}
+              onOpenInCanvas={onOpenPlanInCanvas}
+              onExecutePlan={onExecutePlan}
+              workDir={workDir}
+            />
           ) : (
             // Assistant messages: full markdown rendering
             <MarkdownRenderer content={message.content} workDir={workDir} />

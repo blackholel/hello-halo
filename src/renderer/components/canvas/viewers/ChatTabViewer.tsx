@@ -75,6 +75,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
 
   // Store actions
   const sendMessageToConversation = useChatStore(state => state.sendMessageToConversation)
+  const executePlan = useChatStore(state => state.executePlan)
   const stopGeneration = useChatStore(state => state.stopGeneration)
   const hydrateConversation = useChatStore(state => state.hydrateConversation)
   const getCachedConversation = useChatStore(state => state.getCachedConversation)
@@ -185,6 +186,13 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
     await openPlan(planContent, t('Plan'), spaceId, conversationId, resolvedWorkDir)
   }, [conversationId, openPlan, resolvedWorkDir, spaceId, t])
 
+  const handleExecutePlan = useCallback(async (planContent: string) => {
+    if (!spaceId || !conversationId || isGenerating) {
+      return
+    }
+    await executePlan(spaceId, conversationId, planContent)
+  }, [conversationId, executePlan, isGenerating, spaceId])
+
   // Loading state
   if (!conversation && isLoadingConversation) {
     return (
@@ -241,6 +249,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
                 toolStatusById={toolStatusById}
                 availableToolsSnapshot={availableToolsSnapshot}
                 onOpenPlanInCanvas={handleOpenPlanInCanvas}
+                onExecutePlan={handleExecutePlan}
               />
               <div ref={bottomRef} />
             </>
