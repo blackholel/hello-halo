@@ -34,7 +34,7 @@ import { SkillsDropdown } from '../skills/SkillsDropdown'
 import { ModelSwitcher } from './ModelSwitcher'
 import { ComposerTriggerPanel, type ComposerSuggestionItem, type ComposerSuggestionTab } from './ComposerTriggerPanel'
 import { processImage, isValidImageType, formatFileSize } from '../../utils/imageProcessor'
-import type { ConversationAiConfig, FileContextAttachment, ImageAttachment, KiteConfig } from '../../types'
+import type { ChatMode, ConversationAiConfig, FileContextAttachment, ImageAttachment, KiteConfig } from '../../types'
 import { useTranslation } from '../../i18n'
 import { useComposerStore } from '../../stores/composer.store'
 import { commandKey } from '../../../shared/command-utils'
@@ -42,15 +42,16 @@ import { getTriggerContext, replaceTriggerToken, type TriggerContext } from '../
 import { isResourceEnabled, toResourceKey } from '../../utils/resource-key'
 
 interface InputAreaProps {
-  onSend: (content: string, images?: ImageAttachment[], thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[], planEnabled?: boolean) => void
+  onSend: (content: string, images?: ImageAttachment[], thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[], mode?: ChatMode) => void
   onStop: () => void
   isGenerating: boolean
+  modeSwitching?: boolean
   spaceId: string | null
   placeholder?: string
   isCompact?: boolean
   workDir?: string  // For skills dropdown
-  planEnabled: boolean
-  onPlanEnabledChange: (enabled: boolean) => void
+  mode: ChatMode
+  onModeChange: (mode: ChatMode) => void
   conversation: { id: string; ai?: ConversationAiConfig } | null
   config: KiteConfig | null
 }
@@ -74,12 +75,13 @@ export function InputArea({
   onSend,
   onStop,
   isGenerating,
+  modeSwitching = false,
   spaceId,
   placeholder,
   isCompact = false,
   workDir,
-  planEnabled,
-  onPlanEnabledChange,
+  mode,
+  onModeChange,
   conversation,
   config,
 }: InputAreaProps) {
@@ -584,7 +586,7 @@ export function InputArea({
         images.length > 0 ? images : undefined,
         thinkingEnabled,
         fileContexts.length > 0 ? fileContexts : undefined,
-        planEnabled
+        mode
       )
 
       if (!isOnboardingSendStep) {
@@ -810,12 +812,13 @@ export function InputArea({
             config={config}
             spaceId={spaceId}
             isGenerating={isGenerating}
+            modeSwitching={modeSwitching}
             isOnboarding={isOnboardingSendStep}
             isProcessingImages={isProcessingImages}
             thinkingEnabled={thinkingEnabled}
             onThinkingToggle={() => setThinkingEnabled(!thinkingEnabled)}
-            planEnabled={planEnabled}
-            onPlanToggle={() => onPlanEnabledChange(!planEnabled)}
+            mode={mode}
+            onModeChange={onModeChange}
             aiBrowserEnabled={aiBrowserEnabled}
             onAIBrowserToggle={() => setAIBrowserEnabled(!aiBrowserEnabled)}
             showAttachMenu={showAttachMenu}
@@ -847,12 +850,13 @@ interface InputToolbarProps {
   config: KiteConfig | null
   spaceId: string | null
   isGenerating: boolean
+  modeSwitching: boolean
   isOnboarding: boolean
   isProcessingImages: boolean
   thinkingEnabled: boolean
   onThinkingToggle: () => void
-  planEnabled: boolean
-  onPlanToggle: () => void
+  mode: ChatMode
+  onModeChange: (mode: ChatMode) => void
   aiBrowserEnabled: boolean
   onAIBrowserToggle: () => void
   showAttachMenu: boolean
@@ -873,12 +877,13 @@ function InputToolbar({
   config,
   spaceId,
   isGenerating,
+  modeSwitching,
   isOnboarding,
   isProcessingImages,
   thinkingEnabled,
   onThinkingToggle,
-  planEnabled,
-  onPlanToggle,
+  mode,
+  onModeChange,
   aiBrowserEnabled,
   onAIBrowserToggle,
   showAttachMenu,
@@ -894,6 +899,8 @@ function InputToolbar({
   onInsertSkill
 }: InputToolbarProps) {
   const { t } = useTranslation()
+  const nextMode: ChatMode = mode === 'code' ? 'plan' : mode === 'plan' ? 'ask' : 'code'
+  const modeLabel = mode === 'code' ? t('Code') : mode === 'plan' ? t('Plan') : t('Ask')
   return (
     <div className="flex items-center justify-between gap-2 px-2.5 pb-2.5 pt-1.5">
       {/* Left section: attachment button + mode toggles */}
@@ -994,22 +1001,26 @@ function InputToolbar({
               <span className="text-xs">{t('Deep Thinking')}</span>
             </button>
 
-            {/* Plan mode toggle */}
-            <button
-              onClick={onPlanToggle}
-              className={`h-8 flex items-center gap-1.5 px-2.5 rounded-lg
-                transition-colors duration-200
-                ${planEnabled
-                  ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                  : 'text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50'
-                }
-              `}
-              title={planEnabled ? t('Disable Plan Mode') : t('Enable Plan Mode')}
-            >
-              <ClipboardList size={15} />
-              <span className="text-xs">{t('Plan')}</span>
-            </button>
           </>
+        )}
+        {!isOnboarding && (
+          <button
+            onClick={() => onModeChange(nextMode)}
+            disabled={modeSwitching}
+            className={`h-8 flex items-center gap-1.5 px-2.5 rounded-lg transition-colors duration-200
+              ${mode === 'plan'
+                ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                : mode === 'ask'
+                  ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400'
+                  : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+              }
+              ${modeSwitching ? 'opacity-60 cursor-not-allowed' : 'hover:bg-muted/50'}
+            `}
+            title={t('Current mode: {{mode}} (click to switch)', { mode: modeLabel })}
+          >
+            <ClipboardList size={15} />
+            <span className="text-xs">{modeLabel}</span>
+          </button>
         )}
       </div>
 
@@ -1038,7 +1049,7 @@ function InputToolbar({
                 : 'bg-muted/50 text-muted-foreground/40 cursor-not-allowed'
               }
             `}
-            title={t(planEnabled ? 'Send (Plan Mode)' : thinkingEnabled ? 'Send (Deep Thinking)' : 'Send')}
+            title={t(mode === 'plan' ? 'Send (Plan Mode)' : mode === 'ask' ? 'Send (Ask Mode)' : thinkingEnabled ? 'Send (Deep Thinking)' : 'Send')}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" />

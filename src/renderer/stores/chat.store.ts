@@ -22,7 +22,10 @@
 import { create } from 'zustand'
 import { api } from '../api'
 import { useTaskStore } from './task.store'
+import { normalizeChatMode } from '../types'
 import type {
+  ChatMode,
+  AgentModeEvent,
   Conversation,
   ConversationMeta,
   ConversationAiConfig,
@@ -125,6 +128,8 @@ interface SpaceState {
 // Per-session runtime state (isolated per conversation, persists across space switches)
 interface SessionState {
   activeRunId: string | null
+  mode: ChatMode
+  modeSwitching: boolean
   lifecycle: AgentRunLifecycle
   terminalReason: TerminalReason | null
   isGenerating: boolean
@@ -152,7 +157,6 @@ interface SessionState {
   parallelGroups: Map<string, ParallelGroup>
   // Currently active sub-agent IDs (Task tools that haven't completed)
   activeAgentIds: string[]
-  planEnabled: boolean
   activePlanTabId?: string
 }
 
@@ -160,6 +164,8 @@ interface SessionState {
 function createEmptySessionState(): SessionState {
   return {
     activeRunId: null,
+    mode: 'code',
+    modeSwitching: false,
     lifecycle: 'idle',
     terminalReason: null,
     isGenerating: false,
@@ -188,7 +194,6 @@ function createEmptySessionState(): SessionState {
     // New fields
     parallelGroups: new Map(),
     activeAgentIds: [],
-    planEnabled: false,
     activePlanTabId: undefined,
   }
 }
@@ -360,8 +365,10 @@ interface ChatState {
   getCurrentConversationMeta: () => ConversationMeta | null
   getCurrentSession: () => SessionState
   getSession: (conversationId: string) => SessionState
+  getConversationMode: (conversationId: string) => ChatMode
   getPlanEnabled: (conversationId: string) => boolean
   setPlanEnabled: (conversationId: string, enabled: boolean) => void
+  setConversationMode: (spaceId: string, conversationId: string, mode: ChatMode) => Promise<boolean>
   getChangeSets: (conversationId: string) => ChangeSet[]
   getConversations: () => ConversationMeta[]
   getCurrentConversationId: () => string | null
@@ -386,8 +393,8 @@ interface ChatState {
   updateConversationAi: (spaceId: string, conversationId: string, ai: ConversationAiConfig) => Promise<boolean>
 
   // Messaging
-  sendMessage: (content: string, images?: ImageAttachment[], aiBrowserEnabled?: boolean, thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[], planEnabled?: boolean) => Promise<void>
-  sendMessageToConversation: (spaceId: string, conversationId: string, content: string, images?: ImageAttachment[], thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[], aiBrowserEnabled?: boolean, planEnabled?: boolean) => Promise<void>
+  sendMessage: (content: string, images?: ImageAttachment[], aiBrowserEnabled?: boolean, thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[], mode?: ChatMode) => Promise<void>
+  sendMessageToConversation: (spaceId: string, conversationId: string, content: string, images?: ImageAttachment[], thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[], aiBrowserEnabled?: boolean, mode?: ChatMode) => Promise<void>
   executePlan: (spaceId: string, conversationId: string, planContent: string) => Promise<void>
   stopGeneration: (conversationId?: string) => Promise<void>
 
@@ -405,6 +412,7 @@ interface ChatState {
   handleAgentToolResult: (data: AgentEventBase & { toolCallId?: string; toolId?: string; result: string; isError: boolean }) => void
   handleAgentError: (data: AgentEventBase & { error: string }) => void
   handleAgentComplete: (data: AgentCompleteEvent) => void
+  handleAgentMode: (data: AgentModeEvent) => void
   handleAgentThought: (data: AgentEventBase & { thought: Thought }) => void
   handleAgentCompact: (data: AgentEventBase & { trigger: 'manual' | 'auto'; preTokens: number }) => void
   handleAgentToolsAvailable: (data: AgentEventBase & { runId: string; snapshotVersion: number; emittedAt: string; tools: string[]; toolCount: number }) => void
@@ -447,6 +455,26 @@ function setConversationLoadingState(
 
     return { loadingConversationCounts: nextLoadingCounts }
   })
+}
+
+function resolveConversationMode(
+  state: ChatState,
+  spaceId: string,
+  conversationId: string,
+  fallback: ChatMode = 'code'
+): ChatMode {
+  const sessionMode = state.sessions.get(conversationId)?.mode
+  if (sessionMode) {
+    return normalizeChatMode(sessionMode, undefined, fallback)
+  }
+  const cachedMode = (state.conversationCache.get(conversationId) as (Conversation & { mode?: ChatMode }) | undefined)?.mode
+  if (cachedMode) {
+    return normalizeChatMode(cachedMode, undefined, fallback)
+  }
+  const metaMode = state.spaceStates
+    .get(spaceId)
+    ?.conversations.find((conversation) => conversation.id === conversationId)?.mode
+  return normalizeChatMode(metaMode, undefined, fallback)
 }
 
 /**
@@ -545,15 +573,30 @@ async function ensureConversationLoadedImpl(
     ])
 
     if (conversationResponse?.success && conversationResponse.data) {
-      const fullConversation = conversationResponse.data as Conversation
+      const fullConversation = conversationResponse.data as Conversation & { mode?: ChatMode }
+      const normalizedMode = normalizeChatMode(fullConversation.mode)
       set((state) => {
         const newCache = new Map(state.conversationCache)
-        newCache.set(conversationId, fullConversation)
+        newCache.set(conversationId, {
+          ...fullConversation,
+          mode: normalizedMode
+        } as Conversation)
         if (newCache.size > CONVERSATION_CACHE_SIZE) {
           const firstKey = newCache.keys().next().value
           if (firstKey) newCache.delete(firstKey)
         }
-        return { conversationCache: newCache }
+
+        const newSessions = new Map(state.sessions)
+        const existingSession = newSessions.get(conversationId)
+        newSessions.set(conversationId, {
+          ...(existingSession || createEmptySessionState()),
+          mode: normalizedMode
+        })
+
+        return {
+          conversationCache: newCache,
+          sessions: newSessions
+        }
       })
     }
 
@@ -563,6 +606,7 @@ async function ensureConversationLoadedImpl(
         thoughts: Thought[]
         processTrace?: ProcessTraceNode[]
         spaceId?: string
+        mode?: ChatMode
       }
       const recoveredProcessTrace = Array.isArray(sessionState.processTrace)
         ? sessionState.processTrace
@@ -592,6 +636,11 @@ async function ensureConversationLoadedImpl(
           const existingSession = newSessions.get(conversationId) || createEmptySessionState()
           newSessions.set(conversationId, {
             ...existingSession,
+            mode: normalizeChatMode(
+              sessionState.mode,
+              undefined,
+              resolveConversationMode(state, spaceId, conversationId)
+            ),
             isGenerating: true,
             isThinking: true,
             thoughts: recoveredThoughts,
@@ -697,20 +746,186 @@ export const useChatStore = create<ChatState>((set, get) => ({
     return get().sessions.get(conversationId) || EMPTY_SESSION
   },
 
+  getConversationMode: (conversationId: string) => {
+    const state = get()
+    const sessionMode = state.sessions.get(conversationId)?.mode
+    if (sessionMode) {
+      return normalizeChatMode(sessionMode)
+    }
+
+    const cachedMode = (state.conversationCache.get(conversationId) as (Conversation & { mode?: ChatMode }) | undefined)?.mode
+    if (cachedMode) {
+      return normalizeChatMode(cachedMode)
+    }
+
+    for (const [spaceId, spaceState] of state.spaceStates.entries()) {
+      if (spaceState.conversations.some(conversation => conversation.id === conversationId)) {
+        return resolveConversationMode(state, spaceId, conversationId)
+      }
+    }
+
+    return 'code'
+  },
+
   getPlanEnabled: (conversationId: string) => {
-    return get().sessions.get(conversationId)?.planEnabled ?? false
+    return get().getConversationMode(conversationId) === 'plan'
   },
 
   setPlanEnabled: (conversationId: string, enabled: boolean) => {
-    set((state) => {
-      const newSessions = new Map(state.sessions)
-      const previousSession = newSessions.get(conversationId)
-      newSessions.set(conversationId, {
-        ...(previousSession || createEmptySessionState()),
-        planEnabled: enabled,
+    const state = get()
+    let targetSpaceId = state.currentSpaceId
+
+    if (!targetSpaceId) {
+      for (const [spaceId, spaceState] of state.spaceStates.entries()) {
+        if (spaceState.conversations.some(conversation => conversation.id === conversationId)) {
+          targetSpaceId = spaceId
+          break
+        }
+      }
+    }
+
+    if (!targetSpaceId) {
+      set((prevState) => {
+        const newSessions = new Map(prevState.sessions)
+        const previousSession = newSessions.get(conversationId)
+        newSessions.set(conversationId, {
+          ...(previousSession || createEmptySessionState()),
+          mode: enabled ? 'plan' : 'code'
+        })
+        return { sessions: newSessions }
       })
-      return { sessions: newSessions }
-    })
+      return
+    }
+
+    void get().setConversationMode(targetSpaceId, conversationId, enabled ? 'plan' : 'code')
+  },
+
+  setConversationMode: async (spaceId, conversationId, mode) => {
+    const targetMode = normalizeChatMode(mode)
+    const snapshot = get()
+    const snapshotSession = snapshot.sessions.get(conversationId) || createEmptySessionState()
+    const previousMode = resolveConversationMode(
+      snapshot,
+      spaceId,
+      conversationId,
+      snapshotSession.mode
+    )
+    if (snapshotSession.modeSwitching) {
+      return false
+    }
+    if (previousMode === targetMode) {
+      return true
+    }
+
+    const applyLocalMode = (
+      nextMode: ChatMode,
+      modeSwitching: boolean,
+      nextError?: string | null
+    ) => {
+      set((state) => {
+        const newSessions = new Map(state.sessions)
+        const prevSession = newSessions.get(conversationId) || createEmptySessionState()
+        newSessions.set(conversationId, {
+          ...prevSession,
+          mode: nextMode,
+          modeSwitching,
+          error: nextError === undefined ? prevSession.error : nextError
+        })
+
+        const newCache = new Map(state.conversationCache)
+        const cached = newCache.get(conversationId) as (Conversation & { mode?: ChatMode }) | undefined
+        if (cached) {
+          newCache.set(conversationId, {
+            ...cached,
+            mode: nextMode
+          })
+        }
+
+        const newSpaceStates = new Map(state.spaceStates)
+        const spaceState = newSpaceStates.get(spaceId)
+        if (spaceState) {
+          newSpaceStates.set(spaceId, {
+            ...spaceState,
+            conversations: spaceState.conversations.map((conversation) =>
+              conversation.id === conversationId
+                ? { ...conversation, mode: nextMode }
+                : conversation
+            )
+          })
+        }
+
+        return {
+          sessions: newSessions,
+          conversationCache: newCache,
+          spaceStates: newSpaceStates
+        }
+      })
+    }
+
+    applyLocalMode(previousMode, true, null)
+    const isRunning = snapshotSession.lifecycle === 'running' && Boolean(snapshotSession.activeRunId)
+    let runtimeApplied = false
+
+    try {
+      if (isRunning) {
+        const runtimeResponse = await api.setAgentMode(
+          conversationId,
+          targetMode,
+          snapshotSession.activeRunId || undefined
+        )
+        const runtimeData = runtimeResponse.success ? runtimeResponse.data : null
+        if (!runtimeResponse.success || !runtimeData) {
+          applyLocalMode(previousMode, false, runtimeResponse.error || 'Failed to switch mode')
+          return false
+        }
+
+        if (!runtimeData.applied && runtimeData.reason !== 'no_active_session') {
+          applyLocalMode(previousMode, false, runtimeData.error || runtimeData.reason || 'Failed to switch mode')
+          return false
+        }
+        runtimeApplied = runtimeData.applied
+      }
+
+      const persistResponse = await api.updateConversation(spaceId, conversationId, { mode: targetMode })
+      if (!persistResponse.success) {
+        if (runtimeApplied) {
+          try {
+            await api.setAgentMode(
+              conversationId,
+              previousMode,
+              snapshotSession.activeRunId || undefined
+            )
+          } catch (rollbackError) {
+            console.error('[ChatStore] Failed to compensate runtime mode switch:', rollbackError)
+          }
+        }
+        applyLocalMode(previousMode, false, persistResponse.error || 'Failed to persist mode')
+        return false
+      }
+
+      applyLocalMode(targetMode, false, null)
+      if (!isRunning) {
+        api.setAgentMode(conversationId, targetMode).catch((runtimeSyncError) => {
+          console.warn('[ChatStore] Best-effort runtime mode sync failed:', runtimeSyncError)
+        })
+      }
+      return true
+    } catch (error) {
+      console.error('[ChatStore] Failed to switch conversation mode:', error)
+      if (runtimeApplied) {
+        try {
+          await api.setAgentMode(
+            conversationId,
+            previousMode,
+            snapshotSession.activeRunId || undefined
+          )
+        } catch (rollbackError) {
+          console.error('[ChatStore] Failed to compensate runtime mode switch:', rollbackError)
+        }
+      }
+      applyLocalMode(previousMode, false, 'Failed to switch mode')
+      return false
+    }
   },
 
   getChangeSets: (conversationId: string) => {
@@ -731,7 +946,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       if (response.success && response.data) {
         // Now receives ConversationMeta[] (lightweight, no messages)
-        const conversations = response.data as ConversationMetaWithAi[]
+        const conversations = (response.data as ConversationMetaWithAi[]).map((conversation) => ({
+          ...conversation,
+          mode: normalizeChatMode((conversation as { mode?: ChatMode }).mode)
+        }))
 
         set((state) => {
           const newSpaceStates = new Map(state.spaceStates)
@@ -758,13 +976,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const response = await api.createConversation(spaceId, title)
 
       if (response.success && response.data) {
-        const newConversation = response.data as ConversationWithAi
+        const newConversation = response.data as ConversationWithAi & { mode?: ChatMode }
+        const mode = normalizeChatMode(newConversation.mode)
 
         // Extract metadata for the list
         const meta: ConversationMetaWithAi = {
           id: newConversation.id,
           spaceId: newConversation.spaceId,
           title: newConversation.title,
+          mode,
           createdAt: newConversation.createdAt,
           updatedAt: newConversation.updatedAt,
           messageCount: newConversation.messages?.length || 0,
@@ -778,7 +998,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
           // Add to conversation cache (new conversation is full)
           const newCache = new Map(state.conversationCache)
-          newCache.set(newConversation.id, newConversation)
+          newCache.set(newConversation.id, {
+            ...newConversation,
+            mode
+          } as Conversation)
 
           // LRU eviction
           if (newCache.size > CONVERSATION_CACHE_SIZE) {
@@ -981,8 +1204,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  // Send message (with optional images for multi-modal, optional AI Browser and thinking mode, optional file contexts, optional plan mode)
-  sendMessage: async (content, images, aiBrowserEnabled, thinkingEnabled, fileContexts, planEnabled) => {
+  // Send message (with optional images for multi-modal, optional AI Browser and thinking mode, optional file contexts, optional mode)
+  sendMessage: async (content, images, aiBrowserEnabled, thinkingEnabled, fileContexts, mode) => {
     const conversation = get().getCurrentConversation()
     const conversationMeta = get().getCurrentConversationMeta()
     const { currentSpaceId } = get()
@@ -996,7 +1219,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!conversationId) return
 
     const snapshotSession = get().sessions.get(conversationId)
-    const effectivePlanEnabled = planEnabled ?? snapshotSession?.planEnabled ?? false
+    const effectiveMode = normalizeChatMode(mode, undefined, snapshotSession?.mode || 'code')
 
     try {
       // Initialize/reset session state for this conversation
@@ -1005,11 +1228,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const latestSession = newSessions.get(conversationId)
         newSessions.set(conversationId, {
           ...createEmptySessionState(),
+          mode: effectiveMode,
           lifecycle: 'running',
           terminalReason: null,
           isGenerating: true,
           isThinking: true,
-          planEnabled: effectivePlanEnabled,
           activePlanTabId: latestSession?.activePlanTabId,
         })
         return { sessions: newSessions }
@@ -1090,7 +1313,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         images: images,  // Pass images to API
         aiBrowserEnabled,  // Pass AI Browser state to API
         thinkingEnabled,  // Pass thinking mode to API
-        planEnabled: effectivePlanEnabled,  // Pass plan mode to API
+        mode: effectiveMode,
+        planEnabled: effectiveMode === 'plan',  // Compatibility (deprecated)
         canvasContext: buildCanvasContext(),  // Pass canvas context for AI awareness
         fileContexts: fileContexts  // Pass file contexts for context injection
       })
@@ -1105,7 +1329,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
           error: 'Failed to send message',
           isGenerating: false,
           isThinking: false,
-          planEnabled: session.planEnabled,
           activePlanTabId: session.activePlanTabId,
         })
         return { sessions: newSessions }
@@ -1114,14 +1337,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   // Send message to a specific conversation (for Chat Tabs - avoids global context switching)
-  sendMessageToConversation: async (spaceId, conversationId, content, images, thinkingEnabled, fileContexts, aiBrowserEnabled, planEnabled) => {
+  sendMessageToConversation: async (spaceId, conversationId, content, images, thinkingEnabled, fileContexts, aiBrowserEnabled, mode) => {
     if (!spaceId || !conversationId) {
       console.error('[ChatStore] spaceId and conversationId are required')
       return
     }
 
     const snapshotSession = get().sessions.get(conversationId)
-    const effectivePlanEnabled = planEnabled ?? snapshotSession?.planEnabled ?? false
+    const effectiveMode = normalizeChatMode(mode, undefined, snapshotSession?.mode || 'code')
 
     try {
       // Initialize/reset session state for this conversation
@@ -1130,11 +1353,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const latestSession = newSessions.get(conversationId)
         newSessions.set(conversationId, {
           ...createEmptySessionState(),
+          mode: effectiveMode,
           lifecycle: 'running',
           terminalReason: null,
           isGenerating: true,
           isThinking: true,
-          planEnabled: effectivePlanEnabled,
           activePlanTabId: latestSession?.activePlanTabId,
         })
         return { sessions: newSessions }
@@ -1185,7 +1408,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         images: images,
         aiBrowserEnabled: aiBrowserEnabled ?? false,
         thinkingEnabled,
-        planEnabled: effectivePlanEnabled,
+        mode: effectiveMode,
+        planEnabled: effectiveMode === 'plan',
         canvasContext: undefined, // No canvas context for tab messages
         fileContexts: fileContexts
       })
@@ -1200,7 +1424,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
           error: 'Failed to send message',
           isGenerating: false,
           isThinking: false,
-          planEnabled: session.planEnabled,
           activePlanTabId: session.activePlanTabId,
         })
         return { sessions: newSessions }
@@ -1224,7 +1447,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         false,
         undefined,
         undefined,
-        false
+        'code'
       )
 
       // Only clear activePlanTabId after successful send
@@ -1398,6 +1621,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // Run barrier event - marks a new active run before any run-scoped events are processed
   handleAgentRunStart: (data) => {
     const { conversationId, runId, startedAt } = data
+    const incomingMode = normalizeChatMode(
+      (data as AgentEventBase & { mode?: ChatMode }).mode,
+      undefined,
+      get().getConversationMode(conversationId)
+    )
     let replayEvents: PendingRunEvent[] = []
 
     set((state) => {
@@ -1411,6 +1639,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const remainingPending = pendingRunEvents.filter(event => event.runId !== runId)
       newSessions.set(conversationId, {
         ...createEmptySessionState(),
+        mode: incomingMode,
         activeRunId: runId,
         lifecycle: 'running',
         terminalReason: null,
@@ -2011,13 +2240,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
       ])
       if (conversationResponse.success && conversationResponse.data) {
         conversationReloaded = true
-        const updatedConversation = conversationResponse.data as ConversationWithAi
+        const updatedConversation = conversationResponse.data as ConversationWithAi & { mode?: ChatMode }
+        const updatedConversationMode = normalizeChatMode(updatedConversation.mode)
 
         // Extract updated metadata
         const updatedMeta: ConversationMetaWithAi = {
           id: updatedConversation.id,
           spaceId: updatedConversation.spaceId,
           title: updatedConversation.title,
+          mode: updatedConversationMode,
           createdAt: updatedConversation.createdAt,
           updatedAt: updatedConversation.updatedAt,
           messageCount: updatedConversation.messages?.length || 0,
@@ -2032,7 +2263,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         set((state) => {
           // Update cache with fresh data
           const newCache = new Map(state.conversationCache)
-          newCache.set(conversationId, updatedConversation)
+          newCache.set(conversationId, {
+            ...updatedConversation,
+            mode: updatedConversationMode
+          } as Conversation)
 
           // Update metadata in space state
           const newSpaceStates = new Map(state.spaceStates)
@@ -2052,6 +2286,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           if (currentSession) {
             newSessions.set(conversationId, {
               ...currentSession,
+              mode: updatedConversationMode,
               isGenerating: false,
               streamingContent: '',
               pendingAskUserQuestion: null,
@@ -2105,6 +2340,54 @@ export const useChatStore = create<ChatState>((set, get) => ({
         return { sessions: newSessions }
       })
     }
+  },
+
+  handleAgentMode: (data) => {
+    const { spaceId, conversationId, runId, mode } = data
+    const nextMode = normalizeChatMode(mode)
+
+    set((state) => {
+      const newSessions = new Map(state.sessions)
+      const session = newSessions.get(conversationId) || createEmptySessionState()
+
+      if (runId && session.activeRunId && session.activeRunId !== runId) {
+        return state
+      }
+
+      newSessions.set(conversationId, {
+        ...session,
+        mode: nextMode,
+        modeSwitching: false
+      })
+
+      const newCache = new Map(state.conversationCache)
+      const cachedConversation = newCache.get(conversationId) as (Conversation & { mode?: ChatMode }) | undefined
+      if (cachedConversation) {
+        newCache.set(conversationId, {
+          ...cachedConversation,
+          mode: nextMode
+        })
+      }
+
+      const newSpaceStates = new Map(state.spaceStates)
+      const targetSpaceState = newSpaceStates.get(spaceId)
+      if (targetSpaceState) {
+        newSpaceStates.set(spaceId, {
+          ...targetSpaceState,
+          conversations: targetSpaceState.conversations.map((conversation) =>
+            conversation.id === conversationId
+              ? { ...conversation, mode: nextMode }
+              : conversation
+          )
+        })
+      }
+
+      return {
+        sessions: newSessions,
+        conversationCache: newCache,
+        spaceStates: newSpaceStates
+      }
+    })
   },
 
   // Load change sets for a conversation

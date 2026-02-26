@@ -11,6 +11,8 @@ interface AskUserQuestionAnswerPayload {
   runId?: string
 }
 
+type ChatMode = 'code' | 'plan' | 'ask'
+
 // Type definitions for exposed API
 export interface KiteAPI {
   // Config
@@ -95,6 +97,7 @@ export interface KiteAPI {
     aiBrowserEnabled?: boolean  // Enable AI Browser tools
     thinkingEnabled?: boolean  // Enable extended thinking mode
     planEnabled?: boolean  // Enable plan mode (no tool execution)
+    mode?: ChatMode
     canvasContext?: {  // Canvas context for AI awareness
       isOpen: boolean
       tabCount: number
@@ -112,7 +115,19 @@ export interface KiteAPI {
         isActive: boolean
       }>
     }
+    fileContexts?: Array<{
+      id: string
+      type: 'file-context'
+      path: string
+      name: string
+      extension: string
+    }>
   }) => Promise<IpcResponse>
+  setAgentMode: (
+    conversationId: string,
+    mode: ChatMode,
+    runId?: string
+  ) => Promise<IpcResponse<{ applied: boolean; mode: ChatMode; runId?: string; reason?: string; error?: string }>>
   stopGeneration: (conversationId?: string) => Promise<IpcResponse>
   approveTool: (conversationId: string) => Promise<IpcResponse>
   rejectTool: (conversationId: string) => Promise<IpcResponse>
@@ -134,6 +149,7 @@ export interface KiteAPI {
   onAgentProcess: (callback: (data: unknown) => void) => () => void
   onAgentError: (callback: (data: unknown) => void) => () => void
   onAgentComplete: (callback: (data: unknown) => void) => () => void
+  onAgentMode: (callback: (data: unknown) => void) => () => void
   onAgentThinking: (callback: (data: unknown) => void) => () => void
   onAgentThought: (callback: (data: unknown) => void) => () => void
   onAgentToolsAvailable: (callback: (data: unknown) => void) => () => void
@@ -437,6 +453,8 @@ const api: KiteAPI = {
 
   // Agent
   sendMessage: (request) => ipcRenderer.invoke('agent:send-message', request),
+  setAgentMode: (conversationId, mode, runId) =>
+    ipcRenderer.invoke('agent:set-mode', { conversationId, mode, runId }),
   stopGeneration: (conversationId) => ipcRenderer.invoke('agent:stop', conversationId),
   approveTool: (conversationId) => ipcRenderer.invoke('agent:approve-tool', conversationId),
   rejectTool: (conversationId) => ipcRenderer.invoke('agent:reject-tool', conversationId),
@@ -456,6 +474,7 @@ const api: KiteAPI = {
   onAgentProcess: (callback) => createEventListener('agent:process', callback),
   onAgentError: (callback) => createEventListener('agent:error', callback),
   onAgentComplete: (callback) => createEventListener('agent:complete', callback),
+  onAgentMode: (callback) => createEventListener('agent:mode', callback),
   onAgentThinking: (callback) => createEventListener('agent:thinking', callback),
   onAgentThought: (callback) => createEventListener('agent:thought', callback),
   onAgentToolsAvailable: (callback) => createEventListener('agent:tools-available', callback),

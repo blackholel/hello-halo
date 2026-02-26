@@ -6,6 +6,7 @@
 import { BrowserWindow } from 'electron'
 import {
   sendMessage as agentSendMessage,
+  setAgentMode as agentSetMode,
   stopGeneration as agentStopGeneration,
   handleToolApproval as agentHandleToolApproval,
   handleAskUserQuestionResponse as agentHandleAskUserQuestionResponse,
@@ -14,7 +15,7 @@ import {
   getSessionState as agentGetSessionState,
   testMcpConnections as agentTestMcpConnections
 } from '../services/agent'
-import type { AskUserQuestionAnswerInput } from '../services/agent'
+import type { AskUserQuestionAnswerInput, ChatMode } from '../services/agent'
 
 // Image attachment type for multi-modal messages
 interface ImageAttachment {
@@ -35,7 +36,28 @@ export interface SendMessageRequest {
   model?: string
   images?: ImageAttachment[]  // Optional images for multi-modal messages
   thinkingEnabled?: boolean   // Enable extended thinking mode
+  planEnabled?: boolean
+  mode?: ChatMode
   aiBrowserEnabled?: boolean  // Enable AI Browser tools
+  canvasContext?: {
+    isOpen: boolean
+    tabCount: number
+    activeTab: { type: string; title: string; url?: string; path?: string } | null
+    tabs: Array<{ type: string; title: string; url?: string; path?: string; isActive: boolean }>
+  }
+  fileContexts?: Array<{
+    id: string
+    type: 'file-context'
+    path: string
+    name: string
+    extension: string
+  }>
+}
+
+export interface SetModeRequest {
+  conversationId: string
+  mode: ChatMode
+  runId?: string
 }
 
 export interface ControllerResponse<T = unknown> {
@@ -58,6 +80,16 @@ export async function sendMessage(
       : request
     await agentSendMessage(mainWindow, normalizedRequest)
     return { success: true }
+  } catch (error: unknown) {
+    const err = error as Error
+    return { success: false, error: err.message }
+  }
+}
+
+export async function setMode(request: SetModeRequest): Promise<ControllerResponse> {
+  try {
+    const result = await agentSetMode(request.conversationId, request.mode, request.runId)
+    return { success: true, data: result }
   } catch (error: unknown) {
     const err = error as Error
     return { success: false, error: err.message }

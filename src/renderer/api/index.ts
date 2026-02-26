@@ -15,6 +15,7 @@ import {
   clearAuthToken,
   getAuthToken
 } from './transport'
+import type { ChatMode } from '../types'
 
 // Response type
 interface ApiResponse<T = unknown> {
@@ -334,6 +335,7 @@ export const api = {
     aiBrowserEnabled?: boolean  // Enable AI Browser tools
     thinkingEnabled?: boolean  // Enable extended thinking mode
     planEnabled?: boolean  // Enable plan mode (no tool execution)
+    mode?: ChatMode
     canvasContext?: {  // Canvas context for AI awareness
       isOpen: boolean
       tabCount: number
@@ -368,6 +370,17 @@ export const api = {
       return window.kite.sendMessage(request)
     }
     return httpRequest('POST', '/api/agent/message', request)
+  },
+
+  setAgentMode: async (
+    conversationId: string,
+    mode: ChatMode,
+    runId?: string
+  ): Promise<ApiResponse<{ applied: boolean; mode: ChatMode; runId?: string; reason?: string; error?: string }>> => {
+    if (isElectron()) {
+      return window.kite.setAgentMode(conversationId, mode, runId)
+    }
+    return httpRequest('POST', '/api/agent/mode', { conversationId, mode, runId })
   },
 
   stopGeneration: async (conversationId?: string): Promise<ApiResponse> => {
@@ -1069,6 +1082,8 @@ export const api = {
     onEvent('agent:error', callback),
   onAgentComplete: (callback: (data: unknown) => void) =>
     onEvent('agent:complete', callback),
+  onAgentMode: (callback: (data: unknown) => void) =>
+    onEvent('agent:mode', callback),
   onAgentThought: (callback: (data: unknown) => void) =>
     onEvent('agent:thought', callback),
   onAgentToolsAvailable: (callback: (data: unknown) => void) =>

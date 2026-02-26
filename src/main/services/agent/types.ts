@@ -32,6 +32,31 @@ export interface FileContextAttachment {
 }
 
 // ============================================
+// Chat Mode
+// ============================================
+
+export const CHAT_MODES = ['code', 'plan', 'ask'] as const
+export type ChatMode = (typeof CHAT_MODES)[number]
+
+export function isChatMode(value: unknown): value is ChatMode {
+  return typeof value === 'string' && (CHAT_MODES as readonly string[]).includes(value)
+}
+
+export function normalizeChatMode(
+  mode?: unknown,
+  planEnabled?: unknown,
+  fallback: ChatMode = 'code'
+): ChatMode {
+  if (isChatMode(mode)) {
+    return mode
+  }
+  if (planEnabled === true) {
+    return 'plan'
+  }
+  return fallback
+}
+
+// ============================================
 // Canvas Context
 // ============================================
 
@@ -69,6 +94,7 @@ export interface AgentRequest {
   aiBrowserEnabled?: boolean
   thinkingEnabled?: boolean
   planEnabled?: boolean
+  mode?: ChatMode
   modelOverride?: string
   /** @deprecated Use modelOverride instead. */
   model?: string
@@ -171,6 +197,7 @@ export interface SessionState {
   spaceId: string
   conversationId: string
   runId: string
+  mode: ChatMode
   startedAt: number
   latestAssistantContent: string
   lifecycle: SessionLifecycle
@@ -184,6 +211,21 @@ export interface SessionState {
   pendingAskUserQuestion: PendingAskUserQuestionContext | null
   thoughts: Thought[]
   processTrace: ProcessTraceNode[]
+}
+
+export type PermissionModeFailureReason =
+  | 'no_active_session'
+  | 'run_id_mismatch'
+  | 'sdk_error'
+  | 'invalid_mode'
+  | 'blocked_pending_interaction'
+
+export interface AgentSetModeResult {
+  applied: boolean
+  mode: ChatMode
+  runId?: string
+  reason?: PermissionModeFailureReason
+  error?: string
 }
 
 /**

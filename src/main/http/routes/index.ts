@@ -253,7 +253,11 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
       model,
       images,
       thinkingEnabled,
-      aiBrowserEnabled
+      aiBrowserEnabled,
+      planEnabled,
+      mode,
+      canvasContext,
+      fileContexts
     } = req.body
     const result = await agentController.sendMessage(mainWindow, {
       spaceId,
@@ -264,8 +268,18 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
       model,
       images,  // Pass images for multi-modal messages (remote access)
       thinkingEnabled,  // Pass thinking mode for extended thinking (remote access)
-      aiBrowserEnabled  // Pass AI Browser toggle for remote access
+      aiBrowserEnabled,  // Pass AI Browser toggle for remote access
+      planEnabled,
+      mode,
+      canvasContext,
+      fileContexts
     })
+    res.json(result)
+  })
+
+  app.post('/api/agent/mode', async (req: Request, res: Response) => {
+    const { conversationId, mode, runId } = req.body
+    const result = await agentController.setMode({ conversationId, mode, runId })
     res.json(result)
   })
 

@@ -25,6 +25,7 @@ import { api } from './api'
 import type {
   AgentEventBase,
   AgentCompleteEvent,
+  AgentModeEvent,
   AgentProcessEvent,
   Thought,
   ToolCall
@@ -90,6 +91,7 @@ export default function App() {
     handleAgentToolResult,
     handleAgentError,
     handleAgentComplete,
+    handleAgentMode,
     handleAgentThought,
     handleAgentCompact,
     handleAgentToolsAvailable,
@@ -198,6 +200,11 @@ export default function App() {
       handleWorkflowAgentComplete(data as AgentCompleteEvent)
     })
 
+    const unsubMode = api.onAgentMode((data) => {
+      console.log('[App] Received agent:mode event:', data)
+      handleAgentMode(data as AgentModeEvent)
+    })
+
     const unsubCompact = api.onAgentCompact((data) => {
       console.log('[App] Received agent:compact event:', data)
       handleAgentCompact(data as AgentEventBase & { trigger: 'manual' | 'auto'; preTokens: number })
@@ -232,6 +239,7 @@ export default function App() {
       unsubToolResult()
       unsubError()
       unsubComplete()
+      unsubMode()
       unsubCompact()
       unsubToolsAvailable()
       unsubMcpStatus()
@@ -244,6 +252,7 @@ export default function App() {
     handleAgentToolResult,
     handleAgentError,
     handleAgentComplete,
+    handleAgentMode,
     handleWorkflowAgentComplete,
     handleAgentThought,
     handleAgentCompact,

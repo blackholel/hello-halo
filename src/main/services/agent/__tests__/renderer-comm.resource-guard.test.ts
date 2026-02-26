@@ -38,6 +38,26 @@ function createHandler() {
   )
 }
 
+function createAskModeHandler() {
+  return createCanUseTool(
+    '/workspace/project',
+    'space-1',
+    'conversation-1',
+    () => undefined,
+    { mode: 'ask' }
+  )
+}
+
+function createDynamicModeHandler(getMode: () => 'code' | 'ask') {
+  return createCanUseTool(
+    '/workspace/project',
+    'space-1',
+    'conversation-1',
+    () => ({ mode: getMode() } as any),
+    { mode: 'code' }
+  )
+}
+
 describe('renderer-comm resource-dir guard', () => {
   beforeEach(() => {
     policyMode = 'strict-space-only'
@@ -100,5 +120,38 @@ describe('renderer-comm resource-dir guard', () => {
     )
 
     expect(result.behavior).toBe('allow')
+  })
+
+  it('ask mode denies all tools', async () => {
+    const canUseTool = createAskModeHandler()
+    const result = await canUseTool(
+      'Read',
+      { file_path: 'README.md' },
+      { signal: new AbortController().signal }
+    )
+
+    expect(result.behavior).toBe('deny')
+    expect(result.message).toContain('ASK mode')
+  })
+
+  it('switching to ask mode at runtime denies tools immediately', async () => {
+    let mode: 'code' | 'ask' = 'code'
+    const canUseTool = createDynamicModeHandler(() => mode)
+
+    const beforeSwitch = await canUseTool(
+      'Read',
+      { file_path: 'README.md' },
+      { signal: new AbortController().signal }
+    )
+    expect(beforeSwitch.behavior).toBe('allow')
+
+    mode = 'ask'
+    const afterSwitch = await canUseTool(
+      'Read',
+      { file_path: 'README.md' },
+      { signal: new AbortController().signal }
+    )
+    expect(afterSwitch.behavior).toBe('deny')
+    expect(afterSwitch.message).toContain('ASK mode')
   })
 })

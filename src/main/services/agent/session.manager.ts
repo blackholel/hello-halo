@@ -13,7 +13,15 @@ import { resolveProvider } from './provider-resolver'
 import { resolveEffectiveConversationAi } from './ai-config-resolver'
 import { buildSdkOptions, getWorkingDir, getEffectiveSkillsLazyLoad } from './sdk-config.builder'
 import { createCanUseTool } from './renderer-comm'
-import type { V2SDKSession, V2SessionInfo, SessionConfig, SessionState } from './types'
+import type {
+  V2SDKSession,
+  V2SessionInfo,
+  SessionConfig,
+  SessionState,
+  ChatMode,
+  AgentSetModeResult
+} from './types'
+import { isChatMode } from './types'
 import { getEnabledPluginMcpHash, getEnabledPluginMcpList } from '../plugin-mcp.service'
 
 // V2 Session management: Map of conversationId -> persistent V2 session
@@ -30,6 +38,16 @@ function toNonEmptyString(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
   const normalized = value.trim()
   return normalized.length > 0 ? normalized : undefined
+}
+
+function toPermissionMode(mode: ChatMode): 'acceptEdits' | 'plan' | 'dontAsk' {
+  if (mode === 'plan') {
+    return 'plan'
+  }
+  if (mode === 'ask') {
+    return 'dontAsk'
+  }
+  return 'acceptEdits'
 }
 
 /**
@@ -404,6 +422,7 @@ export function getSessionState(conversationId: string): {
   processTrace: import('./types').ProcessTraceNode[]
   spaceId?: string
   runId?: string | null
+  mode?: ChatMode
   lifecycle?: import('./types').SessionLifecycle | 'idle'
   terminalReason?: import('./types').SessionTerminalReason
 } {
@@ -414,6 +433,7 @@ export function getSessionState(conversationId: string): {
       thoughts: [],
       processTrace: [],
       runId: null,
+      mode: 'code',
       lifecycle: 'idle',
       terminalReason: null
     }
@@ -424,8 +444,90 @@ export function getSessionState(conversationId: string): {
     processTrace: [...session.processTrace],
     spaceId: session.spaceId,
     runId: session.runId,
+    mode: session.mode,
     lifecycle: session.lifecycle,
     terminalReason: session.terminalReason
+  }
+}
+
+export async function setSessionMode(
+  conversationId: string,
+  targetMode: unknown,
+  runId?: string
+): Promise<AgentSetModeResult> {
+  if (!isChatMode(targetMode)) {
+    return {
+      applied: false,
+      mode: 'code',
+      reason: 'invalid_mode',
+      error: `Invalid mode: ${String(targetMode)}`
+    }
+  }
+
+  const sessionState = activeSessions.get(conversationId)
+  if (!sessionState || sessionState.lifecycle !== 'running') {
+    return {
+      applied: false,
+      mode: targetMode,
+      reason: 'no_active_session'
+    }
+  }
+
+  if (sessionState.pendingAskUserQuestion || sessionState.pendingPermissionResolve) {
+    return {
+      applied: false,
+      mode: sessionState.mode,
+      runId: sessionState.runId,
+      reason: 'blocked_pending_interaction'
+    }
+  }
+
+  if (runId && sessionState.runId !== runId) {
+    return {
+      applied: false,
+      mode: sessionState.mode,
+      runId: sessionState.runId,
+      reason: 'run_id_mismatch'
+    }
+  }
+
+  const v2SessionInfo = v2Sessions.get(conversationId)
+  if (!v2SessionInfo || typeof v2SessionInfo.session.setPermissionMode !== 'function') {
+    return {
+      applied: false,
+      mode: sessionState.mode,
+      runId: sessionState.runId,
+      reason: 'sdk_error',
+      error: 'Session does not support permission mode switching'
+    }
+  }
+
+  if (sessionState.mode === targetMode) {
+    return {
+      applied: true,
+      mode: targetMode,
+      runId: sessionState.runId
+    }
+  }
+
+  try {
+    await v2SessionInfo.session.setPermissionMode(toPermissionMode(targetMode))
+    sessionState.mode = targetMode
+    v2SessionInfo.lastUsedAt = Date.now()
+    return {
+      applied: true,
+      mode: targetMode,
+      runId: sessionState.runId
+    }
+  } catch (error) {
+    const err = error as Error
+    return {
+      applied: false,
+      mode: sessionState.mode,
+      runId: sessionState.runId,
+      reason: 'sdk_error',
+      error: err.message
+    }
   }
 }
 

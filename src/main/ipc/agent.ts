@@ -5,6 +5,7 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import {
   sendMessage,
+  setAgentMode,
   stopGeneration,
   handleToolApproval,
   handleAskUserQuestionResponse,
@@ -43,6 +44,7 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
         }>
         thinkingEnabled?: boolean  // Enable extended thinking mode
         planEnabled?: boolean  // Enable plan mode (no tool execution)
+        mode?: 'code' | 'plan' | 'ask'
         aiBrowserEnabled?: boolean  // Enable AI Browser tools
         canvasContext?: {
           isOpen: boolean
@@ -66,6 +68,22 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
           : request
         await sendMessage(mainWindow, normalizedRequest)
         return { success: true }
+      } catch (error: unknown) {
+        const err = error as Error
+        return { success: false, error: err.message }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'agent:set-mode',
+    async (
+      _event,
+      request: { conversationId: string; mode: 'code' | 'plan' | 'ask'; runId?: string }
+    ) => {
+      try {
+        const result = await setAgentMode(request.conversationId, request.mode, request.runId)
+        return { success: true, data: result }
       } catch (error: unknown) {
         const err = error as Error
         return { success: false, error: err.message }

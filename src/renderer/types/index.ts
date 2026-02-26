@@ -73,6 +73,28 @@ export type ToolStatus =
 // Message Role
 export type MessageRole = 'user' | 'assistant' | 'system';
 
+// Chat Mode
+export const CHAT_MODES = ['code', 'plan', 'ask'] as const;
+export type ChatMode = (typeof CHAT_MODES)[number];
+
+export function isChatMode(value: unknown): value is ChatMode {
+  return typeof value === 'string' && (CHAT_MODES as readonly string[]).includes(value);
+}
+
+export function normalizeChatMode(
+  mode?: unknown,
+  planEnabled?: unknown,
+  fallback: ChatMode = 'code'
+): ChatMode {
+  if (isChatMode(mode)) {
+    return mode;
+  }
+  if (planEnabled === true) {
+    return 'plan';
+  }
+  return fallback;
+}
+
 // ============================================
 // Configuration Types
 // ============================================
@@ -246,6 +268,7 @@ export interface ConversationMeta {
   id: string;
   spaceId: string;
   title: string;
+  mode?: ChatMode;
   createdAt: string;
   updatedAt: string;
   messageCount: number;
@@ -664,6 +687,14 @@ export interface AgentCompleteEvent extends AgentEventBase {
   isPlan?: boolean;
 }
 
+export interface AgentModeEvent extends AgentEventBase {
+  type: 'mode';
+  mode: ChatMode;
+  applied: boolean;
+  reason?: string;
+  error?: string;
+}
+
 export interface AgentRunStartEvent extends AgentEventBase {
   type: 'run_start';
   runId: string;
@@ -703,6 +734,7 @@ export type AgentEvent =
   | AgentToolResultEvent
   | AgentErrorEvent
   | AgentCompleteEvent
+  | AgentModeEvent
   | AgentCompactEvent
   | AgentToolsAvailableEvent;
 

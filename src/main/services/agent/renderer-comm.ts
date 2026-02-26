@@ -21,7 +21,8 @@ import type {
   SessionState,
   AskUserQuestionAnswerInput,
   AskUserQuestionMode,
-  CanUseToolDecision
+  CanUseToolDecision,
+  ChatMode
 } from './types'
 
 // Current main window reference for IPC communication
@@ -310,7 +311,8 @@ export function createCanUseTool(
   workDir: string,
   spaceId: string,
   conversationId: string,
-  getActiveSession: (convId: string) => SessionState | undefined
+  getActiveSession: (convId: string) => SessionState | undefined,
+  options?: { mode?: ChatMode }
 ): (
   toolName: string,
   input: Record<string, unknown>,
@@ -326,6 +328,15 @@ export function createCanUseTool(
     input: Record<string, unknown>,
     _options: { signal: AbortSignal }
   ) => {
+    const runtimeMode = getActiveSession(conversationId)?.mode
+    const effectiveMode = runtimeMode || options?.mode
+    if (effectiveMode === 'ask') {
+      return {
+        behavior: 'deny' as const,
+        message: 'ASK mode is text-only; tool execution is disabled'
+      }
+    }
+
     console.log(
       `[Agent] canUseTool called - Tool: ${toolName}, Input:`,
       JSON.stringify(input).substring(0, 200)

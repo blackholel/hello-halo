@@ -24,7 +24,7 @@ import { ScrollToBottomButton } from '../../chat/ScrollToBottomButton'
 import { Sparkles } from '../../icons/ToolIcons'
 import { ChangeReviewBar } from '../../diff'
 import type { TabState } from '../../../services/canvas-lifecycle'
-import type { ConversationAiConfig, FileContextAttachment, ImageAttachment } from '../../../types'
+import type { ChatMode, ConversationAiConfig, FileContextAttachment, ImageAttachment } from '../../../types'
 import { useTranslation } from '../../../i18n'
 
 interface ChatTabViewerProps {
@@ -84,7 +84,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
   const rollbackChangeSet = useChatStore(state => state.rollbackChangeSet)
   const answerQuestion = useChatStore(state => state.answerQuestion)
   const dismissAskUserQuestion = useChatStore(state => state.dismissAskUserQuestion)
-  const setPlanEnabled = useChatStore(state => state.setPlanEnabled)
+  const setConversationMode = useChatStore(state => state.setConversationMode)
 
   // Load conversation if not in cache
   useEffect(() => {
@@ -115,7 +115,8 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
     toolStatusById = {},
     availableToolsSnapshot,
     pendingAskUserQuestion = null,
-    planEnabled = false,
+    mode = 'code',
+    modeSwitching = false,
     failedAskUserQuestion = null
   } = session || {}
 
@@ -140,7 +141,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
     images?: ImageAttachment[],
     thinkingEnabled?: boolean,
     fileContexts?: FileContextAttachment[],
-    planEnabled?: boolean
+    mode?: ChatMode
   ) => {
     if (!conversationId || !spaceId) return
     if ((!content.trim() && (!images || images.length === 0) && (!fileContexts || fileContexts.length === 0)) || isGenerating) return
@@ -154,7 +155,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
       thinkingEnabled,
       fileContexts,
       undefined,
-      planEnabled
+      mode
     )
   }, [conversationId, spaceId, isGenerating, sendMessageToConversation])
 
@@ -168,12 +169,12 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
   const messages = conversation?.messages || []
   const hasMessages = messages.length > 0 || Boolean(streamingContent) || isThinking
 
-  const handlePlanEnabledChange = useCallback((enabled: boolean) => {
-    if (!conversationId) {
+  const handleModeChange = useCallback((nextMode: ChatMode) => {
+    if (!conversationId || !spaceId) {
       return
     }
-    setPlanEnabled(conversationId, enabled)
-  }, [conversationId, setPlanEnabled])
+    void setConversationMode(spaceId, conversationId, nextMode)
+  }, [conversationId, setConversationMode, spaceId])
 
   const handleOpenPlanInCanvas = useCallback(async (planContent: string) => {
     if (!spaceId || !conversationId) {
@@ -309,7 +310,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
               false,
               undefined,
               false,
-              false
+              'code'
             )
           }}
           isCompact={true}
@@ -319,12 +320,13 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
         onSend={handleSend}
         onStop={handleStop}
         isGenerating={isGenerating}
+        modeSwitching={modeSwitching}
         placeholder={t('Continue conversation...')}
         isCompact={true}
         spaceId={spaceId ?? null}
         workDir={resolvedWorkDir}
-        planEnabled={planEnabled}
-        onPlanEnabledChange={handlePlanEnabledChange}
+        mode={mode}
+        onModeChange={handleModeChange}
         conversation={modelSwitcherConversation}
         config={appConfig}
       />

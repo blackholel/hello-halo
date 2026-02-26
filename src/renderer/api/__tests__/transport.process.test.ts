@@ -105,3 +105,30 @@ describe('transport.onEvent agent:process', () => {
     expect(callback).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('transport.onEvent agent:mode', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.restoreAllMocks()
+  })
+
+  it('electron mode maps to window.kite.onAgentMode', async () => {
+    const unsub = vi.fn()
+    const onAgentMode = vi.fn(() => unsub)
+
+    ;(globalThis as any).window = {
+      kite: {
+        onAgentMode
+      }
+    }
+
+    const { onEvent } = await import('../transport')
+    const callback = vi.fn()
+
+    const returnedUnsub = onEvent('agent:mode', callback)
+
+    expect(onAgentMode).toHaveBeenCalledTimes(1)
+    expect(onAgentMode).toHaveBeenCalledWith(callback)
+    expect(returnedUnsub).toBe(unsub)
+  })
+})

@@ -13,6 +13,7 @@ import { getConfig, getTempSpacePath } from './config.service'
 import { getSpace } from './space.service'
 import { v4 as uuidv4 } from 'uuid'
 import type { ConversationAiConfig } from '../../shared/types/ai-profile'
+import { isChatMode, normalizeChatMode, type ChatMode } from './agent/types'
 
 // Thought types for agent reasoning
 type ProcessVisibility = 'user' | 'debug'
@@ -106,6 +107,7 @@ export interface ConversationMeta {
   id: string
   spaceId: string
   title: string
+  mode: ChatMode
   createdAt: string
   updatedAt: string
   messageCount: number
@@ -126,8 +128,34 @@ interface ConversationIndex {
   conversations: ConversationMeta[]
 }
 
-const INDEX_VERSION = 2
+const INDEX_VERSION = 3
 const PREVIEW_LENGTH = 50
+
+function normalizeConversationMeta(
+  meta: Partial<ConversationMeta> & { id: string; spaceId: string; title: string }
+): ConversationMeta {
+  return {
+    id: meta.id,
+    spaceId: meta.spaceId,
+    title: meta.title,
+    mode: normalizeChatMode(meta.mode),
+    createdAt: meta.createdAt || new Date().toISOString(),
+    updatedAt: meta.updatedAt || new Date().toISOString(),
+    messageCount: typeof meta.messageCount === 'number' ? meta.messageCount : 0,
+    preview: meta.preview,
+    ai: meta.ai
+  }
+}
+
+function normalizeConversation(conversation: Conversation): Conversation {
+  const messages = Array.isArray(conversation.messages) ? conversation.messages : []
+  return {
+    ...conversation,
+    mode: normalizeChatMode((conversation as Partial<Conversation>).mode),
+    messages,
+    messageCount: messages.length
+  }
+}
 
 // ============================================================================
 // Index Management Functions
@@ -156,7 +184,12 @@ function readIndex(conversationsDir: string): ConversationIndex | null {
       return null
     }
 
-    return index
+    return {
+      ...index,
+      conversations: index.conversations.map((conversation) =>
+        normalizeConversationMeta(conversation as ConversationMeta)
+      )
+    }
   } catch (error) {
     console.error('[Conversation] Failed to read index:', error)
     return null
@@ -193,16 +226,17 @@ function toMeta(conversation: Conversation): ConversationMeta {
     }
   }
 
-  return {
+  return normalizeConversationMeta({
     id: conversation.id,
     spaceId: conversation.spaceId,
     title: conversation.title,
+    mode: conversation.mode,
     createdAt: conversation.createdAt,
     updatedAt: conversation.updatedAt,
     messageCount: conversation.messages.length,
     preview,
     ai: conversation.ai
-  }
+  })
 }
 
 // Full scan: read all conversation files and build metadata list
@@ -219,7 +253,7 @@ function fullScanConversations(conversationsDir: string, spaceId: string): Conve
   for (const file of files) {
     try {
       const content = readFileSync(join(conversationsDir, file), 'utf-8')
-      const conversation: Conversation = JSON.parse(content)
+      const conversation = normalizeConversation(JSON.parse(content) as Conversation)
       metas.push(toMeta(conversation))
     } catch (error) {
       console.error(`[Conversation] Failed to read conversation ${file}:`, error)
@@ -339,6 +373,7 @@ export function createConversation(spaceId: string, title?: string): Conversatio
     id,
     spaceId,
     title: title || generateTitle(),
+    mode: 'code',
     createdAt: now,
     updatedAt: now,
     messageCount: 0,
@@ -375,7 +410,7 @@ export function getConversation(spaceId: string, conversationId: string): Conver
 
   if (existsSync(filePath)) {
     try {
-      const conversation = JSON.parse(readFileSync(filePath, 'utf-8'))
+      const conversation = normalizeConversation(JSON.parse(readFileSync(filePath, 'utf-8')) as Conversation)
       console.log(`[Conversation] Found conversation: ${conversation.title}`)
       return conversation
     } catch (error) {
@@ -399,9 +434,14 @@ export function updateConversation(
     return null
   }
 
+  if (Object.prototype.hasOwnProperty.call(updates, 'mode') && !isChatMode(updates.mode)) {
+    throw new Error(`Invalid conversation mode: ${String((updates as { mode?: unknown }).mode)}`)
+  }
+
   const updated: Conversation = {
     ...conversation,
     ...updates,
+    mode: normalizeChatMode(updates.mode, undefined, conversation.mode),
     updatedAt: new Date().toISOString()
   }
 

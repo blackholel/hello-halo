@@ -206,6 +206,7 @@ export function onEvent(channel: string, callback: (data: unknown) => void): () 
       'agent:process': 'onAgentProcess',
       'agent:error': 'onAgentError',
       'agent:complete': 'onAgentComplete',
+      'agent:mode': 'onAgentMode',
       'agent:thought': 'onAgentThought',
       'agent:tools-available': 'onAgentToolsAvailable',
       'agent:mcp-status': 'onAgentMcpStatus',

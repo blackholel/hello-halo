@@ -346,7 +346,8 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
         undefined,
         false,
         undefined,
-        false
+        false,
+        'code'
       )
       return
     }
@@ -407,7 +408,8 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
         undefined,
         false,
         undefined,
-        false
+        false,
+        'code'
       )
       return
     }
@@ -487,6 +489,7 @@ async function startStep(get: () => WorkflowsState, set: (partial: Partial<Workf
     undefined,
     run.workflow.settings?.thinkingEnabled,
     undefined,
-    run.workflow.settings?.aiBrowserEnabled
+    run.workflow.settings?.aiBrowserEnabled,
+    'code'
   )
 }

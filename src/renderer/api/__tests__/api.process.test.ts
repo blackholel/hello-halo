@@ -30,3 +30,19 @@ describe('api.onAgentProcess', () => {
     expect(typeof unsub).toBe('function')
   })
 })
+
+describe('api.onAgentMode', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('registers mode listener via transport.onEvent', async () => {
+    const { api } = await import('..')
+    const callback = vi.fn()
+
+    const unsub = api.onAgentMode(callback)
+
+    expect(onEventMock).toHaveBeenCalledWith('agent:mode', callback)
+    expect(typeof unsub).toBe('function')
+  })
+})

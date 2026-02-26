@@ -13,6 +13,7 @@ import {
   updateLastMessage as serviceUpdateLastMessage
 } from '../services/conversation.service'
 import { stopGeneration, closeV2Session, isGenerating } from '../services/agent'
+import { isChatMode } from '../services/agent/types'
 
 export interface ControllerResponse<T = unknown> {
   success: boolean
@@ -71,6 +72,13 @@ export function updateConversation(
   updates: Record<string, unknown>
 ): ControllerResponse {
   try {
+    if (Object.prototype.hasOwnProperty.call(updates, 'mode') && !isChatMode(updates.mode)) {
+      return {
+        success: false,
+        error: `Invalid conversation mode: ${String(updates.mode)}`
+      }
+    }
+
     if (updates.ai && isGenerating(conversationId)) {
       return {
         success: false,

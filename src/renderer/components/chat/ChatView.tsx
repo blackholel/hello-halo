@@ -30,7 +30,7 @@ import {
   getOnboardingPrompt,
 } from '../onboarding/onboardingData'
 import { api } from '../../api'
-import type { FileContextAttachment, ImageAttachment } from '../../types'
+import type { ChatMode, FileContextAttachment, ImageAttachment } from '../../types'
 import { useTranslation } from '../../i18n'
 
 interface ChatViewProps {
@@ -54,7 +54,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     stopGeneration,
     answerQuestion,
     dismissAskUserQuestion,
-    setPlanEnabled
+    setConversationMode
   } = useChatStore()
   const { openPlan } = useCanvasLifecycle()
   const appConfig = useAppStore(state => state.config)
@@ -188,7 +188,8 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     compactInfo,
     error,
     textBlockVersion,
-    planEnabled,
+    mode,
+    modeSwitching,
     toolStatusById,
     availableToolsSnapshot,
     pendingAskUserQuestion,
@@ -263,7 +264,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
   const { enabled: aiBrowserEnabled } = useAIBrowserStore()
 
   // Handle send (with optional images for multi-modal messages, optional thinking mode, optional file contexts, optional plan mode)
-  const handleSend = async (content: string, images?: ImageAttachment[], thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[], planEnabled?: boolean) => {
+  const handleSend = async (content: string, images?: ImageAttachment[], thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[], mode?: ChatMode) => {
     // In onboarding mode, intercept and play mock response
     if (isOnboarding && currentStep === 'send-message') {
       handleOnboardingSend()
@@ -274,16 +275,16 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     if (!hasContent || isGenerating) return
 
     // Pass AI Browser, thinking, and plan state to sendMessage
-    await sendMessage(content, images, aiBrowserEnabled, thinkingEnabled, fileContexts, planEnabled)
+    await sendMessage(content, images, aiBrowserEnabled, thinkingEnabled, fileContexts, mode)
   }
 
-  const handlePlanEnabledChange = useCallback((enabled: boolean) => {
+  const handleModeChange = useCallback((nextMode: ChatMode) => {
     const conversationId = getCurrentConversationId()
-    if (!conversationId) {
+    if (!conversationId || !currentSpaceId) {
       return
     }
-    setPlanEnabled(conversationId, enabled)
-  }, [getCurrentConversationId, setPlanEnabled])
+    void setConversationMode(currentSpaceId, conversationId, nextMode)
+  }, [currentSpaceId, getCurrentConversationId, setConversationMode])
 
   // Handle stop - stops the current conversation's generation
   const handleStop = async () => {
@@ -440,7 +441,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
               throw new Error('Expected manual answer text')
             }
             dismissAskUserQuestion(currentConversationId)
-            await sendMessage(answer, undefined, aiBrowserEnabled, false, undefined, false)
+            await sendMessage(answer, undefined, aiBrowserEnabled, false, undefined, 'code')
           }}
           isCompact={isCompact}
         />
@@ -449,12 +450,13 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
         onSend={handleSend}
         onStop={handleStop}
         isGenerating={isGenerating}
+        modeSwitching={modeSwitching}
         placeholder={isCompact ? t('Continue conversation...') : (currentSpace?.isTemp ? t('Say something to Kite...') : t('Continue conversation...'))}
         isCompact={isCompact}
         spaceId={currentSpaceId}
         workDir={currentSpace?.path}
-        planEnabled={planEnabled}
-        onPlanEnabledChange={handlePlanEnabledChange}
+        mode={mode}
+        onModeChange={handleModeChange}
         conversation={modelSwitcherConversation}
         config={appConfig}
       />

@@ -7,11 +7,14 @@
 
 // Re-export types
 export type {
+  ChatMode,
   ImageMediaType,
   ImageAttachment,
   FileContextAttachment,
   CanvasContext,
   AgentRequest,
+  AgentSetModeResult,
+  PermissionModeFailureReason,
   ToolCallStatus,
   ToolCall,
   AskUserQuestionMode,
@@ -30,6 +33,7 @@ export type {
   PluginConfig,
   SettingSource
 } from './types'
+export { isChatMode, normalizeChatMode } from './types'
 
 // Re-export from electron-path
 export { getHeadlessElectronPath } from './electron-path'
@@ -86,6 +90,7 @@ export {
 // Re-export from message-flow.service
 export {
   sendMessage,
+  setAgentMode,
   stopGeneration,
   handleToolApproval,
   handleAskUserQuestionResponse

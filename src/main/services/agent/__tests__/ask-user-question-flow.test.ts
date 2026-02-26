@@ -29,6 +29,7 @@ function createSessionState(overrides: Partial<SessionState> = {}): SessionState
     spaceId: 'space-1',
     conversationId: 'conv-1',
     runId: 'run-test',
+    mode: 'code',
     startedAt: Date.now(),
     latestAssistantContent: '',
     lifecycle: 'running',
@@ -41,6 +42,7 @@ function createSessionState(overrides: Partial<SessionState> = {}): SessionState
     pendingPermissionResolve: null,
     pendingAskUserQuestion: null,
     thoughts: [],
+    processTrace: [],
     ...overrides
   }
 }
