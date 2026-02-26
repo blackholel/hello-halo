@@ -24,7 +24,7 @@ import { ScrollToBottomButton } from '../../chat/ScrollToBottomButton'
 import { Sparkles } from '../../icons/ToolIcons'
 import { ChangeReviewBar } from '../../diff'
 import type { TabState } from '../../../services/canvas-lifecycle'
-import type { ConversationAiConfig, FileContextAttachment, ImageAttachment } from '../../../types'
+import type { ConversationAiConfig, FileContextAttachment, ImageAttachment, ToolCall } from '../../../types'
 import { useTranslation } from '../../../i18n'
 
 interface ChatTabViewerProps {
@@ -84,6 +84,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
   const rollbackChangeSet = useChatStore(state => state.rollbackChangeSet)
   const answerQuestion = useChatStore(state => state.answerQuestion)
   const dismissAskUserQuestion = useChatStore(state => state.dismissAskUserQuestion)
+  const setActiveAskUserQuestion = useChatStore(state => state.setActiveAskUserQuestion)
   const setPlanEnabled = useChatStore(state => state.setPlanEnabled)
 
   // Load conversation if not in cache
@@ -114,10 +115,27 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
     textBlockVersion = 0,
     toolStatusById = {},
     availableToolsSnapshot,
-    pendingAskUserQuestion = null,
+    askUserQuestionsById = {},
+    askUserQuestionOrder = [],
+    activeAskUserQuestionId = null,
     planEnabled = false,
-    failedAskUserQuestion = null
   } = session || {}
+
+  const askUserQuestionItems = askUserQuestionOrder
+    .map((id) => askUserQuestionsById[id])
+    .filter(Boolean) as Array<{
+    id: string
+    toolCall: ToolCall
+    status: 'pending' | 'failed' | 'resolved'
+  }>
+  const activeAskUserQuestionItem =
+    (activeAskUserQuestionId && askUserQuestionsById[activeAskUserQuestionId]) ||
+    askUserQuestionItems[0] ||
+    null
+  const pendingAskUserQuestion =
+    activeAskUserQuestionItem?.status === 'pending' ? activeAskUserQuestionItem.toolCall : null
+  const failedAskUserQuestion =
+    activeAskUserQuestionItem?.status === 'failed' ? activeAskUserQuestionItem.toolCall : null
 
   const currentChangeSets = conversationId ? (changeSets.get(conversationId) || []) : []
   const activeChangeSet = currentChangeSets[0]
@@ -277,6 +295,26 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
           })}
         />
       )}
+      {askUserQuestionItems.length > 1 && conversationId && (
+        <div className="mx-4 mb-2 flex flex-wrap items-center gap-2">
+          {askUserQuestionItems.map((item, index) => {
+            const isActive = item.id === activeAskUserQuestionItem?.id
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveAskUserQuestion(conversationId, item.id)}
+                className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                  isActive
+                    ? 'border-primary/40 bg-primary/10 text-primary'
+                    : 'border-border/40 bg-secondary/20 text-muted-foreground hover:bg-secondary/35'
+                }`}
+              >
+                {`Q${index + 1} · ${item.status}`}
+              </button>
+            )
+          })}
+        </div>
+      )}
       {pendingAskUserQuestion && conversationId && (
         <AskUserQuestionPanel
           toolCall={pendingAskUserQuestion}
@@ -299,7 +337,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
             if (typeof answer !== 'string') {
               throw new Error('Expected manual answer text')
             }
-            dismissAskUserQuestion(conversationId)
+            dismissAskUserQuestion(conversationId, failedAskUserQuestion.id)
             if (!spaceId) return
             await sendMessageToConversation(
               spaceId,

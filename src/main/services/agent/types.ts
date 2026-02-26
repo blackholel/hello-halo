@@ -102,6 +102,32 @@ export interface ToolCall {
 
 export type AskUserQuestionMode = 'sdk_allow_updated_input' | 'legacy_deny_send'
 
+export const ASK_USER_QUESTION_ERROR_CODES = {
+  NO_ACTIVE_SESSION: 'ASK_USER_QUESTION_NO_ACTIVE_SESSION',
+  NO_PENDING: 'ASK_USER_QUESTION_NO_PENDING',
+  RUN_REQUIRED: 'ASK_USER_QUESTION_RUN_REQUIRED',
+  RUN_MISMATCH: 'ASK_USER_QUESTION_RUN_MISMATCH',
+  TOOLCALL_REQUIRED_MULTI_PENDING: 'ASK_USER_QUESTION_TOOLCALL_REQUIRED_MULTI_PENDING',
+  TARGET_NOT_FOUND: 'ASK_USER_QUESTION_TARGET_NOT_FOUND',
+  BINDING_AMBIGUOUS: 'ASK_USER_QUESTION_BINDING_AMBIGUOUS',
+  DUPLICATE_PENDING_SIGNATURE: 'ASK_USER_QUESTION_DUPLICATE_PENDING_SIGNATURE',
+  LEGACY_NOT_ALLOWED: 'ASK_USER_QUESTION_LEGACY_NOT_ALLOWED',
+  ALREADY_RESOLVED: 'ASK_USER_QUESTION_ALREADY_RESOLVED'
+} as const
+
+export type AskUserQuestionErrorCode =
+  typeof ASK_USER_QUESTION_ERROR_CODES[keyof typeof ASK_USER_QUESTION_ERROR_CODES]
+
+export class AskUserQuestionError extends Error {
+  errorCode: AskUserQuestionErrorCode
+
+  constructor(errorCode: AskUserQuestionErrorCode, message: string) {
+    super(message)
+    this.name = 'AskUserQuestionError'
+    this.errorCode = errorCode
+  }
+}
+
 export interface AskUserQuestionAnswerPayload {
   toolCallId: string
   answersByQuestionId: Record<string, string[]>
@@ -117,12 +143,22 @@ export interface CanUseToolDecision {
   message?: string
 }
 
+export type AskUserQuestionPendingStatus =
+  | 'awaiting_bind'
+  | 'awaiting_answer'
+  | 'resolved'
+  | 'failed'
+
 export interface PendingAskUserQuestionContext {
+  pendingId: string
   resolve: (decision: CanUseToolDecision) => void
   inputSnapshot: Record<string, unknown>
+  inputFingerprint: string
+  sessionId?: string
   expectedToolCallId: string | null
   runId: string
   createdAt: number
+  status: AskUserQuestionPendingStatus
   mode: AskUserQuestionMode
 }
 
@@ -181,7 +217,12 @@ export interface SessionState {
   toolsById: Map<string, ToolCall>
   askUserQuestionModeByToolCallId: Map<string, AskUserQuestionMode>
   pendingPermissionResolve: ((approved: boolean) => void) | null
-  pendingAskUserQuestion: PendingAskUserQuestionContext | null
+  pendingAskUserQuestionsById: Map<string, PendingAskUserQuestionContext>
+  pendingAskUserQuestionOrder: string[]
+  pendingAskUserQuestionIdByToolCallId: Map<string, string>
+  unmatchedAskUserQuestionToolCalls: Map<string, string[]>
+  askUserQuestionSeq: number
+  recentlyResolvedAskUserQuestionByToolCallId: Map<string, { runId: string; resolvedAt: number }>
   thoughts: Thought[]
   processTrace: ProcessTraceNode[]
 }

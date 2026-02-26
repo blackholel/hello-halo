@@ -30,7 +30,7 @@ import {
   getOnboardingPrompt,
 } from '../onboarding/onboardingData'
 import { api } from '../../api'
-import type { FileContextAttachment, ImageAttachment } from '../../types'
+import type { FileContextAttachment, ImageAttachment, ToolCall } from '../../types'
 import { useTranslation } from '../../i18n'
 
 interface ChatViewProps {
@@ -54,6 +54,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     stopGeneration,
     answerQuestion,
     dismissAskUserQuestion,
+    setActiveAskUserQuestion,
     setPlanEnabled
   } = useChatStore()
   const { openPlan } = useCanvasLifecycle()
@@ -191,9 +192,26 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     planEnabled,
     toolStatusById,
     availableToolsSnapshot,
-    pendingAskUserQuestion,
-    failedAskUserQuestion
+    askUserQuestionsById,
+    askUserQuestionOrder,
+    activeAskUserQuestionId
   } = session
+
+  const askUserQuestionItems = askUserQuestionOrder
+    .map((id) => askUserQuestionsById[id])
+    .filter(Boolean) as Array<{
+    id: string
+    toolCall: ToolCall
+    status: 'pending' | 'failed' | 'resolved'
+  }>
+  const activeAskUserQuestionItem =
+    (activeAskUserQuestionId && askUserQuestionsById[activeAskUserQuestionId]) ||
+    askUserQuestionItems[0] ||
+    null
+  const pendingAskUserQuestion =
+    activeAskUserQuestionItem?.status === 'pending' ? activeAskUserQuestionItem.toolCall : null
+  const failedAskUserQuestion =
+    activeAskUserQuestionItem?.status === 'failed' ? activeAskUserQuestionItem.toolCall : null
 
   // Smart auto-scroll: only scrolls when user is at bottom
   const {
@@ -417,6 +435,26 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
           })}
         />
       )}
+      {askUserQuestionItems.length > 1 && currentConversationId && (
+        <div className="mx-4 mb-2 flex flex-wrap items-center gap-2">
+          {askUserQuestionItems.map((item, index) => {
+            const isActive = item.id === activeAskUserQuestionItem?.id
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveAskUserQuestion(currentConversationId, item.id)}
+                className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                  isActive
+                    ? 'border-primary/40 bg-primary/10 text-primary'
+                    : 'border-border/40 bg-secondary/20 text-muted-foreground hover:bg-secondary/35'
+                }`}
+              >
+                {`Q${index + 1} · ${item.status}`}
+              </button>
+            )
+          })}
+        </div>
+      )}
       {pendingAskUserQuestion && currentConversationId && (
         <AskUserQuestionPanel
           toolCall={pendingAskUserQuestion}
@@ -439,7 +477,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
             if (typeof answer !== 'string') {
               throw new Error('Expected manual answer text')
             }
-            dismissAskUserQuestion(currentConversationId)
+            dismissAskUserQuestion(currentConversationId, failedAskUserQuestion.id)
             await sendMessage(answer, undefined, aiBrowserEnabled, false, undefined, false)
           }}
           isCompact={isCompact}

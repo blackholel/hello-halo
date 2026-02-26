@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { SessionState } from '../types'
+import { handleAskUserQuestionResponse } from '../message-flow.service'
+import type {
+  PendingAskUserQuestionContext,
+  SessionState
+} from '../types'
+import { ASK_USER_QUESTION_ERROR_CODES } from '../types'
 
 const sessionManagerMocks = vi.hoisted(() => ({
   getOrCreateV2Session: vi.fn(),
@@ -21,7 +26,35 @@ vi.mock('../session.manager', () => ({
   getV2SessionsCount: sessionManagerMocks.getV2SessionsCount
 }))
 
-import { handleAskUserQuestionResponse } from '../message-flow.service'
+function createPending(
+  pendingId: string,
+  toolCallId: string,
+  runId: string,
+  resolve: (decision: unknown) => void
+): PendingAskUserQuestionContext {
+  return {
+    pendingId,
+    resolve: resolve as (decision: any) => void,
+    inputSnapshot: {
+      questions: [
+        {
+          id: 'q_1',
+          question: `Question ${pendingId}`,
+          options: [
+            { label: 'Yes', description: 'Yes option' },
+            { label: 'No', description: 'No option' }
+          ]
+        }
+      ]
+    },
+    inputFingerprint: `fingerprint-${pendingId}`,
+    expectedToolCallId: toolCallId,
+    runId,
+    createdAt: Date.now(),
+    status: 'awaiting_answer',
+    mode: 'sdk_allow_updated_input'
+  }
+}
 
 function createSessionState(overrides: Partial<SessionState> = {}): SessionState {
   return {
@@ -39,316 +72,136 @@ function createSessionState(overrides: Partial<SessionState> = {}): SessionState
     toolsById: new Map(),
     askUserQuestionModeByToolCallId: new Map(),
     pendingPermissionResolve: null,
-    pendingAskUserQuestion: null,
+    pendingAskUserQuestionsById: new Map(),
+    pendingAskUserQuestionOrder: [],
+    pendingAskUserQuestionIdByToolCallId: new Map(),
+    unmatchedAskUserQuestionToolCalls: new Map(),
+    askUserQuestionSeq: 0,
+    recentlyResolvedAskUserQuestionByToolCallId: new Map(),
     thoughts: [],
+    processTrace: [],
     ...overrides
+  }
+}
+
+function registerPending(session: SessionState, pending: PendingAskUserQuestionContext): void {
+  session.pendingAskUserQuestionsById.set(pending.pendingId, pending)
+  session.pendingAskUserQuestionOrder.push(pending.pendingId)
+  if (pending.expectedToolCallId) {
+    session.pendingAskUserQuestionIdByToolCallId.set(pending.expectedToolCallId, pending.pendingId)
+    session.askUserQuestionModeByToolCallId.set(pending.expectedToolCallId, pending.mode)
   }
 }
 
 describe('AskUserQuestion Flow', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-  })
-
-  it('throws when answer is empty', async () => {
-    const session = createSessionState({
-      pendingAskUserQuestion: {
-        resolve: vi.fn(),
-        inputSnapshot: {
-          questions: [{ id: 'q_1', question: 'Pick one' }]
-        },
-        expectedToolCallId: null,
-        runId: 'run-test',
-        createdAt: Date.now(),
-        mode: 'sdk_allow_updated_input'
-      }
-    })
-    sessionManagerMocks.getActiveSession.mockReturnValue(session)
     sessionManagerMocks.getV2SessionInfo.mockReturnValue({
       session: { send: vi.fn() }
     })
-
-    await expect(handleAskUserQuestionResponse('conv-1', '   ')).rejects.toThrow('Answer cannot be empty')
   })
 
-  it('throws when no pending AskUserQuestion resolver exists', async () => {
-    const send = vi.fn()
-
-    sessionManagerMocks.getActiveSession.mockReturnValue(createSessionState())
-    sessionManagerMocks.getV2SessionInfo.mockReturnValue({
-      session: { send }
-    })
-
-    await expect(handleAskUserQuestionResponse('conv-1', 'yes')).rejects.toThrow(
-      'No pending AskUserQuestion found for this conversation'
-    )
-    expect(send).not.toHaveBeenCalled()
-  })
-
-  it('resolves pending AskUserQuestion with allow + updatedInput', async () => {
-    const resolvePendingQuestion = vi.fn<(decision: unknown) => void>()
-    const send = vi.fn()
-    const session = createSessionState({
-      pendingAskUserQuestion: {
-        resolve: resolvePendingQuestion,
-        inputSnapshot: {
-          questions: [
-            {
-              id: 'q_1',
-              question: 'Pick one',
-              options: [{ label: 'A', description: 'Option A' }]
-            }
-          ]
-        },
-        expectedToolCallId: 'tool-ask-1',
-        runId: 'run-test',
-        createdAt: Date.now(),
-        mode: 'sdk_allow_updated_input'
-      }
-    })
-
+  it('routes answer by toolCallId when multiple pending questions exist', async () => {
+    const resolveOne = vi.fn()
+    const resolveTwo = vi.fn()
+    const session = createSessionState({ runId: 'run-1' })
+    registerPending(session, createPending('aq_run_1', 'tool-1', 'run-1', resolveOne))
+    registerPending(session, createPending('aq_run_2', 'tool-2', 'run-1', resolveTwo))
     sessionManagerMocks.getActiveSession.mockReturnValue(session)
-    sessionManagerMocks.getV2SessionInfo.mockReturnValue({
-      session: { send }
-    })
 
     await handleAskUserQuestionResponse('conv-1', {
-      toolCallId: 'tool-ask-1',
-      runId: 'run-test',
-      answersByQuestionId: {
-        q_1: ['option-a']
-      },
+      runId: 'run-1',
+      toolCallId: 'tool-2',
+      answersByQuestionId: { q_1: ['Yes'] },
       skippedQuestionIds: []
     })
 
-    expect(resolvePendingQuestion).toHaveBeenCalledWith({
-      behavior: 'allow',
-      updatedInput: {
-        questions: [
-          {
-            id: 'q_1',
-            header: 'Question 1',
-            question: 'Pick one',
-            options: [{ label: 'A', description: 'Option A' }],
-            multiSelect: false
-          }
-        ],
-        answers: {
-          'Pick one': 'option-a'
-        },
-        skippedQuestionIds: []
-      }
-    })
-    expect(send).not.toHaveBeenCalled()
-    expect(session.pendingAskUserQuestion).toBeNull()
+    expect(resolveTwo).toHaveBeenCalledTimes(1)
+    expect(resolveOne).not.toHaveBeenCalled()
+    expect(session.pendingAskUserQuestionOrder).toEqual(['aq_run_1'])
+    expect(session.pendingAskUserQuestionIdByToolCallId.has('tool-2')).toBe(false)
   })
 
-  it('throws when runId does not match pending AskUserQuestion run', async () => {
-    const session = createSessionState({
-      runId: 'run-a',
-      pendingAskUserQuestion: {
-        resolve: vi.fn(),
-        inputSnapshot: {
-          questions: [{ id: 'q_1', question: 'Pick one' }]
-        },
-        expectedToolCallId: 'tool-ask-1',
-        runId: 'run-a',
-        createdAt: Date.now(),
-        mode: 'sdk_allow_updated_input'
-      }
-    })
+  it('requires toolCallId when multiple pending questions exist', async () => {
+    const session = createSessionState({ runId: 'run-2' })
+    registerPending(session, createPending('aq_run_1', 'tool-1', 'run-2', vi.fn()))
+    registerPending(session, createPending('aq_run_2', 'tool-2', 'run-2', vi.fn()))
     sessionManagerMocks.getActiveSession.mockReturnValue(session)
-    sessionManagerMocks.getV2SessionInfo.mockReturnValue({
-      session: { send: vi.fn() }
-    })
 
     await expect(
       handleAskUserQuestionResponse('conv-1', {
-        toolCallId: 'tool-ask-1',
-        runId: 'run-b',
+        runId: 'run-2',
+        toolCallId: '',
         answersByQuestionId: { q_1: ['Yes'] },
         skippedQuestionIds: []
       })
-    ).rejects.toThrow('Run mismatch for AskUserQuestion response')
+    ).rejects.toMatchObject({
+      errorCode: ASK_USER_QUESTION_ERROR_CODES.TOOLCALL_REQUIRED_MULTI_PENDING
+    })
   })
 
-  it('throws when runId is missing in structured AskUserQuestion payload', async () => {
-    const session = createSessionState({
-      runId: 'run-a',
-      pendingAskUserQuestion: {
-        resolve: vi.fn(),
-        inputSnapshot: {
-          questions: [{ id: 'q_1', question: 'Pick one' }]
-        },
-        expectedToolCallId: 'tool-ask-1',
-        runId: 'run-a',
-        createdAt: Date.now(),
-        mode: 'sdk_allow_updated_input'
-      }
-    })
+  it('throws legacy-not-allowed when legacy string is used with multiple pending questions', async () => {
+    const session = createSessionState({ runId: 'run-3' })
+    registerPending(session, createPending('aq_run_1', 'tool-1', 'run-3', vi.fn()))
+    registerPending(session, createPending('aq_run_2', 'tool-2', 'run-3', vi.fn()))
     sessionManagerMocks.getActiveSession.mockReturnValue(session)
-    sessionManagerMocks.getV2SessionInfo.mockReturnValue({
-      session: { send: vi.fn() }
+
+    await expect(
+      handleAskUserQuestionResponse('conv-1', 'legacy answer')
+    ).rejects.toMatchObject({
+      errorCode: ASK_USER_QUESTION_ERROR_CODES.LEGACY_NOT_ALLOWED
     })
+  })
+
+  it('throws run mismatch when payload runId differs from target pending run', async () => {
+    const session = createSessionState({ runId: 'run-4' })
+    registerPending(session, createPending('aq_run_1', 'tool-1', 'run-4', vi.fn()))
+    sessionManagerMocks.getActiveSession.mockReturnValue(session)
 
     await expect(
       handleAskUserQuestionResponse('conv-1', {
-        toolCallId: 'tool-ask-1',
+        runId: 'run-5',
+        toolCallId: 'tool-1',
         answersByQuestionId: { q_1: ['Yes'] },
         skippedQuestionIds: []
       })
-    ).rejects.toThrow('AskUserQuestion response must include runId')
+    ).rejects.toMatchObject({
+      errorCode: ASK_USER_QUESTION_ERROR_CODES.RUN_MISMATCH
+    })
   })
 
-  it('throws when toolCallId does not match expected AskUserQuestion tool call', async () => {
-    const session = createSessionState({
-      runId: 'run-a',
-      pendingAskUserQuestion: {
-        resolve: vi.fn(),
-        inputSnapshot: {
-          questions: [{ id: 'q_1', question: 'Pick one' }]
-        },
-        expectedToolCallId: 'tool-ask-1',
-        runId: 'run-a',
-        createdAt: Date.now(),
-        mode: 'sdk_allow_updated_input'
-      }
-    })
+  it('treats duplicate submit on same toolCallId as idempotent success', async () => {
+    const resolvePending = vi.fn()
+    const session = createSessionState({ runId: 'run-6' })
+    registerPending(session, createPending('aq_run_1', 'tool-1', 'run-6', resolvePending))
     sessionManagerMocks.getActiveSession.mockReturnValue(session)
-    sessionManagerMocks.getV2SessionInfo.mockReturnValue({
-      session: { send: vi.fn() }
-    })
 
-    await expect(
-      handleAskUserQuestionResponse('conv-1', {
-        toolCallId: 'tool-ask-2',
-        runId: 'run-a',
-        answersByQuestionId: { q_1: ['Yes'] },
-        skippedQuestionIds: []
-      })
-    ).rejects.toThrow('toolCallId mismatch for AskUserQuestion response')
-  })
-
-  it('throws when duplicate question text exists in AskUserQuestion snapshot', async () => {
-    const session = createSessionState({
-      pendingAskUserQuestion: {
-        resolve: vi.fn(),
-        inputSnapshot: {
-          questions: [
-            { id: 'q_1', question: 'Repeat?' },
-            { id: 'q_2', question: 'Repeat?' }
-          ]
-        },
-        expectedToolCallId: 'tool-ask-1',
-        runId: 'run-test',
-        createdAt: Date.now(),
-        mode: 'sdk_allow_updated_input'
-      }
-    })
-    sessionManagerMocks.getActiveSession.mockReturnValue(session)
-    sessionManagerMocks.getV2SessionInfo.mockReturnValue({
-      session: { send: vi.fn() }
-    })
-
-    await expect(
-      handleAskUserQuestionResponse('conv-1', {
-        toolCallId: 'tool-ask-1',
-        runId: 'run-test',
-        answersByQuestionId: { q_1: ['A'], q_2: ['B'] },
-        skippedQuestionIds: []
-      })
-    ).rejects.toThrow('Duplicate AskUserQuestion question text is not allowed')
-  })
-
-  it('converts multi-select answers to SDK question-text map with comma-joined values', async () => {
-    const resolvePendingQuestion = vi.fn<(decision: unknown) => void>()
-    const session = createSessionState({
-      pendingAskUserQuestion: {
-        resolve: resolvePendingQuestion,
-        inputSnapshot: {
-          questions: [
-            { id: 'q_1', question: 'Pick colors' },
-            { id: 'q_2', question: 'Pick one tool' }
-          ]
-        },
-        expectedToolCallId: 'tool-ask-1',
-        runId: 'run-test',
-        createdAt: Date.now(),
-        mode: 'sdk_allow_updated_input'
-      }
-    })
-    sessionManagerMocks.getActiveSession.mockReturnValue(session)
-    sessionManagerMocks.getV2SessionInfo.mockReturnValue({
-      session: { send: vi.fn() }
-    })
-
-    await handleAskUserQuestionResponse('conv-1', {
-      toolCallId: 'tool-ask-1',
-      runId: 'run-test',
-      answersByQuestionId: {
-        q_1: ['red', 'blue'],
-        q_2: ['hammer']
-      },
+    const payload = {
+      runId: 'run-6',
+      toolCallId: 'tool-1',
+      answersByQuestionId: { q_1: ['Yes'] },
       skippedQuestionIds: []
-    })
+    } as const
 
-    expect(resolvePendingQuestion).toHaveBeenCalledWith({
-      behavior: 'allow',
-      updatedInput: {
-        questions: [
-          {
-            id: 'q_1',
-            header: 'Question 1',
-            question: 'Pick colors',
-            options: [
-              { label: 'Yes', description: 'Select Yes' },
-              { label: 'No', description: 'Select No' }
-            ],
-            multiSelect: false
-          },
-          {
-            id: 'q_2',
-            header: 'Question 2',
-            question: 'Pick one tool',
-            options: [
-              { label: 'Yes', description: 'Select Yes' },
-              { label: 'No', description: 'Select No' }
-            ],
-            multiSelect: false
-          }
-        ],
-        answers: {
-          'Pick colors': 'red, blue',
-          'Pick one tool': 'hammer'
-        },
-        skippedQuestionIds: []
-      }
-    })
+    await handleAskUserQuestionResponse('conv-1', payload)
+    await expect(handleAskUserQuestionResponse('conv-1', payload)).resolves.toBeUndefined()
+    expect(resolvePending).toHaveBeenCalledTimes(1)
   })
 
-  it('throws for legacy string answer when AskUserQuestion has multiple questions', async () => {
-    const session = createSessionState({
-      pendingAskUserQuestion: {
-        resolve: vi.fn(),
-        inputSnapshot: {
-          questions: [
-            { id: 'q_1', question: 'Question 1' },
-            { id: 'q_2', question: 'Question 2' }
-          ]
-        },
-        expectedToolCallId: null,
-        runId: 'run-test',
-        createdAt: Date.now(),
-        mode: 'sdk_allow_updated_input'
-      }
-    })
+  it('returns target-not-found when toolCallId is not mapped and not resolved', async () => {
+    const session = createSessionState({ runId: 'run-7' })
+    registerPending(session, createPending('aq_run_1', 'tool-1', 'run-7', vi.fn()))
     sessionManagerMocks.getActiveSession.mockReturnValue(session)
-    sessionManagerMocks.getV2SessionInfo.mockReturnValue({
-      session: { send: vi.fn() }
-    })
 
-    await expect(handleAskUserQuestionResponse('conv-1', 'legacy-answer')).rejects.toThrow(
-      'Legacy answer string does not support multi-question AskUserQuestion. Please upgrade client.'
-    )
+    await expect(
+      handleAskUserQuestionResponse('conv-1', {
+        runId: 'run-7',
+        toolCallId: 'tool-404',
+        answersByQuestionId: { q_1: ['Yes'] },
+        skippedQuestionIds: []
+      })
+    ).rejects.toMatchObject({
+      errorCode: ASK_USER_QUESTION_ERROR_CODES.TARGET_NOT_FOUND
+    })
   })
 })

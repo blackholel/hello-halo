@@ -78,7 +78,12 @@ vi.mock('../../../utils/path-validation', () => ({
 
 import { getSpaceConfig, updateSpaceConfig } from '../../space-config.service'
 import { buildHooksConfig } from '../../hooks.service'
-import { buildPluginsConfig, buildSdkOptions, buildSettingSources } from '../sdk-config.builder'
+import {
+  buildPluginsConfig,
+  buildSdkOptions,
+  buildSettingSources,
+  buildSystemPromptAppend
+} from '../sdk-config.builder'
 import { ensureSpaceResourcePolicy } from '../space-resource-policy.service'
 
 function createBuildSdkOptionsParams(workDir: string = '/workspace/project') {
@@ -194,5 +199,13 @@ describe('sdk-config.builder strict space-only', () => {
     expect(sdkOptions.env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBe('kimi-k2-0905-preview')
     expect(sdkOptions.env.ANTHROPIC_DEFAULT_SONNET_MODEL).toBe('kimi-k2-0905-preview')
     expect(sdkOptions.env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe('kimi-k2-0905-preview')
+  })
+
+  it('system prompt append includes blocking-batch AskUserQuestion policy', () => {
+    const append = buildSystemPromptAppend('/workspace/project', null)
+
+    expect(append).toContain('execution-blocking gaps')
+    expect(append).toContain('at most 3 questions')
+    expect(append).toContain('Avoid duplicate question texts and duplicate option labels')
   })
 })
