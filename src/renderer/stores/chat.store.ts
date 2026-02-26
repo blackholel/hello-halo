@@ -2167,6 +2167,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
         } else {
           delete askUserQuestionsById[toolCallId]
           askUserQuestionOrder = askUserQuestionOrder.filter((id) => id !== toolCallId)
+          for (const [id, item] of Object.entries(askUserQuestionsById)) {
+            if (item.status === 'failed') {
+              delete askUserQuestionsById[id]
+            }
+          }
+          askUserQuestionOrder = askUserQuestionOrder.filter((id) => askUserQuestionsById[id] != null)
         }
       }
       askUserQuestionOrder = ensureAskUserQuestionOrder(askUserQuestionOrder, askUserQuestionsById)
