@@ -139,10 +139,11 @@ describe('Agent Service - CLAUDE_CONFIG_DIR', () => {
       expect(env.CLAUDE_CONFIG_DIR).not.toContain('.claude')
     })
 
-    it('should switch to ~/.claude/ when locked mode is claude', () => {
-      vi.mocked(getLockedUserConfigRootDir).mockReturnValue(join(homedir(), '.claude'))
+    it('should remain ~/.kite/ when lock helper input is claude', () => {
+      vi.mocked(getLockedUserConfigRootDir).mockReturnValue(join(homedir(), '.kite'))
       const env = _testBuildSdkOptionsEnv()
-      expect(env.CLAUDE_CONFIG_DIR).toBe(join(homedir(), '.claude'))
+      expect(env.CLAUDE_CONFIG_DIR).toBe(join(homedir(), '.kite'))
+      expect(env.CLAUDE_CONFIG_DIR).not.toContain('.claude')
     })
   })
 

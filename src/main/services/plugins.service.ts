@@ -3,7 +3,6 @@
  *
  * This service reads plugins from a single locked config source root:
  * - Kite mode: ~/.kite
- * - Claude mode: ~/.claude
  */
 
 import { join } from 'path'

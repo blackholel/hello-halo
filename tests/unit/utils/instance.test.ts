@@ -93,6 +93,24 @@ describe('instance utilities', () => {
       expect(getConfigDir()).toBe(getExpectedDefaultConfigDir())
       expect(getConfigDir()).not.toBe(legacyHaloDir)
     })
+
+    it('should fallback to ~/.kite when KITE_CONFIG_DIR points to ~/.claude', () => {
+      const claudeDir = join(homedir(), '.claude')
+      fs.mkdirSync(claudeDir, { recursive: true })
+
+      process.env.KITE_CONFIG_DIR = claudeDir
+      expect(getConfigDir()).toBe(getExpectedDefaultConfigDir())
+    })
+
+    it('should fallback to ~/.kite when KITE_CONFIG_DIR symlink resolves to ~/.claude', () => {
+      const claudeDir = join(homedir(), '.claude')
+      const linkPath = join(homedir(), 'claude-link')
+      fs.mkdirSync(claudeDir, { recursive: true })
+      fs.symlinkSync(claudeDir, linkPath)
+
+      process.env.KITE_CONFIG_DIR = linkPath
+      expect(getConfigDir()).toBe(getExpectedDefaultConfigDir())
+    })
   })
 
   describe('getVitePort', () => {

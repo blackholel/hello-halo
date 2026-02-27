@@ -1,15 +1,9 @@
-import { Bot, Terminal, Zap } from 'lucide-react'
+import { Bot, ChevronsDownUp, Globe, Terminal, Zap } from 'lucide-react'
 import { useTranslation } from '../../i18n'
-
-export type ComposerSuggestionTab = 'skills' | 'commands' | 'agents'
-
-export interface ComposerSuggestionItem {
-  id: string
-  type: 'skill' | 'command' | 'agent'
-  displayName: string
-  insertText: string
-  description?: string
-}
+import type {
+  ComposerSuggestionItem,
+  ComposerSuggestionTab
+} from '../../utils/composer-suggestion-types'
 
 interface ComposerTriggerPanelProps {
   triggerType: 'slash' | 'mention'
@@ -86,32 +80,64 @@ export function ComposerTriggerPanel({
             {triggerType === 'mention' ? t('No agents found') : t('No resources found')}
           </div>
         ) : (
-          items.map((item, index) => (
-            <button
-              key={item.id}
-              onMouseEnter={() => onHoverIndex(index)}
-              onClick={() => onSelect(item)}
-              className={`w-full px-3 py-2 text-left transition-colors ${
-                index === activeIndex
-                  ? 'bg-primary/10'
-                  : 'hover:bg-muted/50'
-              }`}
-            >
-              <div className="flex items-start gap-2">
-                <div className="mt-0.5 flex-shrink-0">
-                  <ItemIcon type={item.type} />
+          items.map((item, index) => {
+            const isActive = index === activeIndex
+            if (item.kind === 'action') {
+              return (
+                <button
+                  key={item.id}
+                  onMouseEnter={() => onHoverIndex(index)}
+                  onClick={() => onSelect(item)}
+                  className={`w-full px-3 py-2 text-left transition-colors ${
+                    isActive ? 'bg-primary/10' : 'hover:bg-muted/50'
+                  }`}
+                >
+                  <div className="flex items-start gap-2">
+                    <div className="mt-0.5 flex-shrink-0">
+                      {item.actionId === 'expand-global'
+                        ? <Globe size={14} className="text-cyan-500" />
+                        : <ChevronsDownUp size={14} className="text-cyan-500" />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-medium text-foreground">
+                        {item.label}
+                      </p>
+                      {item.description && (
+                        <p className="truncate text-[11px] text-muted-foreground">{item.description}</p>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              )
+            }
+
+            return (
+              <button
+                key={item.id}
+                onMouseEnter={() => onHoverIndex(index)}
+                onClick={() => onSelect(item)}
+                className={`w-full px-3 py-2 text-left transition-colors ${
+                  isActive
+                    ? 'bg-primary/10'
+                    : 'hover:bg-muted/50'
+                }`}
+              >
+                <div className="flex items-start gap-2">
+                  <div className="mt-0.5 flex-shrink-0">
+                    <ItemIcon type={item.type} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-mono text-foreground">
+                      {item.type === 'agent' ? '@' : '/'}{item.displayName}
+                    </p>
+                    {item.description && (
+                      <p className="truncate text-[11px] text-muted-foreground">{item.description}</p>
+                    )}
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-mono text-foreground">
-                    {item.type === 'agent' ? '@' : '/'}{item.displayName}
-                  </p>
-                  {item.description && (
-                    <p className="truncate text-[11px] text-muted-foreground">{item.description}</p>
-                  )}
-                </div>
-              </div>
-            </button>
-          ))
+              </button>
+            )
+          })
         )}
       </div>
     </div>

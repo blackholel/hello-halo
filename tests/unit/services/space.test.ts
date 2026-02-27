@@ -143,10 +143,24 @@ describe('Space Service', () => {
       const warnings = warnSpy.mock.calls.flat().map((entry) => String(entry))
       warnSpy.mockRestore()
 
+      const migratedSkillPath = path.join(space.path, '.claude', 'skills', 'review', 'SKILL.md')
+      const migratedAgentPath = path.join(space.path, '.claude', 'agents', 'reviewer.md')
+      const migratedCommandPath = path.join(space.path, '.claude', 'commands', 'lint.md')
+      for (let i = 0; i < 20; i += 1) {
+        if (
+          fs.existsSync(migratedSkillPath) &&
+          fs.existsSync(migratedAgentPath) &&
+          fs.existsSync(migratedCommandPath)
+        ) {
+          break
+        }
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 10))
+      }
+
       expect(spaces.some((item) => item.id === space.id)).toBe(true)
-      expect(fs.existsSync(path.join(space.path, '.claude', 'skills', 'review', 'SKILL.md'))).toBe(true)
-      expect(fs.existsSync(path.join(space.path, '.claude', 'agents', 'reviewer.md'))).toBe(true)
-      expect(fs.existsSync(path.join(space.path, '.claude', 'commands', 'lint.md'))).toBe(true)
+      expect(fs.existsSync(migratedSkillPath)).toBe(true)
+      expect(fs.existsSync(migratedAgentPath)).toBe(true)
+      expect(fs.existsSync(migratedCommandPath)).toBe(true)
 
       expect(warnings.some((line) => line.includes("Cannot find module './skills.service'"))).toBe(false)
       expect(warnings.some((line) => line.includes("Cannot find module './agents.service'"))).toBe(false)
@@ -314,6 +328,40 @@ describe('Space Service', () => {
       expect(fs.existsSync(collidingCustomPath)).toBe(true)
       expect(fs.existsSync(projectFile)).toBe(true)
       expect(fs.existsSync(path.join(collidingCustomPath, '.kite'))).toBe(false)
+    })
+
+    it('should refuse deleting a space when custom path equals home directory', async () => {
+      const homePath = globalThis.__KITE_TEST_DIR__
+      const sentinelPath = path.join(homePath, '.kite', 'sentinel.txt')
+      fs.mkdirSync(path.dirname(sentinelPath), { recursive: true })
+      fs.writeFileSync(sentinelPath, 'keep', 'utf-8')
+
+      const space = await createSpace({
+        name: 'Home Protected',
+        icon: 'folder',
+        customPath: homePath
+      })
+
+      const deleted = deleteSpace(space.id)
+      expect(deleted).toBe(false)
+      expect(fs.existsSync(sentinelPath)).toBe(true)
+    })
+
+    it('should refuse deleting when space meta id is mismatched', async () => {
+      const space = await createSpace({
+        name: 'Meta Mismatch',
+        icon: 'folder'
+      })
+
+      const metaPath = path.join(space.path, '.kite', 'meta.json')
+      const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
+      meta.id = 'tampered-id'
+      fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+
+      const deleted = deleteSpace(space.id)
+      expect(deleted).toBe(false)
+      expect(fs.existsSync(space.path)).toBe(true)
+      expect(fs.existsSync(path.join(space.path, '.kite'))).toBe(true)
     })
   })
 

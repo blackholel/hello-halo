@@ -77,6 +77,7 @@ vi.mock('../../../utils/path-validation', () => ({
 }))
 
 import { getSpaceConfig, updateSpaceConfig } from '../../space-config.service'
+import { getConfig } from '../../config.service'
 import { buildHooksConfig } from '../../hooks.service'
 import {
   buildPluginsConfig,
@@ -150,6 +151,38 @@ describe('sdk-config.builder strict space-only', () => {
     expect(paths).toContain('/home/test/.kite')
     expect(paths).toContain('/workspace/project/.local-plugins')
     expect(paths).toContain('/workspace/project/.claude')
+  })
+
+  it('ignores enableSystemSkills and never injects ~/.claude user root', () => {
+    vi.mocked(getConfig).mockReturnValue({
+      claudeCode: {
+        enableSystemSkills: true,
+        plugins: {
+          enabled: true,
+          globalPaths: ['/global/plugins'],
+          loadDefaultPaths: true
+        },
+        skillsLazyLoad: false
+      }
+    } as any)
+
+    vi.mocked(getSpaceConfig).mockReturnValue({
+      resourcePolicy: {
+        version: 1,
+        mode: 'legacy'
+      },
+      claudeCode: {
+        plugins: {
+          paths: []
+        }
+      }
+    } as any)
+
+    const plugins = buildPluginsConfig('/workspace/project')
+    const paths = plugins.map(plugin => plugin.path)
+
+    expect(paths).toContain('/home/test/.kite')
+    expect(paths).not.toContain('/home/test/.claude')
   })
 
   it('keeps hooks configurable through buildHooksConfig when strict policy allows hooks', () => {

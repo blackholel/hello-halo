@@ -29,6 +29,7 @@ export default defineConfig({
       '../src/main/services/__tests__/toolkit.service.test.ts',
       '../src/main/services/__tests__/workflow.service.space-only.test.ts',
       '../src/main/services/__tests__/resource-copy-by-ref.test.ts',
+      '../src/main/services/__tests__/resource-delete-guard.test.ts',
       '../src/main/services/__tests__/resource-metadata.service.test.ts',
       '../src/main/services/__tests__/resource-scene-tags.service.test.ts',
       '../src/main/services/__tests__/resource-scan-scene-tags.integration.test.ts',
@@ -43,7 +44,9 @@ export default defineConfig({
       '../src/renderer/components/resources/__tests__/template-library-filter-behavior.test.ts',
       '../src/renderer/components/chat/__tests__/message-list.thought-priority.test.ts',
       '../src/renderer/components/chat/__tests__/thought-process.visibility.test.ts',
-      '../src/renderer/stores/__tests__/chat.store.ask-user-question.test.ts'
+      '../src/renderer/stores/__tests__/chat.store.ask-user-question.test.ts',
+      '../src/renderer/stores/__tests__/composer-mru.store.test.ts',
+      '../src/renderer/utils/__tests__/composer-suggestion-ranking.test.ts'
     ],
 
     // Root directory for tests

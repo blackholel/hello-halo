@@ -10,7 +10,6 @@ import type {
   KiteConfig,
   ThemeMode,
   McpServersConfig,
-  ConfigSourceMode,
   ApiProfile
 } from '../types'
 import { CheckCircle2, XCircle, ArrowLeft, ChevronDown, ChevronRight, Package, Trash2, Loader2 } from '../components/icons/ToolIcons'
@@ -122,8 +121,6 @@ export function SettingsPage() {
   const [templateKey, setTemplateKey] = useState(AI_PROFILE_TEMPLATES[0]?.key || 'minimax')
 
   const [theme, setTheme] = useState<ThemeMode>(config?.appearance.theme || 'system')
-  const [configSourceMode, setConfigSourceMode] = useState<ConfigSourceMode>(config?.configSourceMode || 'kite')
-  const [configSourceNotice, setConfigSourceNotice] = useState<string | null>(null)
   const [taxonomyAdminEnabled, setTaxonomyAdminEnabled] = useState<boolean>(config?.extensionTaxonomy?.adminEnabled || false)
 
   // Connection status
@@ -162,10 +159,6 @@ export function SettingsPage() {
       unsubscribe()
     }
   }, [])
-
-  useEffect(() => {
-    setConfigSourceMode(config?.configSourceMode || 'kite')
-  }, [config?.configSourceMode])
 
   useEffect(() => {
     setTaxonomyAdminEnabled(config?.extensionTaxonomy?.adminEnabled || false)
@@ -345,28 +338,6 @@ export function SettingsPage() {
   const handleMcpServersSave = async (servers: McpServersConfig) => {
     await api.setConfig({ mcpServers: servers })
     setConfig({ ...config, mcpServers: servers } as KiteConfig)
-  }
-
-  const handleConfigSourceModeChange = async (nextMode: ConfigSourceMode) => {
-    const previousMode = configSourceMode
-    setConfigSourceMode(nextMode)
-    setConfigSourceNotice(null)
-
-    if (nextMode === previousMode) {
-      return
-    }
-
-    try {
-      await api.setConfig({ configSourceMode: nextMode })
-      // Do not update global in-memory config here.
-      // Runtime source mode is locked in main process until restart,
-      // so UI should keep using current effective source outside this page.
-      setConfigSourceNotice(t('Configuration source saved. Restart Kite to apply changes.'))
-    } catch (error) {
-      console.error('[Settings] Failed to update configuration source mode:', error)
-      setConfigSourceMode(previousMode)
-      setConfigSourceNotice(t('Save failed'))
-    }
   }
 
   const handleTaxonomyAdminToggle = async (enabled: boolean) => {
@@ -763,27 +734,16 @@ export function SettingsPage() {
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">
-                  {t('Source Mode')}
+                  {t('Source')}
                 </label>
-                <select
-                  value={configSourceMode}
-                  onChange={(event) => handleConfigSourceModeChange(event.target.value as ConfigSourceMode)}
-                  className="w-full select-apple text-sm"
-                >
-                  <option value="kite">{t('Kite (~/.kite)')}</option>
-                  <option value="claude">{t('Claude (~/.claude)')}</option>
-                </select>
-              </div>
-
-              <div className="settings-warning text-sm">
-                {t('Changing configuration source requires restart. Current session keeps existing sources until restart.')}
-              </div>
-
-              {configSourceNotice && (
-                <div className="settings-info text-sm">
-                  {configSourceNotice}
+                <div className="w-full px-3 py-2 rounded-xl border border-border/60 bg-muted/30 text-sm">
+                  {t('Kite (~/.kite)')}
                 </div>
-              )}
+              </div>
+
+              <div className="settings-info text-sm">
+                {t('Current version only supports Kite config root.')}
+              </div>
             </div>
           </section>
 

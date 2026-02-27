@@ -18,7 +18,7 @@ import { getSpaceToolkit } from '../toolkit.service'
 import { createAIBrowserMcpServer, AI_BROWSER_SYSTEM_PROMPT } from '../ai-browser'
 import { SKILLS_LAZY_SYSTEM_PROMPT } from '../skills-mcp-server'
 import { buildPluginMcpServers } from '../plugin-mcp.service'
-import { getLockedConfigSourceMode, getLockedUserConfigRootDir } from '../config-source-mode.service'
+import { getLockedUserConfigRootDir } from '../config-source-mode.service'
 import { getSpaceResourcePolicy, isStrictSpaceOnlyPolicy } from './space-resource-policy.service'
 import { resolveEffectiveConversationAi } from './ai-config-resolver'
 import {
@@ -95,11 +95,10 @@ export function getEffectiveSkillsLazyLoad(
 
 /**
  * Build plugins configuration for skills loading.
- * Loading priority: installed plugins → system → global → app → space → workDir/.claude/
+ * Loading priority: installed plugins → global → app → space → workDir/.claude/
  */
 export function buildPluginsConfig(workDir: string): PluginConfig[] {
   const plugins: PluginConfig[] = []
-  const sourceMode = getLockedConfigSourceMode()
   const config = getConfig()
   const spaceConfig = getSpaceConfig(workDir)
   const claudeCodeConfig = config.claudeCode
@@ -152,35 +151,27 @@ export function buildPluginsConfig(workDir: string): PluginConfig[] {
   const disableGlobal = spaceConfig?.claudeCode?.plugins?.disableGlobal === true
 
   if (!disableGlobal) {
-    if (sourceMode === 'claude') {
-      // Strict Claude source mode: use only Claude user root, no app overlay paths.
-      addIfValid(getLockedUserConfigRootDir())
-    } else {
-      // 1. System config directory (optional, default: false)
-      // Load ~/.claude/ which contains skills/, commands/, hooks/, agents/
-      if (claudeCodeConfig?.enableSystemSkills) {
-        const systemConfigPath = join(homedir(), '.claude')
-        addIfValid(systemConfigPath)
-      }
+    if (claudeCodeConfig?.enableSystemSkills) {
+      console.warn('[Agent] claudeCode.enableSystemSkills is deprecated and ignored.')
+    }
 
-      // 2. Global custom paths from config.claudeCode.plugins.globalPaths
-      const globalPaths = claudeCodeConfig?.plugins?.globalPaths || []
-      for (const globalPath of globalPaths) {
-        // Resolve relative paths from home directory
-        const resolvedPath = globalPath.startsWith('/') ? globalPath : join(homedir(), globalPath)
-        addIfValid(resolvedPath)
-      }
+    // 1. Global custom paths from config.claudeCode.plugins.globalPaths
+    const globalPaths = claudeCodeConfig?.plugins?.globalPaths || []
+    for (const globalPath of globalPaths) {
+      // Resolve relative paths from home directory
+      const resolvedPath = globalPath.startsWith('/') ? globalPath : join(homedir(), globalPath)
+      addIfValid(resolvedPath)
+    }
 
-      // 3. App config directory (default: ~/.kite/)
-      // This loads skills/, commands/, hooks/, agents/ from ~/.kite/
-      if (claudeCodeConfig?.plugins?.loadDefaultPaths !== false) {
-        const kiteDir = getLockedUserConfigRootDir()
-        addIfValid(kiteDir)
-      }
+    // 2. App config directory (default: ~/.kite/)
+    // This loads skills/, commands/, hooks/, agents/ from ~/.kite/
+    if (claudeCodeConfig?.plugins?.loadDefaultPaths !== false) {
+      const kiteDir = getLockedUserConfigRootDir()
+      addIfValid(kiteDir)
     }
   }
 
-  // 5. Space custom paths from space-config.json
+  // 3. Space custom paths from space-config.json
   const spacePaths = spaceConfig?.claudeCode?.plugins?.paths || []
   for (const spacePath of spacePaths) {
     // Resolve relative paths from workDir
@@ -188,7 +179,7 @@ export function buildPluginsConfig(workDir: string): PluginConfig[] {
     addIfValid(resolvedPath)
   }
 
-  // 6. Default space-level path (unless disabled)
+  // 4. Default space-level path (unless disabled)
   // {workDir}/.claude/ - Claude Code CLI compatible
   if (spaceConfig?.claudeCode?.plugins?.loadDefaultPath !== false) {
     if (workDir) {

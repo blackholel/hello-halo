@@ -454,19 +454,23 @@ export function updateSkill(skillPath: string, content: string): boolean {
  */
 export function deleteSkill(skillPath: string): boolean {
   try {
-    const normalizedPath = skillPath.replace(/\\/g, '/')
-    if (!normalizedPath.includes('/skills/') && !normalizedPath.includes('/.claude/skills/')) {
-      console.warn(`[Skills] Cannot delete skill outside of skills directory: ${skillPath}`)
+    const skillMdPath = skillPath.endsWith('SKILL.md')
+      ? skillPath
+      : join(skillPath, 'SKILL.md')
+
+    if (!isPathWithinBasePaths(skillMdPath, getAllowedSkillBaseDirs())) {
+      console.warn(`[Skills] Cannot delete skill outside of space skills directory: ${skillPath}`)
       return false
     }
 
-    if (!existsSync(skillPath)) {
-      console.warn(`[Skills] Skill directory not found: ${skillPath}`)
+    if (!existsSync(skillMdPath)) {
+      console.warn(`[Skills] Skill file not found: ${skillMdPath}`)
       return false
     }
 
-    rmSync(skillPath, { recursive: true, force: true })
-    const workDir = resolveWorkDirForSkillPath(skillPath)
+    const targetDir = dirname(skillMdPath)
+    rmSync(targetDir, { recursive: true, force: true })
+    const workDir = resolveWorkDirForSkillPath(skillMdPath)
     if (workDir) {
       invalidateSkillsCache(workDir)
     } else {

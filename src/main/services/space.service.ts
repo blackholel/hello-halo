@@ -3,8 +3,9 @@
  */
 
 import { shell } from 'electron'
-import { join } from 'path'
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, rmSync } from 'fs'
+import { homedir } from 'os'
+import { dirname, isAbsolute, join, relative, resolve } from 'path'
+import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, readdirSync, rmSync, statSync, writeFileSync } from 'fs'
 import { getKiteDir, getLegacySpacesDir, getTempSpacePath, getSpacesDir } from './config.service'
 import { getSpaceConfig, updateSpaceConfig } from './space-config.service'
 import { v4 as uuidv4 } from 'uuid'
@@ -116,6 +117,81 @@ function isInDefaultSpacesRoot(spacePath: string): boolean {
 function getDefaultSpaceRoots(): string[] {
   const roots = [getSpacesDir(), getLegacySpacesDir()]
   return roots.filter((root, index) => roots.indexOf(root) === index)
+}
+
+function normalizeComparisonPath(pathValue: string): string {
+  const normalized = resolve(pathValue)
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized
+}
+
+function canonicalizePath(pathValue: string): string {
+  const resolvedPath = resolve(pathValue)
+  const missingSegments: string[] = []
+  let cursor = resolvedPath
+
+  while (!existsSync(cursor)) {
+    const parent = dirname(cursor)
+    if (parent === cursor) {
+      break
+    }
+    missingSegments.unshift(cursor.slice(parent.length).replace(/^[/\\]/, ''))
+    cursor = parent
+  }
+
+  let canonicalBase = cursor
+  if (existsSync(cursor)) {
+    try {
+      canonicalBase = realpathSync(cursor)
+    } catch {
+      canonicalBase = cursor
+    }
+  }
+
+  let canonical = canonicalBase
+  for (const segment of missingSegments) {
+    if (!segment) continue
+    canonical = join(canonical, segment)
+  }
+
+  return normalizeComparisonPath(canonical)
+}
+
+function isPathEqual(targetPath: string, otherPath: string): boolean {
+  return canonicalizePath(targetPath) === canonicalizePath(otherPath)
+}
+
+function isPathInside(targetPath: string, parentPath: string): boolean {
+  const rel = relative(canonicalizePath(parentPath), canonicalizePath(targetPath))
+  return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel)
+}
+
+function getSpaceMetaPath(spacePath: string): string {
+  return join(spacePath, '.kite', 'meta.json')
+}
+
+function readSpaceMeta(spacePath: string): SpaceMeta | null {
+  const metaPath = getSpaceMetaPath(spacePath)
+  if (!existsSync(metaPath)) {
+    return null
+  }
+  try {
+    return JSON.parse(readFileSync(metaPath, 'utf-8')) as SpaceMeta
+  } catch {
+    return null
+  }
+}
+
+function isProtectedDeletionTarget(pathValue: string): boolean {
+  const protectedPaths = [
+    resolve('/'),
+    resolve(homedir()),
+    resolve(getKiteDir()),
+    resolve(dirname(getKiteDir())),
+    resolve(getSpacesDir()),
+    resolve(getLegacySpacesDir())
+  ]
+
+  return protectedPaths.some((protectedPath) => isPathEqual(pathValue, protectedPath))
 }
 
 function loadSpacesFromRoots(roots: string[]): Space[] {
@@ -507,12 +583,53 @@ export function deleteSpace(spaceId: string): boolean {
   const isCustomPath = !isInDefaultSpacesRoot(spacePath)
 
   try {
+    if (!existsSync(spacePath)) {
+      console.warn(`[Space] Refusing delete for missing path: ${spacePath}`)
+      return false
+    }
+
+    if (isProtectedDeletionTarget(spacePath)) {
+      console.error(`[Space] Refusing delete for protected path: ${spacePath}`)
+      return false
+    }
+
+    const spacePathStat = lstatSync(spacePath)
+    if (spacePathStat.isSymbolicLink()) {
+      console.error(`[Space] Refusing delete for symlink space path: ${spacePath}`)
+      return false
+    }
+
+    const meta = readSpaceMeta(spacePath)
+    if (!meta || meta.id !== space.id) {
+      console.error(`[Space] Refusing delete due to missing or mismatched meta id: ${spacePath}`)
+      return false
+    }
+
     if (isCustomPath) {
       // For custom path spaces, only delete the .kite folder (preserve user's files)
       const kiteDir = join(spacePath, '.kite')
-      if (existsSync(kiteDir)) {
-        rmSync(kiteDir, { recursive: true, force: true })
+      if (!existsSync(kiteDir)) {
+        console.error(`[Space] Refusing custom space delete without .kite directory: ${spacePath}`)
+        return false
       }
+
+      if (isProtectedDeletionTarget(kiteDir)) {
+        console.error(`[Space] Refusing delete for protected .kite path: ${kiteDir}`)
+        return false
+      }
+
+      const kiteDirStat = lstatSync(kiteDir)
+      if (kiteDirStat.isSymbolicLink()) {
+        console.error(`[Space] Refusing delete for symlink .kite directory: ${kiteDir}`)
+        return false
+      }
+
+      if (!isPathInside(kiteDir, spacePath)) {
+        console.error(`[Space] Refusing delete because .kite is outside space boundary: ${kiteDir}`)
+        return false
+      }
+
+      rmSync(kiteDir, { recursive: true, force: true })
       // Remove from index
       removeFromSpaceIndex(spacePath)
     } else {

@@ -23,16 +23,17 @@ import { useState, useRef, useEffect, useCallback, useMemo, KeyboardEvent, Clipb
 import { Plus, ImagePlus, Loader2, AlertCircle, Atom, Globe, ClipboardList } from 'lucide-react'
 import { useOnboardingStore } from '../../stores/onboarding.store'
 import { useAIBrowserStore } from '../../stores/ai-browser.store'
+import { getComposerMruMap, touchComposerMru } from '../../stores/composer-mru.store'
 import { useSpaceStore } from '../../stores/space.store'
-import { useSkillsStore, type SkillDefinition } from '../../stores/skills.store'
-import { useAgentsStore, type AgentDefinition } from '../../stores/agents.store'
-import { useCommandsStore, type CommandDefinition } from '../../stores/commands.store'
+import { useSkillsStore } from '../../stores/skills.store'
+import { useAgentsStore } from '../../stores/agents.store'
+import { useCommandsStore } from '../../stores/commands.store'
 import { getOnboardingPrompt } from '../onboarding/onboardingData'
 import { ImageAttachmentPreview } from './ImageAttachmentPreview'
 import { FileContextPreview } from './FileContextPreview'
 import { SkillsDropdown } from '../skills/SkillsDropdown'
 import { ModelSwitcher } from './ModelSwitcher'
-import { ComposerTriggerPanel, type ComposerSuggestionItem, type ComposerSuggestionTab } from './ComposerTriggerPanel'
+import { ComposerTriggerPanel } from './ComposerTriggerPanel'
 import { processImage, isValidImageType, formatFileSize } from '../../utils/imageProcessor'
 import type { ConversationAiConfig, FileContextAttachment, ImageAttachment, KiteConfig } from '../../types'
 import { useTranslation } from '../../i18n'
@@ -40,6 +41,21 @@ import { useComposerStore } from '../../stores/composer.store'
 import { commandKey } from '../../../shared/command-utils'
 import { getTriggerContext, replaceTriggerToken, type TriggerContext } from '../../utils/composer-trigger'
 import { isResourceEnabled, toResourceKey } from '../../utils/resource-key'
+import {
+  buildGlobalExpandStateKey,
+  buildSuggestionStableId,
+  buildVisibleSuggestions,
+  rankSuggestions,
+  shouldResetGlobalExpandState,
+  splitSuggestionsByScope
+} from '../../utils/composer-suggestion-ranking'
+import type {
+  ComposerResourceSuggestionItem,
+  ComposerSuggestionItem,
+  ComposerSuggestionSource,
+  ComposerSuggestionTab,
+  ComposerSuggestionType
+} from '../../utils/composer-suggestion-types'
 
 interface InputAreaProps {
   onSend: (content: string, images?: ImageAttachment[], thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[], planEnabled?: boolean) => void
@@ -70,6 +86,23 @@ function getLocalizedName(item: { name: string; displayName?: string; namespace?
   return item.namespace ? `${item.namespace}:${base}` : base
 }
 
+function normalizeSuggestionSource(source: string | undefined): ComposerSuggestionSource {
+  if (source === 'app' || source === 'global' || source === 'space' || source === 'installed' || source === 'plugin') {
+    return source
+  }
+  return 'space'
+}
+
+function toSuggestionScope(source: ComposerSuggestionSource): 'space' | 'global' {
+  return source === 'space' ? 'space' : 'global'
+}
+
+function toSuggestionTypeFromTab(tab: ComposerSuggestionTab): ComposerSuggestionType {
+  if (tab === 'commands') return 'command'
+  if (tab === 'agents') return 'agent'
+  return 'skill'
+}
+
 export function InputArea({
   onSend,
   onStop,
@@ -96,12 +129,15 @@ export function InputArea({
   const [triggerContext, setTriggerContext] = useState<TriggerContext | null>(null)
   const [activeSuggestionTab, setActiveSuggestionTab] = useState<ComposerSuggestionTab>('skills')
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0)
+  const [globalExpandState, setGlobalExpandState] = useState<Record<string, boolean>>({})
+  const [mruVersion, setMruVersion] = useState(0)
   const [isComposing, setIsComposing] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const attachMenuRef = useRef<HTMLDivElement>(null)
   const inputContainerRef = useRef<HTMLDivElement>(null)
   const lastTriggerTypeRef = useRef<TriggerContext['type'] | null>(null)
+  const lastExpandContextRef = useRef<{ stateKey: string | null; query: string } | null>(null)
   const insertQueue = useComposerStore(state => state.insertQueue)
   const dequeueInsert = useComposerStore(state => state.dequeueInsert)
 
@@ -212,105 +248,195 @@ export function InputArea({
   const displayContent = isOnboardingSendStep ? onboardingPrompt : content
   const isTriggerPanelOpen = Boolean(triggerContext) && !isOnboardingSendStep && !isGenerating
 
-  const matchesTriggerQuery = useCallback((...values: Array<string | undefined>) => {
-    if (!triggerQuery) return true
-    return values.some(value => value?.toLowerCase().includes(triggerQuery))
-  }, [triggerQuery])
+  const mruSpaceId = spaceId || 'no-space'
+  const effectiveSuggestionTab: ComposerSuggestionTab = triggerContext?.type === 'mention'
+    ? 'agents'
+    : activeSuggestionTab
+  const expandStateKey = triggerContext
+    ? buildGlobalExpandStateKey({
+      spaceId: mruSpaceId,
+      triggerMode: triggerContext.type,
+      tab: effectiveSuggestionTab
+    })
+    : null
+  const isGlobalExpanded = expandStateKey ? globalExpandState[expandStateKey] === true : false
 
-  const filteredSkills = useMemo(() => {
-    let items = skills.filter(skill => skill.source === 'space')
-    if (enabledSkills.length > 0) {
-      items = items.filter(skill => isResourceEnabled(enabledSkills, skill))
-    }
-    return items.filter((skill) => matchesTriggerQuery(
-      toResourceKey(skill),
-      skill.name,
-      skill.displayName,
-      skill.description
-    ))
-  }, [enabledSkills, matchesTriggerQuery, skills])
+  const skillCandidates = useMemo<ComposerResourceSuggestionItem[]>(() => {
+    const suggestions: ComposerResourceSuggestionItem[] = []
+    for (const skill of skills) {
+      const source = normalizeSuggestionSource(skill.source)
+      const scope = toSuggestionScope(source)
+      if (scope === 'space' && enabledSkills.length > 0 && !isResourceEnabled(enabledSkills, skill)) {
+        continue
+      }
 
-  const filteredCommands = useMemo(() => {
-    const items = commands.filter(command => command.source === 'space')
-    return items.filter((command) => matchesTriggerQuery(
-      commandKey(command),
-      command.name,
-      command.displayName,
-      command.description
-    ))
-  }, [commands, matchesTriggerQuery])
-
-  const filteredAgents = useMemo(() => {
-    let items = agents.filter(agent => agent.source === 'space')
-    if (enabledAgents.length > 0) {
-      items = items.filter(agent => isResourceEnabled(enabledAgents, agent))
-    }
-    return items.filter((agent) => matchesTriggerQuery(
-      toResourceKey(agent),
-      agent.name,
-      agent.displayName,
-      agent.description
-    ))
-  }, [agents, enabledAgents, matchesTriggerQuery])
-
-  const skillSuggestions = useMemo<ComposerSuggestionItem[]>(() => (
-    filteredSkills.map((skill: SkillDefinition) => {
       const key = toResourceKey(skill)
-      return {
+      suggestions.push({
+        kind: 'resource',
         id: `skill:${skill.path}`,
+        stableId: buildSuggestionStableId({
+          type: 'skill',
+          source,
+          namespace: skill.namespace,
+          name: skill.name,
+          pluginRoot: skill.pluginRoot
+        }),
         type: 'skill',
+        source,
+        scope,
         displayName: getLocalizedName(skill),
         insertText: `/${key}`,
-        description: skill.description
-      }
-    })
-  ), [filteredSkills])
+        description: skill.description,
+        keywords: [
+          key,
+          skill.name,
+          skill.displayName,
+          skill.description
+        ].filter((item): item is string => Boolean(item))
+      })
+    }
+    return suggestions
+  }, [enabledSkills, skills])
 
-  const commandSuggestions = useMemo<ComposerSuggestionItem[]>(() => (
-    filteredCommands.map((command: CommandDefinition) => {
+  const commandCandidates = useMemo<ComposerResourceSuggestionItem[]>(() => {
+    const suggestions: ComposerResourceSuggestionItem[] = []
+    for (const command of commands) {
+      const source = normalizeSuggestionSource(command.source)
       const key = commandKey(command)
-      return {
+      suggestions.push({
+        kind: 'resource',
         id: `command:${command.path}`,
+        stableId: buildSuggestionStableId({
+          type: 'command',
+          source,
+          namespace: command.namespace,
+          name: command.name,
+          pluginRoot: command.pluginRoot
+        }),
         type: 'command',
+        source,
+        scope: toSuggestionScope(source),
         displayName: getLocalizedName(command),
         insertText: `/${key}`,
-        description: command.description
-      }
-    })
-  ), [filteredCommands])
+        description: command.description,
+        keywords: [
+          key,
+          command.name,
+          command.displayName,
+          command.description
+        ].filter((item): item is string => Boolean(item))
+      })
+    }
+    return suggestions
+  }, [commands])
 
-  const agentSuggestions = useMemo<ComposerSuggestionItem[]>(() => (
-    filteredAgents.map((agent: AgentDefinition) => {
+  const agentCandidates = useMemo<ComposerResourceSuggestionItem[]>(() => {
+    const suggestions: ComposerResourceSuggestionItem[] = []
+    for (const agent of agents) {
+      const source = normalizeSuggestionSource(agent.source)
+      const scope = toSuggestionScope(source)
+      if (scope === 'space' && enabledAgents.length > 0 && !isResourceEnabled(enabledAgents, agent)) {
+        continue
+      }
+
       const key = toResourceKey(agent)
-      return {
+      suggestions.push({
+        kind: 'resource',
         id: `agent:${agent.path}`,
+        stableId: buildSuggestionStableId({
+          type: 'agent',
+          source,
+          namespace: agent.namespace,
+          name: agent.name,
+          pluginRoot: agent.pluginRoot
+        }),
         type: 'agent',
+        source,
+        scope,
         displayName: getLocalizedName(agent),
         insertText: `@${key}`,
-        description: agent.description
-      }
-    })
-  ), [filteredAgents])
+        description: agent.description,
+        keywords: [
+          key,
+          agent.name,
+          agent.displayName,
+          agent.description
+        ].filter((item): item is string => Boolean(item))
+      })
+    }
+    return suggestions
+  }, [agents, enabledAgents])
+
+  const rankedSkillSuggestions = useMemo(
+    () => rankSuggestions(skillCandidates, {
+      query: triggerQuery,
+      mruMap: getComposerMruMap(mruSpaceId, 'skill')
+    }),
+    [mruSpaceId, mruVersion, skillCandidates, triggerQuery]
+  )
+  const rankedCommandSuggestions = useMemo(
+    () => rankSuggestions(commandCandidates, {
+      query: triggerQuery,
+      mruMap: getComposerMruMap(mruSpaceId, 'command')
+    }),
+    [commandCandidates, mruSpaceId, mruVersion, triggerQuery]
+  )
+  const rankedAgentSuggestions = useMemo(
+    () => rankSuggestions(agentCandidates, {
+      query: triggerQuery,
+      mruMap: getComposerMruMap(mruSpaceId, 'agent')
+    }),
+    [agentCandidates, mruSpaceId, mruVersion, triggerQuery]
+  )
+
+  const skillSuggestionGroups = useMemo(
+    () => splitSuggestionsByScope(rankedSkillSuggestions),
+    [rankedSkillSuggestions]
+  )
+  const commandSuggestionGroups = useMemo(
+    () => splitSuggestionsByScope(rankedCommandSuggestions),
+    [rankedCommandSuggestions]
+  )
+  const agentSuggestionGroups = useMemo(
+    () => splitSuggestionsByScope(rankedAgentSuggestions),
+    [rankedAgentSuggestions]
+  )
 
   const suggestionCounts = useMemo<Record<ComposerSuggestionTab, number>>(() => ({
-    skills: skillSuggestions.length,
-    commands: commandSuggestions.length,
-    agents: agentSuggestions.length
-  }), [agentSuggestions.length, commandSuggestions.length, skillSuggestions.length])
+    skills: skillSuggestionGroups.space.length,
+    commands: commandSuggestionGroups.space.length,
+    agents: agentSuggestionGroups.space.length
+  }), [agentSuggestionGroups.space.length, commandSuggestionGroups.space.length, skillSuggestionGroups.space.length])
+
+  const activeSuggestionGroups = useMemo(() => {
+    if (effectiveSuggestionTab === 'commands') return commandSuggestionGroups
+    if (effectiveSuggestionTab === 'agents') return agentSuggestionGroups
+    return skillSuggestionGroups
+  }, [agentSuggestionGroups, commandSuggestionGroups, effectiveSuggestionTab, skillSuggestionGroups])
+
+  const activeSuggestionType = toSuggestionTypeFromTab(effectiveSuggestionTab)
+  const activeGlobalCount = activeSuggestionGroups.global.length
 
   const activeSuggestions = useMemo(() => {
     if (!triggerContext) return [] as ComposerSuggestionItem[]
-    if (triggerContext.type === 'mention') {
-      return agentSuggestions
-    }
-    if (activeSuggestionTab === 'commands') {
-      return commandSuggestions
-    }
-    if (activeSuggestionTab === 'agents') {
-      return agentSuggestions
-    }
-    return skillSuggestions
-  }, [activeSuggestionTab, agentSuggestions, commandSuggestions, skillSuggestions, triggerContext])
+    return buildVisibleSuggestions({
+      spaceSuggestions: activeSuggestionGroups.space,
+      globalSuggestions: activeSuggestionGroups.global,
+      expanded: isGlobalExpanded,
+      type: activeSuggestionType,
+      expandLabel: t('Show global resources ({{count}})', { count: activeGlobalCount }),
+      collapseLabel: t('Hide global resources'),
+      expandDescription: t('Includes app, plugin, and shared resources')
+    })
+  }, [
+    activeGlobalCount,
+    activeSuggestionGroups.global,
+    activeSuggestionGroups.space,
+    activeSuggestionType,
+    isGlobalExpanded,
+    t,
+    triggerContext
+  ])
 
   // Process file to ImageAttachment with professional compression
   const processFileWithCompression = async (file: File): Promise<ImageAttachment | null> => {
@@ -485,6 +611,7 @@ export function InputArea({
   }, [isGenerating, isOnboardingSendStep])
 
   const closeTriggerPanel = useCallback(() => {
+    setGlobalExpandState(prev => (Object.keys(prev).length === 0 ? prev : {}))
     setTriggerContext(null)
     setActiveSuggestionIndex(0)
   }, [])
@@ -525,6 +652,7 @@ export function InputArea({
     if (!triggerContext) {
       setActiveSuggestionIndex(0)
       lastTriggerTypeRef.current = null
+      lastExpandContextRef.current = null
       return
     }
     if (lastTriggerTypeRef.current !== triggerContext.type) {
@@ -545,9 +673,73 @@ export function InputArea({
     setActiveSuggestionIndex(prev => Math.min(prev, activeSuggestions.length - 1))
   }, [activeSuggestions.length])
 
+  useEffect(() => {
+    if (!triggerContext || !expandStateKey) {
+      lastExpandContextRef.current = null
+      return
+    }
+
+    const previous = lastExpandContextRef.current
+    const shouldReset = shouldResetGlobalExpandState({
+      prevStateKey: previous?.stateKey || null,
+      nextStateKey: expandStateKey,
+      prevQuery: previous?.query || '',
+      nextQuery: triggerQuery,
+      isComposing
+    })
+
+    if (shouldReset) {
+      setGlobalExpandState(prev => {
+        if (prev[expandStateKey] !== true) return prev
+        return {
+          ...prev,
+          [expandStateKey]: false
+        }
+      })
+    }
+
+    lastExpandContextRef.current = {
+      stateKey: expandStateKey,
+      query: triggerQuery
+    }
+  }, [expandStateKey, isComposing, triggerContext, triggerQuery])
+
+  useEffect(() => {
+    if (!triggerContext || !expandStateKey || isComposing) return
+    if (!isGlobalExpanded) return
+    if (activeGlobalCount > 0) return
+
+    setGlobalExpandState(prev => {
+      if (prev[expandStateKey] !== true) return prev
+      return {
+        ...prev,
+        [expandStateKey]: false
+      }
+    })
+  }, [activeGlobalCount, expandStateKey, isComposing, isGlobalExpanded, triggerContext])
+
   const applySuggestion = useCallback((item: ComposerSuggestionItem) => {
+    if (item.kind === 'action') {
+      if (!expandStateKey) return
+      const nextExpanded = item.actionId === 'expand-global'
+      setGlobalExpandState(prev => {
+        if (prev[expandStateKey] === nextExpanded) return prev
+        return {
+          ...prev,
+          [expandStateKey]: nextExpanded
+        }
+      })
+      setActiveSuggestionIndex(0)
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus()
+      })
+      return
+    }
+
     if (!triggerContext) return
     const replaced = replaceTriggerToken(content, triggerContext, item.insertText)
+    touchComposerMru(mruSpaceId, item.type, item.stableId)
+    setMruVersion(version => version + 1)
     setContent(replaced.value)
     closeTriggerPanel()
     requestAnimationFrame(() => {
@@ -556,7 +748,7 @@ export function InputArea({
       textarea.focus()
       textarea.setSelectionRange(replaced.caret, replaced.caret)
     })
-  }, [closeTriggerPanel, content, triggerContext])
+  }, [closeTriggerPanel, content, expandStateKey, mruSpaceId, triggerContext])
 
   const syncTriggerWithCursor = useCallback(() => {
     const textarea = textareaRef.current

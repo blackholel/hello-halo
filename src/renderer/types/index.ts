@@ -58,6 +58,8 @@ export type PermissionLevel = 'allow' | 'ask' | 'deny';
 
 // Theme Mode
 export type ThemeMode = 'light' | 'dark' | 'system';
+// `claude` is kept only for backward-compatible payload parsing.
+// Runtime behavior is always forced to `kite`.
 export type ConfigSourceMode = 'kite' | 'claude';
 
 // Tool Call Status

@@ -38,9 +38,19 @@ const CONFIG_SOURCE_MODE_VALUES = ['kite', 'claude'] as const
 export type ConfigSourceMode = (typeof CONFIG_SOURCE_MODE_VALUES)[number]
 
 export function normalizeConfigSourceMode(value: unknown): ConfigSourceMode {
-  if (typeof value === 'string' && (CONFIG_SOURCE_MODE_VALUES as readonly string[]).includes(value)) {
-    return value as ConfigSourceMode
+  if (value === 'kite') {
+    return 'kite'
   }
+
+  if (value === 'claude') {
+    console.warn('[ConfigSourceMode] "claude" is deprecated. Forced to "kite".')
+    return 'kite'
+  }
+
+  if (value !== undefined && value !== null) {
+    console.warn('[ConfigSourceMode] Invalid value detected. Forced to "kite".', value)
+  }
+
   return 'kite'
 }
 
@@ -554,6 +564,28 @@ function injectBuiltInSeed(seedDir: string, kiteDir: string): boolean {
   return true
 }
 
+function forcePersistKiteConfigSourceMode(configPath: string): void {
+  if (!existsSync(configPath)) {
+    return
+  }
+
+  try {
+    const content = readFileSync(configPath, 'utf-8')
+    const parsed = JSON.parse(content) as Record<string, unknown>
+    const normalizedMode = normalizeConfigSourceMode(parsed.configSourceMode)
+
+    if (parsed.configSourceMode === normalizedMode) {
+      return
+    }
+
+    parsed.configSourceMode = 'kite'
+    writeFileSync(configPath, JSON.stringify(parsed, null, 2))
+    console.log('[ConfigSourceMode] Migrated persisted configSourceMode to "kite".')
+  } catch (error) {
+    console.warn('[ConfigSourceMode] Failed to migrate persisted configSourceMode:', error)
+  }
+}
+
 // Initialize app directories
 export async function initializeApp(): Promise<void> {
   const kiteDir = getKiteDir()
@@ -589,6 +621,7 @@ export async function initializeApp(): Promise<void> {
   if (!existsSync(configPath)) {
     writeFileSync(configPath, JSON.stringify(DEFAULT_CONFIG, null, 2))
   }
+  forcePersistKiteConfigSourceMode(configPath)
 }
 
 // Get configuration
@@ -667,9 +700,7 @@ export function saveConfig(config: Partial<KiteConfig>): KiteConfig {
   if (config.onboarding) {
     newConfig.onboarding = { ...currentConfig.onboarding, ...config.onboarding }
   }
-  if (rawUpdates.configSourceMode !== undefined) {
-    newConfig.configSourceMode = normalizeConfigSourceMode(rawUpdates.configSourceMode)
-  }
+  newConfig.configSourceMode = 'kite'
   if ((config as any).extensionTaxonomy !== undefined) {
     newConfig.extensionTaxonomy = {
       ...currentConfig.extensionTaxonomy,

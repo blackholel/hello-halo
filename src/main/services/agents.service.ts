@@ -439,9 +439,9 @@ export function updateAgent(agentPath: string, content: string): boolean {
  */
 export function deleteAgent(agentPath: string): boolean {
   try {
-    const normalizedPath = agentPath.replace(/\\/g, '/')
-    if (!normalizedPath.includes('/agents/') && !normalizedPath.includes('/.claude/agents/')) {
-      console.warn(`[Agents] Cannot delete agent outside of agents directory: ${agentPath}`)
+    const allowedBases = getAllowedAgentBaseDirs()
+    if (!isPathWithinBasePaths(agentPath, allowedBases)) {
+      console.warn(`[Agents] Cannot delete agent outside of space agents directory: ${agentPath}`)
       return false
     }
     if (!existsSync(agentPath)) {

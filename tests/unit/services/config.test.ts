@@ -377,6 +377,14 @@ describe('Config Service', () => {
       const config = getConfig()
       expect(config.configSourceMode).toBe('kite')
     })
+
+    it('should force configSourceMode to kite when save input is claude', () => {
+      saveConfig({ configSourceMode: 'claude' as any } as any)
+
+      const configPath = getConfigPath()
+      const saved = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+      expect(saved.configSourceMode).toBe('kite')
+    })
   })
 
   describe('configSourceMode normalization', () => {
@@ -389,6 +397,19 @@ describe('Config Service', () => {
 
       const config = getConfig()
       expect(config.configSourceMode).toBe('kite')
+    })
+
+    it('should migrate persisted claude mode to kite during initializeApp', async () => {
+      await initializeApp()
+      const configPath = getConfigPath()
+      fs.writeFileSync(configPath, JSON.stringify({
+        configSourceMode: 'claude'
+      }))
+
+      await initializeApp()
+
+      const raw = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+      expect(raw.configSourceMode).toBe('kite')
     })
   })
 })

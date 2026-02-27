@@ -240,8 +240,8 @@ describe('hooks.service', () => {
       expect(result?.PreToolUse?.[1].matcher).toBe('space')
     })
 
-    it('should ignore global and space hooks in claude mode', () => {
-      mockGetLockedConfigSourceMode.mockReturnValue('claude')
+    it('should keep merging global and space hooks under forced kite mode', () => {
+      mockGetLockedConfigSourceMode.mockReturnValue('kite')
       mockGetConfig.mockReturnValue({
         claudeCode: {
           hooks: {
@@ -250,6 +250,10 @@ describe('hooks.service', () => {
         }
       } as ReturnType<typeof getConfig>)
       mockGetSpaceConfig.mockReturnValue({
+        resourcePolicy: {
+          version: 1,
+          mode: 'legacy'
+        },
         claudeCode: {
           hooks: {
             PreToolUse: [createHookDef('space', 'echo space')]
@@ -258,7 +262,9 @@ describe('hooks.service', () => {
       } as any)
 
       const result = buildHooksConfig('/test/workdir')
-      expect(result).toBeUndefined()
+      expect(result?.PreToolUse).toHaveLength(2)
+      expect(result?.PreToolUse?.[0].matcher).toBe('global')
+      expect(result?.PreToolUse?.[1].matcher).toBe('space')
     })
   })
 

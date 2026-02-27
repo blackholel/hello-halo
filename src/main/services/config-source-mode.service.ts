@@ -1,5 +1,3 @@
-import { homedir } from 'os'
-import { join } from 'path'
 import { getConfig, getKiteDir, normalizeConfigSourceMode, type ConfigSourceMode } from './config.service'
 
 let lockedConfigSourceMode: ConfigSourceMode | null = null
@@ -13,7 +11,7 @@ export function initConfigSourceModeLock(): void {
     return
   }
   lockedConfigSourceMode = normalizeConfigSourceMode((getConfig() as { configSourceMode?: unknown }).configSourceMode)
-  console.log(`[ConfigSourceMode] Locked mode: ${lockedConfigSourceMode}`)
+  console.log(`[ConfigSourceMode] Locked mode: ${lockedConfigSourceMode} (forced kite mode)`)
 }
 
 export function getLockedConfigSourceMode(): ConfigSourceMode {
@@ -24,10 +22,7 @@ export function getLockedConfigSourceMode(): ConfigSourceMode {
 }
 
 export function getLockedUserConfigRootDir(): string {
-  const mode = getLockedConfigSourceMode()
-  if (mode === 'claude') {
-    return join(homedir(), '.claude')
-  }
+  getLockedConfigSourceMode()
   return getKiteDir()
 }
 
@@ -37,5 +32,5 @@ export function _testResetConfigSourceModeLock(): void {
 }
 
 export function _testInitConfigSourceModeLock(mode: ConfigSourceMode): void {
-  lockedConfigSourceMode = mode
+  lockedConfigSourceMode = normalizeConfigSourceMode(mode)
 }

@@ -2,9 +2,9 @@
  * Plugins Service Tests
  *
  * Verifies single-source loading behavior:
- * - kite mode reads only ~/.kite
- * - claude mode reads only ~/.claude
- * - cache signature includes mode/path fingerprint
+ * - runtime always reads ~/.kite
+ * - claude input is normalized and cannot switch root
+ * - cache signature remains stable with forced kite mode
  */
 
 import { describe, it, expect, beforeEach } from 'vitest'
@@ -57,7 +57,7 @@ describe('plugins.service', () => {
     _testInitConfigSourceModeLock('kite')
   })
 
-  it('should read only ~/.kite registry in kite mode', () => {
+  it('should read only ~/.kite registry in runtime mode', () => {
     const testDir = getTestDir()
     const kiteRoot = join(testDir, '.kite')
     const claudeRoot = join(testDir, '.claude')
@@ -69,9 +69,10 @@ describe('plugins.service', () => {
 
     const paths = getInstalledPluginPaths()
     expect(paths).toEqual([kiteInstallPath])
+    expect(paths).not.toContain(claudeInstallPath)
   })
 
-  it('should read only ~/.claude registry in claude mode', () => {
+  it('should keep reading ~/.kite registry even when lock helper receives claude', () => {
     const testDir = getTestDir()
     const kiteRoot = join(testDir, '.kite')
     const claudeRoot = join(testDir, '.claude')
@@ -85,10 +86,11 @@ describe('plugins.service', () => {
     _testInitConfigSourceModeLock('claude')
 
     const paths = getInstalledPluginPaths()
-    expect(paths).toEqual([claudeInstallPath])
+    expect(paths).toEqual([kiteInstallPath])
+    expect(paths).not.toContain(claudeInstallPath)
   })
 
-  it('should invalidate cache when mode changes without manual cache clear', () => {
+  it('should keep cache behavior stable when mode input toggles to claude', () => {
     const testDir = getTestDir()
     const kiteRoot = join(testDir, '.kite')
     const claudeRoot = join(testDir, '.claude')
@@ -98,19 +100,20 @@ describe('plugins.service', () => {
     writeRegistry(kiteRoot, 'kite-plugin@kite-market', kiteInstallPath)
     writeRegistry(claudeRoot, 'claude-plugin@claude-market', claudeInstallPath)
 
-    const kitePlugins = loadInstalledPlugins()
-    expect(kitePlugins).toHaveLength(1)
-    expect(kitePlugins[0]?.installPath).toBe(kiteInstallPath)
+    const firstLoad = loadInstalledPlugins()
+    expect(firstLoad).toHaveLength(1)
+    expect(firstLoad[0]?.installPath).toBe(kiteInstallPath)
 
     _testResetConfigSourceModeLock()
     _testInitConfigSourceModeLock('claude')
 
-    const claudePlugins = loadInstalledPlugins()
-    expect(claudePlugins).toHaveLength(1)
-    expect(claudePlugins[0]?.installPath).toBe(claudeInstallPath)
+    const secondLoad = loadInstalledPlugins()
+    expect(secondLoad).toHaveLength(1)
+    expect(secondLoad[0]?.installPath).toBe(kiteInstallPath)
+    expect(secondLoad[0]?.installPath).not.toBe(claudeInstallPath)
   })
 
-  it('should read enabledPlugins from active source settings only', () => {
+  it('should read enabledPlugins from kite settings only', () => {
     const testDir = getTestDir()
     const kiteRoot = join(testDir, '.kite')
     const claudeRoot = join(testDir, '.claude')
@@ -122,16 +125,8 @@ describe('plugins.service', () => {
     writeEnabledPluginsSettings(kiteRoot, { 'kite-plugin@kite-market': false })
     writeEnabledPluginsSettings(claudeRoot, { 'claude-plugin@claude-market': true })
 
-    // Kite mode: disabled in kite settings -> no enabled plugins
-    _testResetConfigSourceModeLock()
-    _testInitConfigSourceModeLock('kite')
-    expect(listEnabledPlugins()).toEqual([])
-
-    // Claude mode: enabled in claude settings -> one enabled plugin
     _testResetConfigSourceModeLock()
     _testInitConfigSourceModeLock('claude')
-    const enabled = listEnabledPlugins()
-    expect(enabled).toHaveLength(1)
-    expect(enabled[0]?.fullName).toBe('claude-plugin@claude-market')
+    expect(listEnabledPlugins()).toEqual([])
   })
 })
