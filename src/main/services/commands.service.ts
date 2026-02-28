@@ -18,9 +18,16 @@ import { FileCache } from '../utils/file-cache'
 import type { ResourceRef, CopyToSpaceOptions, CopyToSpaceResult } from './resource-ref.service'
 import { commandKey } from '../../shared/command-utils'
 import type { SceneTagKey } from '../../shared/scene-taxonomy'
-import { parseResourceMetadata, getLocalizedFrontmatterString } from './resource-metadata.service'
+import {
+  parseResourceMetadata,
+  getFrontmatterString,
+  getFrontmatterStringArray,
+  getLocalizedFrontmatterString
+} from './resource-metadata.service'
 import { resolveSceneTags } from './resource-scene-tags.service'
 import { buildResourceSceneKey, getSceneTaxonomy } from './scene-taxonomy.service'
+import type { ResourceListView, ResourceExposure } from '../../shared/resource-access'
+import { filterByResourceExposure, resolveResourceExposure } from './resource-exposure.service'
 
 // ============================================
 // Command Types
@@ -35,6 +42,9 @@ export interface CommandDefinition {
   sceneTags: SceneTagKey[]
   pluginRoot?: string
   namespace?: string
+  exposure: ResourceExposure
+  requiresSkills?: string[]
+  requiresAgents?: string[]
 }
 
 // Cache for commands list (in-memory only)
@@ -74,7 +84,14 @@ function readCommandMetadata(
   namespace?: string,
   workDir?: string,
   locale?: string
-): { displayName?: string; description?: string; sceneTags: SceneTagKey[] } {
+): {
+  displayName?: string
+  description?: string
+  sceneTags: SceneTagKey[]
+  exposure?: unknown
+  requiresSkills?: string[]
+  requiresAgents?: string[]
+} {
   try {
     const content = readFileSync(filePath, 'utf-8')
     const metadata = parseResourceMetadata(content)
@@ -82,9 +99,15 @@ function readCommandMetadata(
     const localizedDescription =
       getLocalizedFrontmatterString(metadata.frontmatter, ['description'], locale) ?? metadata.description
     const displayName = getLocalizedFrontmatterString(metadata.frontmatter, ['name', 'title'], locale)
+    const exposure = getFrontmatterString(metadata.frontmatter, ['exposure'])
+    const requiresSkills = getFrontmatterStringArray(metadata.frontmatter, ['requires_skills'])
+    const requiresAgents = getFrontmatterStringArray(metadata.frontmatter, ['requires_agents'])
     return {
       displayName,
       description: localizedDescription,
+      exposure,
+      requiresSkills,
+      requiresAgents,
       sceneTags: resolveSceneTags({
         name,
         description: metadata.description,
@@ -102,7 +125,7 @@ function readCommandMetadata(
       })
     }
   } catch {
-    return { sceneTags: ['office'] }
+    return { sceneTags: ['office'], exposure: undefined, requiresSkills: undefined, requiresAgents: undefined }
   }
 }
 
@@ -129,8 +152,18 @@ function scanCommandDir(
           name,
           path: filePath,
           source,
+          exposure: resolveResourceExposure({
+            type: 'command',
+            source,
+            name,
+            namespace,
+            workDir,
+            frontmatterExposure: metadata.exposure
+          }),
           description: metadata.description,
           sceneTags: metadata.sceneTags,
+          ...(metadata.requiresSkills && { requiresSkills: metadata.requiresSkills }),
+          ...(metadata.requiresAgents && { requiresAgents: metadata.requiresAgents }),
           ...(metadata.displayName && { displayName: metadata.displayName }),
           ...(pluginRoot && { pluginRoot }),
           ...(namespace && { namespace })
@@ -213,7 +246,7 @@ function logFound(items: CommandDefinition[], locale?: string): void {
   }
 }
 
-export function listCommands(workDir?: string, locale?: string): CommandDefinition[] {
+function listCommandsUnfiltered(workDir?: string, locale?: string): CommandDefinition[] {
   const localeKey = toLocaleCacheKey(locale)
   let globalCommands = globalCommandsCacheByLocale.get(localeKey)
   if (!globalCommands) {
@@ -222,7 +255,6 @@ export function listCommands(workDir?: string, locale?: string): CommandDefiniti
   }
 
   if (!workDir) {
-    logFound(globalCommands, locale)
     return globalCommands
   }
 
@@ -239,12 +271,17 @@ export function listCommands(workDir?: string, locale?: string): CommandDefiniti
   }
 
   const commands = mergeCommands(globalCommands, spaceCommands)
+  return commands
+}
+
+export function listCommands(workDir: string | undefined, view: ResourceListView, locale?: string): CommandDefinition[] {
+  const commands = filterByResourceExposure(listCommandsUnfiltered(workDir, locale), view)
   logFound(commands, locale)
   return commands
 }
 
 export function listSpaceCommands(workDir: string): CommandDefinition[] {
-  return listCommands(workDir).filter(command => command.source === 'space')
+  return listCommandsUnfiltered(workDir).filter(command => command.source === 'space')
 }
 
 function listCommandsForRefLookup(workDir: string): CommandDefinition[] {
@@ -271,7 +308,7 @@ function listCommandsForRefLookup(workDir: string): CommandDefinition[] {
 }
 
 export function getCommand(name: string, workDir?: string): CommandDefinition | null {
-  return findCommand(listCommands(workDir), name) ?? null
+  return findCommand(listCommandsUnfiltered(workDir), name) ?? null
 }
 
 export function getCommandContent(
@@ -281,7 +318,7 @@ export function getCommandContent(
 ): string | null {
   const executionMode = opts?.executionMode === 'execute' ? 'execute' : 'display'
   const localeSuffix = opts?.locale ? ` (locale: ${opts.locale})` : ''
-  const command = getCommand(name, workDir)
+  const command = findCommand(listCommandsUnfiltered(workDir), name)
 
   if (!command) {
     if (!opts?.silent) console.warn(`[Commands] Command not found: ${name}${localeSuffix} [mode=${executionMode}]`)
@@ -349,11 +386,23 @@ export function createCommand(workDir: string, name: string, content: string): C
   const displayName = getLocalizedFrontmatterString(metadata.frontmatter, ['name', 'title'])
 
   const taxonomy = getSceneTaxonomy().config
+  const requiresSkills = getFrontmatterStringArray(metadata.frontmatter, ['requires_skills'])
+  const requiresAgents = getFrontmatterStringArray(metadata.frontmatter, ['requires_agents'])
+  const exposure = resolveResourceExposure({
+    type: 'command',
+    source: 'space',
+    workDir,
+    name,
+    frontmatterExposure: getFrontmatterString(metadata.frontmatter, ['exposure'])
+  })
   return {
     name,
     path: commandPath,
     source: 'space',
+    exposure,
     description: metadata.description,
+    ...(requiresSkills && { requiresSkills }),
+    ...(requiresAgents && { requiresAgents }),
     ...(displayName && { displayName }),
     sceneTags: resolveSceneTags({
       name,

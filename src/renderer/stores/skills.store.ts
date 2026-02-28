@@ -16,6 +16,7 @@ import { useSpaceStore } from './space.store'
 import { useToolkitStore } from './toolkit.store'
 import { buildDirective } from '../utils/directive-helpers'
 import type { SceneTag } from '../../shared/extension-taxonomy'
+import type { ResourceExposure } from '../../shared/resource-access'
 
 // ============================================
 // Types
@@ -32,6 +33,7 @@ export interface SkillDefinition {
   sceneTags?: SceneTag[]
   pluginRoot?: string
   namespace?: string
+  exposure: ResourceExposure
 }
 
 export interface SkillContent {
@@ -113,7 +115,7 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
     try {
       set({ isLoading: true, error: null })
 
-      const response = await api.listSkills(workDir, i18n.language)
+      const response = await api.listSkills(workDir, i18n.language, 'extensions')
 
       if (response.success && response.data) {
         const nextByWorkDir = {

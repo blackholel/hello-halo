@@ -182,6 +182,15 @@ export interface KiteConfig {
   extensionTaxonomy?: {
     adminEnabled: boolean;
   };
+  resourceExposure?: {
+    enabled: boolean;
+  };
+  workflow?: {
+    allowLegacyInternalDirect: boolean;
+  };
+  commands?: {
+    legacyDependencyRegexEnabled: boolean;
+  };
   claudeCode?: ClaudeCodeConfig;  // Claude Code configuration (plugins, hooks, agents)
 }
 
@@ -268,7 +277,7 @@ export interface Conversation extends ConversationMeta {
 
 export interface WorkflowStep {
   id: string;
-  type: 'skill' | 'agent' | 'message';
+  type: 'skill' | 'agent' | 'command' | 'message';
   name?: string;
   input?: string;
   args?: string;

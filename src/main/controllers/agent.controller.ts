@@ -15,6 +15,7 @@ import {
   testMcpConnections as agentTestMcpConnections
 } from '../services/agent'
 import type { AskUserQuestionAnswerInput } from '../services/agent'
+import type { InvocationContext } from '../../shared/resource-access'
 
 // Image attachment type for multi-modal messages
 interface ImageAttachment {
@@ -36,6 +37,8 @@ export interface SendMessageRequest {
   images?: ImageAttachment[]  // Optional images for multi-modal messages
   thinkingEnabled?: boolean   // Enable extended thinking mode
   aiBrowserEnabled?: boolean  // Enable AI Browser tools
+  planEnabled?: boolean
+  invocationContext?: InvocationContext
 }
 
 export interface ControllerResponse<T = unknown> {

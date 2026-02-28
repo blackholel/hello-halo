@@ -9,6 +9,7 @@ import type { Workflow, WorkflowStep } from '../../types'
 import { useWorkflowsStore } from '../../stores/workflows.store'
 import { useSkillsStore } from '../../stores/skills.store'
 import { useAgentsStore } from '../../stores/agents.store'
+import { useCommandsStore } from '../../stores/commands.store'
 import { useSpaceStore } from '../../stores/space.store'
 
 interface WorkflowEditorModalProps {
@@ -87,6 +88,12 @@ export function WorkflowEditorModal({ spaceId, workflow, onClose, onSaved }: Wor
     isLoading: isLoadingAgents,
     loadAgents
   } = useAgentsStore()
+  const {
+    commands,
+    loadedWorkDir: loadedCommandsDir,
+    isLoading: isLoadingCommands,
+    loadCommands
+  } = useCommandsStore()
   const isEditMode = !!workflow
   const activeSpace = useMemo(() => {
     if (currentSpace?.id === spaceId) return currentSpace
@@ -139,6 +146,9 @@ export function WorkflowEditorModal({ spaceId, workflow, onClose, onSaved }: Wor
       if (agents.length === 0 || loadedAgentsDir !== workDir) {
         loadAgents(workDir)
       }
+      if (commands.length === 0 || loadedCommandsDir !== workDir) {
+        loadCommands(workDir)
+      }
     } else {
       if (skills.length === 0 && loadedSkillsDir !== null) {
         loadSkills()
@@ -146,15 +156,21 @@ export function WorkflowEditorModal({ spaceId, workflow, onClose, onSaved }: Wor
       if (agents.length === 0 && loadedAgentsDir !== null) {
         loadAgents()
       }
+      if (commands.length === 0 && loadedCommandsDir !== null) {
+        loadCommands()
+      }
     }
   }, [
     workDir,
     skills.length,
     agents.length,
+    commands.length,
     loadedSkillsDir,
     loadedAgentsDir,
+    loadedCommandsDir,
     loadSkills,
-    loadAgents
+    loadAgents,
+    loadCommands
   ])
 
   const selectedStep = useMemo(
@@ -176,6 +192,10 @@ export function WorkflowEditorModal({ spaceId, workflow, onClose, onSaved }: Wor
     const base = agents.filter(agent => agent.source === 'space')
     return base.sort((a, b) => a.name.localeCompare(b.name))
   }, [agents])
+  const availableCommands = useMemo(() => {
+    const base = commands.filter(command => command.source === 'space')
+    return base.sort((a, b) => a.name.localeCompare(b.name))
+  }, [commands])
   const selectedSkillName = useMemo(() => {
     if (!selectedStep || selectedStep.type !== 'skill') return ''
     return availableSkills.some(skill => skill.name === selectedStep.name) ? (selectedStep.name || '') : ''
@@ -184,6 +204,10 @@ export function WorkflowEditorModal({ spaceId, workflow, onClose, onSaved }: Wor
     if (!selectedStep || selectedStep.type !== 'agent') return ''
     return availableAgents.some(agent => agent.name === selectedStep.name) ? (selectedStep.name || '') : ''
   }, [selectedStep, availableAgents])
+  const selectedCommandName = useMemo(() => {
+    if (!selectedStep || selectedStep.type !== 'command') return ''
+    return availableCommands.some(command => command.name === selectedStep.name) ? (selectedStep.name || '') : ''
+  }, [selectedStep, availableCommands])
 
   const updateStep = useCallback((stepId: string, updates: Partial<WorkflowStep>) => {
     setSteps(prev => prev.map(step => step.id === stepId ? { ...step, ...updates } : step))
@@ -272,7 +296,7 @@ export function WorkflowEditorModal({ spaceId, workflow, onClose, onSaved }: Wor
         issues.push(t('Step type is required'))
       }
 
-      if (step.type === 'skill' || step.type === 'agent') {
+      if (step.type === 'skill' || step.type === 'agent' || step.type === 'command') {
         const trimmedName = step.name?.trim() || ''
         if (!trimmedName) {
           issues.push(t('Step name is required'))
@@ -316,6 +340,16 @@ export function WorkflowEditorModal({ spaceId, workflow, onClose, onSaved }: Wor
       }
 
       if (step.type === 'agent') {
+        return {
+          id: step.id,
+          type: step.type,
+          name: stepName,
+          input: input || undefined,
+          summarizeAfter: step.summarizeAfter
+        }
+      }
+
+      if (step.type === 'command') {
         return {
           id: step.id,
           type: step.type,
@@ -579,7 +613,7 @@ export function WorkflowEditorModal({ spaceId, workflow, onClose, onSaved }: Wor
                             updates.name = ''
                             updates.args = ''
                           }
-                          if (nextType === 'agent') {
+                          if (nextType === 'agent' || nextType === 'command') {
                             updates.args = ''
                           }
                           updateStep(selectedStep.id, updates)
@@ -589,11 +623,12 @@ export function WorkflowEditorModal({ spaceId, workflow, onClose, onSaved }: Wor
                       >
                         <option value="skill">{t('Skill')}</option>
                         <option value="agent">{t('Agent')}</option>
+                        <option value="command">{t('Command')}</option>
                         <option value="message">{t('Message')}</option>
                       </select>
                     </div>
 
-                    {(selectedStep.type === 'skill' || selectedStep.type === 'agent') && (
+                    {(selectedStep.type === 'skill' || selectedStep.type === 'agent' || selectedStep.type === 'command') && (
                       <div>
                         <label className="block text-xs font-medium text-foreground mb-2">
                           {t('Name')}
@@ -602,7 +637,13 @@ export function WorkflowEditorModal({ spaceId, workflow, onClose, onSaved }: Wor
                           type="text"
                           value={selectedStep.name || ''}
                           onChange={(event) => updateStep(selectedStep.id, { name: event.target.value })}
-                          placeholder={selectedStep.type === 'skill' ? 'my-skill' : 'my-agent'}
+                          placeholder={
+                            selectedStep.type === 'skill'
+                              ? 'my-skill'
+                              : selectedStep.type === 'agent'
+                                ? 'my-agent'
+                                : 'my-command'
+                          }
                           className="w-full px-3 py-2 bg-input border border-border rounded-lg
                             focus:outline-none focus:border-primary text-sm font-mono"
                         />
@@ -612,13 +653,21 @@ export function WorkflowEditorModal({ spaceId, workflow, onClose, onSaved }: Wor
                       </div>
                     )}
 
-                    {(selectedStep.type === 'skill' || selectedStep.type === 'agent') && (
+                    {(selectedStep.type === 'skill' || selectedStep.type === 'agent' || selectedStep.type === 'command') && (
                       <div>
                         <label className="block text-xs font-medium text-foreground mb-2">
-                          {selectedStep.type === 'skill' ? t('Select a skill') : t('Select an agent')}
+                          {selectedStep.type === 'skill'
+                            ? t('Select a skill')
+                            : selectedStep.type === 'agent'
+                              ? t('Select an agent')
+                              : t('Select a command')}
                         </label>
                         <select
-                          value={selectedStep.type === 'skill' ? selectedSkillName : selectedAgentName}
+                          value={selectedStep.type === 'skill'
+                            ? selectedSkillName
+                            : selectedStep.type === 'agent'
+                              ? selectedAgentName
+                              : selectedCommandName}
                           onChange={(event) => {
                             const nextName = event.target.value
                             if (nextName) {
@@ -627,16 +676,24 @@ export function WorkflowEditorModal({ spaceId, workflow, onClose, onSaved }: Wor
                           }}
                           disabled={selectedStep.type === 'skill'
                             ? isLoadingSkills || availableSkills.length === 0
-                            : isLoadingAgents || availableAgents.length === 0}
+                            : selectedStep.type === 'agent'
+                              ? isLoadingAgents || availableAgents.length === 0
+                              : isLoadingCommands || availableCommands.length === 0}
                           className="w-full px-3 py-2 bg-input border border-border rounded-lg
                             focus:outline-none focus:border-primary text-sm"
                         >
                           <option value="">
                             {selectedStep.type === 'skill'
                               ? (isLoadingSkills ? t('Loading skills...') : t('Select a skill'))
-                              : (isLoadingAgents ? t('Loading agents...') : t('Select an agent'))}
+                              : selectedStep.type === 'agent'
+                                ? (isLoadingAgents ? t('Loading agents...') : t('Select an agent'))
+                                : (isLoadingCommands ? t('Loading commands...') : t('Select a command'))}
                           </option>
-                          {(selectedStep.type === 'skill' ? availableSkills : availableAgents).map((item) => (
+                          {(selectedStep.type === 'skill'
+                            ? availableSkills
+                            : selectedStep.type === 'agent'
+                              ? availableAgents
+                              : availableCommands).map((item) => (
                             <option key={item.name} value={item.name}>
                               {item.name}
                             </option>

@@ -50,6 +50,10 @@ interface WorkflowsState {
 }
 
 function buildMessageForStep(step: WorkflowStep): string {
+  if (step.type === 'command') {
+    const input = step.input ? ` ${step.input}` : ''
+    return `/${step.name}${input}`.trim()
+  }
   if (step.type === 'skill') {
     const args = step.args ? ` ${step.args}` : ''
     const input = step.input ? ` ${step.input}` : ''
@@ -210,15 +214,18 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
       : useSpaceStore.getState().spaces.find(space => space.id === spaceId)
     if (knownSpace?.path) {
       const locale = getCurrentLanguage()
-      const [skillsResponse, agentsResponse] = await Promise.all([
-        api.listSkills(knownSpace.path, locale),
-        api.listAgents(knownSpace.path, locale)
+      const [skillsResponse, agentsResponse, commandsResponse] = await Promise.all([
+        api.listSkills(knownSpace.path, locale, 'workflow-validation'),
+        api.listAgents(knownSpace.path, locale, 'workflow-validation'),
+        api.listCommands(knownSpace.path, locale, 'workflow-validation')
       ])
 
       const spaceSkills = (skillsResponse.success ? (skillsResponse.data as Array<{ name: string; namespace?: string; source: string }>) : [])
         .filter(skill => skill.source === 'space')
       const spaceAgents = (agentsResponse.success ? (agentsResponse.data as Array<{ name: string; namespace?: string; source: string }>) : [])
         .filter(agent => agent.source === 'space')
+      const spaceCommands = (commandsResponse.success ? (commandsResponse.data as Array<{ name: string; namespace?: string; source: string }>) : [])
+        .filter(command => command.source === 'space')
 
       const missingSteps: string[] = []
       workflow.steps.forEach((step, index) => {
@@ -229,6 +236,9 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
         }
         if (step.type === 'agent' && !hasSpaceResource(stepName, spaceAgents)) {
           missingSteps.push(`Step ${index + 1}: agent ${stepName}`)
+        }
+        if (step.type === 'command' && !hasSpaceResource(stepName, spaceCommands)) {
+          missingSteps.push(`Step ${index + 1}: command ${stepName}`)
         }
       })
 
@@ -346,7 +356,9 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
         undefined,
         false,
         undefined,
-        false
+        false,
+        false,
+        'workflow-step'
       )
       return
     }
@@ -407,7 +419,9 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
         undefined,
         false,
         undefined,
-        false
+        false,
+        false,
+        'workflow-step'
       )
       return
     }
@@ -487,6 +501,8 @@ async function startStep(get: () => WorkflowsState, set: (partial: Partial<Workf
     undefined,
     run.workflow.settings?.thinkingEnabled,
     undefined,
-    run.workflow.settings?.aiBrowserEnabled
+    run.workflow.settings?.aiBrowserEnabled,
+    undefined,
+    'workflow-step'
   )
 }

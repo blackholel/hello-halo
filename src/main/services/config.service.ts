@@ -123,6 +123,15 @@ interface KiteConfig {
   extensionTaxonomy?: {
     adminEnabled: boolean
   }
+  resourceExposure?: {
+    enabled: boolean
+  }
+  workflow?: {
+    allowLegacyInternalDirect: boolean
+  }
+  commands?: {
+    legacyDependencyRegexEnabled: boolean
+  }
 }
 
 // MCP server configuration types
@@ -262,6 +271,15 @@ const DEFAULT_CONFIG: KiteConfig = {
   configSourceMode: 'kite',
   extensionTaxonomy: {
     adminEnabled: false
+  },
+  resourceExposure: {
+    enabled: true
+  },
+  workflow: {
+    allowLegacyInternalDirect: true
+  },
+  commands: {
+    legacyDependencyRegexEnabled: true
   }
 }
 
@@ -659,6 +677,24 @@ export function getConfig(): KiteConfig {
           typeof parsed.extensionTaxonomy?.adminEnabled === 'boolean'
             ? parsed.extensionTaxonomy.adminEnabled
             : DEFAULT_CONFIG.extensionTaxonomy?.adminEnabled || false
+      },
+      resourceExposure: {
+        enabled:
+          typeof parsed.resourceExposure?.enabled === 'boolean'
+            ? parsed.resourceExposure.enabled
+            : DEFAULT_CONFIG.resourceExposure?.enabled !== false
+      },
+      workflow: {
+        allowLegacyInternalDirect:
+          typeof parsed.workflow?.allowLegacyInternalDirect === 'boolean'
+            ? parsed.workflow.allowLegacyInternalDirect
+            : DEFAULT_CONFIG.workflow?.allowLegacyInternalDirect !== false
+      },
+      commands: {
+        legacyDependencyRegexEnabled:
+          typeof parsed.commands?.legacyDependencyRegexEnabled === 'boolean'
+            ? parsed.commands.legacyDependencyRegexEnabled
+            : DEFAULT_CONFIG.commands?.legacyDependencyRegexEnabled !== false
       }
     }
   } catch (error) {
@@ -705,6 +741,24 @@ export function saveConfig(config: Partial<KiteConfig>): KiteConfig {
     newConfig.extensionTaxonomy = {
       ...currentConfig.extensionTaxonomy,
       ...(config as any).extensionTaxonomy
+    }
+  }
+  if ((config as any).resourceExposure !== undefined) {
+    newConfig.resourceExposure = {
+      ...currentConfig.resourceExposure,
+      ...(config as any).resourceExposure
+    }
+  }
+  if ((config as any).workflow !== undefined) {
+    newConfig.workflow = {
+      ...currentConfig.workflow,
+      ...(config as any).workflow
+    }
+  }
+  if ((config as any).commands !== undefined) {
+    newConfig.commands = {
+      ...currentConfig.commands,
+      ...(config as any).commands
     }
   }
   // mcpServers: replace entirely when provided (not merged)

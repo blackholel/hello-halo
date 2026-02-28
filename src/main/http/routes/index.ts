@@ -19,6 +19,7 @@ import { listArtifacts } from '../../services/artifact.service'
 import { getTempSpacePath, getSpacesDir } from '../../services/config.service'
 import { getSpace, getAllSpacePaths } from '../../services/space.service'
 import { isWorkDirAllowed } from '../../utils/path-validation'
+import { isResourceListView, type ResourceListView } from '../../../shared/resource-access'
 import {
   addToolkitResource,
   clearSpaceToolkit,
@@ -50,6 +51,15 @@ function validateWorkDir(req: Request, res: Response): string | null {
     return null
   }
   return workDir
+}
+
+function validateResourceListView(req: Request, res: Response): ResourceListView | null {
+  const view = (req.body?.view || req.query?.view) as string | undefined
+  if (!isResourceListView(view)) {
+    res.status(400).json({ success: false, error: 'view is required and must be a valid ResourceListView' })
+    return null
+  }
+  return view
 }
 
 /** Wraps an async route handler with standard error response */
@@ -253,7 +263,9 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
       model,
       images,
       thinkingEnabled,
-      aiBrowserEnabled
+      aiBrowserEnabled,
+      planEnabled,
+      invocationContext
     } = req.body
     const result = await agentController.sendMessage(mainWindow, {
       spaceId,
@@ -264,7 +276,9 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
       model,
       images,  // Pass images for multi-modal messages (remote access)
       thinkingEnabled,  // Pass thinking mode for extended thinking (remote access)
-      aiBrowserEnabled  // Pass AI Browser toggle for remote access
+      aiBrowserEnabled,  // Pass AI Browser toggle for remote access
+      planEnabled,
+      invocationContext
     })
     res.json(result)
   })
@@ -409,9 +423,11 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
   app.get('/api/skills', safeRoute(async (req, res) => {
     const workDir = validateWorkDir(req, res)
     if (workDir === null) return
+    const view = validateResourceListView(req, res)
+    if (!view) return
     const { listSkills } = await import('../../services/skills.service')
     const locale = typeof req.query.locale === 'string' ? req.query.locale : undefined
-    res.json({ success: true, data: listSkills(workDir || undefined, locale) })
+    res.json({ success: true, data: listSkills(workDir || undefined, view, locale) })
   }))
 
   app.get('/api/skills/content', safeRoute(async (req, res) => {
@@ -485,9 +501,11 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
   app.get('/api/agents', safeRoute(async (req, res) => {
     const workDir = validateWorkDir(req, res)
     if (workDir === null) return
+    const view = validateResourceListView(req, res)
+    if (!view) return
     const { listAgents } = await import('../../services/agents.service')
     const locale = typeof req.query.locale === 'string' ? req.query.locale : undefined
-    res.json({ success: true, data: listAgents(workDir || undefined, locale) })
+    res.json({ success: true, data: listAgents(workDir || undefined, view, locale) })
   }))
 
   app.get('/api/agents/content', safeRoute(async (req, res) => {
@@ -561,9 +579,11 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
   app.get('/api/commands', safeRoute(async (req, res) => {
     const workDir = validateWorkDir(req, res)
     if (workDir === null) return
+    const view = validateResourceListView(req, res)
+    if (!view) return
     const { listCommands } = await import('../../services/commands.service')
     const locale = typeof req.query.locale === 'string' ? req.query.locale : undefined
-    res.json({ success: true, data: listCommands(workDir || undefined, locale) })
+    res.json({ success: true, data: listCommands(workDir || undefined, view, locale) })
   }))
 
   app.get('/api/commands/content', safeRoute(async (req, res) => {

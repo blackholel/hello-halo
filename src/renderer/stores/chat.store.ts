@@ -47,6 +47,7 @@ import type {
 import { canvasLifecycle } from '../services/canvas-lifecycle'
 import { buildParallelGroups, getThoughtKey } from '../utils/thought-utils'
 import i18n from '../i18n'
+import type { InvocationContext } from '../../shared/resource-access'
 
 // LRU cache size limit
 const CONVERSATION_CACHE_SIZE = 10
@@ -427,8 +428,26 @@ interface ChatState {
   updateConversationAi: (spaceId: string, conversationId: string, ai: ConversationAiConfig) => Promise<boolean>
 
   // Messaging
-  sendMessage: (content: string, images?: ImageAttachment[], aiBrowserEnabled?: boolean, thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[], planEnabled?: boolean) => Promise<void>
-  sendMessageToConversation: (spaceId: string, conversationId: string, content: string, images?: ImageAttachment[], thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[], aiBrowserEnabled?: boolean, planEnabled?: boolean) => Promise<void>
+  sendMessage: (
+    content: string,
+    images?: ImageAttachment[],
+    aiBrowserEnabled?: boolean,
+    thinkingEnabled?: boolean,
+    fileContexts?: FileContextAttachment[],
+    planEnabled?: boolean,
+    invocationContext?: InvocationContext
+  ) => Promise<void>
+  sendMessageToConversation: (
+    spaceId: string,
+    conversationId: string,
+    content: string,
+    images?: ImageAttachment[],
+    thinkingEnabled?: boolean,
+    fileContexts?: FileContextAttachment[],
+    aiBrowserEnabled?: boolean,
+    planEnabled?: boolean,
+    invocationContext?: InvocationContext
+  ) => Promise<void>
   executePlan: (spaceId: string, conversationId: string, planContent: string) => Promise<void>
   stopGeneration: (conversationId?: string) => Promise<void>
 
@@ -1024,7 +1043,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   // Send message (with optional images for multi-modal, optional AI Browser and thinking mode, optional file contexts, optional plan mode)
-  sendMessage: async (content, images, aiBrowserEnabled, thinkingEnabled, fileContexts, planEnabled) => {
+  sendMessage: async (content, images, aiBrowserEnabled, thinkingEnabled, fileContexts, planEnabled, invocationContext) => {
     const conversation = get().getCurrentConversation()
     const conversationMeta = get().getCurrentConversationMeta()
     const { currentSpaceId } = get()
@@ -1133,6 +1152,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         aiBrowserEnabled,  // Pass AI Browser state to API
         thinkingEnabled,  // Pass thinking mode to API
         planEnabled: effectivePlanEnabled,  // Pass plan mode to API
+        invocationContext: invocationContext || 'interactive',
         canvasContext: buildCanvasContext(),  // Pass canvas context for AI awareness
         fileContexts: fileContexts  // Pass file contexts for context injection
       })
@@ -1156,7 +1176,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   // Send message to a specific conversation (for Chat Tabs - avoids global context switching)
-  sendMessageToConversation: async (spaceId, conversationId, content, images, thinkingEnabled, fileContexts, aiBrowserEnabled, planEnabled) => {
+  sendMessageToConversation: async (spaceId, conversationId, content, images, thinkingEnabled, fileContexts, aiBrowserEnabled, planEnabled, invocationContext) => {
     if (!spaceId || !conversationId) {
       console.error('[ChatStore] spaceId and conversationId are required')
       return
@@ -1228,6 +1248,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         aiBrowserEnabled: aiBrowserEnabled ?? false,
         thinkingEnabled,
         planEnabled: effectivePlanEnabled,
+        invocationContext: invocationContext || 'interactive',
         canvasContext: undefined, // No canvas context for tab messages
         fileContexts: fileContexts
       })
@@ -1937,7 +1958,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }
         } else {
           delete askUserQuestionsById[toolCallId]
-          askUserQuestionOrder = askUserQuestionOrder.filter((id) => id !== toolCallId)
+          for (const [id, item] of Object.entries(askUserQuestionsById)) {
+            if (item.status === 'failed') {
+              delete askUserQuestionsById[id]
+            }
+          }
+          askUserQuestionOrder = askUserQuestionOrder.filter((id) => (
+            id !== toolCallId &&
+            askUserQuestionsById[id] != null &&
+            askUserQuestionsById[id].status !== 'failed'
+          ))
         }
       }
       askUserQuestionOrder = ensureAskUserQuestionOrder(askUserQuestionOrder, askUserQuestionsById)

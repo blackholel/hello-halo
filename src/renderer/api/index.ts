@@ -15,6 +15,7 @@ import {
   clearAuthToken,
   getAuthToken
 } from './transport'
+import type { InvocationContext, ResourceListView } from '../../shared/resource-access'
 
 // Response type
 interface ApiResponse<T = unknown> {
@@ -335,6 +336,7 @@ export const api = {
     aiBrowserEnabled?: boolean  // Enable AI Browser tools
     thinkingEnabled?: boolean  // Enable extended thinking mode
     planEnabled?: boolean  // Enable plan mode (no tool execution)
+    invocationContext?: InvocationContext
     canvasContext?: {  // Canvas context for AI awareness
       isOpen: boolean
       tabCount: number
@@ -590,13 +592,18 @@ export const api = {
   },
 
   // ===== Skills =====
-  listSkills: async (workDir?: string, locale?: string): Promise<ApiResponse> => {
+  listSkills: async (
+    workDir: string | undefined,
+    locale: string | undefined,
+    view: ResourceListView
+  ): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.kite.listSkills(workDir, locale)
+      return window.kite.listSkills(workDir, locale, view)
     }
     const params = new URLSearchParams()
     if (workDir) params.append('workDir', workDir)
     if (locale) params.append('locale', locale)
+    params.append('view', view)
     const query = params.toString()
     return httpRequest('GET', `/api/skills${query ? `?${query}` : ''}`)
   },
@@ -657,13 +664,18 @@ export const api = {
   },
 
   // ===== Commands =====
-  listCommands: async (workDir?: string, locale?: string): Promise<ApiResponse> => {
+  listCommands: async (
+    workDir: string | undefined,
+    locale: string | undefined,
+    view: ResourceListView
+  ): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.kite.listCommands(workDir, locale)
+      return window.kite.listCommands(workDir, locale, view)
     }
     const params = new URLSearchParams()
     if (workDir) params.append('workDir', workDir)
     if (locale) params.append('locale', locale)
+    params.append('view', view)
     const query = params.toString()
     return httpRequest('GET', `/api/commands${query ? `?${query}` : ''}`)
   },
@@ -724,13 +736,18 @@ export const api = {
   },
 
   // ===== Agents =====
-  listAgents: async (workDir?: string, locale?: string): Promise<ApiResponse> => {
+  listAgents: async (
+    workDir: string | undefined,
+    locale: string | undefined,
+    view: ResourceListView
+  ): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.kite.listAgents(workDir, locale)
+      return window.kite.listAgents(workDir, locale, view)
     }
     const params = new URLSearchParams()
     if (workDir) params.append('workDir', workDir)
     if (locale) params.append('locale', locale)
+    params.append('view', view)
     const query = params.toString()
     return httpRequest('GET', `/api/agents${query ? `?${query}` : ''}`)
   },

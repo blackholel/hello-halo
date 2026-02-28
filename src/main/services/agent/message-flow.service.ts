@@ -32,6 +32,7 @@ import { parseSDKMessages, formatCanvasContext, buildMessageContent } from './me
 import { broadcastMcpStatus } from './mcp-status.service'
 import { expandLazyDirectives } from './skill-expander'
 import { getSpaceResourcePolicy, isStrictSpaceOnlyPolicy } from './space-resource-policy.service'
+import { getResourceExposureRuntimeFlags } from '../resource-exposure.service'
 import { findEnabledPluginByInput } from '../plugins.service'
 import {
   beginChangeSet,
@@ -458,7 +459,8 @@ export async function sendMessage(
     modelOverride,
     model: legacyModelOverride,
     canvasContext,
-    fileContexts
+    fileContexts,
+    invocationContext
   } = request
   const config = getConfig()
   const conversation = getConversation(spaceId, conversationId) as
@@ -507,6 +509,7 @@ export async function sendMessage(
   beginChangeSet(spaceId, conversationId, workDir)
   const spaceConfig = getSpaceConfig(workDir)
   const { effectiveLazyLoad: skillsLazyLoad, toolkit } = getEffectiveSkillsLazyLoad(workDir, config)
+  const exposureFlags = getResourceExposureRuntimeFlags()
   const policy = getSpaceResourcePolicy(workDir)
   const strictSpaceOnly = isStrictSpaceOnlyPolicy(policy)
   const strictBlocksMcpDirective = strictSpaceOnly && policy.allowPluginMcpDirective !== true
@@ -782,7 +785,11 @@ export async function sendMessage(
 
     const expandedMessage = (skillsLazyLoad || strictSpaceOnly)
       ? expandLazyDirectives(messageForSend, workDir, toolkit, {
-        allowSources: strictSpaceOnly ? ['space'] : undefined
+        allowSources: strictSpaceOnly ? ['space'] : undefined,
+        invocationContext: invocationContext || 'interactive',
+        resourceExposureEnabled: exposureFlags.exposureEnabled,
+        allowLegacyWorkflowInternalDirect: exposureFlags.allowLegacyInternalDirect,
+        legacyDependencyRegexEnabled: exposureFlags.legacyDependencyRegexEnabled
       })
       : {
           text: messageForSend,

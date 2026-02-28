@@ -212,10 +212,10 @@ export function SceneTaxonomyAdminPage(): JSX.Element {
       const locale = getCurrentLanguage()
       const targetWorkDir = source === 'space' ? workDir : undefined
       const response = type === 'skill'
-        ? await api.listSkills(targetWorkDir, locale)
+        ? await api.listSkills(targetWorkDir, locale, 'taxonomy-admin')
         : type === 'agent'
-          ? await api.listAgents(targetWorkDir, locale)
-          : await api.listCommands(targetWorkDir, locale)
+          ? await api.listAgents(targetWorkDir, locale, 'taxonomy-admin')
+          : await api.listCommands(targetWorkDir, locale, 'taxonomy-admin')
 
       if (!response.success || !Array.isArray(response.data)) {
         setError(response.error || 'Failed to load resources')

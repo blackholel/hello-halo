@@ -15,6 +15,7 @@ import {
   toggleMcpServer
 } from '../services/agent'
 import type { AskUserQuestionAnswerInput } from '../services/agent'
+import type { InvocationContext } from '../../shared/resource-access'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -53,6 +54,7 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
         thinkingEnabled?: boolean  // Enable extended thinking mode
         planEnabled?: boolean  // Enable plan mode (no tool execution)
         aiBrowserEnabled?: boolean  // Enable AI Browser tools
+        invocationContext?: InvocationContext
         canvasContext?: {
           isOpen: boolean
           tabCount: number

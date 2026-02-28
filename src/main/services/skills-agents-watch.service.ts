@@ -5,18 +5,19 @@
  */
 
 import type { BrowserWindow } from 'electron'
-import { watch, existsSync, readdirSync, statSync } from 'fs'
-import { join, relative, isAbsolute } from 'path'
+import { watch, existsSync, mkdirSync, readdirSync, statSync } from 'fs'
+import { dirname, join, relative, isAbsolute } from 'path'
 import { getConfig, getSpacesDir } from './config.service'
 import { listEnabledPlugins } from './plugins.service'
-import { invalidateSkillsCache } from './skills.service'
-import { invalidateAgentsCache } from './agents.service'
-import { invalidateCommandsCache } from './commands.service'
+import { clearSkillsCache, invalidateSkillsCache } from './skills.service'
+import { clearAgentsCache, invalidateAgentsCache } from './agents.service'
+import { clearCommandsCache, invalidateCommandsCache } from './commands.service'
 import { getAllSpacePaths } from './space.service'
 import { normalizePlatformPath } from '../utils/path-validation'
 import { getLockedConfigSourceMode, getLockedUserConfigRootDir } from './config-source-mode.service'
+import { clearResourceExposureCache, getResourceExposureConfigPath } from './resource-exposure.service'
 
-type WatchKind = 'skills' | 'agents' | 'commands' | 'spaces-root'
+type WatchKind = 'skills' | 'agents' | 'commands' | 'spaces-root' | 'resource-exposure' | 'resource-exposure-dir'
 type ResourceKind = 'skills' | 'agents' | 'commands'
 
 interface WatchEntry {
@@ -66,6 +67,23 @@ function scheduleNotify(kind: ResourceKind, workDir?: string): void {
   }, 200))
 }
 
+function scheduleExposureNotify(): void {
+  const key = 'resource-exposure:global'
+  const timer = debounceTimers.get(key)
+  if (timer) clearTimeout(timer)
+
+  debounceTimers.set(key, setTimeout(() => {
+    debounceTimers.delete(key)
+    clearResourceExposureCache()
+    clearSkillsCache()
+    clearAgentsCache()
+    clearCommandsCache()
+    sendEvent('skills:changed', { workDir: null })
+    sendEvent('agents:changed', { workDir: null })
+    sendEvent('commands:changed', { workDir: null })
+  }, 200))
+}
+
 function createWatcher(kind: WatchKind, path: string, workDir?: string, opts?: { isRoot?: boolean }): void {
   const key = makeKey(kind, path)
   if (watchers.has(key) || !existsSync(path)) return
@@ -76,6 +94,8 @@ function createWatcher(kind: WatchKind, path: string, workDir?: string, opts?: {
     const watcher = watch(path, { recursive: supportsRecursive }, () => {
       if (kind === 'spaces-root') {
         refreshSpaceWatchers()
+      } else if (kind === 'resource-exposure' || kind === 'resource-exposure-dir') {
+        scheduleExposureNotify()
       } else {
         scheduleNotify(kind, workDir)
         if (!supportsRecursive && kind === 'skills') {
@@ -209,6 +229,13 @@ function refreshSpaceWatchers(): void {
 export function initSkillAgentWatchers(window: BrowserWindow): void {
   mainWindow = window
   createWatcher('spaces-root', getSpacesDir())
+  const exposurePath = getResourceExposureConfigPath()
+  const exposureDir = dirname(exposurePath)
+  if (!existsSync(exposureDir)) {
+    mkdirSync(exposureDir, { recursive: true })
+  }
+  createWatcher('resource-exposure', exposurePath)
+  createWatcher('resource-exposure-dir', exposureDir)
 
   const kinds: ResourceKind[] = ['skills', 'agents', 'commands']
   for (const kind of kinds) {

@@ -8,10 +8,12 @@ import { v4 as uuidv4 } from 'uuid'
 import { getSpace } from './space.service'
 import { listSpaceSkills } from './skills.service'
 import { listSpaceAgents } from './agents.service'
+import { listSpaceCommands } from './commands.service'
+import { getConfig } from './config.service'
 
 export interface WorkflowStep {
   id: string
-  type: 'skill' | 'agent' | 'message'
+  type: 'skill' | 'agent' | 'command' | 'message'
   name?: string
   input?: string
   args?: string
@@ -175,6 +177,8 @@ function validateWorkflowSteps(spaceId: string, steps: WorkflowStep[]): void {
 
   const availableSkills = listSpaceSkills(space.path)
   const availableAgents = listSpaceAgents(space.path)
+  const availableCommands = listSpaceCommands(space.path)
+  const allowLegacyWorkflowInternalDirect = getConfig().workflow?.allowLegacyInternalDirect !== false
 
   const missing: string[] = []
   for (const [index, step] of steps.entries()) {
@@ -182,19 +186,30 @@ function validateWorkflowSteps(spaceId: string, steps: WorkflowStep[]): void {
     if (!parsed || step.type === 'message') continue
 
     if (step.type === 'skill') {
-      const ok = availableSkills.some(skill => (
+      const matchedSkill = availableSkills.find(skill => (
         skill.name === parsed.name &&
         (skill.namespace || undefined) === (parsed.namespace || undefined)
       ))
-      if (!ok) missing.push(`Step ${index + 1}: skill ${step.name}`)
+      const disallowedInternal = matchedSkill?.exposure === 'internal-only' && !allowLegacyWorkflowInternalDirect
+      if (!matchedSkill || disallowedInternal) missing.push(`Step ${index + 1}: skill ${step.name}`)
     }
 
     if (step.type === 'agent') {
-      const ok = availableAgents.some(agent => (
+      const matchedAgent = availableAgents.find(agent => (
         agent.name === parsed.name &&
         (agent.namespace || undefined) === (parsed.namespace || undefined)
       ))
-      if (!ok) missing.push(`Step ${index + 1}: agent ${step.name}`)
+      const disallowedInternal = matchedAgent?.exposure === 'internal-only' && !allowLegacyWorkflowInternalDirect
+      if (!matchedAgent || disallowedInternal) missing.push(`Step ${index + 1}: agent ${step.name}`)
+    }
+
+    if (step.type === 'command') {
+      const matchedCommand = availableCommands.find(command => (
+        command.name === parsed.name &&
+        (command.namespace || undefined) === (parsed.namespace || undefined)
+      ))
+      const disallowedInternal = matchedCommand?.exposure === 'internal-only' && !allowLegacyWorkflowInternalDirect
+      if (!matchedCommand || disallowedInternal) missing.push(`Step ${index + 1}: command ${step.name}`)
     }
   }
 

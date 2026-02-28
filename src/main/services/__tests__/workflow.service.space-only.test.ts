@@ -6,11 +6,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 const {
   listSpaceSkillsMock,
   listSpaceAgentsMock,
-  getSpaceMock
+  listSpaceCommandsMock,
+  getSpaceMock,
+  getConfigMock
 } = vi.hoisted(() => ({
   listSpaceSkillsMock: vi.fn(),
   listSpaceAgentsMock: vi.fn(),
-  getSpaceMock: vi.fn()
+  listSpaceCommandsMock: vi.fn(),
+  getSpaceMock: vi.fn(),
+  getConfigMock: vi.fn()
 }))
 
 vi.mock('../skills.service', () => ({
@@ -21,8 +25,16 @@ vi.mock('../agents.service', () => ({
   listSpaceAgents: listSpaceAgentsMock
 }))
 
+vi.mock('../commands.service', () => ({
+  listSpaceCommands: listSpaceCommandsMock
+}))
+
 vi.mock('../space.service', () => ({
   getSpace: getSpaceMock
+}))
+
+vi.mock('../config.service', () => ({
+  getConfig: getConfigMock
 }))
 
 import { createWorkflow, updateWorkflow } from '../workflow.service'
@@ -44,9 +56,11 @@ describe('workflow.service space-only validation', () => {
 
   it('rejects creating workflow when step references non-space skill', () => {
     const spacePath = createSpacePath()
+    getConfigMock.mockReturnValue({ workflow: { allowLegacyInternalDirect: true } })
     getSpaceMock.mockReturnValue({ id: 'space-1', path: spacePath })
-    listSpaceSkillsMock.mockReturnValue([{ name: 'space-skill', namespace: undefined }])
-    listSpaceAgentsMock.mockReturnValue([{ name: 'space-agent', namespace: undefined }])
+    listSpaceSkillsMock.mockReturnValue([{ name: 'space-skill', namespace: undefined, exposure: 'public' }])
+    listSpaceAgentsMock.mockReturnValue([{ name: 'space-agent', namespace: undefined, exposure: 'public' }])
+    listSpaceCommandsMock.mockReturnValue([{ name: 'space-command', namespace: undefined, exposure: 'public' }])
 
     expect(() => createWorkflow('space-1', {
       spaceId: 'space-1',
@@ -59,9 +73,11 @@ describe('workflow.service space-only validation', () => {
 
   it('allows creating workflow when all skill/agent steps are space resources', () => {
     const spacePath = createSpacePath()
+    getConfigMock.mockReturnValue({ workflow: { allowLegacyInternalDirect: true } })
     getSpaceMock.mockReturnValue({ id: 'space-1', path: spacePath })
-    listSpaceSkillsMock.mockReturnValue([{ name: 'space-skill', namespace: undefined }])
-    listSpaceAgentsMock.mockReturnValue([{ name: 'space-agent', namespace: undefined }])
+    listSpaceSkillsMock.mockReturnValue([{ name: 'space-skill', namespace: undefined, exposure: 'public' }])
+    listSpaceAgentsMock.mockReturnValue([{ name: 'space-agent', namespace: undefined, exposure: 'public' }])
+    listSpaceCommandsMock.mockReturnValue([{ name: 'space-command', namespace: undefined, exposure: 'public' }])
 
     const workflow = createWorkflow('space-1', {
       spaceId: 'space-1',
@@ -79,9 +95,11 @@ describe('workflow.service space-only validation', () => {
 
   it('returns null on update when new steps include non-space agent', () => {
     const spacePath = createSpacePath()
+    getConfigMock.mockReturnValue({ workflow: { allowLegacyInternalDirect: true } })
     getSpaceMock.mockReturnValue({ id: 'space-1', path: spacePath })
-    listSpaceSkillsMock.mockReturnValue([{ name: 'space-skill', namespace: undefined }])
-    listSpaceAgentsMock.mockReturnValue([{ name: 'space-agent', namespace: undefined }])
+    listSpaceSkillsMock.mockReturnValue([{ name: 'space-skill', namespace: undefined, exposure: 'public' }])
+    listSpaceAgentsMock.mockReturnValue([{ name: 'space-agent', namespace: undefined, exposure: 'public' }])
+    listSpaceCommandsMock.mockReturnValue([{ name: 'space-command', namespace: undefined, exposure: 'public' }])
 
     const workflow = createWorkflow('space-1', {
       spaceId: 'space-1',
@@ -94,5 +112,22 @@ describe('workflow.service space-only validation', () => {
     })
 
     expect(result).toBeNull()
+  })
+
+  it('rejects internal-only direct step when legacy access is disabled', () => {
+    const spacePath = createSpacePath()
+    getConfigMock.mockReturnValue({ workflow: { allowLegacyInternalDirect: false } })
+    getSpaceMock.mockReturnValue({ id: 'space-1', path: spacePath })
+    listSpaceSkillsMock.mockReturnValue([{ name: 'space-skill', namespace: undefined, exposure: 'internal-only' }])
+    listSpaceAgentsMock.mockReturnValue([])
+    listSpaceCommandsMock.mockReturnValue([])
+
+    expect(() => createWorkflow('space-1', {
+      spaceId: 'space-1',
+      name: 'invalid-internal-flow',
+      steps: [
+        { id: 'step-1', type: 'skill', name: 'space-skill' }
+      ]
+    })).toThrow('Workflow contains non-space resources')
   })
 })

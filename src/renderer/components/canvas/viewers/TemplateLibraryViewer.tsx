@@ -115,20 +115,20 @@ export function TemplateLibraryViewer({ tab }: TemplateLibraryViewerProps): JSX.
       setLoading(true)
 
       const [globalSkillsRes, globalAgentsRes, globalCommandsRes] = await Promise.all([
-        api.listSkills(undefined, locale),
-        api.listAgents(undefined, locale),
+        api.listSkills(undefined, locale, 'template-library'),
+        api.listAgents(undefined, locale, 'template-library'),
         isRemote
           ? Promise.resolve({ success: true, data: [] as CommandDefinition[] })
-          : api.listCommands(undefined, locale)
+          : api.listCommands(undefined, locale, 'template-library')
       ])
 
       const [spaceSkillsRes, spaceAgentsRes, spaceCommandsRes] = workDir
         ? await Promise.all([
-          api.listSkills(workDir, locale),
-          api.listAgents(workDir, locale),
+          api.listSkills(workDir, locale, 'template-library'),
+          api.listAgents(workDir, locale, 'template-library'),
           isRemote
             ? Promise.resolve({ success: true, data: [] as CommandDefinition[] })
-            : api.listCommands(workDir, locale)
+            : api.listCommands(workDir, locale, 'template-library')
         ])
         : [
           { success: true, data: [] as SkillDefinition[] },

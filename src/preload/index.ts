@@ -3,6 +3,7 @@
  */
 
 import { contextBridge, ipcRenderer } from 'electron'
+import type { InvocationContext, ResourceListView } from '../shared/resource-access'
 
 interface AskUserQuestionAnswerPayload {
   toolCallId: string
@@ -95,6 +96,7 @@ export interface KiteAPI {
     aiBrowserEnabled?: boolean  // Enable AI Browser tools
     thinkingEnabled?: boolean  // Enable extended thinking mode
     planEnabled?: boolean  // Enable plan mode (no tool execution)
+    invocationContext?: InvocationContext
     canvasContext?: {  // Canvas context for AI awareness
       isOpen: boolean
       tabCount: number
@@ -162,7 +164,7 @@ export interface KiteAPI {
   saveOnboardingConversation: (spaceId: string, userPrompt: string, aiResponse: string) => Promise<IpcResponse>
 
   // Skills
-  listSkills: (workDir?: string, locale?: string) => Promise<IpcResponse>
+  listSkills: (workDir: string | undefined, locale: string | undefined, view: ResourceListView) => Promise<IpcResponse>
   getSkillContent: (name: string, workDir?: string) => Promise<IpcResponse>
   createSkill: (workDir: string, name: string, content: string) => Promise<IpcResponse>
   updateSkill: (skillPath: string, content: string) => Promise<IpcResponse>
@@ -176,7 +178,7 @@ export interface KiteAPI {
   clearSkillsCache: () => Promise<IpcResponse>
 
   // Commands
-  listCommands: (workDir?: string, locale?: string) => Promise<IpcResponse>
+  listCommands: (workDir: string | undefined, locale: string | undefined, view: ResourceListView) => Promise<IpcResponse>
   getCommandContent: (name: string, workDir?: string) => Promise<IpcResponse>
   createCommand: (workDir: string, name: string, content: string) => Promise<IpcResponse>
   updateCommand: (commandPath: string, content: string) => Promise<IpcResponse>
@@ -190,7 +192,7 @@ export interface KiteAPI {
   clearCommandsCache: () => Promise<IpcResponse>
 
   // Agents
-  listAgents: (workDir?: string, locale?: string) => Promise<IpcResponse>
+  listAgents: (workDir: string | undefined, locale: string | undefined, view: ResourceListView) => Promise<IpcResponse>
   getAgentContent: (name: string, workDir?: string) => Promise<IpcResponse>
   createAgent: (workDir: string, name: string, content: string) => Promise<IpcResponse>
   updateAgent: (agentPath: string, content: string) => Promise<IpcResponse>
@@ -487,7 +489,7 @@ const api: KiteAPI = {
     ipcRenderer.invoke('onboarding:save-conversation', spaceId, userPrompt, aiResponse),
 
   // Skills
-  listSkills: (workDir, locale) => ipcRenderer.invoke('skills:list', workDir, locale),
+  listSkills: (workDir, locale, view) => ipcRenderer.invoke('skills:list', workDir, locale, view),
   getSkillContent: (name, workDir) => ipcRenderer.invoke('skills:get-content', name, workDir),
   createSkill: (workDir, name, content) => ipcRenderer.invoke('skills:create', workDir, name, content),
   updateSkill: (skillPath, content) => ipcRenderer.invoke('skills:update', skillPath, content),
@@ -497,7 +499,7 @@ const api: KiteAPI = {
   clearSkillsCache: () => ipcRenderer.invoke('skills:clear-cache'),
 
   // Commands
-  listCommands: (workDir, locale) => ipcRenderer.invoke('commands:list', workDir, locale),
+  listCommands: (workDir, locale, view) => ipcRenderer.invoke('commands:list', workDir, locale, view),
   getCommandContent: (name, workDir) => ipcRenderer.invoke('commands:get-content', name, workDir),
   createCommand: (workDir, name, content) => ipcRenderer.invoke('commands:create', workDir, name, content),
   updateCommand: (commandPath, content) => ipcRenderer.invoke('commands:update', commandPath, content),
@@ -507,7 +509,7 @@ const api: KiteAPI = {
   clearCommandsCache: () => ipcRenderer.invoke('commands:clear-cache'),
 
   // Agents
-  listAgents: (workDir, locale) => ipcRenderer.invoke('agents:list', workDir, locale),
+  listAgents: (workDir, locale, view) => ipcRenderer.invoke('agents:list', workDir, locale, view),
   getAgentContent: (name, workDir) => ipcRenderer.invoke('agents:get-content', name, workDir),
   createAgent: (workDir, name, content) => ipcRenderer.invoke('agents:create', workDir, name, content),
   updateAgent: (agentPath, content) => ipcRenderer.invoke('agents:update', agentPath, content),

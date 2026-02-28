@@ -74,6 +74,7 @@ export interface AgentRequest {
   model?: string
   canvasContext?: CanvasContext
   fileContexts?: FileContextAttachment[]
+  invocationContext?: import('../../../shared/resource-access').InvocationContext
 }
 
 // ============================================

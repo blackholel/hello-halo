@@ -16,6 +16,7 @@ import { useSpaceStore } from './space.store'
 import { useToolkitStore } from './toolkit.store'
 import { buildDirective } from '../utils/directive-helpers'
 import type { SceneTag } from '../../shared/extension-taxonomy'
+import type { ResourceExposure } from '../../shared/resource-access'
 
 // ============================================
 // Types
@@ -29,6 +30,7 @@ export interface AgentDefinition {
   description?: string
   sceneTags?: SceneTag[]
   namespace?: string
+  exposure: ResourceExposure
 }
 
 export interface AgentContent {
@@ -109,7 +111,7 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
     try {
       set({ isLoading: true, error: null })
 
-      const response = await api.listAgents(workDir, i18n.language)
+      const response = await api.listAgents(workDir, i18n.language, 'extensions')
 
       if (response.success && response.data) {
         const nextByWorkDir = {
