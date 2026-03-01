@@ -493,6 +493,20 @@ export const api = {
     }))
   },
 
+  getAgentResourceHash: async (
+    params?: { spaceId?: string; workDir?: string; conversationId?: string }
+  ): Promise<ApiResponse<{ hash: string; workDir?: string | null; sessionResourceHash?: string | null }>> => {
+    if (isElectron()) {
+      return window.kite.getAgentResourceHash(params)
+    }
+    const query = new URLSearchParams()
+    if (params?.spaceId) query.append('spaceId', params.spaceId)
+    if (params?.workDir) query.append('workDir', params.workDir)
+    if (params?.conversationId) query.append('conversationId', params.conversationId)
+    const suffix = query.toString()
+    return httpRequest('GET', `/api/agent/resource-hash${suffix ? `?${suffix}` : ''}`)
+  },
+
   // Test MCP server connections
   testMcpConnections: async (): Promise<{ success: boolean; servers: unknown[]; error?: string }> => {
     if (isElectron()) {
@@ -717,6 +731,13 @@ export const api = {
       return window.kite.clearSkillsCache()
     }
     return httpRequest('POST', '/api/skills/clear-cache')
+  },
+
+  refreshSkillsIndex: async (workDir?: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.kite.refreshSkillsIndex(workDir)
+    }
+    return httpRequest('POST', '/api/skills/refresh', { workDir })
   },
 
   // ===== Commands =====

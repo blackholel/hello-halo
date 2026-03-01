@@ -12,10 +12,13 @@ import {
   ensureSessionWarm,
   testMcpConnections,
   reconnectMcpServer,
-  toggleMcpServer
+  toggleMcpServer,
+  getWorkingDir,
+  getV2SessionInfo
 } from '../services/agent'
 import type { AskUserQuestionAnswerInput } from '../services/agent'
 import type { InvocationContext } from '../../shared/resource-access'
+import { getResourceIndexHash } from '../services/resource-index.service'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -154,6 +157,27 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
       return toErrorResponse(error)
     }
   })
+
+  ipcMain.handle(
+    'agent:get-resource-hash',
+    async (_event, params?: { spaceId?: string; workDir?: string; conversationId?: string }) => {
+      try {
+        const resolvedWorkDir = params?.workDir
+          || (typeof params?.spaceId === 'string' ? getWorkingDir(params.spaceId) : undefined)
+        const sessionInfo = params?.conversationId ? getV2SessionInfo(params.conversationId) : undefined
+        return {
+          success: true,
+          data: {
+            hash: getResourceIndexHash(resolvedWorkDir),
+            workDir: resolvedWorkDir || null,
+            sessionResourceHash: sessionInfo?.config.resourceIndexHash || null
+          }
+        }
+      } catch (error: unknown) {
+        return toErrorResponse(error)
+      }
+    }
+  )
 
   // Test MCP server connections
   ipcMain.handle('agent:test-mcp', async () => {

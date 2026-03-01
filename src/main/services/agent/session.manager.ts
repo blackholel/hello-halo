@@ -14,6 +14,7 @@ import { buildSdkOptions, getWorkingDir, getEffectiveSkillsLazyLoad } from './sd
 import { createCanUseTool } from './renderer-comm'
 import type { V2SDKSession, V2SessionInfo, SessionConfig, SessionState } from './types'
 import { getEnabledPluginMcpHash, getEnabledPluginMcpList } from '../plugin-mcp.service'
+import { getResourceIndexHash } from '../resource-index.service'
 
 // V2 Session management: Map of conversationId -> persistent V2 session
 const v2Sessions = new Map<string, V2SessionInfo>()
@@ -23,7 +24,9 @@ const activeSessions = new Map<string, SessionState>()
 
 // Session cleanup interval (clean up sessions not used for 30 minutes)
 const SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000
+const RESOURCE_INDEX_REBUILD_DEBOUNCE_MS = 3000
 let cleanupIntervalId: NodeJS.Timeout | null = null
+const lastResourceIndexRebuildAt = new Map<string, number>()
 
 function toNonEmptyString(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
@@ -48,6 +51,7 @@ function startSessionCleanup(): void {
           console.error(`[Agent] Error closing session ${convId}:`, e)
         }
         v2Sessions.delete(convId)
+        lastResourceIndexRebuildAt.delete(convId)
       }
     }
   }, 60 * 1000)
@@ -61,6 +65,7 @@ function getSessionRebuildReasons(existing: SessionConfig, next: SessionConfig):
   if ((existing.providerSignature || '') !== (next.providerSignature || '')) reasons.push('providerSignature')
   if ((existing.effectiveModel || '') !== (next.effectiveModel || '')) reasons.push('effectiveModel')
   if ((existing.enabledPluginMcpsHash || '') !== (next.enabledPluginMcpsHash || '')) reasons.push('enabledPluginMcpsHash')
+  if ((existing.resourceIndexHash || '') !== (next.resourceIndexHash || '')) reasons.push('resourceIndexHash')
   if ((existing.hasCanUseTool || false) !== (next.hasCanUseTool || false)) reasons.push('hasCanUseTool')
   return reasons
 }
@@ -73,8 +78,22 @@ function buildSessionConfigSignature(config: SessionConfig): string {
     providerSignature: config.providerSignature || '',
     effectiveModel: config.effectiveModel || '',
     enabledPluginMcpsHash: config.enabledPluginMcpsHash || '',
+    resourceIndexHash: config.resourceIndexHash || '',
     hasCanUseTool: config.hasCanUseTool || false
   })
+}
+
+function shouldDebounceResourceIndexRebuild(conversationId: string, reasons: string[]): boolean {
+  if (reasons.length !== 1 || reasons[0] !== 'resourceIndexHash') {
+    return false
+  }
+  const now = Date.now()
+  const last = lastResourceIndexRebuildAt.get(conversationId) || 0
+  if (now - last < RESOURCE_INDEX_REBUILD_DEBOUNCE_MS) {
+    return true
+  }
+  lastResourceIndexRebuildAt.set(conversationId, now)
+  return false
 }
 
 function emitAgentSessionRebuildEvent(
@@ -122,6 +141,13 @@ export async function getOrCreateV2Session(
   if (existing) {
     const reasons = config ? getSessionRebuildReasons(existing.config, config) : []
     if (config && reasons.length > 0) {
+      if (shouldDebounceResourceIndexRebuild(conversationId, reasons)) {
+        console.log(
+          `[Agent][${conversationId}] Skip session rebuild due to resourceIndexHash debounce (${RESOURCE_INDEX_REBUILD_DEBOUNCE_MS}ms)`
+        )
+        existing.lastUsedAt = Date.now()
+        return existing.session
+      }
       console.log(
         `[Agent][${conversationId}] Session config changed, rebuilding session`,
         {
@@ -233,6 +259,7 @@ export async function ensureSessionWarm(spaceId: string, conversationId: string)
         providerSignature: effectiveAi.providerSignature,
         effectiveModel: effectiveAi.effectiveModel,
         enabledPluginMcpsHash: getEnabledPluginMcpHash(conversationId),
+        resourceIndexHash: getResourceIndexHash(workDir),
         hasCanUseTool: true // Session has canUseTool callback
       }
     )
@@ -256,6 +283,7 @@ export function closeV2Session(conversationId: string): void {
     }
     v2Sessions.delete(conversationId)
   }
+  lastResourceIndexRebuildAt.delete(conversationId)
 }
 
 /**
@@ -272,6 +300,7 @@ export function closeAllV2Sessions(): void {
     }
   }
   v2Sessions.clear()
+  lastResourceIndexRebuildAt.clear()
 
   if (cleanupIntervalId) {
     clearInterval(cleanupIntervalId)
@@ -305,6 +334,7 @@ function invalidateAllSessions(): void {
   }
 
   v2Sessions.clear()
+  lastResourceIndexRebuildAt.clear()
   console.log('[Agent] All sessions invalidated, will use new config on next message')
 }
 

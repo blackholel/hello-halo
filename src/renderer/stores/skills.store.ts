@@ -13,7 +13,7 @@ import { api } from '../api'
 import i18n from '../i18n'
 import { getCacheKey, getAllCacheKeys, GLOBAL_CACHE_KEY } from './cache-keys'
 import type { SceneTag } from '../../shared/extension-taxonomy'
-import type { ResourceExposure } from '../../shared/resource-access'
+import type { ResourceChangedPayload, ResourceExposure } from '../../shared/resource-access'
 
 // ============================================
 // Types
@@ -53,6 +53,8 @@ interface SkillsState {
   isLoadingContent: boolean
   searchQuery: string
   error: string | null
+  lastRefreshReason: string | null
+  lastRefreshTs: string | null
 
   // Actions
   loadSkills: (workDir?: string) => Promise<void>
@@ -93,6 +95,8 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
   isLoadingContent: false,
   searchQuery: '',
   error: null,
+  lastRefreshReason: null,
+  lastRefreshTs: null,
 
   // Load all skills from all sources
   loadSkills: async (workDir?: string) => {
@@ -370,7 +374,11 @@ export function initSkillsStoreListeners(): void {
   skillsListenersInitialized = true
 
   api.onSkillsChanged((data) => {
-    const payload = data as { workDir?: string | null }
+    const payload = data as ResourceChangedPayload
+    useSkillsStore.setState({
+      lastRefreshReason: payload.reason || null,
+      lastRefreshTs: payload.ts || null
+    })
     const { loadedWorkDir, loadSkills, markDirty, markAllDirty } = useSkillsStore.getState()
     if (payload.workDir == null) {
       markAllDirty()
