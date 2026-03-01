@@ -22,18 +22,9 @@ const outputDir = join(projectRoot, 'build', 'default-kite-config')
 const packageJsonPath = join(projectRoot, 'package.json')
 const installPathTemplate = '__KITE_ROOT__'
 const secretKeyPattern = /(key|token|secret|password)/i
-
-const whitelist = new Set([
-  'config.json',
-  'settings.json',
-  'agents',
-  'commands',
-  'hooks',
-  'mcp',
-  'rules',
-  'skills',
-  'contexts',
-  'plugins'
+const seedStateFileName = '.seed-state.json'
+const ignoredRootEntries = new Set([
+  seedStateFileName
 ])
 
 function isDirectory(path) {
@@ -64,29 +55,13 @@ function writeJson(path, value) {
   writeFileSync(path, JSON.stringify(value, null, 2))
 }
 
-function copyDir(sourcePath, targetPath) {
-  mkdirSync(targetPath, { recursive: true })
-  for (const entry of readdirSync(sourcePath, { withFileTypes: true })) {
-    const src = join(sourcePath, entry.name)
-    const dst = join(targetPath, entry.name)
-    if (entry.isDirectory()) {
-      copyDir(src, dst)
-      continue
-    }
-    if (entry.isFile()) {
-      mkdirSync(dirname(dst), { recursive: true })
-      copyFileSync(src, dst)
-    }
-  }
-}
-
 function sanitizeConfig(config) {
   if (!config || typeof config !== 'object' || Array.isArray(config)) return null
-  const sanitized = JSON.parse(JSON.stringify(config))
+  const sanitized = sanitizeSecrets(JSON.parse(JSON.stringify(config)))
 
-  if (sanitized.api && typeof sanitized.api === 'object') {
-    sanitized.api.apiKey = ''
-  }
+  // 不随安装包分发个人模型/API配置，避免敏感信息外泄
+  delete sanitized.api
+  delete sanitized.ai
 
   if (sanitized.mcpServers && typeof sanitized.mcpServers === 'object') {
     for (const server of Object.values(sanitized.mcpServers)) {
@@ -169,57 +144,85 @@ function sanitizePluginsRegistry(registry, pluginsCacheDir) {
   }
 }
 
-function copyWhitelistedSeed() {
+function sanitizeGenericJsonFile(sourcePath, targetPath) {
+  const parsed = readJson(sourcePath)
+  if (!parsed || typeof parsed !== 'object') return false
+
+  writeJson(targetPath, sanitizeSecrets(parsed))
+  return true
+}
+
+function copySeedFile(sourcePath, targetPath, relativePath) {
+  mkdirSync(dirname(targetPath), { recursive: true })
+
+  if (relativePath === 'config.json') {
+    const config = sanitizeConfig(readJson(sourcePath))
+    if (config) {
+      writeJson(targetPath, config)
+      return
+    }
+    copyFileSync(sourcePath, targetPath)
+    return
+  }
+
+  if (relativePath === 'settings.json') {
+    const settings = sanitizeSecrets(readJson(sourcePath))
+    if (settings && typeof settings === 'object') {
+      writeJson(targetPath, settings)
+      return
+    }
+    copyFileSync(sourcePath, targetPath)
+    return
+  }
+
+  if (relativePath === 'plugins/installed_plugins.json') {
+    // 插件索引里的绝对安装路径改写成模板路径，避免把构建机路径打进包
+    const sourceCacheDir = join(sourceDir, 'plugins', 'cache')
+    const registry = sanitizePluginsRegistry(readJson(sourcePath), resolve(sourceCacheDir))
+    if (registry) {
+      writeJson(targetPath, registry)
+      return
+    }
+    copyFileSync(sourcePath, targetPath)
+    return
+  }
+
+  if (relativePath.endsWith('.json')) {
+    const handled = sanitizeGenericJsonFile(sourcePath, targetPath)
+    if (handled) return
+  }
+
+  copyFileSync(sourcePath, targetPath)
+}
+
+function copyAllSeedEntries() {
   const copied = []
-  for (const entryName of whitelist) {
-    const src = join(sourceDir, entryName)
-    if (!existsSync(src)) continue
+  // 全量遍历 .kite，除了根目录里明确忽略的元数据文件
+  const walk = (currentSourceDir, currentTargetDir, currentRelativeDir = '') => {
+    mkdirSync(currentTargetDir, { recursive: true })
+    for (const entry of readdirSync(currentSourceDir, { withFileTypes: true })) {
+      if (currentRelativeDir === '' && ignoredRootEntries.has(entry.name)) continue
 
-    if (entryName === 'config.json') {
-      const config = sanitizeConfig(readJson(src))
-      if (config) {
-        writeJson(join(outputDir, entryName), config)
-        copied.push(entryName)
-      }
-      continue
-    }
+      const sourcePath = join(currentSourceDir, entry.name)
+      const targetPath = join(currentTargetDir, entry.name)
+      const relativePath = currentRelativeDir ? `${currentRelativeDir}/${entry.name}` : entry.name
 
-    if (entryName === 'settings.json') {
-      const settings = sanitizeSecrets(readJson(src))
-      if (settings && typeof settings === 'object') {
-        writeJson(join(outputDir, entryName), settings)
-        copied.push(entryName)
-      }
-      continue
-    }
-
-    if (entryName === 'plugins') {
-      const srcCacheDir = join(src, 'cache')
-      const dstCacheDir = join(outputDir, 'plugins', 'cache')
-      if (isDirectory(srcCacheDir)) {
-        copyDir(srcCacheDir, dstCacheDir)
-        copied.push('plugins/cache')
+      if (entry.isDirectory()) {
+        walk(sourcePath, targetPath, relativePath)
+        continue
       }
 
-      const registryPath = join(src, 'installed_plugins.json')
-      const registry = sanitizePluginsRegistry(readJson(registryPath), resolve(srcCacheDir))
-      if (registry) {
-        writeJson(join(outputDir, 'plugins', 'installed_plugins.json'), registry)
-        copied.push('plugins/installed_plugins.json')
-      }
-      continue
-    }
-
-    if (isDirectory(src)) {
-      copyDir(src, join(outputDir, entryName))
-      copied.push(entryName)
-    } else {
-      mkdirSync(dirname(join(outputDir, entryName)), { recursive: true })
-      copyFileSync(src, join(outputDir, entryName))
-      copied.push(entryName)
+      if (!entry.isFile()) continue
+      copySeedFile(sourcePath, targetPath, relativePath)
     }
   }
 
+  for (const entry of readdirSync(sourceDir, { withFileTypes: true })) {
+    if (ignoredRootEntries.has(entry.name)) continue
+    copied.push(entry.name)
+  }
+
+  walk(sourceDir, outputDir)
   return copied
 }
 
@@ -236,7 +239,7 @@ function writeManifest(copiedEntries) {
     schemaVersion: 1,
     appVersion: typeof pkg.version === 'string' ? pkg.version : '0.0.0',
     generatedAt: new Date().toISOString(),
-    sourceDir,
+    source: 'kite-user-home',
     copiedEntries
   }
   writeJson(join(outputDir, 'seed-manifest.json'), manifest)
@@ -247,7 +250,7 @@ function main() {
   rmSync(outputDir, { recursive: true, force: true })
   mkdirSync(outputDir, { recursive: true })
 
-  const copiedEntries = copyWhitelistedSeed()
+  const copiedEntries = copyAllSeedEntries()
   writeManifest(copiedEntries)
 
   console.log(`[Seed] Prepared built-in seed at: ${outputDir}`)

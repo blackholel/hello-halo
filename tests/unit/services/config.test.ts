@@ -247,6 +247,20 @@ describe('Config Service', () => {
       expect(fs.existsSync(path.join(kiteDir, 'commands', 'second.md'))).toBe(false)
     })
 
+    it('should inject non-whitelisted seed entries and ignore seed metadata', async () => {
+      const kiteDir = getKiteDir()
+      const seedDir = path.join(getTestDir(), 'seed-full')
+      fs.mkdirSync(path.join(seedDir, 'custom-bundles', 'demo'), { recursive: true })
+      fs.writeFileSync(path.join(seedDir, 'custom-bundles', 'demo', 'readme.md'), 'bundle content')
+      fs.writeFileSync(path.join(seedDir, 'seed-manifest.json'), JSON.stringify({ source: 'seed' }))
+
+      process.env.KITE_BUILTIN_SEED_DIR = seedDir
+      await initializeApp()
+
+      expect(fs.existsSync(path.join(kiteDir, 'custom-bundles', 'demo', 'readme.md'))).toBe(true)
+      expect(fs.existsSync(path.join(kiteDir, 'seed-manifest.json'))).toBe(false)
+    })
+
     it('should not write seed state for empty seed and should retry on next launch', async () => {
       const kiteDir = getKiteDir()
       const seedDir = path.join(getTestDir(), 'seed-empty-then-ready')
@@ -279,6 +293,80 @@ describe('Config Service', () => {
       })
 
       expect(result.status).toBe(1)
+    })
+
+    it('should package full seed while removing sensitive config fields', () => {
+      const scriptPath = path.join(projectRoot, 'scripts', 'copy-kite-seed.mjs')
+      const sourceSeedDir = path.join(getTestDir(), 'seed-source-full-copy')
+      const outputDir = path.join(projectRoot, 'build', 'default-kite-config')
+      const backupOutputDir = path.join(getTestDir(), 'seed-output-backup')
+      const pluginCacheDir = path.join(sourceSeedDir, 'plugins', 'cache', 'demo-market', 'demo-plugin', '1.0.0')
+      const installPath = path.join(pluginCacheDir)
+      const hasOriginalOutput = fs.existsSync(outputDir)
+
+      fs.rmSync(sourceSeedDir, { recursive: true, force: true })
+      fs.rmSync(backupOutputDir, { recursive: true, force: true })
+      if (hasOriginalOutput) {
+        fs.cpSync(outputDir, backupOutputDir, { recursive: true })
+      }
+      fs.mkdirSync(path.join(sourceSeedDir, 'custom-dir', 'nested'), { recursive: true })
+      fs.mkdirSync(pluginCacheDir, { recursive: true })
+      fs.writeFileSync(path.join(sourceSeedDir, 'custom-dir', 'nested', 'note.txt'), 'ok')
+      fs.writeFileSync(path.join(sourceSeedDir, 'settings.json'), JSON.stringify({
+        token: 'secret-token',
+        nested: { apiKey: 'abc' }
+      }))
+      fs.writeFileSync(path.join(sourceSeedDir, 'config.json'), JSON.stringify({
+        api: { apiKey: 'should-not-ship', model: 'private-model' },
+        ai: { defaultProfileId: 'profile-private' },
+        mcpServers: { demo: { env: { SECRET_KEY: 'x' } } },
+        claudeCode: { hooksEnabled: true }
+      }))
+      fs.writeFileSync(path.join(sourceSeedDir, 'plugins', 'installed_plugins.json'), JSON.stringify({
+        version: 2,
+        plugins: {
+          'demo-plugin@demo-market': [{
+            scope: 'user',
+            installPath,
+            version: '1.0.0'
+          }]
+        }
+      }))
+
+      try {
+        const result = spawnSync(process.execPath, [scriptPath], {
+          cwd: projectRoot,
+          env: {
+            ...process.env,
+            KITE_SEED_SOURCE_DIR: sourceSeedDir
+          },
+          encoding: 'utf-8'
+        })
+
+        expect(result.status).toBe(0)
+        expect(fs.existsSync(path.join(outputDir, 'custom-dir', 'nested', 'note.txt'))).toBe(true)
+
+        const packagedSettings = JSON.parse(fs.readFileSync(path.join(outputDir, 'settings.json'), 'utf-8'))
+        expect(packagedSettings.token).toBe('')
+        expect(packagedSettings.nested.apiKey).toBe('')
+
+        const packagedConfig = JSON.parse(fs.readFileSync(path.join(outputDir, 'config.json'), 'utf-8'))
+        expect(packagedConfig.api).toBeUndefined()
+        expect(packagedConfig.ai).toBeUndefined()
+        expect(packagedConfig.mcpServers.demo.env).toEqual({})
+        expect(packagedConfig.claudeCode.hooksEnabled).toBe(true)
+
+        const packagedRegistry = JSON.parse(
+          fs.readFileSync(path.join(outputDir, 'plugins', 'installed_plugins.json'), 'utf-8')
+        )
+        expect(packagedRegistry.plugins['demo-plugin@demo-market'][0].installPath)
+          .toBe('__KITE_ROOT__/plugins/cache/demo-market/demo-plugin/1.0.0')
+      } finally {
+        fs.rmSync(outputDir, { recursive: true, force: true })
+        if (hasOriginalOutput) {
+          fs.cpSync(backupOutputDir, outputDir, { recursive: true })
+        }
+      }
     })
   })
 

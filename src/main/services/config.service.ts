@@ -287,17 +287,9 @@ const BUILTIN_SEED_ENV_KEY = 'KITE_BUILTIN_SEED_DIR'
 const DISABLE_BUILTIN_SEED_ENV_KEY = 'KITE_DISABLE_BUILTIN_SEED'
 const SEED_STATE_FILE = '.seed-state.json'
 const KITE_ROOT_TEMPLATE = '__KITE_ROOT__'
-const BUILTIN_SEED_CONFIG_NAMES = new Set([
-  'config.json',
-  'settings.json',
-  'agents',
-  'commands',
-  'hooks',
-  'mcp',
-  'rules',
-  'skills',
-  'contexts',
-  'plugins'
+const BUILTIN_SEED_IGNORED_NAMES = new Set([
+  SEED_STATE_FILE,
+  'seed-manifest.json'
 ])
 
 interface SeedInstalledPlugin {
@@ -545,9 +537,11 @@ export function resolveSeedDir(): string | null {
 
 function injectBuiltInSeed(seedDir: string, kiteDir: string): boolean {
   let hasSeedEntries = false
-  for (const entryName of BUILTIN_SEED_CONFIG_NAMES) {
+  for (const entry of readdirSync(seedDir, { withFileTypes: true })) {
+    const entryName = entry.name
+    if (BUILTIN_SEED_IGNORED_NAMES.has(entryName)) continue
+
     const sourcePath = join(seedDir, entryName)
-    if (!existsSync(sourcePath)) continue
     hasSeedEntries = true
     const targetPath = join(kiteDir, entryName)
 
@@ -556,17 +550,19 @@ function injectBuiltInSeed(seedDir: string, kiteDir: string): boolean {
       continue
     }
 
-    if (entryName === 'plugins' && isDirectory(sourcePath)) {
+    if (entryName === 'plugins' && entry.isDirectory()) {
       injectPluginsSeed(sourcePath, targetPath, kiteDir)
       continue
     }
 
-    if (isDirectory(sourcePath)) {
+    if (entry.isDirectory()) {
       copyDirMissingOnly(sourcePath, targetPath)
       continue
     }
 
-    copyFileIfMissing(sourcePath, targetPath)
+    if (entry.isFile()) {
+      copyFileIfMissing(sourcePath, targetPath)
+    }
   }
 
   if (!hasSeedEntries) {
