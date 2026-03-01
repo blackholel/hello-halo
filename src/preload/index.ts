@@ -182,6 +182,9 @@ export interface KiteAPI {
   ) => Promise<IpcResponse>
   getSessionState: (conversationId: string) => Promise<IpcResponse>
   ensureSessionWarm: (spaceId: string, conversationId: string) => Promise<IpcResponse>
+  getAgentResourceHash: (
+    params?: { spaceId?: string; workDir?: string; conversationId?: string }
+  ) => Promise<IpcResponse>
   testMcpConnections: () => Promise<{ success: boolean; servers: unknown[]; error?: string }>
   reconnectMcpServer: (conversationId: string, serverName: string) => Promise<{ success: boolean; error?: string }>
   toggleMcpServer: (conversationId: string, serverName: string, enabled: boolean) => Promise<{ success: boolean; error?: string }>
@@ -235,6 +238,7 @@ export interface KiteAPI {
     options?: { overwrite?: boolean }
   ) => Promise<IpcResponse>
   clearSkillsCache: () => Promise<IpcResponse>
+  refreshSkillsIndex: (workDir?: string) => Promise<IpcResponse>
 
   // Commands
   listCommands: (workDir: string | undefined, locale: string | undefined, view: ResourceListView) => Promise<IpcResponse>
@@ -509,6 +513,7 @@ const api: KiteAPI = {
     ipcRenderer.invoke('agent:answer-question', conversationId, answer),
   getSessionState: (conversationId) => ipcRenderer.invoke('agent:get-session-state', conversationId),
   ensureSessionWarm: (spaceId, conversationId) => ipcRenderer.invoke('agent:ensure-session-warm', spaceId, conversationId),
+  getAgentResourceHash: (params) => ipcRenderer.invoke('agent:get-resource-hash', params),
   testMcpConnections: () => ipcRenderer.invoke('agent:test-mcp'),
   reconnectMcpServer: (conversationId, serverName) => ipcRenderer.invoke('agent:reconnect-mcp', conversationId, serverName),
   toggleMcpServer: (conversationId, serverName, enabled) => ipcRenderer.invoke('agent:toggle-mcp', conversationId, serverName, enabled),
@@ -560,6 +565,7 @@ const api: KiteAPI = {
   copySkillToSpace: (skillName, workDir) => ipcRenderer.invoke('skills:copy-to-space', skillName, workDir),
   copySkillToSpaceByRef: (ref, workDir, options) => ipcRenderer.invoke('skills:copy-to-space-by-ref', ref, workDir, options),
   clearSkillsCache: () => ipcRenderer.invoke('skills:clear-cache'),
+  refreshSkillsIndex: (workDir) => ipcRenderer.invoke('skills:refresh', workDir),
 
   // Commands
   listCommands: (workDir, locale, view) => ipcRenderer.invoke('commands:list', workDir, locale, view),

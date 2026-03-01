@@ -83,4 +83,43 @@ describe('session.manager rebuild', () => {
     expect(closeFirst).toHaveBeenCalledTimes(1)
     expect(closeSecond).not.toHaveBeenCalled()
   })
+
+  it('resourceIndexHash 高频变化时触发防抖，避免连续重建', async () => {
+    const closeA = vi.fn()
+    const closeB = vi.fn()
+    const closeC = vi.fn()
+    vi.mocked(unstable_v2_createSession)
+      .mockReset()
+      .mockResolvedValueOnce({ close: closeA } as any)
+      .mockResolvedValueOnce({ close: closeB } as any)
+      .mockResolvedValueOnce({ close: closeC } as any)
+
+    const base: SessionConfig = {
+      aiBrowserEnabled: false,
+      skillsLazyLoad: false,
+      profileId: 'profile-a',
+      providerSignature: 'sig-a',
+      effectiveModel: 'model-a',
+      enabledPluginMcpsHash: 'mcp-1',
+      hasCanUseTool: true
+    }
+
+    await getOrCreateV2Session('space-1', 'conv-2', {}, undefined, {
+      ...base,
+      resourceIndexHash: 'hash-1'
+    })
+    await getOrCreateV2Session('space-1', 'conv-2', {}, undefined, {
+      ...base,
+      resourceIndexHash: 'hash-2'
+    })
+    await getOrCreateV2Session('space-1', 'conv-2', {}, undefined, {
+      ...base,
+      resourceIndexHash: 'hash-3'
+    })
+
+    expect(unstable_v2_createSession).toHaveBeenCalledTimes(2)
+    expect(closeA).toHaveBeenCalledTimes(1)
+    expect(closeB).not.toHaveBeenCalled()
+    expect(closeC).not.toHaveBeenCalled()
+  })
 })

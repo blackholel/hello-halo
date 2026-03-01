@@ -1,4 +1,5 @@
 export type ResourceType = 'skill' | 'agent' | 'command'
+export type ResourceKind = 'skills' | 'agents' | 'commands'
 
 export type ResourceExposure = 'public' | 'internal-only'
 
@@ -69,4 +70,30 @@ export type InvocationContext = 'interactive' | 'workflow-step' | 'command-depen
 
 export function isInvocationContext(value: unknown): value is InvocationContext {
   return value === 'interactive' || value === 'workflow-step' || value === 'command-dependency'
+}
+
+export type ResourceRefreshReason =
+  | 'file-change'
+  | 'plugin-registry-change'
+  | 'settings-change'
+  | 'resource-exposure-change'
+  | 'manual-refresh'
+  | 'install-complete'
+
+export interface ResourceChangedPayload {
+  workDir?: string | null
+  reason?: ResourceRefreshReason
+  ts?: string
+  resources?: ResourceKind[]
+}
+
+export interface ResourceIndexSnapshot {
+  hash: string
+  generatedAt: string
+  reason: ResourceRefreshReason
+  counts: {
+    skills: number
+    agents: number
+    commands: number
+  }
 }

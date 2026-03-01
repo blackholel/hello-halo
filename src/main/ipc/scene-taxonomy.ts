@@ -19,6 +19,7 @@ import {
   upsertSceneDefinition
 } from '../services/scene-taxonomy.service'
 import type { SceneDefinition, SceneTagKey, SceneTaxonomyConfig } from '../../shared/scene-taxonomy'
+import type { ResourceChangedPayload } from '../../shared/resource-access'
 
 let unsubscribeMutationListener: (() => void) | null = null
 
@@ -38,9 +39,15 @@ function bindMutationSideEffects(mainWindow: BrowserWindow | null): void {
     clearCommandsCache()
 
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('skills:changed', { workDir: null })
-      mainWindow.webContents.send('agents:changed', { workDir: null })
-      mainWindow.webContents.send('commands:changed', { workDir: null })
+      const payload: ResourceChangedPayload = {
+        workDir: null,
+        reason: 'manual-refresh',
+        ts: new Date().toISOString(),
+        resources: ['skills', 'agents', 'commands']
+      }
+      mainWindow.webContents.send('skills:changed', payload)
+      mainWindow.webContents.send('agents:changed', payload)
+      mainWindow.webContents.send('commands:changed', payload)
     }
   })
 }

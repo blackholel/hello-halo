@@ -43,6 +43,7 @@ import {
   finalizeChangeSet,
   trackChangeFile
 } from '../change-set.service'
+import { getResourceIndexHash } from '../resource-index.service'
 import {
   buildPluginMcpServers,
   enablePluginMcp,
@@ -736,6 +737,7 @@ export async function sendMessage(
       providerSignature: effectiveAi.providerSignature,
       effectiveModel: effectiveAi.effectiveModel,
       enabledPluginMcpsHash: getEnabledPluginMcpHash(conversationId),
+      resourceIndexHash: getResourceIndexHash(workDir),
       hasCanUseTool: true // Session has canUseTool callback
     }
 

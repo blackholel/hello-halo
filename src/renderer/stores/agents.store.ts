@@ -13,7 +13,7 @@ import { api } from '../api'
 import i18n from '../i18n'
 import { getCacheKey, getAllCacheKeys, GLOBAL_CACHE_KEY } from './cache-keys'
 import type { SceneTag } from '../../shared/extension-taxonomy'
-import type { ResourceExposure } from '../../shared/resource-access'
+import type { ResourceChangedPayload, ResourceExposure } from '../../shared/resource-access'
 
 // ============================================
 // Types
@@ -350,7 +350,7 @@ export function initAgentsStoreListeners(): void {
   agentsListenersInitialized = true
 
   api.onAgentsChanged((data) => {
-    const payload = data as { workDir?: string | null }
+    const payload = data as ResourceChangedPayload
     const { loadedWorkDir, loadAgents, markDirty, markAllDirty } = useAgentsStore.getState()
     if (payload.workDir == null) {
       markAllDirty()

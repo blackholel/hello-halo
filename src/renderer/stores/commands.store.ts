@@ -9,7 +9,7 @@ import { create } from 'zustand'
 import { api } from '../api'
 import i18n from '../i18n'
 import type { SceneTag } from '../../shared/extension-taxonomy'
-import type { ResourceExposure } from '../../shared/resource-access'
+import type { ResourceChangedPayload, ResourceExposure } from '../../shared/resource-access'
 
 export interface CommandDefinition {
   name: string
@@ -196,9 +196,7 @@ export const useCommandsStore = create<CommandsState>((set, get) => ({
 }))
 
 /** Payload shape for the commands:changed IPC event */
-interface CommandsChangedPayload {
-  workDir?: string | null
-}
+type CommandsChangedPayload = ResourceChangedPayload
 
 function isCommandsChangedPayload(data: unknown): data is CommandsChangedPayload {
   if (data == null || typeof data !== 'object') return true // treat null/undefined as "reload all"

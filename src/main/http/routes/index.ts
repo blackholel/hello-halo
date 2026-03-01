@@ -317,6 +317,34 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
     res.json({ success: true })
   }))
 
+  app.get('/api/agent/resource-hash', safeRoute(async (req, res) => {
+    const spaceId = typeof req.query.spaceId === 'string' ? req.query.spaceId : undefined
+    const workDirQuery = typeof req.query.workDir === 'string' ? req.query.workDir : undefined
+    const conversationId = typeof req.query.conversationId === 'string' ? req.query.conversationId : undefined
+
+    let resolvedWorkDir = workDirQuery
+    if (!resolvedWorkDir && spaceId) {
+      resolvedWorkDir = getWorkingDir(spaceId)
+    }
+
+    if (resolvedWorkDir && !isWorkDirAllowed(resolvedWorkDir, getAllSpacePaths())) {
+      res.status(403).json({ success: false, error: 'workDir is not an allowed workspace path' })
+      return
+    }
+
+    const { getResourceIndexHash } = await import('../../services/resource-index.service')
+    const { getV2SessionInfo } = await import('../../services/agent')
+    const sessionInfo = conversationId ? getV2SessionInfo(conversationId) : undefined
+    res.json({
+      success: true,
+      data: {
+        hash: getResourceIndexHash(resolvedWorkDir),
+        workDir: resolvedWorkDir || null,
+        sessionResourceHash: sessionInfo?.config.resourceIndexHash || null
+      }
+    })
+  }))
+
   app.post('/api/agent/approve', async (req: Request, res: Response) => {
     const { conversationId } = req.body
     const result = agentController.approveTool(conversationId)
@@ -512,6 +540,35 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
     const { clearSkillsCache } = await import('../../services/skills.service')
     clearSkillsCache()
     res.json({ success: true })
+  }))
+
+  app.post('/api/skills/refresh', safeRoute(async (req, res) => {
+    const workDir = validateWorkDir(req, res)
+    if (workDir === null) return
+    const normalizedWorkDir = workDir || undefined
+
+    const [{ clearPluginsCache }, { invalidateSkillsCache, clearSkillsCache }, { invalidateAgentsCache }, { invalidateCommandsCache }, { rebuildResourceIndex, rebuildAllResourceIndexes }] = await Promise.all([
+      import('../../services/plugins.service'),
+      import('../../services/skills.service'),
+      import('../../services/agents.service'),
+      import('../../services/commands.service'),
+      import('../../services/resource-index.service')
+    ])
+
+    if (normalizedWorkDir) {
+      invalidateSkillsCache(normalizedWorkDir)
+      invalidateAgentsCache(normalizedWorkDir)
+      invalidateCommandsCache(normalizedWorkDir)
+      res.json({ success: true, data: rebuildResourceIndex(normalizedWorkDir, 'manual-refresh') })
+      return
+    }
+
+    clearPluginsCache()
+    clearSkillsCache()
+    invalidateAgentsCache(null)
+    invalidateCommandsCache(null)
+    rebuildAllResourceIndexes('manual-refresh')
+    res.json({ success: true, data: rebuildResourceIndex(undefined, 'manual-refresh') })
   }))
 
   // ===== Agents Routes =====
