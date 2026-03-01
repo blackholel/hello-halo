@@ -39,7 +39,6 @@ const MOBILE_BREAKPOINT = 640
 interface ArtifactRailProps {
   spaceId: string
   isTemp: boolean
-  onOpenFolder: () => void
   // External control props for Canvas integration
   externalExpanded?: boolean        // Controlled expanded state from parent
   onExpandedChange?: (expanded: boolean) => void  // Callback when user toggles
@@ -78,7 +77,6 @@ const DEFAULT_BROWSER_URL = 'https://www.bing.com'
 export function ArtifactRail({
   spaceId,
   isTemp,
-  onOpenFolder,
   externalExpanded,
   onExpandedChange
 }: ArtifactRailProps) {
@@ -244,6 +242,21 @@ export function ArtifactRail({
     }
   }, [openUrl, isControlled, onExpandedChange])
 
+  const handleShowCurrentSpaceFiles = useCallback(() => {
+    setViewMode('tree')
+    localStorage.setItem(VIEW_MODE_STORAGE_KEY, 'tree')
+
+    if (isControlled) {
+      onExpandedChange?.(true)
+    } else {
+      setInternalExpanded(true)
+    }
+
+    if (isMobile) {
+      setMobileOverlayOpen(true)
+    }
+  }, [isControlled, isMobile, onExpandedChange])
+
   // Shared content renderer
   const renderContent = () => (
     <div className="flex-1 overflow-hidden">
@@ -313,12 +326,12 @@ export function ArtifactRail({
         <div className="flex items-center gap-2">
           {/* Open folder button */}
           <button
-            onClick={onOpenFolder}
+            onClick={handleShowCurrentSpaceFiles}
             className="flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground rounded-lg transition-colors"
-            title={t('Open folder (⌘⇧F)')}
+            title={t('Show current space files')}
           >
             <FolderOpen className="w-4 h-4 text-amber-500" />
-            <span>{t('Folder')}</span>
+            <span>{t('Current space files')}</span>
           </button>
           {/* Open browser button */}
           <button
@@ -496,9 +509,9 @@ export function ArtifactRail({
           ) : (
             <>
               <button
-                onClick={onOpenFolder}
+                onClick={handleShowCurrentSpaceFiles}
                 className="p-2 hover:bg-secondary rounded-lg transition-colors"
-                title={t('Open folder')}
+                title={t('Show current space files')}
               >
                 <FolderOpen className="w-5 h-5 text-amber-500" />
               </button>

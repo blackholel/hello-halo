@@ -500,5 +500,11 @@
   "Select a skill": "スキルを選択",
   "Select an agent": "エージェントを選択",
   "Open in Canvas": "Canvasで開く",
-  "You can execute this plan directly, or reply with adjustments in chat.": "この計画は直接実行するか、チャットで修正内容を返信できます。"
+  "You can execute this plan directly, or reply with adjustments in chat.": "この計画は直接実行するか、チャットで修正内容を返信できます。",
+  "Ask Kite anything, / for commands": "Kite に何でも質問、/ でコマンド",
+  "Current space files": "現在のスペースのファイル",
+  "Show current space files": "現在のスペースのファイルを表示",
+  "New conversation (⌘T)": "新しい会話 (⌘T)",
+  "System files": "システムファイル",
+  "Unable to attach system file in current mode": "現在のモードではシステムファイルを添付できません"
 }

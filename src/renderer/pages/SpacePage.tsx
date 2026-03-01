@@ -71,7 +71,7 @@ function useIsMobile() {
 export function SpacePage() {
   const { t } = useTranslation()
   const { setView, mockBashMode, gitBashInstallProgress, startGitBashInstall } = useAppStore()
-  const { currentSpace, refreshCurrentSpace, openSpaceFolder } = useSpaceStore()
+  const { currentSpace } = useSpaceStore()
   const {
     currentSpaceId,
     setCurrentSpace,
@@ -380,13 +380,6 @@ export function SpacePage() {
     }
   }, [layoutMode, currentSpace, conversations, openChat, selectConversation])
 
-  // Handle open folder
-  const handleOpenFolder = () => {
-    if (currentSpace) {
-      openSpaceFolder(currentSpace.id)
-    }
-  }
-
   if (!currentSpace) {
     return (
       <div className="h-full w-full flex items-center justify-center">
@@ -687,7 +680,6 @@ export function SpacePage() {
           <ArtifactRail
             spaceId={currentSpace.id}
             isTemp={currentSpace.isTemp}
-            onOpenFolder={handleOpenFolder}
             externalExpanded={effectiveRailExpanded}
             onExpandedChange={setRailExpanded}
           />
@@ -726,7 +718,6 @@ export function SpacePage() {
         <ArtifactRail
           spaceId={currentSpace.id}
           isTemp={currentSpace.isTemp}
-          onOpenFolder={handleOpenFolder}
         />
       )}
 

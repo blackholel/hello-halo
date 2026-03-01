@@ -11,7 +11,7 @@
  * - Appropriate viewer component selected based on content type
  *
  * Keyboard shortcuts:
- * - Cmd/Ctrl+T: New browser tab
+ * - Cmd/Ctrl+T: New conversation tab
  * - Cmd/Ctrl+W: Close current tab
  * - Cmd/Ctrl+Shift+W: Close all tabs
  * - Cmd/Ctrl+Tab: Switch to next tab
@@ -41,9 +41,7 @@ import { TemplateLibraryViewer } from './viewers/TemplateLibraryViewer'
 import { api } from '../../api'
 import { useTranslation } from '../../i18n'
 import { useChatStore } from '../../stores/chat.store'
-
-// Default URL for new browser tabs
-const DEFAULT_NEW_TAB_URL = 'https://www.bing.com'
+import { useSpaceStore } from '../../stores/space.store'
 
 interface ContentCanvasProps {
   className?: string
@@ -62,18 +60,25 @@ export function ContentCanvas({ className = '' }: ContentCanvasProps) {
     switchToNextTab,
     switchToPrevTab,
     switchToTabIndex,
-    openUrl,
+    openChat,
     updateTabContent,
     saveFile,
   } = useCanvasLifecycle()
+  const currentSpace = useSpaceStore(state => state.currentSpace)
+  const createConversation = useChatStore(state => state.createConversation)
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd/Ctrl + T: New browser tab (works globally)
+      // Cmd/Ctrl + T: New conversation tab (works globally)
       if ((e.metaKey || e.ctrlKey) && e.key === 't') {
         e.preventDefault()
-        openUrl(DEFAULT_NEW_TAB_URL, t('New Tab'))
+        if (!currentSpace) return
+        void (async () => {
+          const newConversation = await createConversation(currentSpace.id)
+          if (!newConversation) return
+          openChat(currentSpace.id, newConversation.id, newConversation.title, currentSpace.path)
+        })()
         return
       }
 
@@ -121,7 +126,7 @@ export function ContentCanvas({ className = '' }: ContentCanvasProps) {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, activeTabId, closeTab, closeAllTabs, setOpen, switchToNextTab, switchToPrevTab, switchToTabIndex, openUrl])
+  }, [activeTabId, closeAllTabs, closeTab, createConversation, currentSpace, isOpen, openChat, setOpen, switchToNextTab, switchToPrevTab, switchToTabIndex])
 
   // Handle scroll position changes
   const handleScrollChange = useCallback((position: number) => {

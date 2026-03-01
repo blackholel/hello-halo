@@ -127,7 +127,6 @@ export function InputArea({
   const [isProcessingImages, setIsProcessingImages] = useState(false)
   const [imageError, setImageError] = useState<ImageError | null>(null)
   const [thinkingEnabled, setThinkingEnabled] = useState(false)  // Extended thinking mode
-  const [showAttachMenu, setShowAttachMenu] = useState(false)  // Attachment menu visibility
   const [triggerContext, setTriggerContext] = useState<TriggerContext | null>(null)
   const [activeSuggestionTab, setActiveSuggestionTab] = useState<ComposerSuggestionTab>('skills')
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0)
@@ -136,7 +135,6 @@ export function InputArea({
   const [isComposing, setIsComposing] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const attachMenuRef = useRef<HTMLDivElement>(null)
   const inputContainerRef = useRef<HTMLDivElement>(null)
   const lastTriggerTypeRef = useRef<TriggerContext['type'] | null>(null)
   const lastExpandContextRef = useRef<{ stateKey: string | null; query: string } | null>(null)
@@ -221,20 +219,6 @@ export function InputArea({
       return () => clearTimeout(timer)
     }
   }, [imageError])
-
-  // Close attachment menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (attachMenuRef.current && !attachMenuRef.current.contains(event.target as Node)) {
-        setShowAttachMenu(false)
-      }
-    }
-
-    if (showAttachMenu) {
-      document.addEventListener('mousedown', handleClickOutside)
-      return () => document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [showAttachMenu])
 
   // Show error to user
   const showError = (message: string) => {
@@ -578,11 +562,38 @@ export function InputArea({
     }
   }
 
-  // Handle file input change
+  // Handle file input change (system file picker -> file context attachments)
   const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
     if (files.length > 0) {
-      await addImages(files)
+      const newFileContexts: FileContextAttachment[] = []
+
+      for (const file of files) {
+        const fileWithPath = file as File & { path?: string }
+        const filePath = fileWithPath.path
+        if (!filePath) {
+          showError(t('Unable to attach system file in current mode'))
+          continue
+        }
+
+        const exists = fileContexts.some(f => f.path === filePath) || newFileContexts.some(f => f.path === filePath)
+        if (exists) continue
+
+        const dotIndex = file.name.lastIndexOf('.')
+        const extension = dotIndex > 0 ? file.name.slice(dotIndex + 1).toLowerCase() : ''
+
+        newFileContexts.push({
+          id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          type: 'file-context',
+          path: filePath,
+          name: file.name,
+          extension
+        })
+      }
+
+      if (newFileContexts.length > 0) {
+        setFileContexts(prev => [...prev, ...newFileContexts])
+      }
     }
     // Reset input
     if (fileInputRef.current) {
@@ -590,9 +601,8 @@ export function InputArea({
     }
   }
 
-  // Handle image button click (from attachment menu)
-  const handleImageButtonClick = () => {
-    setShowAttachMenu(false)
+  // Handle system file button click
+  const handleSystemFileButtonClick = () => {
     fileInputRef.current?.click()
   }
 
@@ -894,7 +904,6 @@ export function InputArea({
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/jpeg,image/png,image/gif,image/webp"
           multiple
           className="hidden"
           onChange={handleFileInputChange}
@@ -1013,12 +1022,7 @@ export function InputArea({
             onModeChange={onModeChange}
             aiBrowserEnabled={aiBrowserEnabled}
             onAIBrowserToggle={() => setAIBrowserEnabled(!aiBrowserEnabled)}
-            showAttachMenu={showAttachMenu}
-            onAttachMenuToggle={() => setShowAttachMenu(!showAttachMenu)}
-            onImageClick={handleImageButtonClick}
-            imageCount={images.length}
-            maxImages={MAX_IMAGES}
-            attachMenuRef={attachMenuRef}
+            onSystemFileClick={handleSystemFileButtonClick}
             canSend={canSend}
             onSend={handleSend}
             onStop={onStop}
@@ -1051,12 +1055,7 @@ interface InputToolbarProps {
   onModeChange: (mode: ChatMode) => void
   aiBrowserEnabled: boolean
   onAIBrowserToggle: () => void
-  showAttachMenu: boolean
-  onAttachMenuToggle: () => void
-  onImageClick: () => void
-  imageCount: number
-  maxImages: number
-  attachMenuRef: React.RefObject<HTMLDivElement | null>
+  onSystemFileClick: () => void
   canSend: boolean
   onSend: () => void
   onStop: () => void
@@ -1078,12 +1077,7 @@ function InputToolbar({
   onModeChange,
   aiBrowserEnabled,
   onAIBrowserToggle,
-  showAttachMenu,
-  onAttachMenuToggle,
-  onImageClick,
-  imageCount,
-  maxImages,
-  attachMenuRef,
+  onSystemFileClick,
   canSend,
   onSend,
   onStop,
@@ -1105,50 +1099,20 @@ function InputToolbar({
         />
         {!isGenerating && !isOnboarding && (
           <>
-            {/* Attachment menu */}
-            <div className="relative" ref={attachMenuRef}>
-              <button
-                onClick={onAttachMenuToggle}
-                disabled={isProcessingImages}
-                className={`w-8 h-8 flex items-center justify-center rounded-lg
-                  transition-all duration-150
-                  ${showAttachMenu
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground/60 hover:text-muted-foreground hover:bg-muted/50'
-                  }
-                  ${isProcessingImages ? 'opacity-50 cursor-not-allowed' : ''}
-                `}
-                title={t('Add attachment')}
-              >
-                <Plus size={18} className={`transition-transform duration-200 ${showAttachMenu ? 'rotate-45' : ''}`} />
-              </button>
-
-              {/* Attachment menu dropdown */}
-              {showAttachMenu && (
-                <div className="absolute bottom-full left-0 mb-2 py-1.5 bg-popover border border-border
-                  rounded-xl shadow-lg min-w-[160px] z-20 animate-fade-in">
-                  <button
-                    onClick={onImageClick}
-                    disabled={imageCount >= maxImages}
-                    className={`w-full px-3 py-2 flex items-center gap-3 text-sm
-                      transition-colors duration-150
-                      ${imageCount >= maxImages
-                        ? 'text-muted-foreground/40 cursor-not-allowed'
-                        : 'text-foreground hover:bg-muted/50'
-                      }
-                    `}
-                  >
-                    <ImagePlus size={16} className="text-muted-foreground" />
-                    <span>{t('Add image')}</span>
-                    {imageCount > 0 && (
-                      <span className="ml-auto text-xs text-muted-foreground">
-                        {imageCount}/{maxImages}
-                      </span>
-                    )}
-                  </button>
-                </div>
-              )}
-            </div>
+            <button
+              onClick={onSystemFileClick}
+              disabled={isProcessingImages}
+              className={`w-8 h-8 flex items-center justify-center rounded-lg
+                transition-all duration-150
+                ${isProcessingImages
+                  ? 'opacity-50 cursor-not-allowed text-muted-foreground/40'
+                  : 'text-muted-foreground/60 hover:text-muted-foreground hover:bg-muted/50'
+                }
+              `}
+              title={t('System files')}
+            >
+              <Plus size={18} />
+            </button>
 
             {/* AI Browser toggle */}
             <button

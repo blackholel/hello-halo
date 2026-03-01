@@ -594,5 +594,11 @@
   "Manage files in {{root}}/commands/ and {{path}}/.claude/commands/": "管理 {{root}}/commands/ 与 {{path}}/.claude/commands/ 下的文件",
   "Manage files in {{root}}/commands/": "管理 {{root}}/commands/ 下的文件",
   "Add .md files in {{root}}/commands or .claude/commands": "请在 {{root}}/commands 或 .claude/commands 下添加 .md 文件",
-  "Add .md files in {{root}}/agents or .claude/agents": "请在 {{root}}/agents 或 .claude/agents 下添加 .md 文件"
+  "Add .md files in {{root}}/agents or .claude/agents": "请在 {{root}}/agents 或 .claude/agents 下添加 .md 文件",
+  "Ask Kite anything, / for commands": "向 Kite 任意提问，/ 调出命令",
+  "Current space files": "当前空间文件目录",
+  "Show current space files": "显示当前空间文件目录",
+  "New conversation (⌘T)": "新建会话 (⌘T)",
+  "System files": "系统文件",
+  "Unable to attach system file in current mode": "当前模式下无法附加系统文件"
 }

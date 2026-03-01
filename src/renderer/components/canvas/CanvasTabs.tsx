@@ -19,7 +19,7 @@
  *
  * Keyboard shortcuts:
  * - Cmd/Ctrl+W: Close current tab
- * - Cmd/Ctrl+T: New browser tab
+ * - Cmd/Ctrl+T: New conversation tab
  * - Middle-click: Close tab
  */
 
@@ -28,13 +28,12 @@ import { X, Loader2, AlertCircle, Plus, XCircle, Maximize2, Minimize2, MessageSq
 import { type TabState } from '../../services/canvas-lifecycle'
 import { useCanvasLifecycle } from '../../hooks/useCanvasLifecycle'
 import { useCanvasStore } from '../../stores/canvas.store'
+import { useSpaceStore } from '../../stores/space.store'
+import { useChatStore } from '../../stores/chat.store'
 import { useWindowMaximize } from './viewers/useWindowMaximize'
 import { FileIcon } from '../icons/ToolIcons'
 import { api } from '../../api'
 import { useTranslation } from '../../i18n'
-
-// Default URL for new browser tabs
-const DEFAULT_NEW_TAB_URL = 'https://www.bing.com'
 
 interface CanvasTabsProps {
   tabs: TabState[]
@@ -291,7 +290,7 @@ export function CanvasTabs({
           <button
             onClick={onNewTab}
             className="canvas-tab-new"
-            title={t('New Tab (⌘T)')}
+            title={t('New conversation (⌘T)')}
           >
             <Plus className="w-4 h-4" />
           </button>
@@ -458,8 +457,9 @@ const TabItem = forwardRef<HTMLDivElement, TabItemProps>(function TabItem({
  * Uses canvasLifecycle for all state and actions
  */
 export function CanvasTabBar() {
-  const { t } = useTranslation()
-  const { tabs, activeTabId, switchTab, closeTab, closeAllTabs, refreshTab, openUrl } = useCanvasLifecycle()
+  const { tabs, activeTabId, switchTab, closeTab, closeAllTabs, refreshTab, openChat } = useCanvasLifecycle()
+  const currentSpace = useSpaceStore(state => state.currentSpace)
+  const createConversation = useChatStore(state => state.createConversation)
   const isCanvasMaximized = useCanvasStore(state => state.isMaximized)
   const toggleCanvasMaximized = useCanvasStore(state => state.toggleMaximized)
   const { isMaximized: isWindowMaximized, toggleMaximize: toggleWindowMaximize } = useWindowMaximize()
@@ -467,10 +467,16 @@ export function CanvasTabBar() {
   // Combined maximize state: both window AND canvas are maximized
   const isFullyMaximized = isCanvasMaximized && isWindowMaximized
 
-  // Handle new tab - opens Bing as default
+  // Handle new tab - create a new conversation in current space
   const handleNewTab = useCallback(() => {
-    openUrl(DEFAULT_NEW_TAB_URL, t('New Tab'))
-  }, [openUrl, t])
+    if (!currentSpace) return
+
+    void (async () => {
+      const newConversation = await createConversation(currentSpace.id)
+      if (!newConversation) return
+      openChat(currentSpace.id, newConversation.id, newConversation.title, currentSpace.path)
+    })()
+  }, [createConversation, currentSpace, openChat])
 
   // Handle combined maximize toggle: window maximize + canvas fullscreen
   const handleToggleMaximize = useCallback(async () => {

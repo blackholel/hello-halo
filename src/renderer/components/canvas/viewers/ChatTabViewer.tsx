@@ -330,7 +330,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
         onStop={handleStop}
         isGenerating={isGenerating}
         modeSwitching={modeSwitching}
-        placeholder={t('Continue conversation...')}
+        placeholder={t('Ask Kite anything, / for commands')}
         isCompact={true}
         spaceId={spaceId ?? null}
         workDir={resolvedWorkDir}
@@ -350,7 +350,7 @@ function EmptyState() {
     <div className="h-full flex flex-col items-center justify-center text-center px-4">
       <Sparkles className="w-8 h-8 text-primary/70" />
       <p className="mt-4 text-sm text-muted-foreground">
-        {t('Continue the conversation here')}
+        {t('Ask Kite anything, / for commands')}
       </p>
     </div>
   )

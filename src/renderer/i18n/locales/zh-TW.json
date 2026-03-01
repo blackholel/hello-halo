@@ -530,5 +530,11 @@
   "Search templates...": "搜尋模板...",
   "Already added. Overwrite existing resource?": "資源已存在，是否覆蓋？",
   "Open in Canvas": "在畫布中開啟",
-  "You can execute this plan directly, or reply with adjustments in chat.": "你可以直接執行這個計畫，或在聊天中回覆調整意見。"
+  "You can execute this plan directly, or reply with adjustments in chat.": "你可以直接執行這個計畫，或在聊天中回覆調整意見。",
+  "Ask Kite anything, / for commands": "向 Kite 任意提問，/ 調出命令",
+  "Current space files": "目前空間檔案目錄",
+  "Show current space files": "顯示目前空間檔案目錄",
+  "New conversation (⌘T)": "新建對話 (⌘T)",
+  "System files": "系統檔案",
+  "Unable to attach system file in current mode": "目前模式下無法附加系統檔案"
 }

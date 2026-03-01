@@ -593,5 +593,11 @@
   "Manage files in {{root}}/commands/ and {{path}}/.claude/commands/": "Manage files in {{root}}/commands/ and {{path}}/.claude/commands/",
   "Manage files in {{root}}/commands/": "Manage files in {{root}}/commands/",
   "Add .md files in {{root}}/commands or .claude/commands": "Add .md files in {{root}}/commands or .claude/commands",
-  "Add .md files in {{root}}/agents or .claude/agents": "Add .md files in {{root}}/agents or .claude/agents"
+  "Add .md files in {{root}}/agents or .claude/agents": "Add .md files in {{root}}/agents or .claude/agents",
+  "Ask Kite anything, / for commands": "Ask Kite anything, / for commands",
+  "Current space files": "Current space files",
+  "Show current space files": "Show current space files",
+  "New conversation (⌘T)": "New conversation (⌘T)",
+  "System files": "System files",
+  "Unable to attach system file in current mode": "Unable to attach system file in current mode"
 }

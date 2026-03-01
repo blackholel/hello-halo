@@ -412,14 +412,14 @@ export function ArtifactTree({ spaceId }: ArtifactTreeProps) {
 
           {/* Header with count */}
           <div className="flex-shrink-0 bg-card/95 backdrop-blur-sm px-2 py-1.5 border-b border-border/50 text-[10px] text-muted-foreground uppercase tracking-wider">
-            {t('Files')} ({itemCount})
+            {t('Current space files')} ({itemCount})
           </div>
 
           {/* Tree - uses window height based calculation */}
           <div className="flex-1 overflow-hidden">
             <Tree
               data={treeData}
-              openByDefault={false}
+              openByDefault={true}
               width="100%"
               height={treeHeight}
               indent={16}

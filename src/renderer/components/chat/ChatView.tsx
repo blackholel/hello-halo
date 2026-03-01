@@ -461,7 +461,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
         onStop={handleStop}
         isGenerating={isGenerating}
         modeSwitching={modeSwitching}
-        placeholder={isCompact ? t('Continue conversation...') : (currentSpace?.isTemp ? t('Say something to Kite...') : t('Continue conversation...'))}
+        placeholder={t('Ask Kite anything, / for commands')}
         isCompact={isCompact}
         spaceId={currentSpaceId}
         workDir={currentSpace?.path}
@@ -497,7 +497,7 @@ function EmptyState({ isTemp, isCompact = false }: { isTemp: boolean; isCompact?
           <Sparkles className="w-5 h-5 text-primary/70" />
         </div>
         <p className="mt-3 text-sm text-muted-foreground">
-          {t('Continue the conversation here')}
+          {t('Ask Kite anything, / for commands')}
         </p>
       </div>
     )

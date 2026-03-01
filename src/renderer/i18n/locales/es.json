@@ -519,5 +519,11 @@
   "Select a skill": "Selecciona una habilidad",
   "Select an agent": "Selecciona un agente",
   "Open in Canvas": "Abrir en Canvas",
-  "You can execute this plan directly, or reply with adjustments in chat.": "Puedes ejecutar este plan directamente o responder en el chat con ajustes."
+  "You can execute this plan directly, or reply with adjustments in chat.": "Puedes ejecutar este plan directamente o responder en el chat con ajustes.",
+  "Ask Kite anything, / for commands": "Pregunta cualquier cosa a Kite, / para comandos",
+  "Current space files": "Archivos del espacio actual",
+  "Show current space files": "Mostrar archivos del espacio actual",
+  "New conversation (⌘T)": "Nueva conversación (⌘T)",
+  "System files": "Archivos del sistema",
+  "Unable to attach system file in current mode": "No se puede adjuntar un archivo del sistema en el modo actual"
 }
