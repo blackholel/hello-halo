@@ -213,11 +213,10 @@ export function ResourceCard({
     if (!currentSpace || actionState.disabled) return
     try {
       setIsUpdatingToolkit(true)
-      if (inToolkit) {
-        await removeResource(currentSpace.id, directive)
-      } else {
-        await addResource(currentSpace.id, directive)
-      }
+      const updatedToolkit = inToolkit
+        ? await removeResource(currentSpace.id, directive)
+        : await addResource(currentSpace.id, directive)
+      if (!updatedToolkit) return
       onAfterAction?.()
     } finally {
       setIsUpdatingToolkit(false)

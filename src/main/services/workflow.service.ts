@@ -6,9 +6,9 @@ import { join } from 'path'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, rmSync } from 'fs'
 import { v4 as uuidv4 } from 'uuid'
 import { getSpace } from './space.service'
-import { listSpaceSkills } from './skills.service'
-import { listSpaceAgents } from './agents.service'
-import { listSpaceCommands } from './commands.service'
+import { listSkills } from './skills.service'
+import { listAgents } from './agents.service'
+import { listCommands } from './commands.service'
 import { getConfig } from './config.service'
 
 export interface WorkflowStep {
@@ -175,12 +175,16 @@ function validateWorkflowSteps(spaceId: string, steps: WorkflowStep[]): void {
     throw new Error('Space not found')
   }
 
-  const availableSkills = listSpaceSkills(space.path)
-  const availableAgents = listSpaceAgents(space.path)
-  const availableCommands = listSpaceCommands(space.path)
-  const allowLegacyWorkflowInternalDirect = getConfig().workflow?.allowLegacyInternalDirect !== false
+  const availableSkills = listSkills(space.path, 'workflow-validation')
+  const availableAgents = listAgents(space.path, 'workflow-validation')
+  const availableCommands = listCommands(space.path, 'workflow-validation')
+  const allowLegacyWorkflowInternalDirect = getConfig().workflow?.allowLegacyInternalDirect === true
 
   const missing: string[] = []
+  const rejects: Array<{ stepIndex: number; resource: string; reason: string }> = []
+  const addReject = (stepIndex: number, resource: string, reason: string): void => {
+    rejects.push({ stepIndex, resource, reason })
+  }
   for (const [index, step] of steps.entries()) {
     const parsed = parseDirectiveName(step.name || '')
     if (!parsed || step.type === 'message') continue
@@ -191,7 +195,10 @@ function validateWorkflowSteps(spaceId: string, steps: WorkflowStep[]): void {
         (skill.namespace || undefined) === (parsed.namespace || undefined)
       ))
       const disallowedInternal = matchedSkill?.exposure === 'internal-only' && !allowLegacyWorkflowInternalDirect
-      if (!matchedSkill || disallowedInternal) missing.push(`Step ${index + 1}: skill ${step.name}`)
+      if (!matchedSkill || disallowedInternal) {
+        missing.push(`Step ${index + 1}: skill ${step.name}`)
+        addReject(index + 1, `skill:${step.name}`, !matchedSkill ? 'not-found' : 'internal-only-direct-blocked')
+      }
     }
 
     if (step.type === 'agent') {
@@ -200,7 +207,10 @@ function validateWorkflowSteps(spaceId: string, steps: WorkflowStep[]): void {
         (agent.namespace || undefined) === (parsed.namespace || undefined)
       ))
       const disallowedInternal = matchedAgent?.exposure === 'internal-only' && !allowLegacyWorkflowInternalDirect
-      if (!matchedAgent || disallowedInternal) missing.push(`Step ${index + 1}: agent ${step.name}`)
+      if (!matchedAgent || disallowedInternal) {
+        missing.push(`Step ${index + 1}: agent ${step.name}`)
+        addReject(index + 1, `agent:${step.name}`, !matchedAgent ? 'not-found' : 'internal-only-direct-blocked')
+      }
     }
 
     if (step.type === 'command') {
@@ -209,12 +219,18 @@ function validateWorkflowSteps(spaceId: string, steps: WorkflowStep[]): void {
         (command.namespace || undefined) === (parsed.namespace || undefined)
       ))
       const disallowedInternal = matchedCommand?.exposure === 'internal-only' && !allowLegacyWorkflowInternalDirect
-      if (!matchedCommand || disallowedInternal) missing.push(`Step ${index + 1}: command ${step.name}`)
+      if (!matchedCommand || disallowedInternal) {
+        missing.push(`Step ${index + 1}: command ${step.name}`)
+        addReject(index + 1, `command:${step.name}`, !matchedCommand ? 'not-found' : 'internal-only-direct-blocked')
+      }
     }
   }
 
   if (missing.length > 0) {
-    throw new Error(`Workflow contains non-space resources: ${missing.join(', ')}`)
+    for (const reject of rejects) {
+      console.warn('[telemetry] workflow_validation_reject', reject)
+    }
+    throw new Error(`Workflow contains unavailable resources: ${missing.join(', ')}`)
   }
 }
 

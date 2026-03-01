@@ -28,6 +28,40 @@ function toErrorResponse(error: unknown): { success: false; error: string; error
   }
 }
 
+type SendMessageIpcRequest = {
+  spaceId: string
+  conversationId: string
+  message: string
+  resumeSessionId?: string
+  modelOverride?: string
+  model?: string
+  images?: Array<{
+    id: string
+    type: 'image'
+    mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
+    data: string
+    name?: string
+    size?: number
+  }>
+  thinkingEnabled?: boolean
+  planEnabled?: boolean
+  aiBrowserEnabled?: boolean
+  invocationContext?: InvocationContext
+  canvasContext?: {
+    isOpen: boolean
+    tabCount: number
+    activeTab: { type: string; title: string; url?: string; path?: string } | null
+    tabs: Array<{ type: string; title: string; url?: string; path?: string; isActive: boolean }>
+  }
+  fileContexts?: Array<{
+    id: string
+    type: 'file-context'
+    path: string
+    name: string
+    extension: string
+  }>
+}
+
 export function registerAgentHandlers(window: BrowserWindow | null): void {
   mainWindow = window
 
@@ -36,45 +70,20 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
     'agent:send-message',
     async (
       _event,
-      request: {
-        spaceId: string
-        conversationId: string
-        message: string
-        resumeSessionId?: string
-        modelOverride?: string
-        model?: string
-        images?: Array<{
-          id: string
-          type: 'image'
-          mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
-          data: string
-          name?: string
-          size?: number
-        }>
-        thinkingEnabled?: boolean  // Enable extended thinking mode
-        planEnabled?: boolean  // Enable plan mode (no tool execution)
-        aiBrowserEnabled?: boolean  // Enable AI Browser tools
-        invocationContext?: InvocationContext
-        canvasContext?: {
-          isOpen: boolean
-          tabCount: number
-          activeTab: { type: string; title: string; url?: string; path?: string } | null
-          tabs: Array<{ type: string; title: string; url?: string; path?: string; isActive: boolean }>
-        }
-        fileContexts?: Array<{  // File contexts for context injection
-          id: string
-          type: 'file-context'
-          path: string
-          name: string
-          extension: string
-        }>
-      }
+      request: SendMessageIpcRequest
     ) => {
       try {
+        if (request.invocationContext && request.invocationContext !== 'interactive') {
+          return {
+            success: false,
+            error: `invocationContext "${request.invocationContext}" is not allowed for agent:send-message`
+          }
+        }
+
         const normalizedModelOverride = request.modelOverride || request.model
         const normalizedRequest = normalizedModelOverride
-          ? { ...request, modelOverride: normalizedModelOverride }
-          : request
+          ? { ...request, modelOverride: normalizedModelOverride, invocationContext: 'interactive' as InvocationContext }
+          : { ...request, invocationContext: 'interactive' as InvocationContext }
         await sendMessage(mainWindow, normalizedRequest)
         return { success: true }
       } catch (error: unknown) {

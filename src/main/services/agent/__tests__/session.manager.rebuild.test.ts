@@ -9,10 +9,6 @@ vi.mock('../../config.service', () => ({
   onApiConfigChange: vi.fn()
 }))
 
-vi.mock('../../toolkit.service', () => ({
-  getToolkitHash: vi.fn(() => 'toolkit-hash')
-}))
-
 vi.mock('../../conversation.service', () => ({
   getConversation: vi.fn(() => null)
 }))
@@ -70,7 +66,6 @@ describe('session.manager rebuild', () => {
       profileId: 'profile-a',
       providerSignature: 'sig-a',
       effectiveModel: 'model-a',
-      toolkitHash: 'toolkit-1',
       enabledPluginMcpsHash: 'mcp-1',
       hasCanUseTool: true
     }

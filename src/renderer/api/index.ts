@@ -373,6 +373,62 @@ export const api = {
     return httpRequest('POST', '/api/agent/message', request)
   },
 
+  sendWorkflowStepMessage: async (request: {
+    spaceId: string
+    conversationId: string
+    message: string
+    resumeSessionId?: string
+    modelOverride?: string
+    model?: string
+    images?: Array<{
+      id: string
+      type: 'image'
+      mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
+      data: string
+      name?: string
+      size?: number
+    }>
+    aiBrowserEnabled?: boolean
+    thinkingEnabled?: boolean
+    planEnabled?: boolean
+    canvasContext?: {
+      isOpen: boolean
+      tabCount: number
+      activeTab: {
+        type: string
+        title: string
+        url?: string
+        path?: string
+      } | null
+      tabs: Array<{
+        type: string
+        title: string
+        url?: string
+        path?: string
+        isActive: boolean
+      }>
+    }
+    fileContexts?: Array<{
+      id: string
+      type: 'file-context'
+      path: string
+      name: string
+      extension: string
+    }>
+  }): Promise<ApiResponse> => {
+    if (!isElectron()) {
+      subscribeToConversation(request.conversationId)
+    }
+
+    if (isElectron()) {
+      return window.kite.sendWorkflowStepMessage(request)
+    }
+    return httpRequest('POST', '/api/agent/message', {
+      ...request,
+      invocationContext: 'interactive'
+    })
+  },
+
   stopGeneration: async (conversationId?: string): Promise<ApiResponse> => {
     if (isElectron()) {
       return window.kite.stopGeneration(conversationId)

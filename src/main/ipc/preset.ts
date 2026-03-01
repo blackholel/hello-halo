@@ -7,6 +7,7 @@
 import { ipcMain } from 'electron'
 import { listPresets, getPreset, savePreset } from '../services/preset.service'
 import type { SpaceToolkit } from '../services/space-config.service'
+import type { ResourceRef } from '../services/resource-ref.service'
 
 export function registerPresetHandlers(): void {
   ipcMain.handle('preset:list', async () => {
@@ -31,10 +32,10 @@ export function registerPresetHandlers(): void {
     _event,
     name: string,
     description: string,
-    toolkit: SpaceToolkit
+    resources: ResourceRef[] | SpaceToolkit
   ) => {
     try {
-      return { success: true, data: savePreset(name, description, toolkit) }
+      return { success: true, data: savePreset(name, description, resources) }
     } catch (error: unknown) {
       return { success: false, error: (error as Error).message }
     }

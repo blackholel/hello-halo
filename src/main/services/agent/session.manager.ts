@@ -6,7 +6,6 @@
 
 import { unstable_v2_createSession } from '@anthropic-ai/claude-agent-sdk'
 import { getConfig, onApiConfigChange } from '../config.service'
-import { getToolkitHash } from '../toolkit.service'
 import { getConversation } from '../conversation.service'
 import { getHeadlessElectronPath } from './electron-path'
 import { resolveProvider } from './provider-resolver'
@@ -54,22 +53,42 @@ function startSessionCleanup(): void {
   }, 60 * 1000)
 }
 
-/**
- * Check if session config requires rebuild.
- * Only process-level params need rebuild; runtime params use setXxx() methods.
- */
-function needsSessionRebuild(existing: V2SessionInfo, newConfig: SessionConfig): boolean {
-  return (
-    existing.config.aiBrowserEnabled !== newConfig.aiBrowserEnabled ||
-    existing.config.skillsLazyLoad !== newConfig.skillsLazyLoad ||
-    (existing.config.profileId || '') !== (newConfig.profileId || '') ||
-    (existing.config.providerSignature || '') !== (newConfig.providerSignature || '') ||
-    (existing.config.effectiveModel || '') !== (newConfig.effectiveModel || '') ||
-    (existing.config.toolkitHash || '') !== (newConfig.toolkitHash || '') ||
-    (existing.config.enabledPluginMcpsHash || '') !== (newConfig.enabledPluginMcpsHash || '') ||
-    // Rebuild if canUseTool presence changed (needed for AskUserQuestion support)
-    (existing.config.hasCanUseTool || false) !== (newConfig.hasCanUseTool || false)
-  )
+function getSessionRebuildReasons(existing: SessionConfig, next: SessionConfig): string[] {
+  const reasons: string[] = []
+  if (existing.aiBrowserEnabled !== next.aiBrowserEnabled) reasons.push('aiBrowserEnabled')
+  if (existing.skillsLazyLoad !== next.skillsLazyLoad) reasons.push('skillsLazyLoad')
+  if ((existing.profileId || '') !== (next.profileId || '')) reasons.push('profileId')
+  if ((existing.providerSignature || '') !== (next.providerSignature || '')) reasons.push('providerSignature')
+  if ((existing.effectiveModel || '') !== (next.effectiveModel || '')) reasons.push('effectiveModel')
+  if ((existing.enabledPluginMcpsHash || '') !== (next.enabledPluginMcpsHash || '')) reasons.push('enabledPluginMcpsHash')
+  if ((existing.hasCanUseTool || false) !== (next.hasCanUseTool || false)) reasons.push('hasCanUseTool')
+  return reasons
+}
+
+function buildSessionConfigSignature(config: SessionConfig): string {
+  return JSON.stringify({
+    aiBrowserEnabled: config.aiBrowserEnabled,
+    skillsLazyLoad: config.skillsLazyLoad,
+    profileId: config.profileId || '',
+    providerSignature: config.providerSignature || '',
+    effectiveModel: config.effectiveModel || '',
+    enabledPluginMcpsHash: config.enabledPluginMcpsHash || '',
+    hasCanUseTool: config.hasCanUseTool || false
+  })
+}
+
+function emitAgentSessionRebuildEvent(
+  conversationId: string,
+  reasons: string[],
+  previous: SessionConfig,
+  next: SessionConfig
+): void {
+  console.warn('[telemetry] agent_session_rebuild', {
+    conversationId,
+    reasons,
+    previousConfigHash: buildSessionConfigSignature(previous),
+    nextConfigHash: buildSessionConfigSignature(next)
+  })
 }
 
 /**
@@ -101,7 +120,8 @@ export async function getOrCreateV2Session(
 ): Promise<V2SDKSession> {
   const existing = v2Sessions.get(conversationId)
   if (existing) {
-    if (config && needsSessionRebuild(existing, config)) {
+    const reasons = config ? getSessionRebuildReasons(existing.config, config) : []
+    if (config && reasons.length > 0) {
       console.log(
         `[Agent][${conversationId}] Session config changed, rebuilding session`,
         {
@@ -117,6 +137,7 @@ export async function getOrCreateV2Session(
           }
         }
       )
+      emitAgentSessionRebuildEvent(conversationId, reasons, existing.config, config)
       closeV2SessionForRebuild(conversationId)
     } else {
       console.log(`[Agent][${conversationId}] Reusing existing V2 session`)
@@ -141,7 +162,7 @@ export async function getOrCreateV2Session(
     conversationId,
     createdAt: Date.now(),
     lastUsedAt: Date.now(),
-    config: config || { aiBrowserEnabled: false, skillsLazyLoad: false, toolkitHash: '', enabledPluginMcpsHash: '' }
+    config: config || { aiBrowserEnabled: false, skillsLazyLoad: false, enabledPluginMcpsHash: '' }
   })
 
   startSessionCleanup()
@@ -160,8 +181,7 @@ export async function ensureSessionWarm(spaceId: string, conversationId: string)
     | null
   const sessionId = conversation?.sessionId
   const electronPath = getHeadlessElectronPath()
-  const { effectiveLazyLoad: skillsLazyLoad, toolkit } = getEffectiveSkillsLazyLoad(workDir, config)
-  const toolkitHash = getToolkitHash(toolkit)
+  const { effectiveLazyLoad: skillsLazyLoad } = getEffectiveSkillsLazyLoad(workDir, config)
   const effectiveAi = resolveEffectiveConversationAi(spaceId, conversationId)
   const configuredConversationProfileId = toNonEmptyString(conversation?.ai?.profileId)
   const defaultProfileId = toNonEmptyString(config.ai?.defaultProfileId)
@@ -212,7 +232,6 @@ export async function ensureSessionWarm(spaceId: string, conversationId: string)
         profileId: effectiveAi.profileId,
         providerSignature: effectiveAi.providerSignature,
         effectiveModel: effectiveAi.effectiveModel,
-        toolkitHash,
         enabledPluginMcpsHash: getEnabledPluginMcpHash(conversationId),
         hasCanUseTool: true // Session has canUseTool callback
       }

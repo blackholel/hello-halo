@@ -55,7 +55,7 @@ export function initializeExtendedServices(mainWindow: BrowserWindow): void {
   registerRemoteHandlers(mainWindow)
 
   // Workflows: Space-level workflow management
-  registerWorkflowHandlers()
+  registerWorkflowHandlers(mainWindow)
 
   // Browser: Embedded BrowserView for Content Canvas
   // Note: BrowserView is created lazily when Canvas is opened

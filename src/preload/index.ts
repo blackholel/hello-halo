@@ -115,6 +115,49 @@ export interface KiteAPI {
       }>
     }
   }) => Promise<IpcResponse>
+  sendWorkflowStepMessage: (request: {
+    spaceId: string
+    conversationId: string
+    message: string
+    resumeSessionId?: string
+    modelOverride?: string
+    model?: string
+    images?: Array<{
+      id: string
+      type: 'image'
+      mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
+      data: string
+      name?: string
+      size?: number
+    }>
+    aiBrowserEnabled?: boolean
+    thinkingEnabled?: boolean
+    planEnabled?: boolean
+    canvasContext?: {
+      isOpen: boolean
+      tabCount: number
+      activeTab: {
+        type: string
+        title: string
+        url?: string
+        path?: string
+      } | null
+      tabs: Array<{
+        type: string
+        title: string
+        url?: string
+        path?: string
+        isActive: boolean
+      }>
+    }
+    fileContexts?: Array<{
+      id: string
+      type: 'file-context'
+      path: string
+      name: string
+      extension: string
+    }>
+  }) => Promise<IpcResponse>
   stopGeneration: (conversationId?: string) => Promise<IpcResponse>
   approveTool: (conversationId: string) => Promise<IpcResponse>
   rejectTool: (conversationId: string) => Promise<IpcResponse>
@@ -440,6 +483,7 @@ const api: KiteAPI = {
 
   // Agent
   sendMessage: (request) => ipcRenderer.invoke('agent:send-message', request),
+  sendWorkflowStepMessage: (request) => ipcRenderer.invoke('workflow:send-step-message', request),
   stopGeneration: (conversationId) => ipcRenderer.invoke('agent:stop', conversationId),
   approveTool: (conversationId) => ipcRenderer.invoke('agent:approve-tool', conversationId),
   rejectTool: (conversationId) => ipcRenderer.invoke('agent:reject-tool', conversationId),

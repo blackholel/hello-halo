@@ -264,8 +264,7 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
       images,
       thinkingEnabled,
       aiBrowserEnabled,
-      planEnabled,
-      invocationContext
+      planEnabled
     } = req.body
     const result = await agentController.sendMessage(mainWindow, {
       spaceId,
@@ -277,10 +276,16 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
       images,  // Pass images for multi-modal messages (remote access)
       thinkingEnabled,  // Pass thinking mode for extended thinking (remote access)
       aiBrowserEnabled,  // Pass AI Browser toggle for remote access
-      planEnabled,
-      invocationContext
+      planEnabled
     })
     res.json(result)
+  })
+
+  app.post('/api/workflow/step-message', async (_req: Request, res: Response) => {
+    res.status(403).json({
+      success: false,
+      error: 'workflow-step endpoint is restricted to trusted internal channels'
+    })
   })
 
   app.post('/api/agent/stop', async (req: Request, res: Response) => {

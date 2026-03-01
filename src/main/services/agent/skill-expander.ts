@@ -58,6 +58,7 @@ interface ExpandLazyDirectiveOptions {
   resourceExposureEnabled?: boolean
   allowLegacyWorkflowInternalDirect?: boolean
   legacyDependencyRegexEnabled?: boolean
+  bypassToolkitAllowlist?: boolean
 }
 
 export interface LazyExpansionResult {
@@ -72,6 +73,21 @@ export interface LazyExpansionResult {
     commands: string[]
     agents: string[]
   }
+}
+
+function emitResourceExposureBlockEvent(
+  type: 'skill' | 'agent' | 'command',
+  token: ParsedDirectiveToken,
+  context: InvocationContext,
+  exposure: ResourceExposure | undefined
+): void {
+  console.warn('[telemetry] resource_exposure_block', {
+    type,
+    token: token.raw,
+    exposure: exposure || 'public',
+    context,
+    callerChannel: context
+  })
 }
 
 /**
@@ -181,8 +197,10 @@ function findReferencedSkill(commandContent: string): string | null {
 function canUseFromToolkit(
   toolkit: SpaceToolkit | null | undefined,
   type: 'skill' | 'command' | 'agent',
-  token: ParsedDirectiveToken
+  token: ParsedDirectiveToken,
+  options?: ExpandLazyDirectiveOptions
 ): boolean {
+  if (options?.bypassToolkitAllowlist) return true
   if (!toolkit) return true
   return toolkitContains(toolkit, type, {
     name: token.name,
@@ -260,7 +278,7 @@ function expandRequiredSkillDependency(
   options?: ExpandLazyDirectiveOptions,
   args?: string
 ): string | null {
-  if (!canUseFromToolkit(toolkit, 'skill', token)) {
+  if (!canUseFromToolkit(toolkit, 'skill', token, options)) {
     pushMissing(state, 'skills', token.raw)
     return null
   }
@@ -293,7 +311,7 @@ function expandRequiredAgentDependency(
   toolkit?: SpaceToolkit | null,
   options?: ExpandLazyDirectiveOptions
 ): string | null {
-  if (!canUseFromToolkit(toolkit, 'agent', token)) {
+  if (!canUseFromToolkit(toolkit, 'agent', token, options)) {
     pushMissing(state, 'agents', token.raw)
     return null
   }
@@ -331,7 +349,7 @@ function expandAgentDirective(
     return null
   }
 
-  if (!canUseFromToolkit(toolkit, 'agent', token)) {
+  if (!canUseFromToolkit(toolkit, 'agent', token, options)) {
     pushMissing(state, 'agents', token.raw)
     return null
   }
@@ -343,6 +361,7 @@ function expandAgentDirective(
   }
   const invocationContext = options?.invocationContext || 'interactive'
   if (!canUseExposure(agentDefinition.exposure, invocationContext, options)) {
+    emitResourceExposureBlockEvent('agent', token, invocationContext, agentDefinition.exposure)
     pushMissing(state, 'agents', token.raw)
     return null
   }
@@ -381,12 +400,13 @@ function expandSlashDirective(
     }
     const directContext = options?.invocationContext || 'interactive'
     if (!canUseExposure(commandDefinition?.exposure, directContext, options)) {
+      emitResourceExposureBlockEvent('command', token, directContext, commandDefinition?.exposure)
       pushMissing(state, 'commands', token.raw)
       return null
     }
     warnWorkflowLegacyInternal('command', token, directContext, commandDefinition?.exposure, options)
 
-    if (!canUseFromToolkit(toolkit, 'command', token)) {
+    if (!canUseFromToolkit(toolkit, 'command', token, options)) {
       pushMissing(state, 'commands', token.raw)
       return null
     }
@@ -447,7 +467,7 @@ function expandSlashDirective(
     ].join('\n')
   }
 
-  if (!canUseFromToolkit(toolkit, 'skill', token)) {
+  if (!canUseFromToolkit(toolkit, 'skill', token, options)) {
     pushMissing(state, 'skills', token.raw)
     return null
   }
@@ -459,6 +479,7 @@ function expandSlashDirective(
   }
   const invocationContext = options?.invocationContext || 'interactive'
   if (!canUseExposure(skillDefinition.exposure, invocationContext, options)) {
+    emitResourceExposureBlockEvent('skill', token, invocationContext, skillDefinition.exposure)
     pushMissing(state, 'skills', token.raw)
     return null
   }

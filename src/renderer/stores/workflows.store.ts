@@ -86,7 +86,7 @@ function shouldSummarizeAfterStep(step: WorkflowStep, stepIndex: number, totalSt
   return !!step.summarizeAfter && stepIndex < totalSteps - 1
 }
 
-function hasSpaceResource(
+function hasAvailableResource(
   name: string,
   refs: Array<{ name: string; namespace?: string }>
 ): boolean {
@@ -220,30 +220,27 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
         api.listCommands(knownSpace.path, locale, 'workflow-validation')
       ])
 
-      const spaceSkills = (skillsResponse.success ? (skillsResponse.data as Array<{ name: string; namespace?: string; source: string }>) : [])
-        .filter(skill => skill.source === 'space')
-      const spaceAgents = (agentsResponse.success ? (agentsResponse.data as Array<{ name: string; namespace?: string; source: string }>) : [])
-        .filter(agent => agent.source === 'space')
-      const spaceCommands = (commandsResponse.success ? (commandsResponse.data as Array<{ name: string; namespace?: string; source: string }>) : [])
-        .filter(command => command.source === 'space')
+      const availableSkills = (skillsResponse.success ? (skillsResponse.data as Array<{ name: string; namespace?: string }>) : [])
+      const availableAgents = (agentsResponse.success ? (agentsResponse.data as Array<{ name: string; namespace?: string }>) : [])
+      const availableCommands = (commandsResponse.success ? (commandsResponse.data as Array<{ name: string; namespace?: string }>) : [])
 
       const missingSteps: string[] = []
       workflow.steps.forEach((step, index) => {
         const stepName = step.name?.trim()
         if (!stepName) return
-        if (step.type === 'skill' && !hasSpaceResource(stepName, spaceSkills)) {
+        if (step.type === 'skill' && !hasAvailableResource(stepName, availableSkills)) {
           missingSteps.push(`Step ${index + 1}: skill ${stepName}`)
         }
-        if (step.type === 'agent' && !hasSpaceResource(stepName, spaceAgents)) {
+        if (step.type === 'agent' && !hasAvailableResource(stepName, availableAgents)) {
           missingSteps.push(`Step ${index + 1}: agent ${stepName}`)
         }
-        if (step.type === 'command' && !hasSpaceResource(stepName, spaceCommands)) {
+        if (step.type === 'command' && !hasAvailableResource(stepName, availableCommands)) {
           missingSteps.push(`Step ${index + 1}: command ${stepName}`)
         }
       })
 
       if (missingSteps.length > 0) {
-        const message = `Workflow contains non-space resources: ${missingSteps.join(', ')}`
+        const message = `Workflow contains unavailable resources: ${missingSteps.join(', ')}`
         console.warn('[WorkflowsStore]', message)
         set({ error: message })
         return

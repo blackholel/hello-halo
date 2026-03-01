@@ -176,7 +176,7 @@ export function getResourceExposureRuntimeFlags(): RuntimeExposureFlags {
 
   return {
     exposureEnabled: config.resourceExposure?.enabled !== false,
-    allowLegacyInternalDirect: config.workflow?.allowLegacyInternalDirect !== false,
+    allowLegacyInternalDirect: config.workflow?.allowLegacyInternalDirect === true,
     legacyDependencyRegexEnabled: config.commands?.legacyDependencyRegexEnabled !== false
   }
 }

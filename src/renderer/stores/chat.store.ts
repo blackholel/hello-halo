@@ -1143,8 +1143,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
       }
 
-      // Send to agent (with images, AI Browser state, thinking mode, plan mode, canvas context, and file contexts)
-      await api.sendMessage({
+      const context = invocationContext || 'interactive'
+      if (context !== 'interactive' && context !== 'workflow-step') {
+        throw new Error(`Unsupported invocationContext from renderer: ${context}`)
+      }
+
+      const baseRequest = {
         spaceId: currentSpaceId,
         conversationId,
         message: content,
@@ -1152,10 +1156,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
         aiBrowserEnabled,  // Pass AI Browser state to API
         thinkingEnabled,  // Pass thinking mode to API
         planEnabled: effectivePlanEnabled,  // Pass plan mode to API
-        invocationContext: invocationContext || 'interactive',
         canvasContext: buildCanvasContext(),  // Pass canvas context for AI awareness
         fileContexts: fileContexts  // Pass file contexts for context injection
-      })
+      }
+
+      if (context === 'workflow-step') {
+        await api.sendWorkflowStepMessage(baseRequest)
+      } else {
+        await api.sendMessage({
+          ...baseRequest,
+          invocationContext: 'interactive'
+        })
+      }
     } catch (error) {
       console.error('Failed to send message:', error)
       // Update session error state
@@ -1239,8 +1251,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
         return { spaceStates: newSpaceStates, conversationCache: newCache }
       })
 
-      // Send to agent (without AI Browser for tab context, with thinking mode, plan mode and file contexts)
-      await api.sendMessage({
+      const context = invocationContext || 'interactive'
+      if (context !== 'interactive' && context !== 'workflow-step') {
+        throw new Error(`Unsupported invocationContext from renderer: ${context}`)
+      }
+
+      const baseRequest = {
         spaceId,
         conversationId,
         message: content,
@@ -1248,10 +1264,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
         aiBrowserEnabled: aiBrowserEnabled ?? false,
         thinkingEnabled,
         planEnabled: effectivePlanEnabled,
-        invocationContext: invocationContext || 'interactive',
-        canvasContext: undefined, // No canvas context for tab messages
+        canvasContext: undefined as undefined, // No canvas context for tab messages
         fileContexts: fileContexts
-      })
+      }
+
+      if (context === 'workflow-step') {
+        await api.sendWorkflowStepMessage(baseRequest)
+      } else {
+        await api.sendMessage({
+          ...baseRequest,
+          invocationContext: 'interactive'
+        })
+      }
     } catch (error) {
       console.error('Failed to send message to conversation:', error)
       // Update session error state

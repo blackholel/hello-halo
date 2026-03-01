@@ -45,6 +45,7 @@ export default defineConfig({
       '../src/renderer/components/chat/__tests__/message-list.thought-priority.test.ts',
       '../src/renderer/components/chat/__tests__/thought-process.visibility.test.ts',
       '../src/renderer/stores/__tests__/chat.store.ask-user-question.test.ts',
+      '../src/renderer/stores/__tests__/workflows.store.validation.test.ts',
       '../src/renderer/stores/__tests__/composer-mru.store.test.ts',
       '../src/renderer/utils/__tests__/composer-suggestion-ranking.test.ts'
     ],

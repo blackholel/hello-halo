@@ -254,7 +254,6 @@ export interface SessionConfig {
   profileId?: string
   providerSignature?: string
   effectiveModel?: string
-  toolkitHash?: string
   enabledPluginMcpsHash?: string
   hasCanUseTool?: boolean // Track if session has canUseTool callback
 }

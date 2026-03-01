@@ -8,9 +8,6 @@
 import { create } from 'zustand'
 import { api } from '../api'
 import i18n from '../i18n'
-import { useSpaceStore } from './space.store'
-import { useToolkitStore } from './toolkit.store'
-import { buildDirective } from '../utils/directive-helpers'
 import type { SceneTag } from '../../shared/extension-taxonomy'
 import type { ResourceExposure } from '../../shared/resource-access'
 
@@ -111,14 +108,6 @@ export const useCommandsStore = create<CommandsState>((set, get) => ({
 
           return { commands: nextCommands }
         })
-
-        const currentSpace = useSpaceStore.getState().currentSpace
-        if (currentSpace) {
-          const toolkitStore = useToolkitStore.getState()
-          if (toolkitStore.getToolkit(currentSpace.id)) {
-            void toolkitStore.addResource(currentSpace.id, buildDirective('command', newCommand))
-          }
-        }
 
         return newCommand
       }

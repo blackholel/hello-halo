@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { getExecutionLayerAllowedSources } from '../space-resource-policy.service'
 
 const skillDefinitions = {
   'space-skill': { source: 'space', exposure: 'public' as const },
@@ -83,6 +84,25 @@ describe('skill-expander strict allowSources', () => {
     expect(result.expanded.skills).toEqual(['app-skill'])
     expect(result.expanded.agents).toEqual(['app-agent'])
     expect(result.expanded.commands).toEqual(['app-command'])
+  })
+
+  it('allows global and space resources when bypassing toolkit allowlist', () => {
+    const result = expandLazyDirectives(
+      '/space-skill\n/app-skill\n@app-agent\n/app-command',
+      undefined,
+      { skills: [], agents: [], commands: [] },
+      {
+        allowSources: getExecutionLayerAllowedSources(),
+        bypassToolkitAllowlist: true
+      }
+    )
+
+    expect(result.expanded.skills).toEqual(['space-skill', 'app-skill'])
+    expect(result.expanded.agents).toEqual(['app-agent'])
+    expect(result.expanded.commands).toEqual(['app-command'])
+    expect(result.missing.skills).toEqual([])
+    expect(result.missing.agents).toEqual([])
+    expect(result.missing.commands).toEqual([])
   })
 
   it('passes command args to explicit required skills', () => {

@@ -276,7 +276,7 @@ const DEFAULT_CONFIG: KiteConfig = {
     enabled: true
   },
   workflow: {
-    allowLegacyInternalDirect: true
+    allowLegacyInternalDirect: false
   },
   commands: {
     legacyDependencyRegexEnabled: true
@@ -688,7 +688,7 @@ export function getConfig(): KiteConfig {
         allowLegacyInternalDirect:
           typeof parsed.workflow?.allowLegacyInternalDirect === 'boolean'
             ? parsed.workflow.allowLegacyInternalDirect
-            : DEFAULT_CONFIG.workflow?.allowLegacyInternalDirect !== false
+            : DEFAULT_CONFIG.workflow?.allowLegacyInternalDirect === true
       },
       commands: {
         legacyDependencyRegexEnabled:

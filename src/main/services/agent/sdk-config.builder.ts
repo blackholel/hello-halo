@@ -71,8 +71,8 @@ function getConfigSkillsLazyLoad(
 }
 
 /**
- * Toolkit-aware lazy-load decision.
- * When toolkit is configured (non-null), lazy-load is forced.
+ * Lazy-load decision for execution paths.
+ * Lazy-load is enabled by strict policy or explicit config flags.
  */
 export function getEffectiveSkillsLazyLoad(
   workDir: string,
@@ -89,7 +89,7 @@ export function getEffectiveSkillsLazyLoad(
   const toolkit = getSpaceToolkit(workDir)
   const policy = getSpaceResourcePolicy(workDir)
   const strictSpaceOnly = isStrictSpaceOnlyPolicy(policy)
-  const effectiveLazyLoad = strictSpaceOnly || configLazyLoad || toolkit !== null
+  const effectiveLazyLoad = strictSpaceOnly || configLazyLoad
   return { configLazyLoad, effectiveLazyLoad, toolkit, strictSpaceOnly }
 }
 
@@ -102,7 +102,7 @@ export function buildPluginsConfig(workDir: string): PluginConfig[] {
   const config = getConfig()
   const spaceConfig = getSpaceConfig(workDir)
   const claudeCodeConfig = config.claudeCode
-  const { configLazyLoad, effectiveLazyLoad, toolkit, strictSpaceOnly } = getEffectiveSkillsLazyLoad(workDir, config)
+  const { effectiveLazyLoad, strictSpaceOnly } = getEffectiveSkillsLazyLoad(workDir, config)
 
   // Helper to add plugin if valid and not already added
   const addedPaths = new Set<string>()
@@ -121,22 +121,23 @@ export function buildPluginsConfig(workDir: string): PluginConfig[] {
   }
 
   if (strictSpaceOnly) {
+    for (const plugin of listEnabledPlugins()) {
+      addIfValid(plugin.installPath)
+    }
+    addIfValid(getLockedUserConfigRootDir())
+
     const spacePaths = spaceConfig?.claudeCode?.plugins?.paths || []
     for (const spacePath of spacePaths) {
       const resolvedPath = spacePath.startsWith('/') ? spacePath : join(workDir, spacePath)
       addIfValid(resolvedPath)
     }
     addIfValid(join(workDir, '.claude'))
-    console.log('[Agent] Strict space-only mode: loading only space plugin directories')
+    console.log('[Agent] Strict space-only mode: loading global and space plugin directories')
     return plugins
   }
 
   if (effectiveLazyLoad) {
-    if (!configLazyLoad && toolkit) {
-      console.log('[Agent] Toolkit allowlist active: forcing skills lazy-load and skipping plugin directories')
-    } else {
-      console.log('[Agent] Skills lazy-load enabled: skipping plugin directories for Claude Code')
-    }
+    console.log('[Agent] Skills lazy-load enabled: skipping plugin directories for Claude Code')
     return plugins
   }
 
@@ -202,14 +203,10 @@ export function buildPluginsConfig(workDir: string): PluginConfig[] {
 export function buildSettingSources(workDir: string): SettingSource[] {
   const config = getConfig()
   const spaceConfig = getSpaceConfig(workDir)
-  const { configLazyLoad, effectiveLazyLoad, toolkit, strictSpaceOnly } = getEffectiveSkillsLazyLoad(workDir, config)
+  const { effectiveLazyLoad, strictSpaceOnly } = getEffectiveSkillsLazyLoad(workDir, config)
 
   if (strictSpaceOnly || effectiveLazyLoad) {
-    if (!configLazyLoad && toolkit) {
-      console.log('[Agent] Toolkit allowlist active: forcing settingSources=local only')
-    } else {
-      console.log('[Agent] Skills lazy-load enabled: settingSources=local only')
-    }
+    console.log('[Agent] Skills lazy-load enabled: settingSources=local only')
     return ['local']
   }
 
@@ -298,15 +295,7 @@ function buildMcpServersConfig(
 /**
  * Build system prompt append.
  */
-function formatToolkitList(items: Array<{ name: string; namespace?: string }>): string {
-  if (items.length === 0) return '[]'
-  const sorted = [...items]
-    .map(item => item.namespace ? `${item.namespace}:${item.name}` : item.name)
-    .sort((a, b) => a.localeCompare(b))
-  return `[${sorted.join(', ')}]`
-}
-
-export function buildSystemPromptAppend(workDir: string, toolkit?: SpaceToolkit | null): string {
+export function buildSystemPromptAppend(workDir: string): string {
   const base = `
 You are Kite, an AI assistant that helps users accomplish real work.
 All created files will be saved in the user's workspace. Current workspace: ${workDir}.
@@ -318,21 +307,7 @@ Use multiSelect=true only when multiple choices can be valid at the same time.
 Avoid duplicate question texts and duplicate option labels.
 If follow-up questions are predictable, include them in the same AskUserQuestion call.
 `
-
-  if (!toolkit) {
-    return base
-  }
-
-  const toolkitAppend = `
-
-## Space Toolkit Allowlist
-Available skills in this space: ${formatToolkitList(toolkit.skills)}
-Available agents in this space: ${formatToolkitList(toolkit.agents)}
-Available commands in this space: ${formatToolkitList(toolkit.commands)}
-Do NOT use resources outside this list.
-`
-
-  return `${base}${toolkitAppend}`
+  return base
 }
 
 /**
@@ -397,7 +372,7 @@ export function buildSdkOptions(params: BuildSdkOptionsParams): Record<string, a
   } = params
 
   const spaceConfig = getSpaceConfig(workDir)
-  const { effectiveLazyLoad, toolkit, strictSpaceOnly } = getEffectiveSkillsLazyLoad(workDir, config)
+  const { effectiveLazyLoad, strictSpaceOnly } = getEffectiveSkillsLazyLoad(workDir, config)
   const shouldInjectAnthropicCompatEnvDefaults = (() => {
     try {
       const effectiveAi = resolveEffectiveConversationAi(spaceId, conversationId, effectiveModel)
@@ -454,7 +429,7 @@ export function buildSdkOptions(params: BuildSdkOptionsParams): Record<string, a
       type: 'preset' as const,
       preset: 'claude_code' as const,
       append: [
-        buildSystemPromptAppend(workDir, toolkit),
+        buildSystemPromptAppend(workDir),
         aiBrowserEnabled ? AI_BROWSER_SYSTEM_PROMPT : '',
         effectiveLazyLoad ? SKILLS_LAZY_SYSTEM_PROMPT : ''
       ].filter(Boolean).join('\n')
