@@ -16,12 +16,16 @@ import {
   clearSkillsCache
 } from '../services/skills.service'
 import type { ResourceRef } from '../services/resource-ref.service'
+import { isResourceListView } from '../../shared/resource-access'
 
 export function registerSkillsHandlers(): void {
   // List all available skills
-  ipcMain.handle('skills:list', async (_event, workDir?: string, locale?: string) => {
+  ipcMain.handle('skills:list', async (_event, workDir?: string, locale?: string, view?: string) => {
     try {
-      const skills = listSkills(workDir, locale)
+      if (!isResourceListView(view)) {
+        return { success: false, error: 'view is required and must be a valid ResourceListView' }
+      }
+      const skills = listSkills(workDir, view, locale)
       return { success: true, data: skills }
     } catch (error: unknown) {
       const err = error as Error

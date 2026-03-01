@@ -16,6 +16,7 @@ import {
   getAuthToken
 } from './transport'
 import type { ChatMode } from '../types'
+import type { InvocationContext, ResourceListView } from '../../shared/resource-access'
 
 // Response type
 interface ApiResponse<T = unknown> {
@@ -337,6 +338,7 @@ export const api = {
     thinkingEnabled?: boolean  // Enable extended thinking mode
     planEnabled?: boolean  // Enable plan mode (no tool execution)
     mode?: ChatMode
+    invocationContext?: InvocationContext
     canvasContext?: {  // Canvas context for AI awareness
       isOpen: boolean
       tabCount: number
@@ -382,6 +384,63 @@ export const api = {
       return window.kite.setAgentMode(conversationId, mode, runId)
     }
     return httpRequest('POST', '/api/agent/mode', { conversationId, mode, runId })
+  },
+
+  sendWorkflowStepMessage: async (request: {
+    spaceId: string
+    conversationId: string
+    message: string
+    resumeSessionId?: string
+    modelOverride?: string
+    model?: string
+    images?: Array<{
+      id: string
+      type: 'image'
+      mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
+      data: string
+      name?: string
+      size?: number
+    }>
+    aiBrowserEnabled?: boolean
+    thinkingEnabled?: boolean
+    planEnabled?: boolean
+    mode?: ChatMode
+    canvasContext?: {
+      isOpen: boolean
+      tabCount: number
+      activeTab: {
+        type: string
+        title: string
+        url?: string
+        path?: string
+      } | null
+      tabs: Array<{
+        type: string
+        title: string
+        url?: string
+        path?: string
+        isActive: boolean
+      }>
+    }
+    fileContexts?: Array<{
+      id: string
+      type: 'file-context'
+      path: string
+      name: string
+      extension: string
+    }>
+  }): Promise<ApiResponse> => {
+    if (!isElectron()) {
+      subscribeToConversation(request.conversationId)
+    }
+
+    if (isElectron()) {
+      return window.kite.sendWorkflowStepMessage(request)
+    }
+    return httpRequest('POST', '/api/agent/message', {
+      ...request,
+      invocationContext: 'interactive'
+    })
   },
 
   stopGeneration: async (conversationId?: string): Promise<ApiResponse> => {
@@ -603,13 +662,18 @@ export const api = {
   },
 
   // ===== Skills =====
-  listSkills: async (workDir?: string, locale?: string): Promise<ApiResponse> => {
+  listSkills: async (
+    workDir: string | undefined,
+    locale: string | undefined,
+    view: ResourceListView
+  ): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.kite.listSkills(workDir, locale)
+      return window.kite.listSkills(workDir, locale, view)
     }
     const params = new URLSearchParams()
     if (workDir) params.append('workDir', workDir)
     if (locale) params.append('locale', locale)
+    params.append('view', view)
     const query = params.toString()
     return httpRequest('GET', `/api/skills${query ? `?${query}` : ''}`)
   },
@@ -670,13 +734,18 @@ export const api = {
   },
 
   // ===== Commands =====
-  listCommands: async (workDir?: string, locale?: string): Promise<ApiResponse> => {
+  listCommands: async (
+    workDir: string | undefined,
+    locale: string | undefined,
+    view: ResourceListView
+  ): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.kite.listCommands(workDir, locale)
+      return window.kite.listCommands(workDir, locale, view)
     }
     const params = new URLSearchParams()
     if (workDir) params.append('workDir', workDir)
     if (locale) params.append('locale', locale)
+    params.append('view', view)
     const query = params.toString()
     return httpRequest('GET', `/api/commands${query ? `?${query}` : ''}`)
   },
@@ -737,13 +806,18 @@ export const api = {
   },
 
   // ===== Agents =====
-  listAgents: async (workDir?: string, locale?: string): Promise<ApiResponse> => {
+  listAgents: async (
+    workDir: string | undefined,
+    locale: string | undefined,
+    view: ResourceListView
+  ): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.kite.listAgents(workDir, locale)
+      return window.kite.listAgents(workDir, locale, view)
     }
     const params = new URLSearchParams()
     if (workDir) params.append('workDir', workDir)
     if (locale) params.append('locale', locale)
+    params.append('view', view)
     const query = params.toString()
     return httpRequest('GET', `/api/agents${query ? `?${query}` : ''}`)
   },

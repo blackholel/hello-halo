@@ -76,12 +76,12 @@ describe('resource scan scene tags integration', () => {
       '# Heading should not win'
     ].join('\n'), 'utf-8')
 
-    const skill = listSkills().find((item) => item.name === 'review')
-    const agent = listAgents().find((item) => item.name === 'planner')
-    const command = listCommands().find((item) => item.name === 'report')
-    const zhSkill = listSkills(undefined, 'zh-CN').find((item) => item.name === 'review')
-    const zhAgent = listAgents(undefined, 'zh-CN').find((item) => item.name === 'planner')
-    const zhCommand = listCommands(undefined, 'zh-CN').find((item) => item.name === 'report')
+    const skill = listSkills(undefined, 'taxonomy-admin').find((item) => item.name === 'review')
+    const agent = listAgents(undefined, 'taxonomy-admin').find((item) => item.name === 'planner')
+    const command = listCommands(undefined, 'taxonomy-admin').find((item) => item.name === 'report')
+    const zhSkill = listSkills(undefined, 'taxonomy-admin', 'zh-CN').find((item) => item.name === 'review')
+    const zhAgent = listAgents(undefined, 'taxonomy-admin', 'zh-CN').find((item) => item.name === 'planner')
+    const zhCommand = listCommands(undefined, 'taxonomy-admin', 'zh-CN').find((item) => item.name === 'report')
 
     expect(skill).toBeDefined()
     expect(skill?.description).toBe('Skill from frontmatter')

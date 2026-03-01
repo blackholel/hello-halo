@@ -9,7 +9,6 @@ import { BrowserWindow } from 'electron'
 import { promises as fsPromises } from 'fs'
 import { getConfig } from '../config.service'
 import { getSpaceConfig } from '../space-config.service'
-import { getToolkitHash } from '../toolkit.service'
 import { getConversation, saveSessionId, addMessage, updateLastMessage } from '../conversation.service'
 import {
   setMainWindow,
@@ -31,7 +30,12 @@ import {
 import { parseSDKMessages, formatCanvasContext, buildMessageContent } from './message-parser'
 import { broadcastMcpStatus } from './mcp-status.service'
 import { expandLazyDirectives } from './skill-expander'
-import { getSpaceResourcePolicy, isStrictSpaceOnlyPolicy } from './space-resource-policy.service'
+import {
+  getExecutionLayerAllowedSources,
+  getSpaceResourcePolicy,
+  isStrictSpaceOnlyPolicy
+} from './space-resource-policy.service'
+import { getResourceExposureRuntimeFlags } from '../resource-exposure.service'
 import { findEnabledPluginByInput } from '../plugins.service'
 import {
   beginChangeSet,
@@ -113,6 +117,18 @@ function createRunId(): string {
 }
 
 const ASK_USER_QUESTION_RECENT_RESOLVED_TTL_MS = 2 * 60 * 1000
+
+function emitAgentUnknownResourceEvent(
+  params: {
+    type: 'skill' | 'agent' | 'command'
+    token: string
+    context: 'interactive' | 'workflow-step'
+    workDir: string
+    sourceCandidates: string[]
+  }
+): void {
+  console.warn('[telemetry] agent_unknown_resource', params)
+}
 
 function getAskUserQuestionFingerprintKey(runId: string, fingerprint: string): string {
   return `${runId}:${fingerprint}`
@@ -461,9 +477,16 @@ export async function sendMessage(
     modelOverride,
     model: legacyModelOverride,
     canvasContext,
-    fileContexts
+    fileContexts,
+    invocationContext
   } = request
   const effectiveMode = normalizeChatMode(mode, planEnabled, 'code')
+  const runtimeInvocationContext = invocationContext === 'workflow-step' ? 'workflow-step' : 'interactive'
+  if (invocationContext && invocationContext !== runtimeInvocationContext) {
+    console.warn(
+      `[Agent][${conversationId}] Ignoring unsupported invocationContext from request: ${invocationContext}`
+    )
+  }
   const config = getConfig()
   const conversation = getConversation(spaceId, conversationId) as
     | ({ ai?: { profileId?: string }; sessionId?: string } & Record<string, unknown>)
@@ -511,10 +534,10 @@ export async function sendMessage(
   beginChangeSet(spaceId, conversationId, workDir)
   const spaceConfig = getSpaceConfig(workDir)
   const { effectiveLazyLoad: skillsLazyLoad, toolkit } = getEffectiveSkillsLazyLoad(workDir, config)
+  const exposureFlags = getResourceExposureRuntimeFlags()
   const policy = getSpaceResourcePolicy(workDir)
   const strictSpaceOnly = isStrictSpaceOnlyPolicy(policy)
   const strictBlocksMcpDirective = strictSpaceOnly && policy.allowPluginMcpDirective !== true
-  const toolkitHash = getToolkitHash(toolkit)
 
   const mcpDirectiveResult = (effectiveMode === 'ask' || strictBlocksMcpDirective)
     ? stripMcpDirectives(message)
@@ -712,7 +735,6 @@ export async function sendMessage(
       profileId: effectiveAi.profileId,
       providerSignature: effectiveAi.providerSignature,
       effectiveModel: effectiveAi.effectiveModel,
-      toolkitHash,
       enabledPluginMcpsHash: getEnabledPluginMcpHash(conversationId),
       hasCanUseTool: true // Session has canUseTool callback
     }
@@ -794,7 +816,12 @@ export async function sendMessage(
 
     const expandedMessage = (effectiveMode !== 'ask' && (skillsLazyLoad || strictSpaceOnly))
       ? expandLazyDirectives(messageForSend, workDir, toolkit, {
-        allowSources: strictSpaceOnly ? ['space'] : undefined
+        allowSources: getExecutionLayerAllowedSources(),
+        bypassToolkitAllowlist: true,
+        invocationContext: runtimeInvocationContext,
+        resourceExposureEnabled: exposureFlags.exposureEnabled,
+        allowLegacyWorkflowInternalDirect: exposureFlags.allowLegacyInternalDirect,
+        legacyDependencyRegexEnabled: exposureFlags.legacyDependencyRegexEnabled
       })
       : {
           text: messageForSend,
@@ -821,16 +848,43 @@ export async function sendMessage(
       console.warn(
         `[Agent][${conversationId}] Skills not found: ${expandedMessage.missing.skills.join(', ')}`
       )
+      for (const token of expandedMessage.missing.skills) {
+        emitAgentUnknownResourceEvent({
+          type: 'skill',
+          token,
+          context: runtimeInvocationContext,
+          workDir,
+          sourceCandidates: getExecutionLayerAllowedSources()
+        })
+      }
     }
     if (expandedMessage.missing.commands.length > 0) {
       console.warn(
         `[Agent][${conversationId}] Commands not found: ${expandedMessage.missing.commands.join(', ')}`
       )
+      for (const token of expandedMessage.missing.commands) {
+        emitAgentUnknownResourceEvent({
+          type: 'command',
+          token,
+          context: runtimeInvocationContext,
+          workDir,
+          sourceCandidates: getExecutionLayerAllowedSources()
+        })
+      }
     }
     if (expandedMessage.missing.agents.length > 0) {
       console.warn(
         `[Agent][${conversationId}] Agents not found: ${expandedMessage.missing.agents.join(', ')}`
       )
+      for (const token of expandedMessage.missing.agents) {
+        emitAgentUnknownResourceEvent({
+          type: 'agent',
+          token,
+          context: runtimeInvocationContext,
+          workDir,
+          sourceCandidates: getExecutionLayerAllowedSources()
+        })
+      }
     }
 
     // NOTE: Plan mode prefix is injected as a user-message guard, not a system prompt.

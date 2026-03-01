@@ -11,7 +11,8 @@
  */
 
 import { homedir } from 'os'
-import { join } from 'path'
+import { basename, dirname, join, resolve } from 'path'
+import { existsSync, realpathSync } from 'fs'
 
 /**
  * Instance configuration derived from environment variables
@@ -30,12 +31,50 @@ const DEFAULTS = {
   INSTANCE_ID: 'default',
   VITE_PORT: 5173
 } as const
+const BLOCKED_CLAUDE_DIR_NAME = '.claude'
 
 /** Get default config directory (computed at call time for testability) */
 function getDefaultConfigDir(): string {
   // Deliberate policy: Kite only uses ~/.kite.
   // We do not read or auto-migrate legacy ~/.halo directories.
   return join(homedir(), '.kite')
+}
+
+function normalizeComparisonPath(pathValue: string): string {
+  const normalized = resolve(pathValue)
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized
+}
+
+function realpathWithMissingTail(pathValue: string): string {
+  const resolvedPath = resolve(pathValue)
+  const missingSegments: string[] = []
+  let cursor = resolvedPath
+
+  while (!existsSync(cursor)) {
+    const parent = dirname(cursor)
+    if (parent === cursor) {
+      break
+    }
+    missingSegments.unshift(basename(cursor))
+    cursor = parent
+  }
+
+  let canonicalBase = cursor
+  if (existsSync(cursor)) {
+    try {
+      canonicalBase = realpathSync(cursor)
+    } catch {
+      canonicalBase = cursor
+    }
+  }
+
+  return missingSegments.reduce((acc, segment) => join(acc, segment), canonicalBase)
+}
+
+function isBlockedClaudeUserRoot(pathValue: string): boolean {
+  const targetPath = normalizeComparisonPath(realpathWithMissingTail(pathValue))
+  const blockedPath = normalizeComparisonPath(realpathWithMissingTail(join(homedir(), BLOCKED_CLAUDE_DIR_NAME)))
+  return targetPath === blockedPath
 }
 
 /**
@@ -52,7 +91,17 @@ export function getInstanceId(): string {
  * Policy note: if KITE_CONFIG_DIR is not set, fallback is always ~/.kite only.
  */
 export function getConfigDir(): string {
-  return process.env.KITE_CONFIG_DIR || getDefaultConfigDir()
+  const configuredPath = process.env.KITE_CONFIG_DIR
+  if (!configuredPath) {
+    return getDefaultConfigDir()
+  }
+
+  if (isBlockedClaudeUserRoot(configuredPath)) {
+    console.warn('[Instance] KITE_CONFIG_DIR points to ~/.claude (or equivalent). Falling back to ~/.kite.')
+    return getDefaultConfigDir()
+  }
+
+  return configuredPath
 }
 
 /**

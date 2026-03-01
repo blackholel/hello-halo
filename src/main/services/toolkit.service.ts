@@ -10,10 +10,16 @@ import { getSpaceConfig, updateSpaceConfig } from './space-config.service'
 import type { SpaceToolkit } from './space-config.service'
 import type { DirectiveRef, DirectiveType } from './agent/types'
 
+const TOOLKIT_WRITE_DISABLED_ERROR = 'Toolkit write operations are deprecated and disabled in global execution mode'
+
 const TYPE_TO_KEY: Record<DirectiveType, keyof SpaceToolkit> = {
   skill: 'skills',
   command: 'commands',
   agent: 'agents'
+}
+
+function assertToolkitWriteEnabled(): void {
+  throw new Error(TOOLKIT_WRITE_DISABLED_ERROR)
 }
 
 /**
@@ -130,6 +136,7 @@ export function getSpaceToolkit(workDir: string): SpaceToolkit | null {
  * If toolkit doesn't exist yet, creates it (entering whitelist mode).
  */
 export function addToolkitResource(workDir: string, ref: DirectiveRef): SpaceToolkit | null {
+  assertToolkitWriteEnabled()
   const normalizedRef = normalizeDirective(ref)
   const key = TYPE_TO_KEY[normalizedRef.type]
 
@@ -145,6 +152,7 @@ export function addToolkitResource(workDir: string, ref: DirectiveRef): SpaceToo
  * Remove a resource from the space toolkit.
  */
 export function removeToolkitResource(workDir: string, ref: DirectiveRef): SpaceToolkit | null {
+  assertToolkitWriteEnabled()
   const normalizedRef = normalizeDirective(ref)
   const key = TYPE_TO_KEY[normalizedRef.type]
 
@@ -160,6 +168,7 @@ export function removeToolkitResource(workDir: string, ref: DirectiveRef): Space
  * Clear the entire toolkit (return to "load all global" mode).
  */
 export function clearSpaceToolkit(workDir: string): void {
+  assertToolkitWriteEnabled()
   updateSpaceConfig(workDir, (config) => {
     const { toolkit: _removed, ...rest } = config
     return rest
@@ -174,6 +183,7 @@ export function migrateToToolkit(
   enabledSkills: string[],
   enabledAgents: string[]
 ): SpaceToolkit | null {
+  assertToolkitWriteEnabled()
   const parsedSkills = enabledSkills
     .map(parseDirectiveName)
     .filter((item): item is ParsedDirectiveName => item !== null)

@@ -50,6 +50,10 @@ interface WorkflowsState {
 }
 
 function buildMessageForStep(step: WorkflowStep): string {
+  if (step.type === 'command') {
+    const input = step.input ? ` ${step.input}` : ''
+    return `/${step.name}${input}`.trim()
+  }
   if (step.type === 'skill') {
     const args = step.args ? ` ${step.args}` : ''
     const input = step.input ? ` ${step.input}` : ''
@@ -82,7 +86,7 @@ function shouldSummarizeAfterStep(step: WorkflowStep, stepIndex: number, totalSt
   return !!step.summarizeAfter && stepIndex < totalSteps - 1
 }
 
-function hasSpaceResource(
+function hasAvailableResource(
   name: string,
   refs: Array<{ name: string; namespace?: string }>
 ): boolean {
@@ -210,30 +214,33 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
       : useSpaceStore.getState().spaces.find(space => space.id === spaceId)
     if (knownSpace?.path) {
       const locale = getCurrentLanguage()
-      const [skillsResponse, agentsResponse] = await Promise.all([
-        api.listSkills(knownSpace.path, locale),
-        api.listAgents(knownSpace.path, locale)
+      const [skillsResponse, agentsResponse, commandsResponse] = await Promise.all([
+        api.listSkills(knownSpace.path, locale, 'workflow-validation'),
+        api.listAgents(knownSpace.path, locale, 'workflow-validation'),
+        api.listCommands(knownSpace.path, locale, 'workflow-validation')
       ])
 
-      const spaceSkills = (skillsResponse.success ? (skillsResponse.data as Array<{ name: string; namespace?: string; source: string }>) : [])
-        .filter(skill => skill.source === 'space')
-      const spaceAgents = (agentsResponse.success ? (agentsResponse.data as Array<{ name: string; namespace?: string; source: string }>) : [])
-        .filter(agent => agent.source === 'space')
+      const availableSkills = (skillsResponse.success ? (skillsResponse.data as Array<{ name: string; namespace?: string }>) : [])
+      const availableAgents = (agentsResponse.success ? (agentsResponse.data as Array<{ name: string; namespace?: string }>) : [])
+      const availableCommands = (commandsResponse.success ? (commandsResponse.data as Array<{ name: string; namespace?: string }>) : [])
 
       const missingSteps: string[] = []
       workflow.steps.forEach((step, index) => {
         const stepName = step.name?.trim()
         if (!stepName) return
-        if (step.type === 'skill' && !hasSpaceResource(stepName, spaceSkills)) {
+        if (step.type === 'skill' && !hasAvailableResource(stepName, availableSkills)) {
           missingSteps.push(`Step ${index + 1}: skill ${stepName}`)
         }
-        if (step.type === 'agent' && !hasSpaceResource(stepName, spaceAgents)) {
+        if (step.type === 'agent' && !hasAvailableResource(stepName, availableAgents)) {
           missingSteps.push(`Step ${index + 1}: agent ${stepName}`)
+        }
+        if (step.type === 'command' && !hasAvailableResource(stepName, availableCommands)) {
+          missingSteps.push(`Step ${index + 1}: command ${stepName}`)
         }
       })
 
       if (missingSteps.length > 0) {
-        const message = `Workflow contains non-space resources: ${missingSteps.join(', ')}`
+        const message = `Workflow contains unavailable resources: ${missingSteps.join(', ')}`
         console.warn('[WorkflowsStore]', message)
         set({ error: message })
         return
@@ -347,7 +354,8 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
         false,
         undefined,
         false,
-        'code'
+        'code',
+        'workflow-step'
       )
       return
     }
@@ -409,7 +417,8 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
         false,
         undefined,
         false,
-        'code'
+        'code',
+        'workflow-step'
       )
       return
     }
@@ -490,6 +499,7 @@ async function startStep(get: () => WorkflowsState, set: (partial: Partial<Workf
     run.workflow.settings?.thinkingEnabled,
     undefined,
     run.workflow.settings?.aiBrowserEnabled,
-    'code'
+    'code',
+    'workflow-step'
   )
 }

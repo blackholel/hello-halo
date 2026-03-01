@@ -26,8 +26,10 @@ import {
   getFrontmatterStringArray,
   getLocalizedFrontmatterString
 } from './resource-metadata.service'
+import type { ResourceListView, ResourceExposure } from '../../shared/resource-access'
 import { resolveSceneTags } from './resource-scene-tags.service'
 import { buildResourceSceneKey, getSceneTaxonomy } from './scene-taxonomy.service'
+import { filterByResourceExposure, resolveResourceExposure } from './resource-exposure.service'
 
 // ============================================
 // Skill Types
@@ -44,6 +46,7 @@ export interface SkillDefinition {
   sceneTags: SceneTagKey[]
   pluginRoot?: string
   namespace?: string
+  exposure: ResourceExposure
 }
 
 export interface SkillContent {
@@ -142,6 +145,7 @@ function scanSkillDir(
         let displayName: string | undefined
         let triggers: string[] | undefined
         let category: string | undefined
+        let frontmatterExposure: unknown
         let sceneTags: SceneTagKey[] = ['office']
         let sceneDescription: string | undefined
         try {
@@ -153,6 +157,7 @@ function scanSkillDir(
             displayName = getLocalizedFrontmatterString(frontmatter, ['name', 'title'], locale)
             triggers = getFrontmatterStringArray(frontmatter, ['triggers'])
             category = getFrontmatterString(frontmatter, ['category'])
+            frontmatterExposure = frontmatter.exposure
           }
 
           const resourceKey = buildResourceSceneKey({
@@ -181,6 +186,14 @@ function scanSkillDir(
           name: entry,
           path: skillPath,
           source,
+          exposure: resolveResourceExposure({
+            type: 'skill',
+            source,
+            name: entry,
+            namespace,
+            workDir,
+            frontmatterExposure
+          }),
           description,
           triggers,
           category,
@@ -268,7 +281,7 @@ function logFound(items: SkillDefinition[]): void {
 /**
  * List all available skills from all sources
  */
-export function listSkills(workDir?: string, locale?: string): SkillDefinition[] {
+function listSkillsUnfiltered(workDir?: string, locale?: string): SkillDefinition[] {
   const localeKey = toLocaleCacheKey(locale)
   let globalSkills = globalSkillsCacheByLocale.get(localeKey)
   if (!globalSkills) {
@@ -277,7 +290,6 @@ export function listSkills(workDir?: string, locale?: string): SkillDefinition[]
   }
 
   if (!workDir) {
-    logFound(globalSkills)
     return globalSkills
   }
 
@@ -294,12 +306,17 @@ export function listSkills(workDir?: string, locale?: string): SkillDefinition[]
   }
 
   const skills = mergeSkills(globalSkills, spaceSkills)
+  return skills
+}
+
+export function listSkills(workDir: string | undefined, view: ResourceListView, locale?: string): SkillDefinition[] {
+  const skills = filterByResourceExposure(listSkillsUnfiltered(workDir, locale), view)
   logFound(skills)
   return skills
 }
 
 export function listSpaceSkills(workDir: string): SkillDefinition[] {
-  return listSkills(workDir).filter(skill => skill.source === 'space')
+  return listSkillsUnfiltered(workDir).filter(skill => skill.source === 'space')
 }
 
 function listSkillsForRefLookup(workDir: string): SkillDefinition[] {
@@ -330,7 +347,7 @@ export function getSkillDefinition(
   workDir?: string,
   opts?: { allowedSources?: SkillDefinition['source'][] }
 ): SkillDefinition | null {
-  const skill = findSkill(listSkills(workDir), name)
+  const skill = findSkill(listSkillsUnfiltered(workDir), name)
   if (!skill) return null
 
   if (opts?.allowedSources && !opts.allowedSources.includes(skill.source)) {
@@ -389,10 +406,18 @@ export function createSkill(workDir: string, name: string, content: string): Ski
   const displayName = getLocalizedFrontmatterString(frontmatter, ['name', 'title'])
   const triggers = getFrontmatterStringArray(frontmatter, ['triggers'])
   const category = getFrontmatterString(frontmatter, ['category'])
+  const exposure = resolveResourceExposure({
+    type: 'skill',
+    source: 'space',
+    workDir,
+    name,
+    frontmatterExposure: frontmatter?.exposure
+  })
   return {
     name,
     path: skillDir,
     source: 'space',
+    exposure,
     description,
     triggers,
     category,
@@ -454,19 +479,23 @@ export function updateSkill(skillPath: string, content: string): boolean {
  */
 export function deleteSkill(skillPath: string): boolean {
   try {
-    const normalizedPath = skillPath.replace(/\\/g, '/')
-    if (!normalizedPath.includes('/skills/') && !normalizedPath.includes('/.claude/skills/')) {
-      console.warn(`[Skills] Cannot delete skill outside of skills directory: ${skillPath}`)
+    const skillMdPath = skillPath.endsWith('SKILL.md')
+      ? skillPath
+      : join(skillPath, 'SKILL.md')
+
+    if (!isPathWithinBasePaths(skillMdPath, getAllowedSkillBaseDirs())) {
+      console.warn(`[Skills] Cannot delete skill outside of space skills directory: ${skillPath}`)
       return false
     }
 
-    if (!existsSync(skillPath)) {
-      console.warn(`[Skills] Skill directory not found: ${skillPath}`)
+    if (!existsSync(skillMdPath)) {
+      console.warn(`[Skills] Skill file not found: ${skillMdPath}`)
       return false
     }
 
-    rmSync(skillPath, { recursive: true, force: true })
-    const workDir = resolveWorkDirForSkillPath(skillPath)
+    const targetDir = dirname(skillMdPath)
+    rmSync(targetDir, { recursive: true, force: true })
+    const workDir = resolveWorkDirForSkillPath(skillMdPath)
     if (workDir) {
       invalidateSkillsCache(workDir)
     } else {

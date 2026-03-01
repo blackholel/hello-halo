@@ -2,14 +2,10 @@
  * Hooks Service - Manages Claude Code hooks configuration
  *
  * Hooks are loaded from multiple sources and merged:
- * - Kite mode:
  *   1. ~/.kite/settings.json (Claude Code compatible format)
  *   2. config.claudeCode.hooks (Kite global config)
  *   3. space-config.json claudeCode.hooks (Space-level config)
  *   4. plugin hooks
- * - Claude mode (strict source):
- *   1. ~/.claude/settings.json
- *   2. plugin hooks
  */
 
 import { join } from 'path'

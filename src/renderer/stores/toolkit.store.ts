@@ -9,6 +9,8 @@ import { create } from 'zustand'
 import { api } from '../api'
 import type { DirectiveRef, SpaceToolkit } from '../types'
 
+const TOOLKIT_WRITE_DISABLED_MESSAGE = 'Toolkit write operations are disabled in global execution mode'
+
 interface ToolkitState {
   toolkitsBySpaceId: Record<string, SpaceToolkit | null>
   isLoading: boolean
@@ -89,68 +91,30 @@ export const useToolkitStore = create<ToolkitState>((set, get) => ({
 
   addResource: async (spaceId, directive): Promise<SpaceToolkit | null> => {
     if (!spaceId) return null
-    try {
-      const normalized = normalizeDirective(directive)
-      const response = await api.addToolkitResource(spaceId, normalized as unknown as Record<string, unknown>)
-      if (response.success) {
-        const toolkit = (response.data as SpaceToolkit | null) ?? null
-        setSpaceToolkit(set, spaceId, toolkit)
-        return toolkit
-      }
-      set({ error: response.error || 'Failed to update toolkit' })
-      return null
-    } catch (error) {
-      console.error('[ToolkitStore] Failed to add toolkit resource:', error)
-      set({ error: 'Failed to update toolkit' })
-      return null
-    }
+    void directive
+    set({ error: TOOLKIT_WRITE_DISABLED_MESSAGE })
+    return null
   },
 
   removeResource: async (spaceId, directive): Promise<SpaceToolkit | null> => {
     if (!spaceId) return null
-    try {
-      const normalized = normalizeDirective(directive)
-      const response = await api.removeToolkitResource(spaceId, normalized as unknown as Record<string, unknown>)
-      if (response.success) {
-        const toolkit = (response.data as SpaceToolkit | null) ?? null
-        setSpaceToolkit(set, spaceId, toolkit)
-        return toolkit
-      }
-      set({ error: response.error || 'Failed to update toolkit' })
-      return null
-    } catch (error) {
-      console.error('[ToolkitStore] Failed to remove toolkit resource:', error)
-      set({ error: 'Failed to update toolkit' })
-      return null
-    }
+    void directive
+    set({ error: TOOLKIT_WRITE_DISABLED_MESSAGE })
+    return null
   },
 
   clearToolkit: async (spaceId): Promise<void> => {
     if (!spaceId) return
-    try {
-      await api.clearToolkit(spaceId)
-      setSpaceToolkit(set, spaceId, null)
-    } catch (error) {
-      console.error('[ToolkitStore] Failed to clear toolkit:', error)
-    }
+    set({ error: TOOLKIT_WRITE_DISABLED_MESSAGE })
+    throw new Error(TOOLKIT_WRITE_DISABLED_MESSAGE)
   },
 
   migrateFromPreferences: async (spaceId, skills, agents): Promise<SpaceToolkit | null> => {
     if (!spaceId) return null
-    try {
-      const response = await api.migrateToToolkit(spaceId, skills, agents)
-      if (response.success) {
-        const toolkit = (response.data as SpaceToolkit | null) ?? null
-        setSpaceToolkit(set, spaceId, toolkit)
-        return toolkit
-      }
-      set({ error: response.error || 'Failed to migrate toolkit' })
-      return null
-    } catch (error) {
-      console.error('[ToolkitStore] Failed to migrate toolkit:', error)
-      set({ error: 'Failed to migrate toolkit' })
-      return null
-    }
+    void skills
+    void agents
+    set({ error: TOOLKIT_WRITE_DISABLED_MESSAGE })
+    return null
   },
 
   getToolkit: (spaceId): SpaceToolkit | null => {

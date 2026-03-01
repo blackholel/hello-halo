@@ -10,7 +10,7 @@
 // ============================================
 
 /**
- * Hooks configuration (compatible with Claude Code ~/.claude/settings.json)
+ * Hooks configuration (compatible with Claude Code settings.json schema)
  */
 export interface HooksConfig {
   PreToolUse?: HookDefinition[]
@@ -74,7 +74,8 @@ export interface ClaudeCodeConfig {
   mcpEnabled?: boolean
   /** Enable lazy skills loading (default: false) */
   skillsLazyLoad?: boolean
-  enableSystemSkills?: boolean    // Load ~/.claude/skills/ - Default: false
+  /** @deprecated Kept for backward compatibility but ignored at runtime. */
+  enableSystemSkills?: boolean
   /**
    * @deprecated No longer needed. CLAUDE_CONFIG_DIR=~/.kite/ provides isolation.
    * Kept for backward compatibility but ignored.

@@ -50,6 +50,7 @@ import type {
 import { canvasLifecycle } from '../services/canvas-lifecycle'
 import { buildParallelGroups, getThoughtKey } from '../utils/thought-utils'
 import i18n from '../i18n'
+import type { InvocationContext } from '../../shared/resource-access'
 
 // LRU cache size limit
 const CONVERSATION_CACHE_SIZE = 10
@@ -434,8 +435,18 @@ interface ChatState {
   updateConversationAi: (spaceId: string, conversationId: string, ai: ConversationAiConfig) => Promise<boolean>
 
   // Messaging
-  sendMessage: (content: string, images?: ImageAttachment[], aiBrowserEnabled?: boolean, thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[], mode?: ChatMode) => Promise<void>
-  sendMessageToConversation: (spaceId: string, conversationId: string, content: string, images?: ImageAttachment[], thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[], aiBrowserEnabled?: boolean, mode?: ChatMode) => Promise<void>
+  sendMessage: (content: string, images?: ImageAttachment[], aiBrowserEnabled?: boolean, thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[], mode?: ChatMode, invocationContext?: InvocationContext) => Promise<void>
+  sendMessageToConversation: (
+    spaceId: string,
+    conversationId: string,
+    content: string,
+    images?: ImageAttachment[],
+    thinkingEnabled?: boolean,
+    fileContexts?: FileContextAttachment[],
+    aiBrowserEnabled?: boolean,
+    mode?: ChatMode,
+    invocationContext?: InvocationContext
+  ) => Promise<void>
   executePlan: (spaceId: string, conversationId: string, planContent: string) => Promise<void>
   stopGeneration: (conversationId?: string) => Promise<void>
 
@@ -1247,7 +1258,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   // Send message (with optional images for multi-modal, optional AI Browser and thinking mode, optional file contexts, optional mode)
-  sendMessage: async (content, images, aiBrowserEnabled, thinkingEnabled, fileContexts, mode) => {
+  sendMessage: async (content, images, aiBrowserEnabled, thinkingEnabled, fileContexts, mode, invocationContext) => {
     const conversation = get().getCurrentConversation()
     const conversationMeta = get().getCurrentConversationMeta()
     const { currentSpaceId } = get()
@@ -1347,8 +1358,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
       }
 
-      // Send to agent (with images, AI Browser state, thinking mode, plan mode, canvas context, and file contexts)
-      await api.sendMessage({
+      const context = invocationContext || 'interactive'
+      if (context !== 'interactive' && context !== 'workflow-step') {
+        throw new Error(`Unsupported invocationContext from renderer: ${context}`)
+      }
+
+      const baseRequest = {
         spaceId: currentSpaceId,
         conversationId,
         message: content,
@@ -1359,7 +1374,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
         planEnabled: effectiveMode === 'plan',  // Compatibility (deprecated)
         canvasContext: buildCanvasContext(),  // Pass canvas context for AI awareness
         fileContexts: fileContexts  // Pass file contexts for context injection
-      })
+      }
+
+      if (context === 'workflow-step') {
+        await api.sendWorkflowStepMessage(baseRequest)
+      } else {
+        await api.sendMessage({
+          ...baseRequest,
+          invocationContext: 'interactive'
+        })
+      }
     } catch (error) {
       console.error('Failed to send message:', error)
       // Update session error state
@@ -1379,7 +1403,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   // Send message to a specific conversation (for Chat Tabs - avoids global context switching)
-  sendMessageToConversation: async (spaceId, conversationId, content, images, thinkingEnabled, fileContexts, aiBrowserEnabled, mode) => {
+  sendMessageToConversation: async (spaceId, conversationId, content, images, thinkingEnabled, fileContexts, aiBrowserEnabled, mode, invocationContext) => {
     if (!spaceId || !conversationId) {
       console.error('[ChatStore] spaceId and conversationId are required')
       return
@@ -1442,8 +1466,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
         return { spaceStates: newSpaceStates, conversationCache: newCache }
       })
 
-      // Send to agent (without AI Browser for tab context, with thinking mode, plan mode and file contexts)
-      await api.sendMessage({
+      const context = invocationContext || 'interactive'
+      if (context !== 'interactive' && context !== 'workflow-step') {
+        throw new Error(`Unsupported invocationContext from renderer: ${context}`)
+      }
+
+      const baseRequest = {
         spaceId,
         conversationId,
         message: content,
@@ -1454,7 +1482,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
         planEnabled: effectiveMode === 'plan',
         canvasContext: undefined, // No canvas context for tab messages
         fileContexts: fileContexts
-      })
+      }
+
+      if (context === 'workflow-step') {
+        await api.sendWorkflowStepMessage(baseRequest)
+      } else {
+        await api.sendMessage({
+          ...baseRequest,
+          invocationContext: 'interactive'
+        })
+      }
     } catch (error) {
       console.error('Failed to send message to conversation:', error)
       // Update session error state
@@ -2166,13 +2203,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }
         } else {
           delete askUserQuestionsById[toolCallId]
-          askUserQuestionOrder = askUserQuestionOrder.filter((id) => id !== toolCallId)
           for (const [id, item] of Object.entries(askUserQuestionsById)) {
             if (item.status === 'failed') {
               delete askUserQuestionsById[id]
             }
           }
-          askUserQuestionOrder = askUserQuestionOrder.filter((id) => askUserQuestionsById[id] != null)
+          askUserQuestionOrder = askUserQuestionOrder.filter((id) => (
+            id !== toolCallId &&
+            askUserQuestionsById[id] != null &&
+            askUserQuestionsById[id].status !== 'failed'
+          ))
         }
       }
       askUserQuestionOrder = ensureAskUserQuestionOrder(askUserQuestionOrder, askUserQuestionsById)

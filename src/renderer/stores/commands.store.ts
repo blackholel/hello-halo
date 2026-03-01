@@ -8,10 +8,8 @@
 import { create } from 'zustand'
 import { api } from '../api'
 import i18n from '../i18n'
-import { useSpaceStore } from './space.store'
-import { useToolkitStore } from './toolkit.store'
-import { buildDirective } from '../utils/directive-helpers'
 import type { SceneTag } from '../../shared/extension-taxonomy'
+import type { ResourceExposure } from '../../shared/resource-access'
 
 export interface CommandDefinition {
   name: string
@@ -22,6 +20,9 @@ export interface CommandDefinition {
   sceneTags?: SceneTag[]
   pluginRoot?: string
   namespace?: string
+  exposure: ResourceExposure
+  requiresSkills?: string[]
+  requiresAgents?: string[]
 }
 
 interface CommandsState {
@@ -60,7 +61,7 @@ export const useCommandsStore = create<CommandsState>((set, get) => ({
     set({ isLoading: true, error: null })
 
     try {
-      const response = await api.listCommands(workDir, i18n.language)
+      const response = await api.listCommands(workDir, i18n.language, 'extensions')
       if (response.success) {
         set({
           commands: response.data as CommandDefinition[],
@@ -107,14 +108,6 @@ export const useCommandsStore = create<CommandsState>((set, get) => ({
 
           return { commands: nextCommands }
         })
-
-        const currentSpace = useSpaceStore.getState().currentSpace
-        if (currentSpace) {
-          const toolkitStore = useToolkitStore.getState()
-          if (toolkitStore.getToolkit(currentSpace.id)) {
-            void toolkitStore.addResource(currentSpace.id, buildDirective('command', newCommand))
-          }
-        }
 
         return newCommand
       }

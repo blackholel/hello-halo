@@ -30,7 +30,7 @@ function buildSkillsTools(workDir?: string) {
       limit: z.number().optional().describe('Max results to return (default: 50)')
     },
     async (args) => {
-      const skills = listSkills(workDir)
+      const skills = listSkills(workDir, 'runtime-direct')
       const query = (args.query || '').trim().toLowerCase()
       const limit = Math.max(1, Math.min(200, args.limit ?? 50))
 

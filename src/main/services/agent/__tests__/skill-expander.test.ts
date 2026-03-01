@@ -9,17 +9,34 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Mock the service dependencies
 vi.mock('../../skills.service', () => ({
+  getSkillDefinition: vi.fn((name: string) => {
+    const defs: Record<string, { source: string; exposure: 'public' | 'internal-only' }> = {
+      'coding-standards': { source: 'app', exposure: 'public' },
+      'tdd-workflow': { source: 'app', exposure: 'public' },
+      'security-review': { source: 'app', exposure: 'public' },
+      'deploy': { source: 'app', exposure: 'public' }
+    }
+    return defs[name] || null
+  }),
   getSkillContent: vi.fn((name: string) => {
     const skills: Record<string, { content: string }> = {
       'coding-standards': { content: '# Coding Standards\nFollow best practices.' },
       'tdd-workflow': { content: '# TDD\nWrite tests first.' },
-      'security-review': { content: '# Security\nReview for vulnerabilities.' }
+      'security-review': { content: '# Security\nReview for vulnerabilities.' },
+      'deploy': { content: '# Deploy Skill\nDo deploy.' }
     }
     return skills[name] || null
   })
 }))
 
 vi.mock('../../commands.service', () => ({
+  getCommand: vi.fn((name: string) => {
+    const commands: Record<string, { source: string; exposure: 'public' | 'internal-only'; requiresSkills?: string[] }> = {
+      review: { source: 'app', exposure: 'public' },
+      deploy: { source: 'app', exposure: 'public', requiresSkills: ['deploy'] }
+    }
+    return commands[name] || null
+  }),
   getCommandContent: vi.fn((name: string) => {
     const commands: Record<string, string> = {
       review: '# Review\nPlease review the code.',
@@ -30,6 +47,13 @@ vi.mock('../../commands.service', () => ({
 }))
 
 vi.mock('../../agents.service', () => ({
+  getAgent: vi.fn((name: string) => {
+    const defs: Record<string, { source: string; exposure: 'public' | 'internal-only' }> = {
+      'code-reviewer': { source: 'app', exposure: 'public' },
+      debugger: { source: 'app', exposure: 'public' }
+    }
+    return defs[name] || null
+  }),
   getAgentContent: vi.fn((name: string) => {
     const agents: Record<string, string> = {
       'code-reviewer': '# Code Reviewer Agent\nReview code changes.',
@@ -242,4 +266,3 @@ describe('stripFrontmatter', () => {
     expect(() => stripFrontmatter(large)).toThrow('Input too large')
   })
 })
-

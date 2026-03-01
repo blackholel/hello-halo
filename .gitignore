@@ -20,6 +20,12 @@ tests/e2e/results/
 
 # Test files
 tests/
+!tests/
+!tests/check/
+!tests/check/no-claude-user-root.mjs
+!tests/unit/
+!tests/unit/services/
+!tests/unit/services/config-source-mode.test.ts
 
 # Chat logs
 .chat/

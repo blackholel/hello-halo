@@ -1,5 +1,7 @@
 import { getSpaceConfig, updateSpaceConfig, type SpaceResourcePolicy } from '../space-config.service'
-import type { ResourceSource } from '../resource-ref.service'
+import { toExecutionScope, type ResourceSource } from '../resource-ref.service'
+
+const EXECUTION_LAYER_ALLOWED_SOURCES: ResourceSource[] = ['app', 'global', 'space', 'installed', 'plugin']
 
 export const DEFAULT_SPACE_RESOURCE_POLICY: SpaceResourcePolicy = {
   version: 1,
@@ -50,12 +52,21 @@ export function isStrictSpaceOnlyPolicy(policy: SpaceResourcePolicy): boolean {
 export function isSourceAllowed(policy: SpaceResourcePolicy, source?: string): boolean {
   if (!source) return false
   if (!isStrictSpaceOnlyPolicy(policy)) return true
-  return source === 'space'
+  return toExecutionScope(source) === 'space-local'
 }
 
 export function getAllowedSources(policy: SpaceResourcePolicy): ResourceSource[] {
   if (!isStrictSpaceOnlyPolicy(policy)) {
-    return ['app', 'global', 'space', 'installed', 'plugin']
+    return [...EXECUTION_LAYER_ALLOWED_SOURCES]
   }
   return ['space']
+}
+
+/**
+ * Runtime directive expansion should always be able to resolve global resources
+ * from ~/.kite as well as current space resources.
+ * Direct invocation safety is still controlled by exposure rules.
+ */
+export function getExecutionLayerAllowedSources(): ResourceSource[] {
+  return [...EXECUTION_LAYER_ALLOWED_SOURCES]
 }

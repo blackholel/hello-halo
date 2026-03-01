@@ -77,6 +77,7 @@ vi.mock('../../../utils/path-validation', () => ({
 }))
 
 import { getSpaceConfig, updateSpaceConfig } from '../../space-config.service'
+import { getConfig } from '../../config.service'
 import { buildHooksConfig } from '../../hooks.service'
 import {
   buildPluginsConfig,
@@ -84,7 +85,7 @@ import {
   buildSettingSources,
   buildSystemPromptAppend
 } from '../sdk-config.builder'
-import { ensureSpaceResourcePolicy } from '../space-resource-policy.service'
+import { ensureSpaceResourcePolicy, getExecutionLayerAllowedSources } from '../space-resource-policy.service'
 
 function createBuildSdkOptionsParams(workDir: string = '/workspace/project') {
   return {
@@ -116,15 +117,15 @@ describe('sdk-config.builder strict space-only', () => {
     expect(sources).toEqual(['local'])
   })
 
-  it('loads only space plugin directories under strict policy', () => {
+  it('loads global and space plugin directories under strict policy', () => {
     const plugins = buildPluginsConfig('/workspace/project')
     const paths = plugins.map(plugin => plugin.path)
 
+    expect(paths).toContain('/enabled/plugin-a')
+    expect(paths).toContain('/home/test/.kite')
     expect(paths).toContain('/workspace/project/.local-plugins')
     expect(paths).toContain('/workspace/project/.claude')
-    expect(paths).not.toContain('/enabled/plugin-a')
     expect(paths).not.toContain('/global/plugins')
-    expect(paths).not.toContain('/home/test/.kite')
   })
 
   it('falls back to legacy behavior when policy is explicitly legacy', () => {
@@ -150,6 +151,38 @@ describe('sdk-config.builder strict space-only', () => {
     expect(paths).toContain('/home/test/.kite')
     expect(paths).toContain('/workspace/project/.local-plugins')
     expect(paths).toContain('/workspace/project/.claude')
+  })
+
+  it('ignores enableSystemSkills and never injects ~/.claude user root', () => {
+    vi.mocked(getConfig).mockReturnValue({
+      claudeCode: {
+        enableSystemSkills: true,
+        plugins: {
+          enabled: true,
+          globalPaths: ['/global/plugins'],
+          loadDefaultPaths: true
+        },
+        skillsLazyLoad: false
+      }
+    } as any)
+
+    vi.mocked(getSpaceConfig).mockReturnValue({
+      resourcePolicy: {
+        version: 1,
+        mode: 'legacy'
+      },
+      claudeCode: {
+        plugins: {
+          paths: []
+        }
+      }
+    } as any)
+
+    const plugins = buildPluginsConfig('/workspace/project')
+    const paths = plugins.map(plugin => plugin.path)
+
+    expect(paths).toContain('/home/test/.kite')
+    expect(paths).not.toContain('/home/test/.claude')
   })
 
   it('keeps hooks configurable through buildHooksConfig when strict policy allows hooks', () => {
@@ -188,6 +221,10 @@ describe('sdk-config.builder strict space-only', () => {
     expect(vi.mocked(updateSpaceConfig)).not.toHaveBeenCalled()
   })
 
+  it('keeps execution-layer directive sources available for global and space resources', () => {
+    expect(getExecutionLayerAllowedSources()).toEqual(['app', 'global', 'space', 'installed', 'plugin'])
+  })
+
   it('compat 场景会注入 ANTHROPIC_MODEL 与默认模型 env', () => {
     const sdkOptions = buildSdkOptions({
       ...createBuildSdkOptionsParams(),
@@ -202,10 +239,11 @@ describe('sdk-config.builder strict space-only', () => {
   })
 
   it('system prompt append includes blocking-batch AskUserQuestion policy', () => {
-    const append = buildSystemPromptAppend('/workspace/project', null)
+    const append = buildSystemPromptAppend('/workspace/project')
 
     expect(append).toContain('execution-blocking gaps')
     expect(append).toContain('at most 3 questions')
     expect(append).toContain('Avoid duplicate question texts and duplicate option labels')
+    expect(append).not.toContain('Do NOT use resources outside this list.')
   })
 })

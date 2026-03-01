@@ -19,9 +19,11 @@ import { isPathWithinBasePaths, isValidDirectoryPath, isFileNotFoundError } from
 import { listEnabledPlugins } from './plugins.service'
 import { FileCache } from '../utils/file-cache'
 import type { SceneTagKey } from '../../shared/scene-taxonomy'
-import { parseResourceMetadata, getLocalizedFrontmatterString } from './resource-metadata.service'
+import { parseResourceMetadata, getFrontmatterString, getLocalizedFrontmatterString } from './resource-metadata.service'
 import { resolveSceneTags } from './resource-scene-tags.service'
 import { buildResourceSceneKey, getSceneTaxonomy } from './scene-taxonomy.service'
+import type { ResourceListView, ResourceExposure } from '../../shared/resource-access'
+import { filterByResourceExposure, resolveResourceExposure } from './resource-exposure.service'
 
 // ============================================
 // Agent Types
@@ -36,6 +38,7 @@ export interface AgentDefinition {
   sceneTags: SceneTagKey[]
   pluginRoot?: string
   namespace?: string
+  exposure: ResourceExposure
 }
 
 // Cache for agents list (in-memory only)
@@ -79,7 +82,7 @@ function readAgentMetadata(
   namespace?: string,
   workDir?: string,
   locale?: string
-): { displayName?: string; description?: string; sceneTags: SceneTagKey[] } {
+): { displayName?: string; description?: string; sceneTags: SceneTagKey[]; exposure?: unknown } {
   try {
     const content = readFileSync(filePath, 'utf-8')
     const metadata = parseResourceMetadata(content)
@@ -87,9 +90,11 @@ function readAgentMetadata(
     const localizedDescription =
       getLocalizedFrontmatterString(metadata.frontmatter, ['description'], locale) ?? metadata.description
     const displayName = getLocalizedFrontmatterString(metadata.frontmatter, ['name', 'title'], locale)
+    const exposure = getFrontmatterString(metadata.frontmatter, ['exposure'])
     return {
       displayName,
       description: localizedDescription,
+      exposure,
       sceneTags: resolveSceneTags({
         name,
         description: metadata.description,
@@ -108,7 +113,7 @@ function readAgentMetadata(
     }
   } catch {
     // Ignore read errors
-    return { sceneTags: ['office'] }
+    return { sceneTags: ['office'], exposure: undefined }
   }
 }
 
@@ -135,6 +140,14 @@ function scanAgentDir(
           name,
           path: filePath,
           source,
+          exposure: resolveResourceExposure({
+            type: 'agent',
+            source,
+            name,
+            namespace,
+            workDir,
+            frontmatterExposure: metadata.exposure
+          }),
           description: metadata.description,
           sceneTags: metadata.sceneTags,
           ...(metadata.displayName && { displayName: metadata.displayName }),
@@ -234,7 +247,7 @@ function logFound(label: string, items: AgentDefinition[], locale?: string): voi
 /**
  * List all available agents from all sources
  */
-export function listAgents(workDir?: string, locale?: string): AgentDefinition[] {
+function listAgentsUnfiltered(workDir?: string, locale?: string): AgentDefinition[] {
   const localeKey = toLocaleCacheKey(locale)
   let globalAgents = globalAgentsCacheByLocale.get(localeKey)
   if (!globalAgents) {
@@ -243,7 +256,6 @@ export function listAgents(workDir?: string, locale?: string): AgentDefinition[]
   }
 
   if (!workDir) {
-    logFound('agents', globalAgents, locale)
     return globalAgents
   }
 
@@ -260,12 +272,17 @@ export function listAgents(workDir?: string, locale?: string): AgentDefinition[]
   }
 
   const agents = mergeAgents(globalAgents, spaceAgents)
+  return agents
+}
+
+export function listAgents(workDir: string | undefined, view: ResourceListView, locale?: string): AgentDefinition[] {
+  const agents = filterByResourceExposure(listAgentsUnfiltered(workDir, locale), view)
   logFound('agents', agents, locale)
   return agents
 }
 
 export function listSpaceAgents(workDir: string): AgentDefinition[] {
-  return listAgents(workDir).filter(agent => agent.source === 'space')
+  return listAgentsUnfiltered(workDir).filter(agent => agent.source === 'space')
 }
 
 function listAgentsForRefLookup(workDir: string): AgentDefinition[] {
@@ -295,7 +312,7 @@ function listAgentsForRefLookup(workDir: string): AgentDefinition[] {
  * Get agent content by name
  */
 export function getAgentContent(name: string, workDir?: string): string | null {
-  const agent = findAgent(listAgents(workDir), name)
+  const agent = findAgent(listAgentsUnfiltered(workDir), name)
   if (!agent) {
     console.warn(`[Agents] Agent not found: ${name}`)
     return null
@@ -322,7 +339,7 @@ export function getAgentContent(name: string, workDir?: string): string | null {
  * Get agent definition by name
  */
 export function getAgent(name: string, workDir?: string): AgentDefinition | null {
-  return findAgent(listAgents(workDir), name) ?? null
+  return findAgent(listAgentsUnfiltered(workDir), name) ?? null
 }
 
 /**
@@ -375,6 +392,13 @@ export function createAgent(workDir: string, name: string, content: string): Age
   const description = metadata.description
   const displayName = getLocalizedFrontmatterString(metadata.frontmatter, ['name', 'title'])
   const taxonomy = getSceneTaxonomy().config
+  const exposure = resolveResourceExposure({
+    type: 'agent',
+    source: 'space',
+    workDir,
+    name,
+    frontmatterExposure: getFrontmatterString(metadata.frontmatter, ['exposure'])
+  })
   const sceneTags = resolveSceneTags({
     name,
     description,
@@ -394,6 +418,7 @@ export function createAgent(workDir: string, name: string, content: string): Age
     name,
     path: agentPath,
     source: 'space',
+    exposure,
     description,
     sceneTags,
     ...(displayName && { displayName })
@@ -439,9 +464,9 @@ export function updateAgent(agentPath: string, content: string): boolean {
  */
 export function deleteAgent(agentPath: string): boolean {
   try {
-    const normalizedPath = agentPath.replace(/\\/g, '/')
-    if (!normalizedPath.includes('/agents/') && !normalizedPath.includes('/.claude/agents/')) {
-      console.warn(`[Agents] Cannot delete agent outside of agents directory: ${agentPath}`)
+    const allowedBases = getAllowedAgentBaseDirs()
+    if (!isPathWithinBasePaths(agentPath, allowedBases)) {
+      console.warn(`[Agents] Cannot delete agent outside of space agents directory: ${agentPath}`)
       return false
     }
     if (!existsSync(agentPath)) {

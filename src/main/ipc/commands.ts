@@ -14,11 +14,15 @@ import {
   clearCommandsCache
 } from '../services/commands.service'
 import type { ResourceRef } from '../services/resource-ref.service'
+import { isResourceListView } from '../../shared/resource-access'
 
 export function registerCommandsHandlers(): void {
-  ipcMain.handle('commands:list', async (_event, workDir?: string, locale?: string) => {
+  ipcMain.handle('commands:list', async (_event, workDir?: string, locale?: string, view?: string) => {
     try {
-      return { success: true, data: listCommands(workDir, locale) }
+      if (!isResourceListView(view)) {
+        return { success: false, error: 'view is required and must be a valid ResourceListView' }
+      }
+      return { success: true, data: listCommands(workDir, view, locale) }
     } catch (error: unknown) {
       return { success: false, error: (error as Error).message }
     }

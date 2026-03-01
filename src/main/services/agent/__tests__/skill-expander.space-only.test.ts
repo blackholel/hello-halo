@@ -1,18 +1,24 @@
 import { describe, expect, it, vi } from 'vitest'
+import { getExecutionLayerAllowedSources } from '../space-resource-policy.service'
 
 const skillDefinitions = {
-  'space-skill': { source: 'space' },
-  'app-skill': { source: 'app' }
+  'space-skill': { source: 'space', exposure: 'public' as const },
+  'app-skill': { source: 'app', exposure: 'public' as const }
 }
 
 const commandDefinitions = {
-  'space-command': { source: 'space' },
-  'app-command': { source: 'app' }
+  'space-command': { source: 'space', exposure: 'public' as const },
+  'space-command-with-skill': {
+    source: 'space',
+    exposure: 'public' as const,
+    requiresSkills: ['space-skill']
+  },
+  'app-command': { source: 'app', exposure: 'public' as const }
 }
 
 const agentDefinitions = {
-  'space-agent': { source: 'space' },
-  'app-agent': { source: 'app' }
+  'space-agent': { source: 'space', exposure: 'public' as const },
+  'app-agent': { source: 'app', exposure: 'public' as const }
 }
 
 vi.mock('../../skills.service', () => ({
@@ -27,7 +33,7 @@ vi.mock('../../skills.service', () => ({
 
 vi.mock('../../commands.service', () => ({
   getCommand: vi.fn((name: string) => (
-    (commandDefinitions as Record<string, { source: string }>)[name] || null
+    (commandDefinitions as Record<string, { source: string; requiresSkills?: string[] }>)[name] || null
   )),
   getCommandContent: vi.fn((name: string) => {
     if (!(name in commandDefinitions)) return null
@@ -78,5 +84,32 @@ describe('skill-expander strict allowSources', () => {
     expect(result.expanded.skills).toEqual(['app-skill'])
     expect(result.expanded.agents).toEqual(['app-agent'])
     expect(result.expanded.commands).toEqual(['app-command'])
+  })
+
+  it('allows global and space resources when bypassing toolkit allowlist', () => {
+    const result = expandLazyDirectives(
+      '/space-skill\n/app-skill\n@app-agent\n/app-command',
+      undefined,
+      { skills: [], agents: [], commands: [] },
+      {
+        allowSources: getExecutionLayerAllowedSources(),
+        bypassToolkitAllowlist: true
+      }
+    )
+
+    expect(result.expanded.skills).toEqual(['space-skill', 'app-skill'])
+    expect(result.expanded.agents).toEqual(['app-agent'])
+    expect(result.expanded.commands).toEqual(['app-command'])
+    expect(result.missing.skills).toEqual([])
+    expect(result.missing.agents).toEqual([])
+    expect(result.missing.commands).toEqual([])
+  })
+
+  it('passes command args to explicit required skills', () => {
+    const result = expandLazyDirectives('/space-command-with-skill target=prod')
+
+    expect(result.expanded.skills).toEqual(['space-skill'])
+    expect(result.expanded.commands).toEqual(['space-command-with-skill'])
+    expect(result.text).toContain('<skill name="space-skill" args="target=prod">')
   })
 })

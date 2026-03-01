@@ -89,53 +89,22 @@ describe('getSpaceToolkit', () => {
 })
 
 describe('addToolkitResource', () => {
-  it('creates toolkit when adding to empty space', () => {
-    addToolkitResource('/test/workspace', {
+  it('is write-disabled in global execution mode', () => {
+    expect(() => addToolkitResource('/test/workspace', {
       id: '',
       type: 'skill',
       name: 'coding-standards'
-    })
-    const config = mockSpaceConfigs['/test/workspace'] as { toolkit?: { skills: unknown[] } }
-    expect(config.toolkit).toBeDefined()
-    expect(config.toolkit!.skills).toHaveLength(1)
-  })
-
-  it('does not duplicate entries', () => {
-    addToolkitResource('/test/workspace', {
-      id: '',
-      type: 'skill',
-      name: 'coding-standards'
-    })
-    addToolkitResource('/test/workspace', {
-      id: '',
-      type: 'skill',
-      name: 'coding-standards'
-    })
-    const config = mockSpaceConfigs['/test/workspace'] as { toolkit?: { skills: unknown[] } }
-    expect(config.toolkit!.skills).toHaveLength(1)
+    })).toThrow('Toolkit write operations are deprecated and disabled')
   })
 })
 
 describe('removeToolkitResource', () => {
-  it('removes a resource from toolkit', () => {
-    addToolkitResource('/test/workspace', {
+  it('is write-disabled in global execution mode', () => {
+    expect(() => removeToolkitResource('/test/workspace', {
       id: '',
       type: 'skill',
       name: 'skill-a'
-    })
-    addToolkitResource('/test/workspace', {
-      id: '',
-      type: 'skill',
-      name: 'skill-b'
-    })
-    removeToolkitResource('/test/workspace', {
-      id: '',
-      type: 'skill',
-      name: 'skill-a'
-    })
-    const config = mockSpaceConfigs['/test/workspace'] as { toolkit?: { skills: Array<{ name: string }> } }
-    expect(config.toolkit!.skills).toHaveLength(1)
-    expect(config.toolkit!.skills[0].name).toBe('skill-b')
+    })).toThrow('Toolkit write operations are deprecated and disabled')
   })
 })
 
@@ -173,37 +142,57 @@ describe('toolkitContains', () => {
 })
 
 describe('migrateToToolkit', () => {
-  it('migrates enabled skills and agents to toolkit', () => {
-    const result = migrateToToolkit(
+  it('is write-disabled in global execution mode', () => {
+    expect(() => migrateToToolkit(
       '/test/workspace',
       ['coding-standards', 'tdd-workflow'],
       ['code-reviewer']
-    )
-    expect(result).not.toBeNull()
-    expect(result!.skills).toHaveLength(2)
-    expect(result!.agents).toHaveLength(1)
-    expect(result!.commands).toHaveLength(0)
-    expect(result!.skills[0].name).toBe('coding-standards')
-    expect(result!.agents[0].name).toBe('code-reviewer')
-  })
-
-  it('handles empty arrays', () => {
-    const result = migrateToToolkit('/test/workspace', [], [])
-    expect(result).not.toBeNull()
-    expect(result!.skills).toHaveLength(0)
-    expect(result!.agents).toHaveLength(0)
+    )).toThrow('Toolkit write operations are deprecated and disabled')
   })
 })
 
 describe('clearSpaceToolkit', () => {
-  it('removes toolkit from config', () => {
-    addToolkitResource('/test/workspace', {
+  it('is write-disabled in global execution mode', () => {
+    expect(() => clearSpaceToolkit('/test/workspace')).toThrow('Toolkit write operations are deprecated and disabled')
+  })
+})
+
+describe('legacy toolkit snapshot reads', () => {
+  it('still loads existing toolkit entries for compatibility read path', () => {
+    mockSpaceConfigs['/test/workspace'] = {
+      toolkit: {
+        skills: [{
+          id: '',
+          type: 'skill',
+          name: 'test'
+        }],
+        commands: [],
+        agents: []
+      }
+    }
+    const toolkit = getSpaceToolkit('/test/workspace')
+    expect(toolkit?.skills).toHaveLength(1)
+    expect(toolkit?.skills[0].name).toBe('test')
+  })
+
+  it('write-disabled mode does not mutate existing toolkit snapshot', () => {
+    mockSpaceConfigs['/test/workspace'] = {
+      toolkit: {
+        skills: [{
+          id: '',
+          type: 'skill',
+          name: 'test'
+        }],
+        commands: [],
+        agents: []
+      }
+    }
+    expect(() => addToolkitResource('/test/workspace', {
       id: '',
       type: 'skill',
       name: 'test'
-    })
-    clearSpaceToolkit('/test/workspace')
-    const config = mockSpaceConfigs['/test/workspace'] as { toolkit?: unknown }
-    expect(config.toolkit).toBeUndefined()
+    })).toThrow()
+    const toolkit = getSpaceToolkit('/test/workspace')
+    expect(toolkit?.skills).toHaveLength(1)
   })
 })

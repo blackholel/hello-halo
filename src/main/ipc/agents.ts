@@ -16,12 +16,16 @@ import {
   copyAgentToSpaceByRef
 } from '../services/agents.service'
 import type { ResourceRef } from '../services/resource-ref.service'
+import { isResourceListView } from '../../shared/resource-access'
 
 export function registerAgentsHandlers(): void {
   // List all available agents
-  ipcMain.handle('agents:list', async (_event, workDir?: string, locale?: string) => {
+  ipcMain.handle('agents:list', async (_event, workDir?: string, locale?: string, view?: string) => {
     try {
-      const agents = listAgents(workDir, locale)
+      if (!isResourceListView(view)) {
+        return { success: false, error: 'view is required and must be a valid ResourceListView' }
+      }
+      const agents = listAgents(workDir, view, locale)
       return { success: true, data: agents }
     } catch (error: unknown) {
       const err = error as Error

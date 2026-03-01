@@ -16,6 +16,7 @@ import {
   testMcpConnections as agentTestMcpConnections
 } from '../services/agent'
 import type { AskUserQuestionAnswerInput, ChatMode } from '../services/agent'
+import type { InvocationContext } from '../../shared/resource-access'
 
 // Image attachment type for multi-modal messages
 interface ImageAttachment {
@@ -52,6 +53,7 @@ export interface SendMessageRequest {
     name: string
     extension: string
   }>
+  invocationContext?: InvocationContext
 }
 
 export interface SetModeRequest {
@@ -84,10 +86,35 @@ export async function sendMessage(
   request: SendMessageRequest
 ): Promise<ControllerResponse> {
   try {
+    if (request.invocationContext && request.invocationContext !== 'interactive') {
+      console.warn(
+        `[AgentController] Ignoring non-interactive invocationContext from external request: ${request.invocationContext}`
+      )
+    }
+
     const normalizedModelOverride = request.modelOverride || request.model
     const normalizedRequest = normalizedModelOverride
-      ? { ...request, modelOverride: normalizedModelOverride }
-      : request
+      ? { ...request, modelOverride: normalizedModelOverride, invocationContext: 'interactive' as InvocationContext }
+      : { ...request, invocationContext: 'interactive' as InvocationContext }
+    await agentSendMessage(mainWindow, normalizedRequest)
+    return { success: true }
+  } catch (error: unknown) {
+    return toErrorResponse(error)
+  }
+}
+
+/**
+ * Send workflow step message with server-derived invocation context.
+ */
+export async function sendWorkflowStepMessage(
+  mainWindow: BrowserWindow | null,
+  request: SendMessageRequest
+): Promise<ControllerResponse> {
+  try {
+    const normalizedModelOverride = request.modelOverride || request.model
+    const normalizedRequest = normalizedModelOverride
+      ? { ...request, modelOverride: normalizedModelOverride, invocationContext: 'workflow-step' as InvocationContext }
+      : { ...request, invocationContext: 'workflow-step' as InvocationContext }
     await agentSendMessage(mainWindow, normalizedRequest)
     return { success: true }
   } catch (error: unknown) {
