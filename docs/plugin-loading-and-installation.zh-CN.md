@@ -53,6 +53,15 @@
    - `skills.service / commands.service / agents.service / hooks.service` 扫描每个启用插件目录
    - 扫描结果通过 IPC 返回到前端，显示在 Extensions 面板
 
+### 3.1 Hooks 现行规则（2026-03-01）
+
+1. 已安装且启用的插件 hooks 会像 `commands/skills/agents` 一样默认参与加载。
+2. `strict-space-only` 不再单独屏蔽 hooks 来源；在 `kite` 模式下合并链路为：
+   `settings -> global -> space -> plugin`。
+3. hooks 的总开关仍是：
+   - `config.claudeCode.hooksEnabled === false`，或
+   - `space-config.claudeCode.hooksEnabled === false`。
+
 ## 4. 插件安装时必须配置什么
 
 ### 4.1 必须项
@@ -111,4 +120,3 @@ cat /Users/dl/.kite/plugins/installed_plugins.json
 cat /Users/dl/.kite/settings.json
 ls -la /Users/dl/.kite/plugins/<plugin-name>
 ```
-

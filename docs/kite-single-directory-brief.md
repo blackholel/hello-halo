@@ -42,6 +42,11 @@
 4. `initializeEssentialServices(mainWindow)`
 5. `initializeExtendedServices(mainWindow)`
 
+### 3.6 Hooks 规则补充（2026-03-01）
+1. `strict-space-only` 不再单独禁用 hooks。
+2. `kite` 模式下 hooks 合并来源为 `settings + app/space overlay + plugin`。
+3. hooks 全局关闭仍由 `hooksEnabled` 控制（全局或 space 任一为 `false` 即禁用）。
+
 ## 4. 主要代码变更
 ### 4.1 新增服务
 1. `src/main/services/config-source-mode.service.ts`

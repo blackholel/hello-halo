@@ -185,12 +185,11 @@ describe('sdk-config.builder strict space-only', () => {
     expect(paths).not.toContain('/home/test/.claude')
   })
 
-  it('keeps hooks configurable through buildHooksConfig when strict policy allows hooks', () => {
+  it('keeps hooks configurable through buildHooksConfig under strict policy', () => {
     vi.mocked(getSpaceConfig).mockReturnValue({
       resourcePolicy: {
         version: 1,
-        mode: 'strict-space-only',
-        allowHooks: true
+        mode: 'strict-space-only'
       },
       claudeCode: {
         plugins: {
@@ -210,7 +209,6 @@ describe('sdk-config.builder strict space-only', () => {
       resourcePolicy: {
         version: 1,
         mode: 'legacy',
-        allowHooks: true,
         allowMcp: true
       }
     } as any)

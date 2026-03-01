@@ -539,7 +539,6 @@ export function createSpace(input: { name: string; icon: string; customPath?: st
     resourcePolicy: {
       version: 1,
       mode: 'strict-space-only',
-      allowHooks: false,
       allowMcp: false,
       allowPluginMcpDirective: false,
       allowedSources: ['space']

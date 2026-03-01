@@ -45,6 +45,8 @@ export interface SpaceClaudeCodeConfig {
 export interface SpaceResourcePolicy {
   version: number
   mode: 'strict-space-only' | 'legacy'
+  // Deprecated: kept for backward-compatible config parsing only.
+  // Hooks runtime enablement is controlled by claudeCode.hooksEnabled.
   allowHooks?: boolean
   allowMcp?: boolean
   allowPluginMcpDirective?: boolean

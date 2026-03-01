@@ -6,7 +6,6 @@ const EXECUTION_LAYER_ALLOWED_SOURCES: ResourceSource[] = ['app', 'global', 'spa
 export const DEFAULT_SPACE_RESOURCE_POLICY: SpaceResourcePolicy = {
   version: 1,
   mode: 'strict-space-only',
-  allowHooks: false,
   allowMcp: false,
   allowPluginMcpDirective: false,
   allowedSources: ['space']

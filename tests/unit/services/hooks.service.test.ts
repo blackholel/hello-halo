@@ -3,7 +3,10 @@
  * TDD: Tests for hooks configuration management
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs'
+import { join } from 'path'
+import { tmpdir } from 'os'
 
 // Mock config.service
 vi.mock('../../../src/main/services/config.service', () => ({
@@ -33,12 +36,15 @@ import {
 } from '../../../src/main/services/hooks.service'
 import { getConfig } from '../../../src/main/services/config.service'
 import { getSpaceConfig } from '../../../src/main/services/space-config.service'
-import { getLockedConfigSourceMode } from '../../../src/main/services/config-source-mode.service'
+import { getLockedConfigSourceMode, getLockedUserConfigRootDir } from '../../../src/main/services/config-source-mode.service'
+import { listEnabledPlugins } from '../../../src/main/services/plugins.service'
 import type { HooksConfig, HookDefinition } from '../../../src/main/services/config.service'
 
 const mockGetConfig = vi.mocked(getConfig)
 const mockGetSpaceConfig = vi.mocked(getSpaceConfig)
 const mockGetLockedConfigSourceMode = vi.mocked(getLockedConfigSourceMode)
+const mockGetLockedUserConfigRootDir = vi.mocked(getLockedUserConfigRootDir)
+const mockListEnabledPlugins = vi.mocked(listEnabledPlugins)
 
 // Helper to create hook definitions
 function createHookDef(matcher: string, command: string): HookDefinition {
@@ -49,6 +55,14 @@ function createHookDef(matcher: string, command: string): HookDefinition {
 }
 
 describe('hooks.service', () => {
+  const tempDirs: string[] = []
+
+  afterEach(() => {
+    for (const dir of tempDirs.splice(0)) {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     clearSettingsCache()
@@ -59,6 +73,8 @@ describe('hooks.service', () => {
     } as ReturnType<typeof getConfig>)
     mockGetSpaceConfig.mockReturnValue(null)
     mockGetLockedConfigSourceMode.mockReturnValue('kite')
+    mockGetLockedUserConfigRootDir.mockReturnValue('/home/user/.kite')
+    mockListEnabledPlugins.mockReturnValue([])
   })
 
   describe('mergeHooksConfigs', () => {
@@ -192,7 +208,7 @@ describe('hooks.service', () => {
   })
 
   describe('buildHooksConfig mode boundaries', () => {
-    it('should disable hooks by default in strict space-only mode', () => {
+    it('should merge global and space hooks in strict space-only mode', () => {
       mockGetLockedConfigSourceMode.mockReturnValue('kite')
       mockGetConfig.mockReturnValue({
         claudeCode: {
@@ -210,7 +226,9 @@ describe('hooks.service', () => {
       } as any)
 
       const result = buildHooksConfig('/test/workdir')
-      expect(result).toBeUndefined()
+      expect(result?.PreToolUse).toHaveLength(2)
+      expect(result?.PreToolUse?.[0].matcher).toBe('global')
+      expect(result?.PreToolUse?.[1].matcher).toBe('space')
     })
 
     it('should merge global and space hooks in kite mode when policy is legacy', () => {
@@ -265,6 +283,145 @@ describe('hooks.service', () => {
       expect(result?.PreToolUse).toHaveLength(2)
       expect(result?.PreToolUse?.[0].matcher).toBe('global')
       expect(result?.PreToolUse?.[1].matcher).toBe('space')
+    })
+
+    it('should merge hooks from settings, global, space and plugin in order under strict mode', () => {
+      const rootDir = mkdtempSync(join(tmpdir(), 'hooks-settings-root-'))
+      const pluginDir = mkdtempSync(join(tmpdir(), 'hooks-plugin-'))
+      tempDirs.push(rootDir, pluginDir)
+
+      mkdirSync(rootDir, { recursive: true })
+      writeFileSync(
+        join(rootDir, 'settings.json'),
+        JSON.stringify({
+          hooks: {
+            PreToolUse: [createHookDef('settings', 'echo settings')]
+          }
+        }),
+        'utf-8'
+      )
+
+      mkdirSync(join(pluginDir, 'hooks'), { recursive: true })
+      writeFileSync(
+        join(pluginDir, 'hooks', 'hooks.json'),
+        JSON.stringify({
+          hooks: {
+            PreToolUse: [createHookDef('plugin', 'echo plugin')]
+          }
+        }),
+        'utf-8'
+      )
+
+      mockGetLockedConfigSourceMode.mockReturnValue('kite')
+      mockGetLockedUserConfigRootDir.mockReturnValue(rootDir)
+      mockGetConfig.mockReturnValue({
+        claudeCode: {
+          hooks: {
+            PreToolUse: [createHookDef('global', 'echo global')]
+          }
+        }
+      } as ReturnType<typeof getConfig>)
+      mockGetSpaceConfig.mockReturnValue({
+        resourcePolicy: {
+          version: 1,
+          mode: 'strict-space-only'
+        },
+        claudeCode: {
+          hooks: {
+            PreToolUse: [createHookDef('space', 'echo space')]
+          }
+        }
+      } as any)
+      mockListEnabledPlugins.mockReturnValue([
+        {
+          name: 'superpowers',
+          marketplace: 'superpowers-dev',
+          fullName: 'superpowers@superpowers-dev',
+          version: '4.3.1',
+          installPath: pluginDir,
+          scope: 'user'
+        }
+      ])
+
+      const result = buildHooksConfig('/test/workdir')
+
+      expect(result?.PreToolUse).toHaveLength(4)
+      expect(result?.PreToolUse?.map((def) => def.matcher)).toEqual([
+        'settings',
+        'global',
+        'space',
+        'plugin'
+      ])
+    })
+
+    it('should load plugin hooks in strict mode and replace CLAUDE_PLUGIN_ROOT', () => {
+      const pluginDir = mkdtempSync(join(tmpdir(), 'hooks-plugin-root-'))
+      tempDirs.push(pluginDir)
+
+      mkdirSync(join(pluginDir, 'hooks'), { recursive: true })
+      writeFileSync(
+        join(pluginDir, 'hooks', 'hooks.json'),
+        JSON.stringify({
+          hooks: {
+            SessionStart: [
+              {
+                matcher: 'startup',
+                hooks: [
+                  {
+                    type: 'command',
+                    command: "'${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd' session-start"
+                  }
+                ]
+              }
+            ]
+          }
+        }),
+        'utf-8'
+      )
+
+      mockGetSpaceConfig.mockReturnValue({
+        resourcePolicy: {
+          version: 1,
+          mode: 'strict-space-only'
+        }
+      } as any)
+      mockListEnabledPlugins.mockReturnValue([
+        {
+          name: 'superpowers',
+          marketplace: 'superpowers-dev',
+          fullName: 'superpowers@superpowers-dev',
+          version: '4.3.1',
+          installPath: pluginDir,
+          scope: 'user'
+        }
+      ])
+
+      const result = buildHooksConfig('/test/workdir')
+
+      expect(result?.SessionStart).toHaveLength(1)
+      expect(result?.SessionStart?.[0].hooks[0].command).toBe(
+        `'${pluginDir}/hooks/run-hook.cmd' session-start`
+      )
+    })
+
+    it('should still disable hooks in strict mode when hooksEnabled is false', () => {
+      mockGetConfig.mockReturnValue({
+        claudeCode: {
+          hooksEnabled: false,
+          hooks: {
+            PreToolUse: [createHookDef('global', 'echo global')]
+          }
+        }
+      } as ReturnType<typeof getConfig>)
+      mockGetSpaceConfig.mockReturnValue({
+        resourcePolicy: {
+          version: 1,
+          mode: 'strict-space-only'
+        }
+      } as any)
+
+      const result = buildHooksConfig('/test/workdir')
+      expect(result).toBeUndefined()
     })
   })
 

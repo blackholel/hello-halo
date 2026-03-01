@@ -7,6 +7,9 @@
 > 更新（2026-02-28）：执行层策略已调整为“全局 + 空间双来源”。  
 > 展示层仍可按既有规则区分/折叠全局资源；执行层在会话与 workflow 中允许解析 `~/.kite` 与当前空间 `.claude` 资源。  
 > `internal-only` 的直调限制语义保持不变。
+>
+> 历史结论标记（2026-03-01）：本文第 3.2 节“strict 下 hooks 默认禁用”仅反映当时实现，现行规则已更新为
+> “hooks 默认参与全局加载，strict-space-only 不再单独拦截 hooks；禁用由 hooksEnabled 控制”。
 
 ---
 
@@ -70,7 +73,7 @@
 
 1. strict 下强制 lazy-load 路径与 `settingSources=['local']`。
 2. strict 下插件目录收敛到空间路径，不走全局/插件扩散路径。
-3. strict 下 hooks 默认禁用。
+3. strict 下 hooks 默认禁用。（历史实现，现行规则已变更，以上方“历史结论标记”为准）
 4. strict 下 `/mcp ...` 指令剥离，不动态启用插件 MCP。
 5. `expandLazyDirectives` 在 strict 下传入 `allowSources:['space']`。
 
