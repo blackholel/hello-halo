@@ -23,8 +23,9 @@ import {
   parseFrontmatter,
   getFrontmatterString,
   getFrontmatterStringArray,
-  getLocalizedFrontmatterString
+  getLocalizedFrontmatterStringForLocale
 } from './resource-metadata.service'
+import { resolveResourceDisplayOverride } from './resource-display-i18n.service'
 import type { ResourceListView, ResourceExposure } from '../../shared/resource-access'
 import { filterByResourceExposure, resolveResourceExposure } from './resource-exposure.service'
 
@@ -119,6 +120,7 @@ function findSkillByRef(skills: SkillDefinition[], ref: ResourceRef): SkillDefin
 function scanSkillDir(
   dirPath: string,
   source: SkillDefinition['source'],
+  sourceRoot?: string,
   pluginRoot?: string,
   namespace?: string,
   workDir?: string,
@@ -141,14 +143,18 @@ function scanSkillDir(
         let triggers: string[] | undefined
         let category: string | undefined
         let frontmatterExposure: unknown
-        let sceneDescription: string | undefined
+        let frontmatterDescription: string | undefined
+        let localizedFrontmatterDescription: string | undefined
+        let frontmatterDisplayName: string | undefined
+        let localizedFrontmatterDisplayName: string | undefined
         try {
           const content = readFileSync(skillMdPath, 'utf-8')
           const frontmatter = parseFrontmatter(content)
           if (frontmatter) {
-            sceneDescription = getFrontmatterString(frontmatter, ['description'])
-            description = getLocalizedFrontmatterString(frontmatter, ['description'], locale) ?? sceneDescription
-            displayName = getLocalizedFrontmatterString(frontmatter, ['name', 'title'], locale)
+            frontmatterDescription = getFrontmatterString(frontmatter, ['description'])
+            localizedFrontmatterDescription = getLocalizedFrontmatterStringForLocale(frontmatter, ['description'], locale)
+            frontmatterDisplayName = getFrontmatterString(frontmatter, ['name', 'title'])
+            localizedFrontmatterDisplayName = getLocalizedFrontmatterStringForLocale(frontmatter, ['name', 'title'], locale)
             triggers = getFrontmatterStringArray(frontmatter, ['triggers'])
             category = getFrontmatterString(frontmatter, ['category'])
             frontmatterExposure = frontmatter.exposure
@@ -156,6 +162,17 @@ function scanSkillDir(
         } catch {
           // Ignore read errors for metadata
         }
+
+        const resourceKey = namespace ? `${namespace}:${entry}` : entry
+        const sidecar = resolveResourceDisplayOverride(sourceRoot, 'skill', resourceKey, locale)
+        description = sidecar.descriptionLocale
+          ?? localizedFrontmatterDescription
+          ?? sidecar.descriptionDefault
+          ?? frontmatterDescription
+        displayName = sidecar.titleLocale
+          ?? localizedFrontmatterDisplayName
+          ?? sidecar.titleDefault
+          ?? frontmatterDisplayName
 
         skills.push({
           name: entry,
@@ -214,12 +231,12 @@ function buildGlobalSkills(locale?: string): SkillDefinition[] {
   for (const plugin of listEnabledPlugins()) {
     const skillsSubdir = join(plugin.installPath, 'skills')
     if (existsSync(skillsSubdir)) {
-      addSkills(scanSkillDir(skillsSubdir, 'installed', plugin.installPath, plugin.name, undefined, locale))
+      addSkills(scanSkillDir(skillsSubdir, 'installed', plugin.installPath, plugin.installPath, plugin.name, undefined, locale))
     }
   }
 
   // 1. App-level skills ({locked-user-root}/skills/)
-  addSkills(scanSkillDir(join(getLockedUserConfigRootDir(), 'skills'), 'app', undefined, undefined, undefined, locale))
+  addSkills(scanSkillDir(join(getLockedUserConfigRootDir(), 'skills'), 'app', getLockedUserConfigRootDir(), undefined, undefined, undefined, locale))
 
   // 2. Kite mode only: global custom paths from config.claudeCode.plugins.globalPaths
   if (sourceMode === 'kite') {
@@ -230,7 +247,7 @@ function buildGlobalSkills(locale?: string): SkillDefinition[] {
         : join(require('os').homedir(), globalPath)
       const skillsSubdir = join(resolvedPath, 'skills')
       if (existsSync(skillsSubdir)) {
-        addSkills(scanSkillDir(skillsSubdir, 'global', undefined, undefined, undefined, locale))
+        addSkills(scanSkillDir(skillsSubdir, 'global', resolvedPath, undefined, undefined, undefined, locale))
       }
     }
   }
@@ -239,7 +256,7 @@ function buildGlobalSkills(locale?: string): SkillDefinition[] {
 }
 
 function buildSpaceSkills(workDir: string, locale?: string): SkillDefinition[] {
-  return scanSkillDir(join(workDir, '.claude', 'skills'), 'space', undefined, undefined, workDir, locale)
+  return scanSkillDir(join(workDir, '.claude', 'skills'), 'space', join(workDir, '.claude'), undefined, undefined, workDir, locale)
 }
 
 function logFound(items: SkillDefinition[]): void {
@@ -377,7 +394,7 @@ export function createSkill(workDir: string, name: string, content: string): Ski
 
   const frontmatter = parseFrontmatter(content)
   const description = getFrontmatterString(frontmatter, ['description'])
-  const displayName = getLocalizedFrontmatterString(frontmatter, ['name', 'title'])
+  const displayName = getFrontmatterString(frontmatter, ['name', 'title'])
   const triggers = getFrontmatterStringArray(frontmatter, ['triggers'])
   const category = getFrontmatterString(frontmatter, ['category'])
   const exposure = resolveResourceExposure({

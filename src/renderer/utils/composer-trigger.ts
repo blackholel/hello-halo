@@ -7,16 +7,18 @@ export interface TriggerContext {
   query: string
 }
 
-const TOKEN_CHAR_RE = /[A-Za-z0-9._:-]/
+const TOKEN_CHAR_RE = /[\p{L}\p{N}A-Za-z0-9._:-]/u
+const SLASH_BOUNDARY_RE = /[\p{L}\p{N}A-Za-z0-9_/:.@-]/u
+const MENTION_BOUNDARY_RE = /[\p{L}\p{N}A-Za-z0-9_.+-]/u
 
 function isSlashBoundary(prev: string | undefined): boolean {
   if (!prev) return true
-  return !/[A-Za-z0-9_/:.@-]/.test(prev)
+  return !SLASH_BOUNDARY_RE.test(prev)
 }
 
 function isMentionBoundary(prev: string | undefined): boolean {
   if (!prev) return true
-  return !/[A-Za-z0-9_.+-]/.test(prev)
+  return !MENTION_BOUNDARY_RE.test(prev)
 }
 
 function isTokenChar(ch: string | undefined): boolean {

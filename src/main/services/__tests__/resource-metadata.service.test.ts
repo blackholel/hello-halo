@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   extractDescriptionFromContent,
+  getLocalizedFrontmatterStringForLocale,
   getLocalizedFrontmatterString,
   parseFrontmatter,
   stripFrontmatter
@@ -98,5 +99,20 @@ describe('resource-metadata.service', () => {
     const frontmatter = parseFrontmatter(content)
     expect(getLocalizedFrontmatterString(frontmatter, ['description'], 'zh-TW')).toBe('中文通用描述')
     expect(getLocalizedFrontmatterString(frontmatter, ['description'], 'fr-FR')).toBe('Default text')
+  })
+
+  it('returns locale-only value without base fallback', () => {
+    const content = [
+      '---',
+      'title: Default Title',
+      'title_zh-CN: 中文标题',
+      'description: Default text',
+      '---',
+      '# Body'
+    ].join('\n')
+
+    const frontmatter = parseFrontmatter(content)
+    expect(getLocalizedFrontmatterStringForLocale(frontmatter, ['title'], 'zh-CN')).toBe('中文标题')
+    expect(getLocalizedFrontmatterStringForLocale(frontmatter, ['description'], 'zh-CN')).toBeUndefined()
   })
 })

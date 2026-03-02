@@ -159,7 +159,7 @@ export function ExtensionsView(): JSX.Element {
       })
 
       if (!response.success || !response.data) {
-        setResourceHashError(response.error || 'Failed to get resource hash')
+        setResourceHashError(response.error || t('Failed to get resource hash'))
         setResourceIndexHash(null)
         setSessionResourceHash(null)
         return
@@ -170,7 +170,7 @@ export function ExtensionsView(): JSX.Element {
       setSessionResourceHash(typeof data.sessionResourceHash === 'string' ? data.sessionResourceHash : null)
     } catch (error) {
       console.error('[ExtensionsView] Failed to get resource hash:', error)
-      setResourceHashError('Failed to get resource hash')
+      setResourceHashError(t('Failed to get resource hash'))
       setResourceIndexHash(null)
       setSessionResourceHash(null)
     } finally {
@@ -229,7 +229,7 @@ export function ExtensionsView(): JSX.Element {
       setIsRefreshing(true)
       const refreshResult = await api.refreshSkillsIndex(loadedWorkDir ?? undefined)
       if (!refreshResult.success) {
-        setResourceHashError(refreshResult.error || 'Failed to refresh resources')
+        setResourceHashError(refreshResult.error || t('Failed to refresh resources'))
         return
       }
       await Promise.all([
@@ -244,7 +244,7 @@ export function ExtensionsView(): JSX.Element {
     } finally {
       setIsRefreshing(false)
     }
-  }, [isRefreshing, loadedWorkDir, loadAgents, loadCommands, loadSkills, isRemote])
+  }, [isRefreshing, loadedWorkDir, loadAgents, loadCommands, loadSkills, isRemote, t])
 
   return (
     <div className="h-full overflow-auto">
@@ -276,7 +276,7 @@ export function ExtensionsView(): JSX.Element {
             </span>
           </div>
           <p className="text-[11px] text-muted-foreground/70 mt-1">
-            app {sourceCounts.app} · global {sourceCounts.global} · plugin {sourceCounts.installed + sourceCounts.plugin} · space {sourceCounts.space}
+            {t('App')} {sourceCounts.app} · {t('Global')} {sourceCounts.global} · {t('Plugin')} {sourceCounts.installed + sourceCounts.plugin} · {t('Space')} {sourceCounts.space}
           </p>
           {sessionReadyState === 'stale' && (
             <p className="text-[11px] text-amber-700/90 dark:text-amber-300/90 mt-1">

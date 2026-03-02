@@ -38,21 +38,19 @@ import { processImage, isValidImageType, formatFileSize } from '../../utils/imag
 import type { ChatMode, ConversationAiConfig, FileContextAttachment, ImageAttachment, KiteConfig } from '../../types'
 import { useTranslation } from '../../i18n'
 import { useComposerStore } from '../../stores/composer.store'
-import { commandKey } from '../../../shared/command-utils'
 import { getTriggerContext, replaceTriggerToken, type TriggerContext } from '../../utils/composer-trigger'
-import { isResourceEnabled, toResourceKey } from '../../utils/resource-key'
+import { isResourceEnabled } from '../../utils/resource-key'
 import {
   buildGlobalExpandStateKey,
-  buildSuggestionStableId,
   buildVisibleSuggestions,
   rankSuggestions,
   shouldResetGlobalExpandState,
   splitSuggestionsByScope
 } from '../../utils/composer-suggestion-ranking'
+import { buildComposerResourceSuggestion } from '../../utils/composer-resource-suggestion'
 import type {
   ComposerResourceSuggestionItem,
   ComposerSuggestionItem,
-  ComposerSuggestionSource,
   ComposerSuggestionTab,
   ComposerSuggestionType
 } from '../../utils/composer-suggestion-types'
@@ -80,22 +78,6 @@ const MAX_IMAGES = 10  // Max images per message
 interface ImageError {
   id: string
   message: string
-}
-
-function getLocalizedName(item: { name: string; displayName?: string; namespace?: string }): string {
-  const base = item.displayName || item.name
-  return item.namespace ? `${item.namespace}:${base}` : base
-}
-
-function normalizeSuggestionSource(source: string | undefined): ComposerSuggestionSource {
-  if (source === 'app' || source === 'global' || source === 'space' || source === 'installed' || source === 'plugin') {
-    return source
-  }
-  return 'space'
-}
-
-function toSuggestionScope(source: ComposerSuggestionSource): 'space' | 'global' {
-  return source === 'space' ? 'space' : 'global'
 }
 
 function toSuggestionTypeFromTab(tab: ComposerSuggestionTab): ComposerSuggestionType {
@@ -250,36 +232,11 @@ export function InputArea({
   const skillCandidates = useMemo<ComposerResourceSuggestionItem[]>(() => {
     const suggestions: ComposerResourceSuggestionItem[] = []
     for (const skill of skills) {
-      const source = normalizeSuggestionSource(skill.source)
-      const scope = toSuggestionScope(source)
-      if (scope === 'space' && enabledSkills.length > 0 && !isResourceEnabled(enabledSkills, skill)) {
+      const suggestion = buildComposerResourceSuggestion('skill', skill)
+      if (suggestion.scope === 'space' && enabledSkills.length > 0 && !isResourceEnabled(enabledSkills, skill)) {
         continue
       }
-
-      const key = toResourceKey(skill)
-      suggestions.push({
-        kind: 'resource',
-        id: `skill:${skill.path}`,
-        stableId: buildSuggestionStableId({
-          type: 'skill',
-          source,
-          namespace: skill.namespace,
-          name: skill.name,
-          pluginRoot: skill.pluginRoot
-        }),
-        type: 'skill',
-        source,
-        scope,
-        displayName: getLocalizedName(skill),
-        insertText: `/${key}`,
-        description: skill.description,
-        keywords: [
-          key,
-          skill.name,
-          skill.displayName,
-          skill.description
-        ].filter((item): item is string => Boolean(item))
-      })
+      suggestions.push(suggestion)
     }
     return suggestions
   }, [enabledSkills, skills])
@@ -287,31 +244,7 @@ export function InputArea({
   const commandCandidates = useMemo<ComposerResourceSuggestionItem[]>(() => {
     const suggestions: ComposerResourceSuggestionItem[] = []
     for (const command of commands) {
-      const source = normalizeSuggestionSource(command.source)
-      const key = commandKey(command)
-      suggestions.push({
-        kind: 'resource',
-        id: `command:${command.path}`,
-        stableId: buildSuggestionStableId({
-          type: 'command',
-          source,
-          namespace: command.namespace,
-          name: command.name,
-          pluginRoot: command.pluginRoot
-        }),
-        type: 'command',
-        source,
-        scope: toSuggestionScope(source),
-        displayName: getLocalizedName(command),
-        insertText: `/${key}`,
-        description: command.description,
-        keywords: [
-          key,
-          command.name,
-          command.displayName,
-          command.description
-        ].filter((item): item is string => Boolean(item))
-      })
+      suggestions.push(buildComposerResourceSuggestion('command', command))
     }
     return suggestions
   }, [commands])
@@ -319,36 +252,11 @@ export function InputArea({
   const agentCandidates = useMemo<ComposerResourceSuggestionItem[]>(() => {
     const suggestions: ComposerResourceSuggestionItem[] = []
     for (const agent of agents) {
-      const source = normalizeSuggestionSource(agent.source)
-      const scope = toSuggestionScope(source)
-      if (scope === 'space' && enabledAgents.length > 0 && !isResourceEnabled(enabledAgents, agent)) {
+      const suggestion = buildComposerResourceSuggestion('agent', agent)
+      if (suggestion.scope === 'space' && enabledAgents.length > 0 && !isResourceEnabled(enabledAgents, agent)) {
         continue
       }
-
-      const key = toResourceKey(agent)
-      suggestions.push({
-        kind: 'resource',
-        id: `agent:${agent.path}`,
-        stableId: buildSuggestionStableId({
-          type: 'agent',
-          source,
-          namespace: agent.namespace,
-          name: agent.name,
-          pluginRoot: agent.pluginRoot
-        }),
-        type: 'agent',
-        source,
-        scope,
-        displayName: getLocalizedName(agent),
-        insertText: `@${key}`,
-        description: agent.description,
-        keywords: [
-          key,
-          agent.name,
-          agent.displayName,
-          agent.description
-        ].filter((item): item is string => Boolean(item))
-      })
+      suggestions.push(suggestion)
     }
     return suggestions
   }, [agents, enabledAgents])

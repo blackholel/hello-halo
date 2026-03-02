@@ -95,8 +95,8 @@ export function normalizeExtensionItems(params: {
 
   const commandItems: ExtensionItem[] = (params.isRemote ? [] : params.commands).map((command) => {
     const displayBase = command.displayName || command.name
-    const namespacedDisplay = command.namespace ? `${command.namespace}:${displayBase}` : displayBase
-    const displayName = `/${namespacedDisplay}`
+    // Display should stay clean for users; keep namespace only in command key/search, not title.
+    const displayName = `/${displayBase}`
     return {
       id: `command:${command.namespace ?? '-'}:${command.name}`,
       type: 'command',

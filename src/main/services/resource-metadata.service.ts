@@ -166,6 +166,31 @@ export function getLocalizedFrontmatterString(
   return undefined
 }
 
+export function getLocalizedFrontmatterStringForLocale(
+  frontmatter: ResourceFrontmatter | null | undefined,
+  keys: string[],
+  locale?: string
+): string | undefined {
+  if (!frontmatter) return undefined
+
+  const lookup = buildFrontmatterStringLookup(frontmatter)
+  const localeCandidates = normalizeLocaleCandidates(locale)
+
+  for (const rawKey of keys) {
+    const key = rawKey.trim()
+    if (!key) continue
+
+    for (const candidate of localeCandidates) {
+      const localizedValue = lookup.get(`${key}_${candidate}`.toLowerCase())
+      if (localizedValue) {
+        return localizedValue
+      }
+    }
+  }
+
+  return undefined
+}
+
 export function getFrontmatterStringArray(
   frontmatter: ResourceFrontmatter | null | undefined,
   keys: string[]

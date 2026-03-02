@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+let displayIndexEntries = ['display-i18n:/home/test/.kite/i18n/resource-display.i18n.json:1700000000000:100']
+
 vi.mock('../../../src/main/services/skills.service', () => ({
   listSkills: vi.fn((workDir?: string) => {
     if (workDir) {
@@ -43,6 +45,15 @@ vi.mock('../../../src/main/services/space.service', () => ({
   getAllSpacePaths: vi.fn(() => ['/workspace/project-a'])
 }))
 
+vi.mock('../../../src/main/services/resource-display-i18n.service', () => ({
+  getResourceDisplayI18nIndexEntries: vi.fn((workDir?: string) => {
+    if (workDir) {
+      return [`display-i18n:${workDir}/.claude/i18n/resource-display.i18n.json:1700000000000:200`]
+    }
+    return displayIndexEntries
+  })
+}))
+
 vi.mock('fs', () => ({
   statSync: vi.fn(() => ({ mtimeMs: 1700000000000 }))
 }))
@@ -59,6 +70,7 @@ describe('resource-index.service', () => {
   beforeEach(() => {
     clearResourceIndexSnapshot()
     vi.clearAllMocks()
+    displayIndexEntries = ['display-i18n:/home/test/.kite/i18n/resource-display.i18n.json:1700000000000:100']
   })
 
   it('rebuildResourceIndex 生成 hash 与统计计数', () => {
@@ -89,5 +101,12 @@ describe('resource-index.service', () => {
     expect(second.hash).toBeTruthy()
     expect(second.generatedAt >= first.generatedAt).toBe(true)
   })
-})
 
+  it('sidecar 指纹变化会导致 hash 变化', () => {
+    const before = rebuildResourceIndex(undefined, 'manual-refresh')
+    displayIndexEntries = ['display-i18n:/home/test/.kite/i18n/resource-display.i18n.json:1700000000500:101']
+    clearResourceIndexSnapshot()
+    const after = rebuildResourceIndex(undefined, 'manual-refresh')
+    expect(after.hash).not.toBe(before.hash)
+  })
+})

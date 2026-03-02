@@ -3,6 +3,10 @@
  * Batch migrate ~/.kite skills/agents/commands frontmatter to include
  * localized display metadata fields (name_zh-CN, description_zh-CN).
  *
+ * DEPRECATED:
+ * This script can invoke online translators (api/google). For offline-only
+ * sidecar migration, use scripts/build-resource-sidecar.mjs.
+ *
  * Usage:
  *   node scripts/migrate-kite-resource-i18n.mjs --dry-run
  *   node scripts/migrate-kite-resource-i18n.mjs --apply
@@ -36,7 +40,8 @@ function parseArgs(argv) {
     force: false,
     pendingOnly: false,
     pendingOut: '',
-    translationsFile: ''
+    translationsFile: '',
+    offlineOnly: true
   }
 
   for (let i = 2; i < argv.length; i += 1) {
@@ -90,6 +95,14 @@ function parseArgs(argv) {
       printHelp()
       process.exit(0)
     }
+    if (token === '--offline-only') {
+      args.offlineOnly = true
+      continue
+    }
+    if (token === '--allow-online') {
+      args.offlineOnly = false
+      continue
+    }
   }
 
   if (!['auto', 'api', 'google', 'copy'].includes(args.mode)) {
@@ -122,6 +135,8 @@ Options:
   --pending-out <p>  Output path for pending list JSON (default: /tmp/kite-resource-pending-<locale>.json)
   --translations-file <path>
                      Read GPT-translated JSON array and apply directly (fields: file, nameZh, descriptionZh)
+  --offline-only     Block api/google translation modes (default: true)
+  --allow-online     Allow api/google translation modes (deprecated, not recommended)
   --help, -h         Show help
 
 Examples:
@@ -562,6 +577,9 @@ function serializeContent(hasFrontmatter, frontmatterLines, body) {
 async function main() {
   const args = parseArgs(process.argv)
   const mode = normalizeMode(args.mode)
+  if (args.offlineOnly && (mode === 'api' || mode === 'google')) {
+    throw new Error('Online translation mode is blocked by --offline-only. Use scripts/build-resource-sidecar.mjs for offline migration, or pass --allow-online explicitly (deprecated).')
+  }
   const localeKeyName = `name_${args.locale}`
   const localeKeyDescription = `description_${args.locale}`
 

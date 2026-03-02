@@ -4,6 +4,7 @@ import { getAllSpacePaths } from './space.service'
 import { listSkills } from './skills.service'
 import { listAgents } from './agents.service'
 import { listCommands } from './commands.service'
+import { getResourceDisplayI18nIndexEntries } from './resource-display-i18n.service'
 import type { ResourceIndexSnapshot, ResourceRefreshReason } from '../../shared/resource-access'
 
 const GLOBAL_INDEX_KEY = '__global__'
@@ -42,7 +43,8 @@ export function rebuildResourceIndex(
   const entries: string[] = [
     ...skills.map((item) => `skill:${item.source}:${item.namespace || ''}:${item.name}:${item.path}:${safeMtime(item.path)}`),
     ...agents.map((item) => `agent:${item.source}:${item.namespace || ''}:${item.name}:${item.path}:${safeMtime(item.path)}`),
-    ...commands.map((item) => `command:${item.source}:${item.namespace || ''}:${item.name}:${item.path}:${safeMtime(item.path)}`)
+    ...commands.map((item) => `command:${item.source}:${item.namespace || ''}:${item.name}:${item.path}:${safeMtime(item.path)}`),
+    ...getResourceDisplayI18nIndexEntries(workDir)
   ]
 
   const snapshot: ResourceIndexSnapshot = {
@@ -85,4 +87,3 @@ export function clearResourceIndexSnapshot(workDir?: string | null): void {
   }
   snapshots.delete(toIndexKey(workDir))
 }
-

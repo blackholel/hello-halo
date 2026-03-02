@@ -45,4 +45,26 @@ describe('extension-filtering', () => {
     expect(applyTypeAndSearchFilter(items, 'all', '代码审查')).toHaveLength(1)
     expect(applyTypeAndSearchFilter(items, 'all', 'missing')).toHaveLength(0)
   })
+
+  it('command card title hides namespace prefix but keeps slash', () => {
+    const items = normalizeExtensionItems({
+      skills: [],
+      agents: [],
+      commands: [
+        {
+          name: 'code-review',
+          displayName: '代码评审',
+          namespace: 'everything-claude-code',
+          description: '执行代码评审。',
+          path: '/tmp/code-review',
+          source: 'plugin'
+        }
+      ],
+      isRemote: false
+    })
+
+    expect(items).toHaveLength(1)
+    expect(items[0].displayName).toBe('/代码评审')
+    expect(items[0].searchable.includes('everything-claude-code:code-review')).toBe(true)
+  })
 })

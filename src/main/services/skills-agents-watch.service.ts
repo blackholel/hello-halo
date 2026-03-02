@@ -17,11 +17,19 @@ import { normalizePlatformPath } from '../utils/path-validation'
 import { getLockedConfigSourceMode, getLockedUserConfigRootDir } from './config-source-mode.service'
 import { clearResourceExposureCache, getResourceExposureConfigPath } from './resource-exposure.service'
 import { clearResourceIndexSnapshot, rebuildAllResourceIndexes, rebuildResourceIndex } from './resource-index.service'
+import {
+  clearResourceDisplayI18nCache,
+  getResourceDisplayI18nRoots,
+  RESOURCE_DISPLAY_I18N_FILE_NAME
+} from './resource-display-i18n.service'
 import type { ResourceChangedPayload, ResourceKind, ResourceRefreshReason } from '../../shared/resource-access'
 
 type WatchKind =
   | ResourceKind
   | 'spaces-root'
+  | 'display-i18n-root-dir'
+  | 'display-i18n-dir'
+  | 'display-i18n-file'
   | 'resource-exposure'
   | 'resource-exposure-dir'
   | 'plugins-registry-file'
@@ -99,6 +107,13 @@ function emitAllResourceChanged(reason: ResourceRefreshReason): void {
   sendEvent('commands:changed', payload)
 }
 
+function emitAllResourceChangedForScope(workDir: string | null, reason: ResourceRefreshReason): void {
+  const payload = buildChangedPayload(workDir, reason, RESOURCE_KINDS)
+  sendEvent('skills:changed', payload)
+  sendEvent('agents:changed', payload)
+  sendEvent('commands:changed', payload)
+}
+
 function rebuildIndexForScope(workDir: string | null, reason: ResourceRefreshReason): void {
   if (workDir) {
     rebuildResourceIndex(workDir, reason)
@@ -121,6 +136,35 @@ function scheduleNotify(kind: ResourceKind, workDir?: string, reason: ResourceRe
   }, 200))
 }
 
+function scheduleDisplayI18nNotify(workDir?: string): void {
+  const scope = workDir || 'global'
+  const key = `display-i18n:${scope}`
+  const timer = debounceTimers.get(key)
+  if (timer) clearTimeout(timer)
+
+  debounceTimers.set(key, setTimeout(() => {
+    debounceTimers.delete(key)
+    clearResourceDisplayI18nCache()
+
+    if (workDir) {
+      invalidateSkillsCache(workDir)
+      invalidateAgentsCache(workDir)
+      invalidateCommandsCache(workDir)
+      clearResourceIndexSnapshot(workDir)
+      rebuildResourceIndex(workDir, 'file-change')
+      emitAllResourceChangedForScope(workDir, 'file-change')
+      return
+    }
+
+    clearSkillsCache()
+    clearAgentsCache()
+    clearCommandsCache()
+    clearResourceIndexSnapshot()
+    rebuildAllResourceIndexes('file-change')
+    emitAllResourceChanged('file-change')
+  }, 200))
+}
+
 function schedulePluginConfigNotify(reason: 'plugin-registry-change' | 'settings-change'): void {
   const key = `plugin-config:${reason}`
   const timer = debounceTimers.get(key)
@@ -129,6 +173,7 @@ function schedulePluginConfigNotify(reason: 'plugin-registry-change' | 'settings
   debounceTimers.set(key, setTimeout(() => {
     debounceTimers.delete(key)
     clearPluginsCache()
+    clearResourceDisplayI18nCache()
     reconcileAllResourceWatchers()
     clearResourceIndexSnapshot()
     clearSkillsCache()
@@ -147,6 +192,7 @@ function scheduleExposureNotify(): void {
   debounceTimers.set(key, setTimeout(() => {
     debounceTimers.delete(key)
     clearResourceExposureCache()
+    clearResourceDisplayI18nCache()
     clearResourceIndexSnapshot()
     clearSkillsCache()
     clearAgentsCache()
@@ -156,9 +202,9 @@ function scheduleExposureNotify(): void {
   }, 200))
 }
 
-function parseChangedName(filename: string | Buffer | null | undefined): string | undefined {
-  if (typeof filename === 'string') return basename(filename)
-  if (Buffer.isBuffer(filename)) return basename(filename.toString('utf-8'))
+function parseChangedPath(filename: string | Buffer | null | undefined): string | undefined {
+  if (typeof filename === 'string') return normalizePlatformPath(filename)
+  if (Buffer.isBuffer(filename)) return normalizePlatformPath(filename.toString('utf-8'))
   return undefined
 }
 
@@ -170,10 +216,31 @@ function createWatcher(kind: WatchKind, path: string, workDir?: string, opts?: {
 
   try {
     const watcher = watch(path, { recursive: supportsRecursive }, (_eventType, filename) => {
-      const changedName = parseChangedName(filename)
+      const changedPath = parseChangedPath(filename)
+      const changedName = changedPath ? basename(changedPath) : undefined
 
       if (kind === 'spaces-root') {
         reconcileAllResourceWatchers()
+        return
+      }
+
+      if (kind === 'display-i18n-root-dir') {
+        reconcileDisplayI18nWatchers()
+        if (!changedPath) return
+        if (changedPath === 'i18n' || changedPath.startsWith(`i18n/`)) {
+          scheduleDisplayI18nNotify(workDir)
+        }
+        return
+      }
+
+      if (kind === 'display-i18n-dir') {
+        if (changedName && changedName !== RESOURCE_DISPLAY_I18N_FILE_NAME) return
+        scheduleDisplayI18nNotify(workDir)
+        return
+      }
+
+      if (kind === 'display-i18n-file') {
+        scheduleDisplayI18nNotify(workDir)
         return
       }
 
@@ -277,6 +344,25 @@ function getResourceDirs(kind: ResourceKind): DirEntry[] {
   return dirs
 }
 
+interface DisplayI18nWatchTargets {
+  rootPath: string
+  i18nDirPath: string
+  sidecarPath: string
+  workDir?: string
+}
+
+function getDisplayI18nWatchTargets(): DisplayI18nWatchTargets[] {
+  return getResourceDisplayI18nRoots().map((entry) => {
+    const i18nDirPath = join(entry.rootPath, 'i18n')
+    return {
+      rootPath: entry.rootPath,
+      i18nDirPath,
+      sidecarPath: join(i18nDirPath, RESOURCE_DISPLAY_I18N_FILE_NAME),
+      workDir: entry.workDir
+    }
+  })
+}
+
 function isChildPath(parent: string, child: string): boolean {
   const rel = relative(parent, child)
   return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel)
@@ -344,10 +430,39 @@ function reconcileResourceWatchers(kind: ResourceKind): void {
   }
 }
 
+function reconcileDisplayI18nWatchers(): void {
+  const targets = getDisplayI18nWatchTargets()
+  const desired = new Set<string>()
+
+  for (const target of targets) {
+    desired.add(makeKey('display-i18n-root-dir', target.rootPath))
+    desired.add(makeKey('display-i18n-dir', target.i18nDirPath))
+    desired.add(makeKey('display-i18n-file', target.sidecarPath))
+  }
+
+  for (const [key, entry] of Array.from(watchers.entries())) {
+    if (
+      entry.kind !== 'display-i18n-root-dir' &&
+      entry.kind !== 'display-i18n-dir' &&
+      entry.kind !== 'display-i18n-file'
+    ) continue
+    if (!desired.has(key)) {
+      stopWatcher(key)
+    }
+  }
+
+  for (const target of targets) {
+    createWatcher('display-i18n-root-dir', target.rootPath, target.workDir, { isRoot: true })
+    createWatcher('display-i18n-dir', target.i18nDirPath, target.workDir)
+    createWatcher('display-i18n-file', target.sidecarPath, target.workDir)
+  }
+}
+
 function reconcileAllResourceWatchers(): void {
   for (const kind of RESOURCE_KINDS) {
     reconcileResourceWatchers(kind)
   }
+  reconcileDisplayI18nWatchers()
 }
 
 function startLinuxRescan(): void {
@@ -409,4 +524,9 @@ export function cleanupSkillAgentWatchers(): void {
 // Test helper: expose resolved watch directories without creating filesystem watchers
 export function _testGetResourceDirs(kind: ResourceKind): Array<{ path: string; workDir?: string }> {
   return getResourceDirs(kind)
+}
+
+// Test helper: expose resolved display-i18n watch targets.
+export function _testGetDisplayI18nWatchTargets(): Array<{ rootPath: string; i18nDirPath: string; sidecarPath: string; workDir?: string }> {
+  return getDisplayI18nWatchTargets()
 }

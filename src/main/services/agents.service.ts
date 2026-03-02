@@ -18,7 +18,12 @@ import type { ResourceRef, CopyToSpaceOptions, CopyToSpaceResult } from './resou
 import { isPathWithinBasePaths, isValidDirectoryPath, isFileNotFoundError } from '../utils/path-validation'
 import { listEnabledPlugins } from './plugins.service'
 import { FileCache } from '../utils/file-cache'
-import { parseResourceMetadata, getFrontmatterString, getLocalizedFrontmatterString } from './resource-metadata.service'
+import {
+  parseResourceMetadata,
+  getFrontmatterString,
+  getLocalizedFrontmatterStringForLocale
+} from './resource-metadata.service'
+import { resolveResourceDisplayOverride } from './resource-display-i18n.service'
 import type { ResourceListView, ResourceExposure } from '../../shared/resource-access'
 import { filterByResourceExposure, resolveResourceExposure } from './resource-exposure.service'
 
@@ -75,6 +80,7 @@ function readAgentMetadata(
   filePath: string,
   name: string,
   source: AgentDefinition['source'],
+  sourceRoot?: string,
   namespace?: string,
   workDir?: string,
   locale?: string
@@ -82,13 +88,25 @@ function readAgentMetadata(
   try {
     const content = readFileSync(filePath, 'utf-8')
     const metadata = parseResourceMetadata(content)
-    const localizedDescription =
-      getLocalizedFrontmatterString(metadata.frontmatter, ['description'], locale) ?? metadata.description
-    const displayName = getLocalizedFrontmatterString(metadata.frontmatter, ['name', 'title'], locale)
+    const frontmatterLocalizedDescription =
+      getLocalizedFrontmatterStringForLocale(metadata.frontmatter, ['description'], locale)
+    const frontmatterBaseDescription = getFrontmatterString(metadata.frontmatter, ['description'])
+    const frontmatterLocalizedDisplayName =
+      getLocalizedFrontmatterStringForLocale(metadata.frontmatter, ['name', 'title'], locale)
+    const frontmatterBaseDisplayName = getFrontmatterString(metadata.frontmatter, ['name', 'title'])
+    const resourceKey = namespace ? `${namespace}:${name}` : name
+    const sidecar = resolveResourceDisplayOverride(sourceRoot, 'agent', resourceKey, locale)
     const exposure = getFrontmatterString(metadata.frontmatter, ['exposure'])
     return {
-      displayName,
-      description: localizedDescription,
+      displayName: sidecar.titleLocale
+        ?? frontmatterLocalizedDisplayName
+        ?? sidecar.titleDefault
+        ?? frontmatterBaseDisplayName,
+      description: sidecar.descriptionLocale
+        ?? frontmatterLocalizedDescription
+        ?? sidecar.descriptionDefault
+        ?? frontmatterBaseDescription
+        ?? metadata.description,
       exposure
     }
   } catch {
@@ -100,6 +118,7 @@ function readAgentMetadata(
 function scanAgentDir(
   dirPath: string,
   source: AgentDefinition['source'],
+  sourceRoot?: string,
   pluginRoot?: string,
   namespace?: string,
   workDir?: string,
@@ -115,7 +134,7 @@ function scanAgentDir(
       try {
         if (!statSync(filePath).isFile()) continue
         const name = file.slice(0, -3)
-        const metadata = readAgentMetadata(filePath, name, source, namespace, workDir, locale)
+        const metadata = readAgentMetadata(filePath, name, source, sourceRoot, namespace, workDir, locale)
         agents.push({
           name,
           path: filePath,
@@ -169,11 +188,11 @@ function buildGlobalAgents(locale?: string): AgentDefinition[] {
 
   // 0. Enabled plugin agents (lowest priority)
   for (const plugin of listEnabledPlugins()) {
-    addAgents(scanAgentDir(join(plugin.installPath, 'agents'), 'plugin', plugin.installPath, plugin.name, undefined, locale))
+    addAgents(scanAgentDir(join(plugin.installPath, 'agents'), 'plugin', plugin.installPath, plugin.installPath, plugin.name, undefined, locale))
   }
 
   // 1. App-level agents ({locked-user-root}/agents/)
-  addAgents(scanAgentDir(join(getLockedUserConfigRootDir(), 'agents'), 'app', undefined, undefined, undefined, locale))
+  addAgents(scanAgentDir(join(getLockedUserConfigRootDir(), 'agents'), 'app', getLockedUserConfigRootDir(), undefined, undefined, undefined, locale))
 
   // 2. Kite mode only: global custom paths from config.claudeCode.agents.paths
   if (sourceMode === 'kite') {
@@ -182,7 +201,7 @@ function buildGlobalAgents(locale?: string): AgentDefinition[] {
       const resolvedPath = globalPath.startsWith('/')
         ? globalPath
         : join(require('os').homedir(), globalPath)
-      addAgents(scanAgentDir(resolvedPath, 'global', undefined, undefined, undefined, locale))
+      addAgents(scanAgentDir(resolvedPath, 'global', resolvedPath, undefined, undefined, undefined, locale))
     }
   }
 
@@ -190,7 +209,7 @@ function buildGlobalAgents(locale?: string): AgentDefinition[] {
 }
 
 function buildSpaceAgents(workDir: string, locale?: string): AgentDefinition[] {
-  return scanAgentDir(join(workDir, '.claude', 'agents'), 'space', undefined, undefined, workDir, locale)
+  return scanAgentDir(join(workDir, '.claude', 'agents'), 'space', join(workDir, '.claude'), undefined, undefined, workDir, locale)
 }
 
 function findAgent(agents: AgentDefinition[], name: string): AgentDefinition | undefined {
@@ -369,7 +388,7 @@ export function createAgent(workDir: string, name: string, content: string): Age
 
   const metadata = parseResourceMetadata(content)
   const description = metadata.description
-  const displayName = getLocalizedFrontmatterString(metadata.frontmatter, ['name', 'title'])
+  const displayName = getFrontmatterString(metadata.frontmatter, ['name', 'title'])
   const exposure = resolveResourceExposure({
     type: 'agent',
     source: 'space',

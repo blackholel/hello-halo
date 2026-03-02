@@ -8,6 +8,7 @@ import { X, Edit2, Copy, Trash2, Star, Zap } from 'lucide-react'
 import { useTranslation } from '../../i18n'
 import { useSkillsStore, type SkillDefinition, type SkillContent } from '../../stores/skills.store'
 import { useSpaceStore } from '../../stores/space.store'
+import { getResourceDisplayName } from '../../utils/resource-display-name'
 import { MarkdownRenderer } from '../chat/MarkdownRenderer'
 
 interface SkillDetailModalProps {
@@ -133,7 +134,7 @@ export function SkillDetailModal({ skill, workDir, onClose, onEdit }: SkillDetai
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-semibold text-foreground">/{skill.name}</h2>
+                <h2 className="text-lg font-semibold text-foreground">/{getResourceDisplayName(skill)}</h2>
         <span className={`text-xs px-2 py-0.5 rounded ${SOURCE_COLORS[skill.source]}`}>
                   {SOURCE_LABELS[skill.source]}
                 </span>

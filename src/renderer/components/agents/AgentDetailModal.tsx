@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { X, Edit2, Copy, Trash2, Bot } from 'lucide-react'
 import { useTranslation } from '../../i18n'
 import { useAgentsStore, type AgentDefinition, type AgentContent } from '../../stores/agents.store'
+import { getResourceDisplayName } from '../../utils/resource-display-name'
 import { MarkdownRenderer } from '../chat/MarkdownRenderer'
 
 interface AgentDetailModalProps {
@@ -103,7 +104,7 @@ export function AgentDetailModal({ agent, workDir, onClose, onEdit }: AgentDetai
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-semibold text-foreground">@{agent.name}</h2>
+                <h2 className="text-lg font-semibold text-foreground">@{getResourceDisplayName(agent)}</h2>
                 <span className={`text-xs px-2 py-0.5 rounded ${SOURCE_COLORS[agent.source]}`}>
                   {SOURCE_LABELS[agent.source]}
                 </span>

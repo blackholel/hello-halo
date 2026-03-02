@@ -21,8 +21,9 @@ import {
   parseResourceMetadata,
   getFrontmatterString,
   getFrontmatterStringArray,
-  getLocalizedFrontmatterString
+  getLocalizedFrontmatterStringForLocale
 } from './resource-metadata.service'
+import { resolveResourceDisplayOverride } from './resource-display-i18n.service'
 import type { ResourceListView, ResourceExposure } from '../../shared/resource-access'
 import { filterByResourceExposure, resolveResourceExposure } from './resource-exposure.service'
 
@@ -77,6 +78,7 @@ function readCommandMetadata(
   filePath: string,
   name: string,
   source: CommandDefinition['source'],
+  sourceRoot?: string,
   namespace?: string,
   workDir?: string,
   locale?: string
@@ -90,15 +92,27 @@ function readCommandMetadata(
   try {
     const content = readFileSync(filePath, 'utf-8')
     const metadata = parseResourceMetadata(content)
-    const localizedDescription =
-      getLocalizedFrontmatterString(metadata.frontmatter, ['description'], locale) ?? metadata.description
-    const displayName = getLocalizedFrontmatterString(metadata.frontmatter, ['name', 'title'], locale)
+    const frontmatterLocalizedDescription =
+      getLocalizedFrontmatterStringForLocale(metadata.frontmatter, ['description'], locale)
+    const frontmatterBaseDescription = getFrontmatterString(metadata.frontmatter, ['description'])
+    const frontmatterLocalizedDisplayName =
+      getLocalizedFrontmatterStringForLocale(metadata.frontmatter, ['name', 'title'], locale)
+    const frontmatterBaseDisplayName = getFrontmatterString(metadata.frontmatter, ['name', 'title'])
+    const resourceKey = namespace ? `${namespace}:${name}` : name
+    const sidecar = resolveResourceDisplayOverride(sourceRoot, 'command', resourceKey, locale)
     const exposure = getFrontmatterString(metadata.frontmatter, ['exposure'])
     const requiresSkills = getFrontmatterStringArray(metadata.frontmatter, ['requires_skills'])
     const requiresAgents = getFrontmatterStringArray(metadata.frontmatter, ['requires_agents'])
     return {
-      displayName,
-      description: localizedDescription,
+      displayName: sidecar.titleLocale
+        ?? frontmatterLocalizedDisplayName
+        ?? sidecar.titleDefault
+        ?? frontmatterBaseDisplayName,
+      description: sidecar.descriptionLocale
+        ?? frontmatterLocalizedDescription
+        ?? sidecar.descriptionDefault
+        ?? frontmatterBaseDescription
+        ?? metadata.description,
       exposure,
       requiresSkills,
       requiresAgents
@@ -111,6 +125,7 @@ function readCommandMetadata(
 function scanCommandDir(
   dirPath: string,
   source: CommandDefinition['source'],
+  sourceRoot?: string,
   pluginRoot?: string,
   namespace?: string,
   workDir?: string,
@@ -126,7 +141,7 @@ function scanCommandDir(
       try {
         if (!statSync(filePath).isFile()) continue
         const name = file.slice(0, -3)
-        const metadata = readCommandMetadata(filePath, name, source, namespace, workDir, locale)
+        const metadata = readCommandMetadata(filePath, name, source, sourceRoot, namespace, workDir, locale)
         commands.push({
           name,
           path: filePath,
@@ -180,16 +195,16 @@ function buildGlobalCommands(locale?: string): CommandDefinition[] {
   }
 
   for (const plugin of listEnabledPlugins()) {
-    addCommands(scanCommandDir(join(plugin.installPath, 'commands'), 'plugin', plugin.installPath, plugin.name, undefined, locale))
+    addCommands(scanCommandDir(join(plugin.installPath, 'commands'), 'plugin', plugin.installPath, plugin.installPath, plugin.name, undefined, locale))
   }
 
-  addCommands(scanCommandDir(join(getLockedUserConfigRootDir(), 'commands'), 'app', undefined, undefined, undefined, locale))
+  addCommands(scanCommandDir(join(getLockedUserConfigRootDir(), 'commands'), 'app', getLockedUserConfigRootDir(), undefined, undefined, undefined, locale))
 
   return commands
 }
 
 function buildSpaceCommands(workDir: string, locale?: string): CommandDefinition[] {
-  return scanCommandDir(join(workDir, '.claude', 'commands'), 'space', undefined, undefined, workDir, locale)
+  return scanCommandDir(join(workDir, '.claude', 'commands'), 'space', join(workDir, '.claude'), undefined, undefined, workDir, locale)
 }
 
 function findCommand(commands: CommandDefinition[], name: string): CommandDefinition | undefined {
@@ -361,7 +376,7 @@ export function createCommand(workDir: string, name: string, content: string): C
   writeFileSync(commandPath, content, 'utf-8')
   invalidateCommandsCache(workDir)
   const metadata = parseResourceMetadata(content)
-  const displayName = getLocalizedFrontmatterString(metadata.frontmatter, ['name', 'title'])
+  const displayName = getFrontmatterString(metadata.frontmatter, ['name', 'title'])
   const requiresSkills = getFrontmatterStringArray(metadata.frontmatter, ['requires_skills'])
   const requiresAgents = getFrontmatterStringArray(metadata.frontmatter, ['requires_agents'])
   const exposure = resolveResourceExposure({
