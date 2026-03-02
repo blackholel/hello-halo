@@ -8,11 +8,14 @@
  * - When complete: indicator fades out smoothly
  */
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import {
   Sparkles,
   Copy,
   Check,
+  Bot,
+  Zap,
+  Terminal
 } from 'lucide-react'
 import { MarkdownRenderer } from './MarkdownRenderer'
 import { MessageImages } from './ImageAttachmentPreview'
@@ -20,6 +23,10 @@ import { TokenUsageIndicator } from './TokenUsageIndicator'
 import { PlanCard } from './PlanCard'
 import type { Message } from '../../types'
 import { useTranslation } from '../../i18n'
+import {
+  parseComposerMessageForDisplay,
+  type ComposerResourceDisplayLookups
+} from '../../utils/composer-resource-chip'
 
 interface MessageItemProps {
   message: Message
@@ -29,8 +36,15 @@ interface MessageItemProps {
   isWorking?: boolean  // True when AI is still generating (not yet complete)
   isWaitingMore?: boolean  // True when content paused (e.g., during tool call), show "..." animation
   workDir?: string  // For skill suggestion card creation
+  resourceDisplayLookups?: ComposerResourceDisplayLookups
   onOpenPlanInCanvas?: (planContent: string) => void
   onExecutePlan?: (planContent: string) => void
+}
+
+const EMPTY_RESOURCE_DISPLAY_LOOKUPS: ComposerResourceDisplayLookups = {
+  skills: new Map(),
+  commands: new Map(),
+  agents: new Map()
 }
 
 export function MessageItem({
@@ -40,6 +54,7 @@ export function MessageItem({
   isWorking = false,
   isWaitingMore = false,
   workDir,
+  resourceDisplayLookups,
   onOpenPlanInCanvas,
   onExecutePlan
 }: MessageItemProps) {
@@ -47,6 +62,13 @@ export function MessageItem({
   const isStreaming = (message as any).isStreaming
   const [copied, setCopied] = useState(false)
   const { t } = useTranslation()
+  const parsedUserMessage = useMemo(() => {
+    if (!isUser || !message.content) return null
+    return parseComposerMessageForDisplay(
+      message.content,
+      resourceDisplayLookups || EMPTY_RESOURCE_DISPLAY_LOOKUPS
+    )
+  }, [isUser, message.content, resourceDisplayLookups])
 
   // Handle copying message content to clipboard
   const handleCopyMessage = useCallback(async () => {
@@ -88,8 +110,27 @@ export function MessageItem({
       <div className="break-words leading-relaxed" data-message-content>
         {message.content && (
           isUser ? (
-            // User messages: simple whitespace-preserving text
-            <span className="whitespace-pre-wrap">{message.content}</span>
+            <>
+              {parsedUserMessage && parsedUserMessage.chips.length > 0 && (
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  {parsedUserMessage.chips.map((chip) => {
+                    const Icon = chip.type === 'agent' ? Bot : chip.type === 'command' ? Terminal : Zap
+                    return (
+                      <span
+                        key={chip.id}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-primary/10 px-2 py-1 text-sm text-primary"
+                      >
+                        <Icon size={14} />
+                        <span className="font-medium">{chip.displayName}</span>
+                      </span>
+                    )
+                  })}
+                </div>
+              )}
+              {(parsedUserMessage?.text ?? message.content) && (
+                <span className="whitespace-pre-wrap">{parsedUserMessage?.text ?? message.content}</span>
+              )}
+            </>
           ) : message.isPlan ? (
             // Plan mode: structured plan card
             <PlanCard

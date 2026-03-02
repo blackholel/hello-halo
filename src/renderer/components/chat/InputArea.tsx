@@ -20,7 +20,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback, useMemo, KeyboardEvent, ClipboardEvent, DragEvent } from 'react'
-import { Plus, ImagePlus, Loader2, AlertCircle, Atom, Globe, ClipboardList } from 'lucide-react'
+import { Plus, ImagePlus, Loader2, AlertCircle, Atom, Globe, ClipboardList, X, Bot, Zap, Terminal } from 'lucide-react'
 import { useOnboardingStore } from '../../stores/onboarding.store'
 import { useAIBrowserStore } from '../../stores/ai-browser.store'
 import { getComposerMruMap, touchComposerMru } from '../../stores/composer-mru.store'
@@ -38,8 +38,14 @@ import { processImage, isValidImageType, formatFileSize } from '../../utils/imag
 import type { ChatMode, ConversationAiConfig, FileContextAttachment, ImageAttachment, KiteConfig } from '../../types'
 import { useTranslation } from '../../i18n'
 import { useComposerStore } from '../../stores/composer.store'
-import { getTriggerContext, replaceTriggerToken, type TriggerContext } from '../../utils/composer-trigger'
+import { getTriggerContext, type TriggerContext } from '../../utils/composer-trigger'
 import { isResourceEnabled } from '../../utils/resource-key'
+import {
+  composeInputMessage,
+  normalizeChipDisplayName,
+  removeTriggerTokenText,
+  type SelectedComposerResourceChip
+} from '../../utils/composer-resource-chip'
 import {
   buildGlobalExpandStateKey,
   buildVisibleSuggestions,
@@ -114,6 +120,7 @@ export function InputArea({
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0)
   const [globalExpandState, setGlobalExpandState] = useState<Record<string, boolean>>({})
   const [mruVersion, setMruVersion] = useState(0)
+  const [selectedResourceChips, setSelectedResourceChips] = useState<SelectedComposerResourceChip[]>([])
   const [isComposing, setIsComposing] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -657,9 +664,21 @@ export function InputArea({
     }
 
     if (!triggerContext) return
-    const replaced = replaceTriggerToken(content, triggerContext, item.insertText)
+    const replaced = removeTriggerTokenText(content, triggerContext)
     touchComposerMru(mruSpaceId, item.type, item.stableId)
     setMruVersion(version => version + 1)
+    setSelectedResourceChips(prev => {
+      if (prev.some((chip) => chip.id === item.stableId)) return prev
+      return [
+        ...prev,
+        {
+          id: item.stableId,
+          type: item.type,
+          displayName: normalizeChipDisplayName(item.displayName),
+          token: item.insertText
+        }
+      ]
+    })
     setContent(replaced.value)
     closeTriggerPanel()
     requestAnimationFrame(() => {
@@ -686,7 +705,9 @@ export function InputArea({
 
   // Handle send
   const handleSend = () => {
-    const textToSend = isOnboardingSendStep ? onboardingPrompt : content.trim()
+    const textToSend = isOnboardingSendStep
+      ? onboardingPrompt
+      : composeInputMessage(content, selectedResourceChips)
     const hasContent = textToSend || images.length > 0 || fileContexts.length > 0
 
     if (hasContent && !isGenerating) {
@@ -701,6 +722,7 @@ export function InputArea({
 
       if (!isOnboardingSendStep) {
         setContent('')
+        setSelectedResourceChips([])
         setImages([])  // Clear images after send
         setFileContexts([])  // Clear file contexts after send
         // Don't reset thinkingEnabled - user might want to keep it on
@@ -750,6 +772,12 @@ export function InputArea({
       }
     }
 
+    if (e.key === 'Backspace' && content.length === 0 && selectedResourceChips.length > 0) {
+      e.preventDefault()
+      setSelectedResourceChips(prev => prev.slice(0, -1))
+      return
+    }
+
     // Mobile: Enter for newline, send via button only
     // PC: Enter to send, Shift+Enter for newline
     if (e.key === 'Enter' && !e.shiftKey && !isMobile()) {
@@ -783,12 +811,35 @@ export function InputArea({
 
   // Handle skill insertion from SkillsDropdown
   const handleInsertSkill = (skillName: string) => {
-    insertText(`/${skillName} `)
+    const skill = skills.find((item) => item.name === skillName)
+    if (!skill) {
+      insertText(`/${skillName} `)
+      return
+    }
+    const suggestion = buildComposerResourceSuggestion('skill', skill)
+    setSelectedResourceChips(prev => {
+      if (prev.some((chip) => chip.id === suggestion.stableId)) return prev
+      return [
+        ...prev,
+        {
+          id: suggestion.stableId,
+          type: suggestion.type,
+          displayName: normalizeChipDisplayName(suggestion.displayName),
+          token: suggestion.insertText
+        }
+      ]
+    })
+    textareaRef.current?.focus()
   }
+
+  const removeResourceChip = useCallback((chipId: string) => {
+    setSelectedResourceChips(prev => prev.filter((chip) => chip.id !== chipId))
+    textareaRef.current?.focus()
+  }, [])
 
   // In onboarding mode, can always send (prefilled content)
   // Can send if has text OR has images OR has file contexts (and not processing/generating)
-  const canSend = isOnboardingSendStep || ((content.trim().length > 0 || images.length > 0 || fileContexts.length > 0) && !isGenerating && !isProcessingImages)
+  const canSend = isOnboardingSendStep || ((content.trim().length > 0 || selectedResourceChips.length > 0 || images.length > 0 || fileContexts.length > 0) && !isGenerating && !isProcessingImages)
   const hasImages = images.length > 0
   const hasFileContexts = fileContexts.length > 0
 
@@ -871,6 +922,30 @@ export function InputArea({
 
           {/* Textarea area */}
           <div className="px-3 pt-3 pb-1">
+            {selectedResourceChips.length > 0 && (
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                {selectedResourceChips.map((chip) => {
+                  const Icon = chip.type === 'agent' ? Bot : chip.type === 'command' ? Terminal : Zap
+                  return (
+                    <span
+                      key={chip.id}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-primary/10 px-2 py-1 text-sm text-primary"
+                    >
+                      <Icon size={14} />
+                      <span className="font-medium">{chip.displayName}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeResourceChip(chip.id)}
+                        className="rounded p-0.5 hover:bg-primary/15"
+                        aria-label={t('Delete')}
+                      >
+                        <X size={12} />
+                      </button>
+                    </span>
+                  )
+                })}
+              </div>
+            )}
             <textarea
               ref={textareaRef}
               value={displayContent}
