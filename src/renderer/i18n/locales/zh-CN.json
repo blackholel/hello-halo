@@ -630,5 +630,20 @@
   "Show current space files": "显示当前空间文件目录",
   "New conversation (⌘T)": "新建会话 (⌘T)",
   "System files": "系统文件",
-  "Unable to attach system file in current mode": "当前模式下无法附加系统文件"
+  "Unable to attach system file in current mode": "当前模式下无法附加系统文件",
+  "Before you start, create your default AI profile": "开始之前,请先创建默认 AI 配置",
+  "Choose Provider": "选择服务商",
+  "Create default profile and enter": "创建默认配置并进入",
+  "Default Model": "默认模型",
+  "Default Profile": "默认配置",
+  "Doc URL": "文档地址",
+  "Model Catalog (comma separated)": "模型目录（逗号分隔）",
+  "Profile Name": "配置名称",
+  "URL must end with /chat/completions or /responses": "URL 必须以 /chat/completions 或 /responses 结尾",
+  "Vendor": "供应商",
+  "Protocol": "协议",
+  "API Key": "API 密钥",
+  "API URL": "API 地址",
+  "Anthropic Official": "Anthropic 官方",
+  "Anthropic Compatible": "Anthropic 兼容"
 }

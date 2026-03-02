@@ -47,7 +47,8 @@ export function ApiSetup() {
   const initialTemplate = matchTemplate(currentProfile)
 
   const [templateKey, setTemplateKey] = useState(initialTemplate.key)
-  const [profileName, setProfileName] = useState(currentProfile?.name || 'Default Profile')
+  const defaultProfileName = t('Default Profile')
+  const [profileName, setProfileName] = useState(currentProfile?.name || defaultProfileName)
   const [vendor, setVendor] = useState<ProviderVendor>(currentProfile?.vendor || initialTemplate.vendor)
   const [protocol, setProtocol] = useState<ProviderProtocol>(currentProfile?.protocol || initialTemplate.protocol)
   const [apiKey, setApiKey] = useState(currentProfile?.apiKey || '')
@@ -111,7 +112,7 @@ export function ApiSetup() {
       const profileId = currentProfile?.id || 'default-profile'
       const profile: ApiProfile = {
         id: profileId,
-        name: profileName.trim() || 'Default Profile',
+        name: profileName.trim() || defaultProfileName,
         vendor,
         protocol,
         apiKey: apiKey.trim(),
@@ -278,7 +279,7 @@ export function ApiSetup() {
 
           {/* API Key */}
           <div className="mb-4">
-            <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">API Key</label>
+            <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">{t('API Key')}</label>
             <input
               type="password"
               value={apiKey}
@@ -291,7 +292,7 @@ export function ApiSetup() {
 
           {/* API URL */}
           <div className="mb-4">
-            <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">API URL</label>
+            <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">{t('API URL')}</label>
             <input
               type="text"
               value={apiUrl}
