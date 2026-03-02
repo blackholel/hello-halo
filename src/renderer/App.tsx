@@ -36,7 +36,6 @@ import type {
 const HomePage = lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })))
 const SpacePage = lazy(() => import('./pages/SpacePage').then(m => ({ default: m.SpacePage })))
 const SettingsPage = lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })))
-const SceneTaxonomyAdminPage = lazy(() => import('./pages/SceneTaxonomyAdminPage').then(m => ({ default: m.SceneTaxonomyAdminPage })))
 
 // Page loading fallback - minimal spinner that matches app style
 function PageLoader() {
@@ -477,12 +476,6 @@ export default function App() {
         return (
           <Suspense fallback={<PageLoader />}>
             <SettingsPage />
-          </Suspense>
-        )
-      case 'sceneTaxonomyAdmin':
-        return (
-          <Suspense fallback={<PageLoader />}>
-            <SceneTaxonomyAdminPage />
           </Suspense>
         )
       default:

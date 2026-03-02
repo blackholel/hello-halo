@@ -2,9 +2,6 @@ import type { AgentDefinition } from '../../stores/agents.store'
 import type { CommandDefinition } from '../../stores/commands.store'
 import type { SkillDefinition } from '../../stores/skills.store'
 import { commandKey } from '../../../shared/command-utils'
-import type { SceneFilter } from '../../../shared/extension-taxonomy'
-import type { SceneDefinition } from '../../../shared/scene-taxonomy'
-import { getSceneOptions, normalizeSceneTags } from './scene-tag-meta'
 import type { ResourceType } from './types'
 import type { TemplateLibraryTab } from '../../types/template-library'
 
@@ -16,7 +13,6 @@ export interface ExtensionItem {
   resource: SkillDefinition | AgentDefinition | CommandDefinition
   searchable: string
   displayName: string
-  sceneTags: string[]
 }
 
 const FILTER_TO_TYPE: Record<FilterTab, ResourceType | null> = {
@@ -49,12 +45,10 @@ export function mapTemplateTabToFilter(tab: TemplateLibraryTab): FilterTab {
 export function buildTemplateFilterState(tab: TemplateLibraryTab): {
   activeFilter: FilterTab
   query: string
-  sceneFilter: SceneFilter
 } {
   return {
     activeFilter: mapTemplateTabToFilter(tab),
-    query: '',
-    sceneFilter: 'all'
+    query: ''
   }
 }
 
@@ -67,7 +61,6 @@ export function normalizeExtensionItems(params: {
   agents: AgentDefinition[]
   commands: CommandDefinition[]
   isRemote: boolean
-  sceneDefinitions: SceneDefinition[]
 }): ExtensionItem[] {
   const skillItems: ExtensionItem[] = params.skills.map((skill) => {
     const displayBase = skill.displayName || skill.name
@@ -84,8 +77,7 @@ export function normalizeExtensionItems(params: {
         skill.category,
         ...(skill.triggers || [])
       ].filter(Boolean).join(' ').toLowerCase(),
-      displayName,
-      sceneTags: normalizeSceneTags(skill.sceneTags, params.sceneDefinitions)
+      displayName
     }
   })
 
@@ -97,8 +89,7 @@ export function normalizeExtensionItems(params: {
       type: 'agent',
       resource: agent,
       searchable: [agent.name, agent.displayName, agent.namespace, agent.description].filter(Boolean).join(' ').toLowerCase(),
-      displayName,
-      sceneTags: normalizeSceneTags(agent.sceneTags, params.sceneDefinitions)
+      displayName
     }
   })
 
@@ -111,8 +102,7 @@ export function normalizeExtensionItems(params: {
       type: 'command',
       resource: command,
       searchable: [commandKey(command), command.displayName, command.description].filter(Boolean).join(' ').toLowerCase(),
-      displayName,
-      sceneTags: normalizeSceneTags(command.sceneTags, params.sceneDefinitions)
+      displayName
     }
   })
 
@@ -128,25 +118,6 @@ export function applyTypeAndSearchFilter(items: ExtensionItem[], activeFilter: F
     if (!normalizedQuery) return true
     return item.searchable.includes(normalizedQuery)
   })
-}
-
-export function applySceneFilter(items: ExtensionItem[], sceneFilter: SceneFilter): ExtensionItem[] {
-  if (sceneFilter === 'all') return items
-  return items.filter((item) => item.sceneTags.includes(sceneFilter))
-}
-
-export function computeSceneCounts(items: ExtensionItem[], sceneKeys: string[]): Record<string, number> {
-  const counts: Record<string, number> = {}
-  for (const key of sceneKeys) counts[key] = 0
-
-  for (const item of items) {
-    for (const tag of item.sceneTags) {
-      if (counts[tag] === undefined) continue
-      counts[tag] += 1
-    }
-  }
-
-  return counts
 }
 
 export function sortExtensions(items: ExtensionItem[]): ExtensionItem[] {
@@ -175,18 +146,6 @@ export function groupByType(items: ExtensionItem[]): Record<ResourceType, Extens
   }
 
   return groups
-}
-
-export function emptySceneCounts(sceneKeys: string[]): Record<string, number> {
-  const counts: Record<string, number> = {}
-  for (const key of sceneKeys) {
-    counts[key] = 0
-  }
-  return counts
-}
-
-export function getSceneOrder(definitions: SceneDefinition[]): string[] {
-  return getSceneOptions(definitions).map((item) => item.key)
 }
 
 export function computeTypeCounts(items: ExtensionItem[]): Record<ResourceType, number> {

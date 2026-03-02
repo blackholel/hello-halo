@@ -14,7 +14,7 @@ describe('resource-metadata.service', () => {
       'triggers:',
       '  - alpha',
       '  - beta',
-      'sceneTags: coding, web',
+      'category: coding, web',
       '---',
       '# Body'
     ].join('\n')
@@ -23,7 +23,7 @@ describe('resource-metadata.service', () => {
     expect(frontmatter).toEqual({
       description: 'hello',
       triggers: ['alpha', 'beta'],
-      sceneTags: 'coding, web'
+      category: 'coding, web'
     })
   })
 
@@ -54,8 +54,7 @@ describe('resource-metadata.service', () => {
   it('uses heading when frontmatter description is missing', () => {
     const content = [
       '---',
-      'sceneTags:',
-      '  - coding',
+      'category: coding',
       '---',
       '# Heading wins',
       'plain text'

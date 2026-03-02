@@ -34,6 +34,7 @@ type AiConfigChangeHandler = () => void
 const apiConfigChangeHandlers: ApiConfigChangeHandler[] = []
 const aiConfigChangeHandlers: AiConfigChangeHandler[] = []
 const CONFIG_SOURCE_MODE_VALUES = ['kite', 'claude'] as const
+const LEGACY_TAXONOMY_CONFIG_KEY = 'extension' + 'Taxonomy'
 
 export type ConfigSourceMode = (typeof CONFIG_SOURCE_MODE_VALUES)[number]
 
@@ -120,9 +121,6 @@ interface KiteConfig {
   claudeCode?: ClaudeCodeConfig
   // Configuration source mode (runtime lock consumes this on startup)
   configSourceMode: ConfigSourceMode
-  extensionTaxonomy?: {
-    adminEnabled: boolean
-  }
   resourceExposure?: {
     enabled: boolean
   }
@@ -269,9 +267,6 @@ const DEFAULT_CONFIG: KiteConfig = {
   mcpServers: {},  // Empty by default
   isFirstLaunch: true,
   configSourceMode: 'kite',
-  extensionTaxonomy: {
-    adminEnabled: false
-  },
   resourceExposure: {
     enabled: true
   },
@@ -649,14 +644,19 @@ export function getConfig(): KiteConfig {
   try {
     const content = readFileSync(configPath, 'utf-8')
     const parsed = JSON.parse(content) as Partial<KiteConfig> & Record<string, unknown>
+    const hadLegacyTaxonomyField = Object.prototype.hasOwnProperty.call(parsed, LEGACY_TAXONOMY_CONFIG_KEY)
+    const {
+      [LEGACY_TAXONOMY_CONFIG_KEY]: _legacyTaxonomyConfig,
+      ...parsedWithoutLegacy
+    } = parsed as Partial<KiteConfig> & Record<string, unknown>
     const legacyApi = ensureLegacyApiConfig(parsed.api, DEFAULT_CONFIG.api)
     const ai = ensureAiConfig(parsed.ai, legacyApi)
     const mirroredApi = mirrorAiToLegacyApi(ai, legacyApi)
 
     // Deep merge to ensure all nested defaults are applied
-    return {
+    const mergedConfig: KiteConfig = {
       ...DEFAULT_CONFIG,
-      ...parsed,
+      ...parsedWithoutLegacy,
       api: mirroredApi,
       ai,
       permissions: { ...DEFAULT_CONFIG.permissions, ...parsed.permissions },
@@ -668,12 +668,6 @@ export function getConfig(): KiteConfig {
       // analytics: keep as-is (managed by analytics.service.ts)
       analytics: parsed.analytics,
       configSourceMode: normalizeConfigSourceMode(parsed.configSourceMode),
-      extensionTaxonomy: {
-        adminEnabled:
-          typeof parsed.extensionTaxonomy?.adminEnabled === 'boolean'
-            ? parsed.extensionTaxonomy.adminEnabled
-            : DEFAULT_CONFIG.extensionTaxonomy?.adminEnabled || false
-      },
       resourceExposure: {
         enabled:
           typeof parsed.resourceExposure?.enabled === 'boolean'
@@ -693,6 +687,12 @@ export function getConfig(): KiteConfig {
             : DEFAULT_CONFIG.commands?.legacyDependencyRegexEnabled !== false
       }
     }
+
+    if (hadLegacyTaxonomyField) {
+      writeFileSync(configPath, JSON.stringify(mergedConfig, null, 2))
+    }
+
+    return mergedConfig
   } catch (error) {
     console.error('Failed to read config:', error)
     return DEFAULT_CONFIG
@@ -702,10 +702,15 @@ export function getConfig(): KiteConfig {
 // Save configuration
 export function saveConfig(config: Partial<KiteConfig>): KiteConfig {
   const currentConfig = getConfig()
-  const newConfig = { ...currentConfig, ...config } as KiteConfig
   const rawUpdates = config as Record<string, unknown>
+  const {
+    [LEGACY_TAXONOMY_CONFIG_KEY]: _legacyTaxonomyConfig,
+    ...updatesWithoutLegacy
+  } = rawUpdates
+  const newConfig = { ...currentConfig, ...updatesWithoutLegacy } as KiteConfig & Record<string, unknown>
+  delete newConfig[LEGACY_TAXONOMY_CONFIG_KEY]
   const hasApiUpdate = config.api !== undefined
-  const hasAiUpdate = rawUpdates.ai !== undefined
+  const hasAiUpdate = updatesWithoutLegacy.ai !== undefined
 
   // Deep merge for nested objects
   if (config.api) {
@@ -733,41 +738,35 @@ export function saveConfig(config: Partial<KiteConfig>): KiteConfig {
     newConfig.onboarding = { ...currentConfig.onboarding, ...config.onboarding }
   }
   newConfig.configSourceMode = 'kite'
-  if ((config as any).extensionTaxonomy !== undefined) {
-    newConfig.extensionTaxonomy = {
-      ...currentConfig.extensionTaxonomy,
-      ...(config as any).extensionTaxonomy
-    }
-  }
-  if ((config as any).resourceExposure !== undefined) {
+  if (updatesWithoutLegacy.resourceExposure !== undefined) {
     newConfig.resourceExposure = {
       ...currentConfig.resourceExposure,
-      ...(config as any).resourceExposure
+      ...(updatesWithoutLegacy.resourceExposure as Record<string, unknown>)
     }
   }
-  if ((config as any).workflow !== undefined) {
+  if (updatesWithoutLegacy.workflow !== undefined) {
     newConfig.workflow = {
       ...currentConfig.workflow,
-      ...(config as any).workflow
+      ...(updatesWithoutLegacy.workflow as Record<string, unknown>)
     }
   }
-  if ((config as any).commands !== undefined) {
+  if (updatesWithoutLegacy.commands !== undefined) {
     newConfig.commands = {
       ...currentConfig.commands,
-      ...(config as any).commands
+      ...(updatesWithoutLegacy.commands as Record<string, unknown>)
     }
   }
   // mcpServers: replace entirely when provided (not merged)
-  if (config.mcpServers !== undefined) {
-    newConfig.mcpServers = config.mcpServers
+  if (updatesWithoutLegacy.mcpServers !== undefined) {
+    newConfig.mcpServers = updatesWithoutLegacy.mcpServers as KiteConfig['mcpServers']
   }
   // analytics: replace entirely when provided (managed by analytics.service.ts)
-  if (config.analytics !== undefined) {
-    newConfig.analytics = config.analytics
+  if (updatesWithoutLegacy.analytics !== undefined) {
+    newConfig.analytics = updatesWithoutLegacy.analytics as KiteConfig['analytics']
   }
   // gitBash: replace entirely when provided (Windows only)
-  if ((config as any).gitBash !== undefined) {
-    (newConfig as any).gitBash = (config as any).gitBash
+  if (updatesWithoutLegacy.gitBash !== undefined) {
+    newConfig.gitBash = updatesWithoutLegacy.gitBash as KiteConfig['gitBash']
   }
 
   // Keep ai <-> api mirrored for backward compatibility.
@@ -783,6 +782,7 @@ export function saveConfig(config: Partial<KiteConfig>): KiteConfig {
   }
 
   const configPath = getConfigPath()
+  delete newConfig[LEGACY_TAXONOMY_CONFIG_KEY]
   writeFileSync(configPath, JSON.stringify(newConfig, null, 2))
 
   // Detect config changes and notify subscribers.

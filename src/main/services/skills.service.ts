@@ -19,7 +19,6 @@ import { getAllSpacePaths } from './space.service'
 import type { ResourceRef, CopyToSpaceOptions, CopyToSpaceResult } from './resource-ref.service'
 import { isPathWithinBasePaths, isValidDirectoryPath, isFileNotFoundError } from '../utils/path-validation'
 import { FileCache } from '../utils/file-cache'
-import type { SceneTagKey } from '../../shared/scene-taxonomy'
 import {
   parseFrontmatter,
   getFrontmatterString,
@@ -27,8 +26,6 @@ import {
   getLocalizedFrontmatterString
 } from './resource-metadata.service'
 import type { ResourceListView, ResourceExposure } from '../../shared/resource-access'
-import { resolveSceneTags } from './resource-scene-tags.service'
-import { buildResourceSceneKey, getSceneTaxonomy } from './scene-taxonomy.service'
 import { filterByResourceExposure, resolveResourceExposure } from './resource-exposure.service'
 
 // ============================================
@@ -43,7 +40,6 @@ export interface SkillDefinition {
   description?: string
   triggers?: string[]
   category?: string
-  sceneTags: SceneTagKey[]
   pluginRoot?: string
   namespace?: string
   exposure: ResourceExposure
@@ -131,7 +127,6 @@ function scanSkillDir(
   if (!isValidDirectoryPath(dirPath, 'Skills')) return []
 
   const skills: SkillDefinition[] = []
-  const taxonomyConfig = getSceneTaxonomy().config
   try {
     for (const entry of readdirSync(dirPath)) {
       const skillPath = join(dirPath, entry)
@@ -146,7 +141,6 @@ function scanSkillDir(
         let triggers: string[] | undefined
         let category: string | undefined
         let frontmatterExposure: unknown
-        let sceneTags: SceneTagKey[] = ['office']
         let sceneDescription: string | undefined
         try {
           const content = readFileSync(skillMdPath, 'utf-8')
@@ -159,25 +153,6 @@ function scanSkillDir(
             category = getFrontmatterString(frontmatter, ['category'])
             frontmatterExposure = frontmatter.exposure
           }
-
-          const resourceKey = buildResourceSceneKey({
-            type: 'skill',
-            source,
-            workDir,
-            namespace,
-            name: entry
-          })
-          sceneTags = resolveSceneTags({
-            name: entry,
-            description: sceneDescription,
-            category,
-            triggers,
-            content,
-            frontmatter: frontmatter ?? undefined,
-            resourceKey,
-            definitions: taxonomyConfig.definitions,
-            resourceOverrides: taxonomyConfig.resourceOverrides
-          })
         } catch {
           // Ignore read errors for metadata
         }
@@ -197,7 +172,6 @@ function scanSkillDir(
           description,
           triggers,
           category,
-          sceneTags,
           ...(displayName && { displayName }),
           ...(pluginRoot && { pluginRoot }),
           ...(namespace && { namespace })
@@ -421,23 +395,7 @@ export function createSkill(workDir: string, name: string, content: string): Ski
     description,
     triggers,
     category,
-    ...(displayName && { displayName }),
-    sceneTags: resolveSceneTags({
-      name,
-      description,
-      category,
-      triggers,
-      content,
-      frontmatter: frontmatter ?? undefined,
-      resourceKey: buildResourceSceneKey({
-        type: 'skill',
-        source: 'space',
-        workDir,
-        name
-      }),
-      definitions: getSceneTaxonomy().config.definitions,
-      resourceOverrides: getSceneTaxonomy().config.resourceOverrides
-    })
+    ...(displayName && { displayName })
   }
 }
 

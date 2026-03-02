@@ -10,12 +10,12 @@ describe('template library filter behavior', () => {
     const agentsState = buildTemplateFilterState('agents')
     const commandsState = buildTemplateFilterState('commands')
 
-    expect(skillsState).toEqual({ activeFilter: 'skills', query: '', sceneFilter: 'all' })
-    expect(agentsState).toEqual({ activeFilter: 'agents', query: '', sceneFilter: 'all' })
-    expect(commandsState).toEqual({ activeFilter: 'commands', query: '', sceneFilter: 'all' })
+    expect(skillsState).toEqual({ activeFilter: 'skills', query: '' })
+    expect(agentsState).toEqual({ activeFilter: 'agents', query: '' })
+    expect(commandsState).toEqual({ activeFilter: 'commands', query: '' })
   })
 
-  it('keeps remote commands limitation independent from scene filter', () => {
+  it('keeps remote commands limitation independent from query state', () => {
     expect(shouldShowRemoteCommandsUnavailable(true, 'all')).toBe(true)
     expect(shouldShowRemoteCommandsUnavailable(true, 'commands')).toBe(true)
     expect(shouldShowRemoteCommandsUnavailable(true, 'skills')).toBe(false)

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Bot, Puzzle, Search, Terminal, Zap } from 'lucide-react'
 import { api } from '../../api'
-import { getCurrentLanguage, useTranslation } from '../../i18n'
+import { useTranslation } from '../../i18n'
 import { type AgentDefinition, useAgentsStore } from '../../stores/agents.store'
 import { useChatStore } from '../../stores/chat.store'
 import { type CommandDefinition, useCommandsStore } from '../../stores/commands.store'
@@ -10,25 +10,14 @@ import { useToolkitStore } from '../../stores/toolkit.store'
 import { useSpaceStore } from '../../stores/space.store'
 import { ResourceCard } from '../resources/ResourceCard'
 import {
-  applySceneFilter,
   applyTypeAndSearchFilter,
-  computeSceneCounts,
   computeTypeCounts,
-  getSceneOrder,
   groupByType,
   normalizeExtensionItems,
   shouldShowRemoteCommandsUnavailable,
   sortExtensions,
   type FilterTab
 } from '../resources/extension-filtering'
-import {
-  getDefaultSceneDefinitions,
-  getSceneClassName,
-  getSceneLabel,
-  normalizeSceneDefinitions
-} from '../resources/scene-tag-meta'
-import type { SceneFilter } from '../../../shared/extension-taxonomy'
-import type { SceneDefinition } from '../../../shared/scene-taxonomy'
 
 interface EmptyStateProps {
   icon: typeof Puzzle
@@ -53,10 +42,8 @@ type SessionReadyState = 'ready' | 'stale' | 'unknown' | 'na'
 export function ExtensionsView(): JSX.Element {
   const { t } = useTranslation()
   const [activeFilter, setActiveFilter] = useState<FilterTab>('all')
-  const [sceneFilter, setSceneFilter] = useState<SceneFilter>('all')
   const [query, setQuery] = useState('')
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const [sceneDefinitions, setSceneDefinitions] = useState<SceneDefinition[]>(getDefaultSceneDefinitions())
   const isRemote = api.isRemoteMode()
   const hasRequestedGlobalResources = useRef(false)
   const currentSpace = useSpaceStore((state) => state.currentSpace)
@@ -108,49 +95,19 @@ export function ExtensionsView(): JSX.Element {
     }
   }, [currentSpace, loadToolkit])
 
-  useEffect(() => {
-    let cancelled = false
-    const loadSceneTaxonomy = async (): Promise<void> => {
-      const response = await api.getSceneTaxonomy()
-      if (!response.success || !response.data || cancelled) return
-      const data = response.data as { definitions?: unknown; config?: { definitions?: unknown } }
-      const definitions = normalizeSceneDefinitions(data.definitions ?? data.config?.definitions)
-      setSceneDefinitions(definitions)
-    }
-    void loadSceneTaxonomy()
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  const sceneDefinitionMap = useMemo(
-    () => new Map(sceneDefinitions.map((item) => [item.key, item])),
-    [sceneDefinitions]
-  )
-  const sceneKeys = useMemo(() => getSceneOrder(sceneDefinitions), [sceneDefinitions])
-
   const normalizedItems = useMemo(() => normalizeExtensionItems({
     skills: skills as SkillDefinition[],
     agents: agents as AgentDefinition[],
     commands: commands as CommandDefinition[],
-    isRemote,
-    sceneDefinitions
-  }), [agents, commands, isRemote, sceneDefinitions, skills])
+    isRemote
+  }), [agents, commands, isRemote, skills])
 
   const typeSearchFilteredItems = useMemo(
     () => sortExtensions(applyTypeAndSearchFilter(normalizedItems, activeFilter, query)),
     [activeFilter, normalizedItems, query]
   )
 
-  const sceneCounts = useMemo(
-    () => computeSceneCounts(typeSearchFilteredItems, sceneKeys),
-    [sceneKeys, typeSearchFilteredItems]
-  )
-
-  const filteredItems = useMemo(
-    () => applySceneFilter(typeSearchFilteredItems, sceneFilter),
-    [sceneFilter, typeSearchFilteredItems]
-  )
+  const filteredItems = typeSearchFilteredItems
 
   const groupedItems = useMemo(() => groupByType(filteredItems), [filteredItems])
 
@@ -170,20 +127,6 @@ export function ExtensionsView(): JSX.Element {
   ], [normalizedItems.length, typeCounts, t, isRemote])
 
   const showRemoteCommandsUnavailable = shouldShowRemoteCommandsUnavailable(isRemote, activeFilter)
-
-  const sceneOptions = useMemo(() => {
-    const allCount = typeSearchFilteredItems.length
-    return [
-      { key: 'all' as const, label: t('All scenes'), count: allCount },
-      ...sceneKeys.map((tag) => ({
-        key: tag,
-        label: sceneDefinitionMap.has(tag)
-          ? getSceneLabel(sceneDefinitionMap.get(tag)!, getCurrentLanguage())
-          : tag,
-        count: sceneCounts[tag] ?? 0
-      }))
-    ]
-  }, [sceneCounts, sceneDefinitionMap, sceneKeys, t, typeSearchFilteredItems.length])
 
   const sourceCounts = useMemo(() => {
     const counts = {
@@ -277,7 +220,6 @@ export function ExtensionsView(): JSX.Element {
   }, [sessionReadyState])
 
   const handleClearFilters = (): void => {
-    setSceneFilter('all')
     setQuery('')
   }
 
@@ -383,34 +325,6 @@ export function ExtensionsView(): JSX.Element {
             })}
           </div>
 
-          <div className="flex flex-wrap gap-1.5 mt-2 pt-2 border-t border-border/40">
-            {sceneOptions.map((scene) => {
-              const isActive = sceneFilter === scene.key
-              const isZero = scene.count === 0 && scene.key !== 'all'
-              const canClick = isActive || !isZero
-
-              const sceneStyle = scene.key === 'all'
-                ? 'text-muted-foreground hover:text-foreground hover:bg-secondary/70'
-                : getSceneClassName(sceneDefinitions, scene.key)
-
-              return (
-                <button
-                  key={scene.key}
-                  type="button"
-                  onClick={() => canClick && setSceneFilter(scene.key)}
-                  disabled={!canClick}
-                  className={`px-2.5 py-1 text-[11px] rounded-full border transition-all ${
-                    isActive
-                      ? 'bg-primary/15 text-primary border-primary/25 font-medium'
-                      : `${sceneStyle} ${isZero ? 'opacity-45 cursor-not-allowed' : 'hover:opacity-90'}`
-                  }`}
-                >
-                  {scene.label}
-                  <span className="ml-1 text-[10px] opacity-80">{scene.count}</span>
-                </button>
-              )
-            })}
-          </div>
         </div>
 
         {isLoading ? (
@@ -432,10 +346,10 @@ export function ExtensionsView(): JSX.Element {
               <div className="stagger-item" style={{ animationDelay: '120ms' }}>
                 <EmptyState
                   icon={Puzzle}
-                  title={query || sceneFilter !== 'all' ? t('No matching extensions') : t('No extensions available')}
-                  description={query || sceneFilter !== 'all' ? t('Try another search keyword') : t('Resources will appear here after loading')}
+                  title={query ? t('No matching extensions') : t('No extensions available')}
+                  description={query ? t('Try another search keyword') : t('Resources will appear here after loading')}
                 />
-                {(query || sceneFilter !== 'all') && (
+                {query && (
                   <div className="mt-3 text-center">
                     <button
                       type="button"
@@ -462,7 +376,6 @@ export function ExtensionsView(): JSX.Element {
                         type="skill"
                         index={index}
                         actionMode="toolkit"
-                        sceneDefinitions={sceneDefinitions}
                       />
                     ))}
                   </div>
@@ -481,7 +394,6 @@ export function ExtensionsView(): JSX.Element {
                         type="agent"
                         index={index}
                         actionMode="toolkit"
-                        sceneDefinitions={sceneDefinitions}
                       />
                     ))}
                   </div>
@@ -501,7 +413,6 @@ export function ExtensionsView(): JSX.Element {
                           type="command"
                           index={index}
                           actionMode="toolkit"
-                          sceneDefinitions={sceneDefinitions}
                         />
                       ))}
                     </div>
@@ -517,7 +428,6 @@ export function ExtensionsView(): JSX.Element {
                     type={item.type}
                     index={index}
                     actionMode="toolkit"
-                    sceneDefinitions={sceneDefinitions}
                   />
                 ))}
               </div>

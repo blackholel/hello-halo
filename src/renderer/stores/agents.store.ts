@@ -12,7 +12,6 @@ import { create } from 'zustand'
 import { api } from '../api'
 import i18n from '../i18n'
 import { getCacheKey, getAllCacheKeys, GLOBAL_CACHE_KEY } from './cache-keys'
-import type { SceneTag } from '../../shared/extension-taxonomy'
 import type { ResourceChangedPayload, ResourceExposure } from '../../shared/resource-access'
 
 // ============================================
@@ -25,7 +24,6 @@ export interface AgentDefinition {
   path: string
   source: 'app' | 'global' | 'space' | 'plugin'
   description?: string
-  sceneTags?: SceneTag[]
   namespace?: string
   exposure: ResourceExposure
 }

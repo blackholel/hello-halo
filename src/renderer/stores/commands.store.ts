@@ -8,7 +8,6 @@
 import { create } from 'zustand'
 import { api } from '../api'
 import i18n from '../i18n'
-import type { SceneTag } from '../../shared/extension-taxonomy'
 import type { ResourceChangedPayload, ResourceExposure } from '../../shared/resource-access'
 
 export interface CommandDefinition {
@@ -17,7 +16,6 @@ export interface CommandDefinition {
   path: string
   source: 'app' | 'space' | 'plugin'
   description?: string
-  sceneTags?: SceneTag[]
   pluginRoot?: string
   namespace?: string
   exposure: ResourceExposure

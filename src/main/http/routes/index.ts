@@ -14,7 +14,6 @@ import * as spaceController from '../../controllers/space.controller'
 import * as conversationController from '../../controllers/conversation.controller'
 import * as configController from '../../controllers/config.controller'
 import * as changeSetController from '../../controllers/change-set.controller'
-import * as sceneTaxonomyController from '../../controllers/scene-taxonomy.controller'
 import { listArtifacts } from '../../services/artifact.service'
 import { getTempSpacePath, getSpacesDir } from '../../services/config.service'
 import { getSpace, getAllSpacePaths } from '../../services/space.service'
@@ -428,40 +427,6 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
       return
     }
     res.json({ success: true, data: preset })
-  }))
-
-  // ===== Scene Taxonomy Routes =====
-  app.get('/api/scene-taxonomy', safeRoute(async (_req, res) => {
-    res.json(sceneTaxonomyController.getSceneTaxonomy())
-  }))
-
-  app.put('/api/scene-taxonomy/definitions', safeRoute(async (req, res) => {
-    res.json(sceneTaxonomyController.upsertSceneDefinition(req.body))
-  }))
-
-  app.delete('/api/scene-taxonomy/definitions/:key', safeRoute(async (req, res) => {
-    res.json(sceneTaxonomyController.removeSceneDefinition(req.params.key))
-  }))
-
-  app.put('/api/scene-taxonomy/overrides', safeRoute(async (req, res) => {
-    const { resourceKey, tags } = req.body
-    res.json(sceneTaxonomyController.setResourceSceneOverride(resourceKey, tags))
-  }))
-
-  app.delete('/api/scene-taxonomy/overrides', safeRoute(async (req, res) => {
-    const resourceKey = typeof req.query.resourceKey === 'string'
-      ? req.query.resourceKey
-      : ''
-    res.json(sceneTaxonomyController.removeResourceSceneOverride(resourceKey))
-  }))
-
-  app.get('/api/scene-taxonomy/export', safeRoute(async (_req, res) => {
-    res.json(sceneTaxonomyController.exportSceneTaxonomy())
-  }))
-
-  app.post('/api/scene-taxonomy/import', safeRoute(async (req, res) => {
-    const mode = req.body?.mode === 'replace' ? 'replace' : 'merge'
-    res.json(sceneTaxonomyController.importSceneTaxonomy(req.body?.payload, mode))
   }))
 
   // ===== Skills Routes =====

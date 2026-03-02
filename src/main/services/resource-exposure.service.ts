@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
+import { createHash } from 'crypto'
 import {
   DEFAULT_RESOURCE_EXPOSURE,
   isResourceExposure,
@@ -10,7 +11,6 @@ import {
 } from '../../shared/resource-access'
 import { getConfig } from './config.service'
 import { getLockedUserConfigRootDir } from './config-source-mode.service'
-import { buildResourceSceneKey } from './scene-taxonomy.service'
 
 interface ResourceExposureFile {
   version?: number
@@ -111,18 +111,37 @@ function normalizeFrontmatterExposure(value: unknown): ResourceExposure | null {
   return value
 }
 
+function normalizePath(pathValue: string): string {
+  return pathValue.trim().replace(/\\/g, '/').replace(/\/+/g, '/')
+}
+
+function buildResourceExposureKey(input: ResolveResourceExposureInput): string {
+  const type = input.type.trim().toLowerCase()
+  const source = input.source.trim().toLowerCase()
+  const namespace = input.namespace && input.namespace.trim().length > 0 ? input.namespace.trim() : '-'
+  const name = input.name.trim()
+  if (!name) {
+    throw new Error('Resource name is required')
+  }
+
+  let scope = '-'
+  if (source === 'space') {
+    const normalizedWorkDir = normalizePath(input.workDir || '')
+    if (!normalizedWorkDir) {
+      throw new Error('Space resource key requires workDir')
+    }
+    scope = createHash('sha1').update(normalizedWorkDir).digest('hex').slice(0, 12)
+  }
+
+  return `${type}:${source}:${scope}:${namespace}:${name}`
+}
+
 function buildCandidateKeys(input: ResolveResourceExposureInput): string[] {
   const namespace = input.namespace?.trim() ? input.namespace.trim() : '-'
   const candidates: string[] = []
 
   try {
-    candidates.push(buildResourceSceneKey({
-      type: input.type,
-      source: input.source,
-      workDir: input.workDir,
-      namespace: input.namespace,
-      name: input.name
-    }))
+    candidates.push(buildResourceExposureKey(input))
   } catch {
     // Ignore invalid resource key build cases.
   }

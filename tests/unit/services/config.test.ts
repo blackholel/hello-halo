@@ -24,6 +24,8 @@ import {
 } from '../../../src/main/services/config.service'
 import { getTestDir } from '../setup'
 
+const LEGACY_TAXONOMY_KEY = 'extension' + 'Taxonomy'
+
 describe('Config Service', () => {
   const thisFileDir = path.dirname(fileURLToPath(import.meta.url))
   const projectRoot = path.resolve(thisFileDir, '../../..')
@@ -404,6 +406,22 @@ describe('Config Service', () => {
       expect(config.api.apiUrl).toBe('https://api.anthropic.com')
       expect(config.permissions.fileAccess).toBe('allow')
     })
+
+    it('should remove legacy taxonomy field on read and persist migrated config', async () => {
+      await initializeApp()
+      const configPath = getConfigPath()
+      fs.writeFileSync(configPath, JSON.stringify({
+        [LEGACY_TAXONOMY_KEY]: { adminEnabled: true },
+        isFirstLaunch: false
+      }))
+
+      const config = getConfig() as Record<string, unknown>
+      expect(config[LEGACY_TAXONOMY_KEY]).toBeUndefined()
+
+      const saved = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as Record<string, unknown>
+      expect(saved[LEGACY_TAXONOMY_KEY]).toBeUndefined()
+      expect(saved.isFirstLaunch).toBe(false)
+    })
   })
 
   describe('saveConfig', () => {
@@ -430,6 +448,14 @@ describe('Config Service', () => {
       const config = getConfig()
       expect(config.api.apiKey).toBe('key1')
       expect(config.isFirstLaunch).toBe(false)
+    })
+
+    it('should strip legacy taxonomy field when saving updates', () => {
+      saveConfig({ [LEGACY_TAXONOMY_KEY]: { adminEnabled: true } } as unknown as Record<string, unknown>)
+
+      const configPath = getConfigPath()
+      const saved = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as Record<string, unknown>
+      expect(saved[LEGACY_TAXONOMY_KEY]).toBeUndefined()
     })
 
     it('should deep merge nested objects', () => {

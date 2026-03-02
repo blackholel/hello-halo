@@ -12,7 +12,6 @@ import { create } from 'zustand'
 import { api } from '../api'
 import i18n from '../i18n'
 import { getCacheKey, getAllCacheKeys, GLOBAL_CACHE_KEY } from './cache-keys'
-import type { SceneTag } from '../../shared/extension-taxonomy'
 import type { ResourceChangedPayload, ResourceExposure } from '../../shared/resource-access'
 
 // ============================================
@@ -27,7 +26,6 @@ export interface SkillDefinition {
   description?: string
   triggers?: string[]
   category?: string
-  sceneTags?: SceneTag[]
   pluginRoot?: string
   namespace?: string
   exposure: ResourceExposure

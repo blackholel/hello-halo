@@ -17,15 +17,12 @@ import { listEnabledPlugins } from './plugins.service'
 import { FileCache } from '../utils/file-cache'
 import type { ResourceRef, CopyToSpaceOptions, CopyToSpaceResult } from './resource-ref.service'
 import { commandKey } from '../../shared/command-utils'
-import type { SceneTagKey } from '../../shared/scene-taxonomy'
 import {
   parseResourceMetadata,
   getFrontmatterString,
   getFrontmatterStringArray,
   getLocalizedFrontmatterString
 } from './resource-metadata.service'
-import { resolveSceneTags } from './resource-scene-tags.service'
-import { buildResourceSceneKey, getSceneTaxonomy } from './scene-taxonomy.service'
 import type { ResourceListView, ResourceExposure } from '../../shared/resource-access'
 import { filterByResourceExposure, resolveResourceExposure } from './resource-exposure.service'
 
@@ -39,7 +36,6 @@ export interface CommandDefinition {
   path: string
   source: 'app' | 'space' | 'plugin'
   description?: string
-  sceneTags: SceneTagKey[]
   pluginRoot?: string
   namespace?: string
   exposure: ResourceExposure
@@ -87,7 +83,6 @@ function readCommandMetadata(
 ): {
   displayName?: string
   description?: string
-  sceneTags: SceneTagKey[]
   exposure?: unknown
   requiresSkills?: string[]
   requiresAgents?: string[]
@@ -95,7 +90,6 @@ function readCommandMetadata(
   try {
     const content = readFileSync(filePath, 'utf-8')
     const metadata = parseResourceMetadata(content)
-    const taxonomy = getSceneTaxonomy().config
     const localizedDescription =
       getLocalizedFrontmatterString(metadata.frontmatter, ['description'], locale) ?? metadata.description
     const displayName = getLocalizedFrontmatterString(metadata.frontmatter, ['name', 'title'], locale)
@@ -107,25 +101,10 @@ function readCommandMetadata(
       description: localizedDescription,
       exposure,
       requiresSkills,
-      requiresAgents,
-      sceneTags: resolveSceneTags({
-        name,
-        description: metadata.description,
-        content,
-        frontmatter: metadata.frontmatter,
-        resourceKey: buildResourceSceneKey({
-          type: 'command',
-          source,
-          workDir,
-          namespace,
-          name
-        }),
-        definitions: taxonomy.definitions,
-        resourceOverrides: taxonomy.resourceOverrides
-      })
+      requiresAgents
     }
   } catch {
-    return { sceneTags: ['office'], exposure: undefined, requiresSkills: undefined, requiresAgents: undefined }
+    return { exposure: undefined, requiresSkills: undefined, requiresAgents: undefined }
   }
 }
 
@@ -161,7 +140,6 @@ function scanCommandDir(
             frontmatterExposure: metadata.exposure
           }),
           description: metadata.description,
-          sceneTags: metadata.sceneTags,
           ...(metadata.requiresSkills && { requiresSkills: metadata.requiresSkills }),
           ...(metadata.requiresAgents && { requiresAgents: metadata.requiresAgents }),
           ...(metadata.displayName && { displayName: metadata.displayName }),
@@ -384,8 +362,6 @@ export function createCommand(workDir: string, name: string, content: string): C
   invalidateCommandsCache(workDir)
   const metadata = parseResourceMetadata(content)
   const displayName = getLocalizedFrontmatterString(metadata.frontmatter, ['name', 'title'])
-
-  const taxonomy = getSceneTaxonomy().config
   const requiresSkills = getFrontmatterStringArray(metadata.frontmatter, ['requires_skills'])
   const requiresAgents = getFrontmatterStringArray(metadata.frontmatter, ['requires_agents'])
   const exposure = resolveResourceExposure({
@@ -403,21 +379,7 @@ export function createCommand(workDir: string, name: string, content: string): C
     description: metadata.description,
     ...(requiresSkills && { requiresSkills }),
     ...(requiresAgents && { requiresAgents }),
-    ...(displayName && { displayName }),
-    sceneTags: resolveSceneTags({
-      name,
-      description: metadata.description,
-      content,
-      frontmatter: metadata.frontmatter,
-      resourceKey: buildResourceSceneKey({
-        type: 'command',
-        source: 'space',
-        workDir,
-        name
-      }),
-      definitions: taxonomy.definitions,
-      resourceOverrides: taxonomy.resourceOverrides
-    })
+    ...(displayName && { displayName })
   }
 }
 

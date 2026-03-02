@@ -18,10 +18,7 @@ import type { ResourceRef, CopyToSpaceOptions, CopyToSpaceResult } from './resou
 import { isPathWithinBasePaths, isValidDirectoryPath, isFileNotFoundError } from '../utils/path-validation'
 import { listEnabledPlugins } from './plugins.service'
 import { FileCache } from '../utils/file-cache'
-import type { SceneTagKey } from '../../shared/scene-taxonomy'
 import { parseResourceMetadata, getFrontmatterString, getLocalizedFrontmatterString } from './resource-metadata.service'
-import { resolveSceneTags } from './resource-scene-tags.service'
-import { buildResourceSceneKey, getSceneTaxonomy } from './scene-taxonomy.service'
 import type { ResourceListView, ResourceExposure } from '../../shared/resource-access'
 import { filterByResourceExposure, resolveResourceExposure } from './resource-exposure.service'
 
@@ -35,7 +32,6 @@ export interface AgentDefinition {
   path: string
   source: 'app' | 'global' | 'space' | 'plugin'
   description?: string
-  sceneTags: SceneTagKey[]
   pluginRoot?: string
   namespace?: string
   exposure: ResourceExposure
@@ -82,11 +78,10 @@ function readAgentMetadata(
   namespace?: string,
   workDir?: string,
   locale?: string
-): { displayName?: string; description?: string; sceneTags: SceneTagKey[]; exposure?: unknown } {
+): { displayName?: string; description?: string; exposure?: unknown } {
   try {
     const content = readFileSync(filePath, 'utf-8')
     const metadata = parseResourceMetadata(content)
-    const taxonomy = getSceneTaxonomy().config
     const localizedDescription =
       getLocalizedFrontmatterString(metadata.frontmatter, ['description'], locale) ?? metadata.description
     const displayName = getLocalizedFrontmatterString(metadata.frontmatter, ['name', 'title'], locale)
@@ -94,26 +89,11 @@ function readAgentMetadata(
     return {
       displayName,
       description: localizedDescription,
-      exposure,
-      sceneTags: resolveSceneTags({
-        name,
-        description: metadata.description,
-        content,
-        frontmatter: metadata.frontmatter,
-        resourceKey: buildResourceSceneKey({
-          type: 'agent',
-          source,
-          workDir,
-          namespace,
-          name
-        }),
-        definitions: taxonomy.definitions,
-        resourceOverrides: taxonomy.resourceOverrides
-      })
+      exposure
     }
   } catch {
     // Ignore read errors
-    return { sceneTags: ['office'], exposure: undefined }
+    return { exposure: undefined }
   }
 }
 
@@ -149,7 +129,6 @@ function scanAgentDir(
             frontmatterExposure: metadata.exposure
           }),
           description: metadata.description,
-          sceneTags: metadata.sceneTags,
           ...(metadata.displayName && { displayName: metadata.displayName }),
           ...(pluginRoot && { pluginRoot }),
           ...(namespace && { namespace })
@@ -391,7 +370,6 @@ export function createAgent(workDir: string, name: string, content: string): Age
   const metadata = parseResourceMetadata(content)
   const description = metadata.description
   const displayName = getLocalizedFrontmatterString(metadata.frontmatter, ['name', 'title'])
-  const taxonomy = getSceneTaxonomy().config
   const exposure = resolveResourceExposure({
     type: 'agent',
     source: 'space',
@@ -399,28 +377,12 @@ export function createAgent(workDir: string, name: string, content: string): Age
     name,
     frontmatterExposure: getFrontmatterString(metadata.frontmatter, ['exposure'])
   })
-  const sceneTags = resolveSceneTags({
-    name,
-    description,
-    content,
-    frontmatter: metadata.frontmatter,
-    resourceKey: buildResourceSceneKey({
-      type: 'agent',
-      source: 'space',
-      workDir,
-      name
-    }),
-    definitions: taxonomy.definitions,
-    resourceOverrides: taxonomy.resourceOverrides
-  })
-
   return {
     name,
     path: agentPath,
     source: 'space',
     exposure,
     description,
-    sceneTags,
     ...(displayName && { displayName })
   }
 }

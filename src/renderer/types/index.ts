@@ -201,9 +201,6 @@ export interface KiteConfig {
   mcpServers: McpServersConfig;  // MCP servers configuration
   isFirstLaunch: boolean;
   configSourceMode: ConfigSourceMode;
-  extensionTaxonomy?: {
-    adminEnabled: boolean;
-  };
   resourceExposure?: {
     enabled: boolean;
   };
@@ -753,7 +750,7 @@ export type AgentEvent =
 // App State Types
 // ============================================
 
-export type AppView = 'splash' | 'gitBashSetup' | 'setup' | 'home' | 'space' | 'settings' | 'sceneTaxonomyAdmin';
+export type AppView = 'splash' | 'gitBashSetup' | 'setup' | 'home' | 'space' | 'settings';
 
 export interface AppState {
   view: AppView;
