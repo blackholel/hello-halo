@@ -420,6 +420,10 @@ export interface Message {
   role: MessageRole;
   content: string;  // Text content (for backward compatibility)
   timestamp: string;
+  guidedMeta?: {
+    runId: string;
+    clientMessageId?: string;
+  };
   toolCalls?: ToolCall[];
   thoughts?: Thought[];  // Agent's reasoning process for this message
   processTrace?: ProcessTraceNode[];  // Unified process trace (thought/tool/system events)

@@ -34,6 +34,14 @@ interface AskUserQuestionAnswerPayload {
   runId?: string
 }
 
+interface GuideMessageRequest {
+  spaceId: string
+  conversationId: string
+  message: string
+  runId?: string
+  clientMessageId?: string
+}
+
 /**
  * API object - drop-in replacement for window.kite
  * Works in both Electron and remote web mode
@@ -446,6 +454,67 @@ export const api = {
       ...request,
       invocationContext: 'interactive'
     })
+  },
+
+  guideMessage: async (
+    request: GuideMessageRequest
+  ): Promise<ApiResponse<{ delivery: 'session_send' | 'ask_user_question_answer' }>> => {
+    if (isElectron()) {
+      const bridge = (window as unknown as { kite?: { guideMessage?: (payload: GuideMessageRequest) => Promise<ApiResponse<{ delivery: 'session_send' | 'ask_user_question_answer' }>> } }).kite
+      if (!bridge || typeof bridge.guideMessage !== 'function') {
+        // Backward-compatible fallback for stale preload bridge:
+        // use window.electron.ipcRenderer.send/on round-trip channel.
+        const electronBridge = (window as unknown as {
+          electron?: {
+            ipcRenderer?: {
+              on?: (channel: string, callback: (...args: unknown[]) => void) => void
+              removeListener?: (channel: string, callback: (...args: unknown[]) => void) => void
+              send?: (channel: string, ...args: unknown[]) => void
+            }
+          }
+        }).electron?.ipcRenderer
+
+        if (
+          electronBridge &&
+          typeof electronBridge.send === 'function' &&
+          typeof electronBridge.on === 'function' &&
+          typeof electronBridge.removeListener === 'function'
+        ) {
+          return await new Promise((resolve) => {
+            const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+            const replyChannel = `agent:guide-message-fallback:reply:${requestId}`
+            const timeoutId = window.setTimeout(() => {
+              electronBridge.removeListener?.(replyChannel, onReply)
+              resolve({
+                success: false,
+                error: 'IPC bridge unavailable: guideMessage (fallback timeout)'
+              })
+            }, 12000)
+
+            const onReply = (response: unknown) => {
+              window.clearTimeout(timeoutId)
+              electronBridge.removeListener?.(replyChannel, onReply)
+              resolve((response as ApiResponse<{ delivery: 'session_send' | 'ask_user_question_answer' }>) || {
+                success: false,
+                error: 'IPC fallback returned empty response'
+              })
+            }
+
+            electronBridge.on(replyChannel, onReply)
+            electronBridge.send('agent:guide-message-fallback', {
+              ...request,
+              replyChannel
+            })
+          })
+        }
+        return {
+          success: false,
+          error: 'IPC bridge unavailable: guideMessage'
+        }
+      }
+      return bridge.guideMessage(request)
+    }
+    return httpRequest('POST', '/api/agent/guide-message', request)
   },
 
   stopGeneration: async (conversationId?: string): Promise<ApiResponse> => {

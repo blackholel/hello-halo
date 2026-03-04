@@ -101,6 +101,44 @@ interface AskUserQuestionItem {
   errorCode?: string
 }
 
+interface QueuedUserTurn {
+  id: string
+  spaceId: string
+  conversationId: string
+  content: string
+  images?: ImageAttachment[]
+  fileContexts?: FileContextAttachment[]
+  thinkingEnabled?: boolean
+  mode?: ChatMode
+  aiBrowserEnabled: boolean
+  invocationContext?: InvocationContext
+  guided?: boolean
+  createdAt: number
+}
+
+type QueueDispatchTrigger = 'submit' | 'agent_complete' | 'agent_error' | 'stop_generation'
+
+type DispatchResult =
+  | { accepted: true }
+  | { accepted: false; error: string }
+
+type GuideDispatchResult =
+  | { accepted: true; delivery?: 'session_send' | 'ask_user_question_answer' }
+  | { accepted: false; error: string; errorCode?: string }
+
+export type QueueSendResult = {
+  accepted: boolean
+  guided: boolean
+  fallbackToNewRun: boolean
+  delivery?: 'session_send' | 'ask_user_question_answer'
+  error?: string
+}
+
+const GUIDE_FALLBACK_TO_NEW_RUN_ERROR_CODES = new Set<string>([
+  'ASK_USER_QUESTION_NO_ACTIVE_SESSION',
+  'ASK_USER_QUESTION_RUN_MISMATCH'
+])
+
 function normalizeToolStatus(status: unknown): ToolStatus {
   switch (status) {
     case 'pending':
@@ -264,6 +302,41 @@ function ensureAskUserQuestionOrder(
   return order.filter((id) => Boolean(byId[id]))
 }
 
+function hasPendingAskUserQuestion(session: SessionState): boolean {
+  return session.askUserQuestionOrder.some((id) => session.askUserQuestionsById[id]?.status === 'pending')
+}
+
+function canStartNewRun(session: SessionState): boolean {
+  return !session.isGenerating && !hasPendingAskUserQuestion(session) && session.pendingToolApproval === null
+}
+
+function getVisibleQueuedTurns(queue: QueuedUserTurn[]): QueuedUserTurn[] {
+  return queue
+}
+
+function toErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message
+  }
+  if (typeof error === 'string' && error.trim().length > 0) {
+    return error
+  }
+  return fallback
+}
+
+function toGuideErrorMessage(error: string | undefined, errorCode?: string): string {
+  if (errorCode === 'ASK_USER_QUESTION_NO_ACTIVE_SESSION') {
+    return i18n.t('No active run found for guided update.')
+  }
+  if (errorCode === 'ASK_USER_QUESTION_RUN_MISMATCH') {
+    return i18n.t('Guide update no longer matches the current run.')
+  }
+  if (typeof error === 'string' && error.trim().length > 0) {
+    return error
+  }
+  return i18n.t('Failed to guide message')
+}
+
 function resolveActiveAskUserQuestionId(
   currentActiveId: string | null,
   order: string[],
@@ -399,6 +472,11 @@ interface ChatState {
   // Loading
   isLoading: boolean
   loadingConversationCounts: Map<string, number>
+  queuedTurnsByConversation: Map<string, QueuedUserTurn[]>
+  queueDispatchingByConversation: Map<string, boolean>
+  queueErrorByConversation: Map<string, string | null>
+  queueInFlightTurnByConversation: Map<string, string>
+  queueSuppressedRestoreByConversation: Map<string, Set<string>>
 
   // Computed getters
   getCurrentSpaceState: () => SpaceState
@@ -447,6 +525,27 @@ interface ChatState {
     mode?: ChatMode,
     invocationContext?: InvocationContext
   ) => Promise<void>
+  submitTurn: (turn: {
+    spaceId: string
+    conversationId: string
+    content: string
+    images?: ImageAttachment[]
+    fileContexts?: FileContextAttachment[]
+    thinkingEnabled?: boolean
+    mode?: ChatMode
+    aiBrowserEnabled: boolean
+    invocationContext?: InvocationContext
+  }) => Promise<void>
+  flushQueuedTurns: (conversationId: string, trigger: QueueDispatchTrigger) => Promise<void>
+  clearConversationQueue: (conversationId: string) => void
+  removeQueuedTurn: (conversationId: string, turnId: string) => void
+  sendQueuedTurn: (conversationId: string, turnId: string) => Promise<QueueSendResult>
+  clearQueueError: (conversationId: string) => void
+  getQueueCount: (conversationId: string) => number
+  getQueueError: (conversationId: string) => string | null
+  getQueuedTurns: (conversationId: string) => QueuedUserTurn[]
+  dispatchTurnInternal: (turn: QueuedUserTurn) => Promise<DispatchResult>
+  dispatchGuidedTurnInternal: (turn: QueuedUserTurn) => Promise<GuideDispatchResult>
   executePlan: (spaceId: string, conversationId: string, planContent: string) => Promise<void>
   stopGeneration: (conversationId?: string) => Promise<void>
 
@@ -740,6 +839,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   artifacts: [],
   isLoading: false,
   loadingConversationCounts: new Map<string, number>(),
+  queuedTurnsByConversation: new Map<string, QueuedUserTurn[]>(),
+  queueDispatchingByConversation: new Map<string, boolean>(),
+  queueErrorByConversation: new Map<string, string | null>(),
+  queueInFlightTurnByConversation: new Map<string, string>(),
+  queueSuppressedRestoreByConversation: new Map<string, Set<string>>(),
 
   // Get current space state
   getCurrentSpaceState: () => {
@@ -797,6 +901,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // Get session state for any conversation
   getSession: (conversationId: string) => {
     return get().sessions.get(conversationId) || EMPTY_SESSION
+  },
+
+  getQueueCount: (conversationId: string) => {
+    const queue = get().queuedTurnsByConversation.get(conversationId) || []
+    return getVisibleQueuedTurns(queue).length
+  },
+
+  getQueueError: (conversationId: string) => {
+    return get().queueErrorByConversation.get(conversationId) || null
+  },
+
+  getQueuedTurns: (conversationId: string) => {
+    const queue = get().queuedTurnsByConversation.get(conversationId) || []
+    return getVisibleQueuedTurns(queue)
   },
 
   getConversationMode: (conversationId: string) => {
@@ -1124,6 +1242,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
           newChangeSets.delete(conversationId)
           const newLoadingConversationCounts = new Map(state.loadingConversationCounts)
           newLoadingConversationCounts.delete(conversationId)
+          const queuedTurnsByConversation = new Map(state.queuedTurnsByConversation)
+          queuedTurnsByConversation.delete(conversationId)
+          const queueDispatchingByConversation = new Map(state.queueDispatchingByConversation)
+          queueDispatchingByConversation.delete(conversationId)
+          const queueErrorByConversation = new Map(state.queueErrorByConversation)
+          queueErrorByConversation.delete(conversationId)
+          const queueInFlightTurnByConversation = new Map(state.queueInFlightTurnByConversation)
+          queueInFlightTurnByConversation.delete(conversationId)
+          const queueSuppressedRestoreByConversation = new Map(state.queueSuppressedRestoreByConversation)
+          queueSuppressedRestoreByConversation.delete(conversationId)
 
           // Update space state
           const newSpaceStates = new Map(state.spaceStates)
@@ -1144,7 +1272,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
             sessions: newSessions,
             conversationCache: newCache,
             changeSets: newChangeSets,
-            loadingConversationCounts: newLoadingConversationCounts
+            loadingConversationCounts: newLoadingConversationCounts,
+            queuedTurnsByConversation,
+            queueDispatchingByConversation,
+            queueErrorByConversation,
+            queueInFlightTurnByConversation,
+            queueSuppressedRestoreByConversation
           }
         })
 
@@ -1378,12 +1511,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
 
       if (context === 'workflow-step') {
-        await api.sendWorkflowStepMessage(baseRequest)
+        const response = await api.sendWorkflowStepMessage(baseRequest)
+        if (!response.success) {
+          throw new Error(response.error || 'Failed to send workflow step message')
+        }
       } else {
-        await api.sendMessage({
+        const response = await api.sendMessage({
           ...baseRequest,
           invocationContext: 'interactive'
         })
+        if (!response.success) {
+          throw new Error(response.error || 'Failed to send message')
+        }
       }
     } catch (error) {
       console.error('Failed to send message:', error)
@@ -1487,12 +1626,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
 
       if (context === 'workflow-step') {
-        await api.sendWorkflowStepMessage(baseRequest)
+        const response = await api.sendWorkflowStepMessage(baseRequest)
+        if (!response.success) {
+          throw new Error(response.error || 'Failed to send workflow step message')
+        }
       } else {
-        await api.sendMessage({
+        const response = await api.sendMessage({
           ...baseRequest,
           invocationContext: 'interactive'
         })
+        if (!response.success) {
+          throw new Error(response.error || 'Failed to send message')
+        }
       }
     } catch (error) {
       console.error('Failed to send message to conversation:', error)
@@ -1508,6 +1653,594 @@ export const useChatStore = create<ChatState>((set, get) => ({
           activePlanTabId: session.activePlanTabId,
         })
         return { sessions: newSessions }
+      })
+    }
+  },
+
+  clearConversationQueue: (conversationId: string) => {
+    set((state) => {
+      const queuedTurnsByConversation = new Map(state.queuedTurnsByConversation)
+      queuedTurnsByConversation.delete(conversationId)
+      const queueDispatchingByConversation = new Map(state.queueDispatchingByConversation)
+      queueDispatchingByConversation.delete(conversationId)
+      const queueErrorByConversation = new Map(state.queueErrorByConversation)
+      queueErrorByConversation.delete(conversationId)
+      const queueSuppressedRestoreByConversation = new Map(state.queueSuppressedRestoreByConversation)
+      const inFlightTurnId = state.queueInFlightTurnByConversation.get(conversationId)
+      if (inFlightTurnId) {
+        const suppressed = new Set(queueSuppressedRestoreByConversation.get(conversationId) || [])
+        suppressed.add(inFlightTurnId)
+        queueSuppressedRestoreByConversation.set(conversationId, suppressed)
+      }
+      return {
+        queuedTurnsByConversation,
+        queueDispatchingByConversation,
+        queueErrorByConversation,
+        queueSuppressedRestoreByConversation
+      }
+    })
+  },
+
+  removeQueuedTurn: (conversationId: string, turnId: string) => {
+    set((state) => {
+      const queuedTurnsByConversation = new Map(state.queuedTurnsByConversation)
+      const queue = queuedTurnsByConversation.get(conversationId) || []
+      if (queue.length === 0) return state
+
+      const nextQueue = queue.filter((turn) => turn.id !== turnId)
+      if (nextQueue.length > 0) {
+        queuedTurnsByConversation.set(conversationId, nextQueue)
+      } else {
+        queuedTurnsByConversation.delete(conversationId)
+      }
+
+      const queueErrorByConversation = new Map(state.queueErrorByConversation)
+      if (nextQueue.length === 0) {
+        queueErrorByConversation.delete(conversationId)
+      }
+      const queueSuppressedRestoreByConversation = new Map(state.queueSuppressedRestoreByConversation)
+      const inFlightTurnId = state.queueInFlightTurnByConversation.get(conversationId)
+      if (inFlightTurnId === turnId) {
+        const suppressed = new Set(queueSuppressedRestoreByConversation.get(conversationId) || [])
+        suppressed.add(turnId)
+        queueSuppressedRestoreByConversation.set(conversationId, suppressed)
+      }
+
+      return {
+        queuedTurnsByConversation,
+        queueErrorByConversation,
+        queueSuppressedRestoreByConversation
+      }
+    })
+  },
+
+  sendQueuedTurn: async (conversationId: string, turnId: string): Promise<QueueSendResult> => {
+    const snapshot = get()
+    const queue = snapshot.queuedTurnsByConversation.get(conversationId) || []
+    const targetIndex = queue.findIndex((turn) => turn.id === turnId)
+    const targetTurn = targetIndex >= 0 ? queue[targetIndex] : undefined
+    if (!targetTurn) {
+      return {
+        accepted: false,
+        guided: false,
+        fallbackToNewRun: false,
+        error: 'Queued turn not found'
+      }
+    }
+
+    if (snapshot.queueDispatchingByConversation.get(conversationId)) {
+      return {
+        accepted: false,
+        guided: false,
+        fallbackToNewRun: false,
+        error: 'Queue is already dispatching'
+      }
+    }
+
+    set((state) => {
+      const queueDispatchingByConversation = new Map(state.queueDispatchingByConversation)
+      queueDispatchingByConversation.set(conversationId, true)
+      const queueInFlightTurnByConversation = new Map(state.queueInFlightTurnByConversation)
+      queueInFlightTurnByConversation.set(conversationId, turnId)
+      const queuedTurnsByConversation = new Map(state.queuedTurnsByConversation)
+      const currentQueue = queuedTurnsByConversation.get(conversationId) || []
+      const nextQueue = currentQueue.filter((turn) => turn.id !== turnId)
+      if (nextQueue.length > 0) {
+        queuedTurnsByConversation.set(conversationId, nextQueue)
+      } else {
+        queuedTurnsByConversation.delete(conversationId)
+      }
+      const queueErrorByConversation = new Map(state.queueErrorByConversation)
+      queueErrorByConversation.delete(conversationId)
+      return {
+        queueDispatchingByConversation,
+        queueInFlightTurnByConversation,
+        queuedTurnsByConversation,
+        queueErrorByConversation
+      }
+    })
+
+    let result: DispatchResult | GuideDispatchResult = { accepted: false, error: 'Unknown dispatch error' }
+    let attemptedGuidedDispatch = false
+    let fallbackToNewRun = false
+    let guidedDelivery: 'session_send' | 'ask_user_question_answer' | undefined
+    try {
+      const latestSession = get().sessions.get(conversationId) || createEmptySessionState()
+      if (canStartNewRun(latestSession)) {
+        result = await get().dispatchTurnInternal(targetTurn)
+      } else {
+        attemptedGuidedDispatch = true
+        const guidedResult = await get().dispatchGuidedTurnInternal(targetTurn)
+        if (
+          !guidedResult.accepted &&
+          guidedResult.errorCode &&
+          GUIDE_FALLBACK_TO_NEW_RUN_ERROR_CODES.has(guidedResult.errorCode)
+        ) {
+          fallbackToNewRun = true
+          result = await get().dispatchTurnInternal(targetTurn)
+        } else {
+          if (guidedResult.accepted) {
+            guidedDelivery = guidedResult.delivery
+          }
+          result = guidedResult
+        }
+      }
+    } finally {
+      set((state) => {
+        const queueDispatchingByConversation = new Map(state.queueDispatchingByConversation)
+        queueDispatchingByConversation.delete(conversationId)
+        const queueInFlightTurnByConversation = new Map(state.queueInFlightTurnByConversation)
+        queueInFlightTurnByConversation.delete(conversationId)
+        const queuedTurnsByConversation = new Map(state.queuedTurnsByConversation)
+        const currentQueue = queuedTurnsByConversation.get(conversationId) || []
+        const queueErrorByConversation = new Map(state.queueErrorByConversation)
+        const queueSuppressedRestoreByConversation = new Map(state.queueSuppressedRestoreByConversation)
+        const suppressedRestoreSet = queueSuppressedRestoreByConversation.get(conversationId)
+        const shouldRestore = !(suppressedRestoreSet && suppressedRestoreSet.has(targetTurn.id))
+        if (suppressedRestoreSet?.has(targetTurn.id)) {
+          const nextSuppressed = new Set(suppressedRestoreSet)
+          nextSuppressed.delete(targetTurn.id)
+          if (nextSuppressed.size > 0) {
+            queueSuppressedRestoreByConversation.set(conversationId, nextSuppressed)
+          } else {
+            queueSuppressedRestoreByConversation.delete(conversationId)
+          }
+        }
+
+        if (result.accepted) {
+          queueErrorByConversation.delete(conversationId)
+        } else {
+          if (shouldRestore) {
+            const recoveredQueue = [...currentQueue]
+            const insertIndex = Math.min(Math.max(targetIndex, 0), recoveredQueue.length)
+            recoveredQueue.splice(insertIndex, 0, targetTurn)
+            queuedTurnsByConversation.set(conversationId, recoveredQueue)
+            queueErrorByConversation.set(conversationId, result.error)
+          } else {
+            queueErrorByConversation.delete(conversationId)
+          }
+        }
+
+        return {
+          queueDispatchingByConversation,
+          queueInFlightTurnByConversation,
+          queuedTurnsByConversation,
+          queueErrorByConversation,
+          queueSuppressedRestoreByConversation
+        }
+      })
+    }
+    return {
+      accepted: result.accepted,
+      guided: attemptedGuidedDispatch && result.accepted && !fallbackToNewRun,
+      fallbackToNewRun: fallbackToNewRun && result.accepted,
+      ...(guidedDelivery ? { delivery: guidedDelivery } : {}),
+      ...(!result.accepted ? { error: result.error } : {})
+    }
+  },
+
+  clearQueueError: (conversationId: string) => {
+    set((state) => {
+      const queueErrorByConversation = new Map(state.queueErrorByConversation)
+      queueErrorByConversation.delete(conversationId)
+      return { queueErrorByConversation }
+    })
+  },
+
+  dispatchTurnInternal: async (turn: QueuedUserTurn): Promise<DispatchResult> => {
+    const { spaceId, conversationId, content, images, fileContexts, thinkingEnabled, aiBrowserEnabled, invocationContext } = turn
+    if (!spaceId || !conversationId) {
+      return { accepted: false, error: '[ChatStore] spaceId and conversationId are required' }
+    }
+
+    const snapshotSession = get().sessions.get(conversationId)
+    const effectiveMode = normalizeChatMode(turn.mode, undefined, snapshotSession?.mode || 'code')
+    const context = invocationContext || 'interactive'
+    if (context !== 'interactive' && context !== 'workflow-step') {
+      return { accepted: false, error: `Unsupported invocationContext from renderer: ${context}` }
+    }
+
+    const nowIso = new Date().toISOString()
+    const userMessageId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const userMessage: Message = {
+      id: userMessageId,
+      role: 'user',
+      content,
+      timestamp: nowIso,
+      images
+    }
+
+    try {
+      // Initialize/reset session state for this conversation
+      set((state) => {
+        const newSessions = new Map(state.sessions)
+        const latestSession = newSessions.get(conversationId)
+        newSessions.set(conversationId, {
+          ...createEmptySessionState(),
+          mode: effectiveMode,
+          lifecycle: 'running',
+          terminalReason: null,
+          isGenerating: true,
+          isThinking: true,
+          activePlanTabId: latestSession?.activePlanTabId,
+        })
+        return { sessions: newSessions }
+      })
+
+      // Add user message to UI immediately
+      set((state) => {
+        const newCache = new Map(state.conversationCache)
+        const cached = newCache.get(conversationId)
+        if (cached) {
+          newCache.set(conversationId, {
+            ...cached,
+            messages: [...cached.messages, userMessage],
+            updatedAt: nowIso
+          })
+        }
+
+        const newSpaceStates = new Map(state.spaceStates)
+        const spaceState = newSpaceStates.get(spaceId)
+        if (spaceState) {
+          newSpaceStates.set(spaceId, {
+            ...spaceState,
+            conversations: spaceState.conversations.map((c) =>
+              c.id === conversationId
+                ? { ...c, messageCount: c.messageCount + 1, updatedAt: nowIso }
+                : c
+            )
+          })
+        }
+        return { spaceStates: newSpaceStates, conversationCache: newCache }
+      })
+
+      const baseRequest = {
+        spaceId,
+        conversationId,
+        message: content,
+        responseLanguage: getCurrentLanguage(),
+        images,
+        aiBrowserEnabled,
+        thinkingEnabled,
+        mode: effectiveMode,
+        planEnabled: effectiveMode === 'plan',
+        canvasContext: undefined as CanvasContext | undefined,
+        fileContexts
+      }
+
+      const response = context === 'workflow-step'
+        ? await api.sendWorkflowStepMessage(baseRequest)
+        : await api.sendMessage({
+          ...baseRequest,
+          invocationContext: 'interactive'
+        })
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to send message')
+      }
+
+      return { accepted: true }
+    } catch (error) {
+      const reason = toErrorMessage(error, 'Failed to send message')
+      console.error('[ChatStore] Failed to dispatch turn:', error)
+      set((state) => {
+        const newSessions = new Map(state.sessions)
+        const session = newSessions.get(conversationId) || createEmptySessionState()
+        newSessions.set(conversationId, {
+          ...session,
+          error: reason,
+          isGenerating: false,
+          isThinking: false,
+          isStreaming: false,
+          activePlanTabId: session.activePlanTabId
+        })
+
+        const newCache = new Map(state.conversationCache)
+        const cached = newCache.get(conversationId)
+        let removedOptimisticMessage = false
+        if (cached) {
+          const nextMessages = cached.messages.filter((message) => {
+            if (message.id !== userMessageId) return true
+            removedOptimisticMessage = true
+            return false
+          })
+          if (removedOptimisticMessage) {
+            newCache.set(conversationId, {
+              ...cached,
+              messages: nextMessages,
+              messageCount: nextMessages.length,
+              updatedAt: new Date().toISOString()
+            })
+          }
+        }
+
+        const newSpaceStates = new Map(state.spaceStates)
+        if (removedOptimisticMessage) {
+          const spaceState = newSpaceStates.get(spaceId)
+          if (spaceState) {
+            newSpaceStates.set(spaceId, {
+              ...spaceState,
+              conversations: spaceState.conversations.map((conversation) =>
+                conversation.id === conversationId
+                  ? {
+                    ...conversation,
+                    messageCount: Math.max(0, conversation.messageCount - 1),
+                    updatedAt: new Date().toISOString()
+                  }
+                  : conversation
+              )
+            })
+          }
+        }
+
+        return {
+          sessions: newSessions,
+          conversationCache: newCache,
+          spaceStates: newSpaceStates
+        }
+      })
+      return { accepted: false, error: reason }
+    }
+  },
+
+  dispatchGuidedTurnInternal: async (turn: QueuedUserTurn): Promise<GuideDispatchResult> => {
+    const { spaceId, conversationId } = turn
+    const content = turn.content.trim()
+    const activeRunId = get().sessions.get(conversationId)?.activeRunId || null
+    if (!spaceId || !conversationId) {
+      return { accepted: false, error: '[ChatStore] spaceId and conversationId are required' }
+    }
+    if (!activeRunId) {
+      return {
+        accepted: false,
+        error: i18n.t('No active run found for guided update.'),
+        errorCode: 'ASK_USER_QUESTION_NO_ACTIVE_SESSION'
+      }
+    }
+    if (!content) {
+      return { accepted: false, error: i18n.t('Guide message cannot be empty') }
+    }
+    if ((turn.images && turn.images.length > 0) || (turn.fileContexts && turn.fileContexts.length > 0)) {
+      return {
+        accepted: false,
+        error: i18n.t('Guide live update supports text only. Attachments remain queued for next turn.')
+      }
+    }
+
+    const nowIso = new Date().toISOString()
+    const userMessageId = `msg-guided-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const userMessage: Message = {
+      id: userMessageId,
+      role: 'user',
+      content,
+      timestamp: nowIso,
+      guidedMeta: {
+        runId: activeRunId
+      }
+    }
+
+    set((state) => {
+      const newCache = new Map(state.conversationCache)
+      const cached = newCache.get(conversationId)
+      if (cached) {
+        newCache.set(conversationId, {
+          ...cached,
+          messages: [...cached.messages, userMessage],
+          updatedAt: nowIso
+        })
+      }
+
+      const newSpaceStates = new Map(state.spaceStates)
+      const spaceState = newSpaceStates.get(spaceId)
+      if (spaceState) {
+        newSpaceStates.set(spaceId, {
+          ...spaceState,
+          conversations: spaceState.conversations.map((conversation) =>
+            conversation.id === conversationId
+              ? {
+                  ...conversation,
+                  messageCount: conversation.messageCount + 1,
+                  updatedAt: nowIso
+                }
+              : conversation
+          )
+        })
+      }
+      return { conversationCache: newCache, spaceStates: newSpaceStates }
+    })
+
+    let result: GuideDispatchResult = { accepted: false, error: 'Failed to guide message' }
+    try {
+      const response = await api.guideMessage({
+        spaceId,
+        conversationId,
+        message: content,
+        runId: activeRunId,
+        clientMessageId: userMessageId
+      })
+      if (!response.success) {
+        result = {
+          accepted: false,
+          error: toGuideErrorMessage(response.error, response.errorCode),
+          errorCode: response.errorCode
+        }
+      } else {
+        result = { accepted: true, delivery: response.data?.delivery }
+      }
+    } catch (error) {
+      const reason = toErrorMessage(error, 'Failed to guide message')
+      console.error('[ChatStore] Failed to dispatch guided turn:', error)
+      result = { accepted: false, error: reason }
+    }
+
+    if (!result.accepted) {
+      set((state) => {
+        const newCache = new Map(state.conversationCache)
+        const cached = newCache.get(conversationId)
+        if (cached) {
+          const nextMessages = cached.messages.filter((message) => message.id !== userMessageId)
+          newCache.set(conversationId, {
+            ...cached,
+            messages: nextMessages,
+            messageCount: nextMessages.length,
+            updatedAt: new Date().toISOString()
+          })
+        }
+
+        const newSpaceStates = new Map(state.spaceStates)
+        const spaceState = newSpaceStates.get(spaceId)
+        if (spaceState) {
+          newSpaceStates.set(spaceId, {
+            ...spaceState,
+            conversations: spaceState.conversations.map((conversation) =>
+              conversation.id === conversationId
+                ? {
+                    ...conversation,
+                    messageCount: Math.max(0, conversation.messageCount - 1),
+                    updatedAt: new Date().toISOString()
+                  }
+                : conversation
+            )
+          })
+        }
+        return { conversationCache: newCache, spaceStates: newSpaceStates }
+      })
+    }
+
+    return result
+  },
+
+  submitTurn: async (turnInput) => {
+    const hasContent = Boolean(
+      turnInput.content.trim() ||
+      (turnInput.images && turnInput.images.length > 0) ||
+      (turnInput.fileContexts && turnInput.fileContexts.length > 0)
+    )
+    if (!hasContent) return
+
+    const turn: QueuedUserTurn = {
+      ...turnInput,
+      id: `queued-turn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      mode: normalizeChatMode(turnInput.mode, undefined, 'code'),
+      createdAt: Date.now()
+    }
+
+    const enqueueTurn = (errorMessage: string | null) => {
+      set((state) => {
+        const queuedTurnsByConversation = new Map(state.queuedTurnsByConversation)
+        const queue = queuedTurnsByConversation.get(turn.conversationId) || []
+        queuedTurnsByConversation.set(turn.conversationId, [...queue, turn])
+
+        const queueErrorByConversation = new Map(state.queueErrorByConversation)
+        if (errorMessage) {
+          queueErrorByConversation.set(turn.conversationId, errorMessage)
+        } else {
+          queueErrorByConversation.delete(turn.conversationId)
+        }
+        return { queuedTurnsByConversation, queueErrorByConversation }
+      })
+    }
+
+    const existingQueue = get().queuedTurnsByConversation.get(turn.conversationId) || []
+    if (existingQueue.length > 0) {
+      enqueueTurn(null)
+      void get().flushQueuedTurns(turn.conversationId, 'submit')
+      return
+    }
+
+    const session = get().sessions.get(turn.conversationId) || createEmptySessionState()
+    if (!canStartNewRun(session)) {
+      enqueueTurn(null)
+      return
+    }
+
+    const result = await get().dispatchTurnInternal(turn)
+    if (result.accepted) {
+      set((state) => {
+        const queueErrorByConversation = new Map(state.queueErrorByConversation)
+        queueErrorByConversation.delete(turn.conversationId)
+        return { queueErrorByConversation }
+      })
+      return
+    }
+
+    enqueueTurn(result.error)
+  },
+
+  flushQueuedTurns: async (conversationId: string, _trigger: QueueDispatchTrigger) => {
+    const snapshot = get()
+    if (snapshot.queueDispatchingByConversation.get(conversationId)) {
+      return
+    }
+
+    const queue = snapshot.queuedTurnsByConversation.get(conversationId) || []
+    if (queue.length === 0) {
+      return
+    }
+
+    const session = snapshot.sessions.get(conversationId) || createEmptySessionState()
+    if (!canStartNewRun(session)) {
+      return
+    }
+
+    const headTurn = queue[0]
+    set((state) => {
+      const queueDispatchingByConversation = new Map(state.queueDispatchingByConversation)
+      queueDispatchingByConversation.set(conversationId, true)
+      return { queueDispatchingByConversation }
+    })
+
+    let result: DispatchResult = { accepted: false, error: 'Unknown dispatch error' }
+    try {
+      result = await get().dispatchTurnInternal(headTurn)
+    } finally {
+      set((state) => {
+        const queueDispatchingByConversation = new Map(state.queueDispatchingByConversation)
+        queueDispatchingByConversation.delete(conversationId)
+
+        const queuedTurnsByConversation = new Map(state.queuedTurnsByConversation)
+        const currentQueue = queuedTurnsByConversation.get(conversationId) || []
+        const queueErrorByConversation = new Map(state.queueErrorByConversation)
+
+        if (result.accepted) {
+          const nextQueue =
+            currentQueue[0]?.id === headTurn.id
+              ? currentQueue.slice(1)
+              : currentQueue.filter((turn) => turn.id !== headTurn.id)
+          if (nextQueue.length > 0) {
+            queuedTurnsByConversation.set(conversationId, nextQueue)
+          } else {
+            queuedTurnsByConversation.delete(conversationId)
+          }
+          queueErrorByConversation.delete(conversationId)
+        } else {
+          queueErrorByConversation.set(conversationId, result.error)
+        }
+
+        return {
+          queueDispatchingByConversation,
+          queuedTurnsByConversation,
+          queueErrorByConversation
+        }
       })
     }
   },
@@ -1582,6 +2315,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               isThinking: false,
               isStreaming: false,
               toolStatusById: cancelledTools,
+              pendingToolApproval: null,
               askUserQuestionsById: {},
               askUserQuestionOrder: [],
               activeAskUserQuestionId: null
@@ -1590,6 +2324,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           return { sessions: newSessions }
         })
         useTaskStore.getState().finalizeTasksOnTerminal('stopped')
+        await get().flushQueuedTurns(targetId, 'stop_generation')
       }
     } catch (error) {
       console.error('Failed to stop generation:', error)
@@ -2287,6 +3022,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         isThinking: false,
         isStreaming: false,
         toolStatusById,
+        pendingToolApproval: null,
         askUserQuestionsById: {},
         askUserQuestionOrder: [],
         activeAskUserQuestionId: null,
@@ -2297,6 +3033,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     if (shouldFinalizeTasks) {
       useTaskStore.getState().finalizeTasksOnTerminal('error')
+      void get().flushQueuedTurns(conversationId, 'agent_error')
     }
   },
 
@@ -2367,6 +3104,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             isStreaming: false,
             isThinking: false,
             streamingContent: '',
+            pendingToolApproval: null,
             askUserQuestionsById: {},
             askUserQuestionOrder: [],
             activeAskUserQuestionId: null,
@@ -2429,6 +3167,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           isThinking: false,
           isGenerating: false,
           toolStatusById: cancelledTools,
+          pendingToolApproval: null,
           askUserQuestionsById: {},
           askUserQuestionOrder: [],
           activeAskUserQuestionId: null
@@ -2441,7 +3180,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           terminalReason,
           isGenerating: false,
           isStreaming: false,
-          isThinking: false
+          isThinking: false,
+          pendingToolApproval: null
         })
       }
       return { sessions: newSessions }
@@ -2518,6 +3258,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               mode: updatedConversationMode,
               isGenerating: false,
               streamingContent: '',
+              pendingToolApproval: null,
               askUserQuestionsById: {},
               askUserQuestionOrder: [],
               activeAskUserQuestionId: null,
@@ -2551,27 +3292,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
     } catch (error) {
       console.error('[ChatStore] Failed to reload conversation:', error)
       const appliedFallback = applyFinalContentFallback(data.finalContent)
-      if (appliedFallback) {
-        return
+      if (!appliedFallback) {
+        // Even on error without fallback, must clear state to avoid stale content
+        set((state) => {
+          const newSessions = new Map(state.sessions)
+          const currentSession = newSessions.get(conversationId)
+          if (currentSession) {
+            newSessions.set(conversationId, {
+              ...currentSession,
+              isGenerating: false,
+              streamingContent: '',
+              pendingToolApproval: null,
+              askUserQuestionsById: {},
+              askUserQuestionOrder: [],
+              activeAskUserQuestionId: null,
+              compactInfo: null  // Clear temporary compact notification
+            })
+          }
+          return { sessions: newSessions }
+        })
       }
-      // Even on error without fallback, must clear state to avoid stale content
-      set((state) => {
-        const newSessions = new Map(state.sessions)
-        const currentSession = newSessions.get(conversationId)
-        if (currentSession) {
-          newSessions.set(conversationId, {
-            ...currentSession,
-            isGenerating: false,
-            streamingContent: '',
-            askUserQuestionsById: {},
-            askUserQuestionOrder: [],
-            activeAskUserQuestionId: null,
-            compactInfo: null  // Clear temporary compact notification
-          })
-        }
-        return { sessions: newSessions }
-      })
     }
+
+    await get().flushQueuedTurns(conversationId, 'agent_complete')
   },
 
   handleAgentMode: (data) => {
@@ -2875,13 +3618,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
       changeSets: new Map(),
       currentSpaceId: null,
       artifacts: [],
-      loadingConversationCounts: new Map()
+      loadingConversationCounts: new Map(),
+      queuedTurnsByConversation: new Map(),
+      queueDispatchingByConversation: new Map(),
+      queueErrorByConversation: new Map(),
+      queueInFlightTurnByConversation: new Map(),
+      queueSuppressedRestoreByConversation: new Map()
     })
   },
 
   // Reset a specific space's state (use when needed)
   resetSpace: (spaceId: string) => {
     set((state) => {
+      const targetConversationIds = new Set(
+        (state.spaceStates.get(spaceId)?.conversations || []).map((conversation) => conversation.id)
+      )
       const newSpaceStates = new Map(state.spaceStates)
       newSpaceStates.delete(spaceId)
       const newChangeSets = new Map(state.changeSets)
@@ -2890,7 +3641,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
           newChangeSets.delete(conversationId)
         }
       }
-      return { spaceStates: newSpaceStates, changeSets: newChangeSets }
+      const queuedTurnsByConversation = new Map(state.queuedTurnsByConversation)
+      const queueDispatchingByConversation = new Map(state.queueDispatchingByConversation)
+      const queueErrorByConversation = new Map(state.queueErrorByConversation)
+      const queueInFlightTurnByConversation = new Map(state.queueInFlightTurnByConversation)
+      const queueSuppressedRestoreByConversation = new Map(state.queueSuppressedRestoreByConversation)
+      for (const conversationId of targetConversationIds) {
+        queuedTurnsByConversation.delete(conversationId)
+        queueDispatchingByConversation.delete(conversationId)
+        queueErrorByConversation.delete(conversationId)
+        queueInFlightTurnByConversation.delete(conversationId)
+        queueSuppressedRestoreByConversation.delete(conversationId)
+      }
+      return {
+        spaceStates: newSpaceStates,
+        changeSets: newChangeSets,
+        queuedTurnsByConversation,
+        queueDispatchingByConversation,
+        queueErrorByConversation,
+        queueInFlightTurnByConversation,
+        queueSuppressedRestoreByConversation
+      }
     })
   }
 }))

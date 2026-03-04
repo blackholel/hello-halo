@@ -6,6 +6,7 @@
 import { BrowserWindow } from 'electron'
 import {
   sendMessage as agentSendMessage,
+  guideLiveInput as agentGuideLiveInput,
   setAgentMode as agentSetMode,
   stopGeneration as agentStopGeneration,
   handleToolApproval as agentHandleToolApproval,
@@ -64,6 +65,14 @@ export interface SetModeRequest {
   runId?: string
 }
 
+export interface GuideMessageRequest {
+  spaceId: string
+  conversationId: string
+  message: string
+  runId?: string
+  clientMessageId?: string
+}
+
 export interface ControllerResponse<T = unknown> {
   success: boolean
   data?: T
@@ -119,6 +128,18 @@ export async function sendWorkflowStepMessage(
       : { ...request, invocationContext: 'workflow-step' as InvocationContext }
     await agentSendMessage(mainWindow, normalizedRequest)
     return { success: true }
+  } catch (error: unknown) {
+    return toErrorResponse(error)
+  }
+}
+
+export async function guideMessage(
+  _mainWindow: BrowserWindow | null,
+  request: GuideMessageRequest
+): Promise<ControllerResponse<{ delivery: 'session_send' | 'ask_user_question_answer' }>> {
+  try {
+    const data = await agentGuideLiveInput(request)
+    return { success: true, data }
   } catch (error: unknown) {
     return toErrorResponse(error)
   }

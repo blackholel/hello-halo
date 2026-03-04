@@ -20,7 +20,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback, useMemo, KeyboardEvent, ClipboardEvent, DragEvent } from 'react'
-import { Plus, ImagePlus, Loader2, AlertCircle, Atom, Globe, ClipboardList, X, Bot, Zap, Terminal } from 'lucide-react'
+import { Plus, ImagePlus, Loader2, AlertCircle, Atom, Globe, ClipboardList, X, Bot, Zap, Terminal, Trash2, Pencil } from 'lucide-react'
 import { useOnboardingStore } from '../../stores/onboarding.store'
 import { useAIBrowserStore } from '../../stores/ai-browser.store'
 import { getComposerMruMap, touchComposerMru } from '../../stores/composer-mru.store'
@@ -65,6 +65,26 @@ interface InputAreaProps {
   onSend: (content: string, images?: ImageAttachment[], thinkingEnabled?: boolean, fileContexts?: FileContextAttachment[], mode?: ChatMode) => void
   onStop: () => void
   isGenerating: boolean
+  queueItems?: Array<{
+    id: string
+    content: string
+    images?: ImageAttachment[]
+    fileContexts?: FileContextAttachment[]
+    hasImages?: boolean
+    hasFileContexts?: boolean
+  }>
+  queueError?: string | null
+  onSendQueueItem?: (id: string) => Promise<{
+    accepted: boolean
+    guided: boolean
+    fallbackToNewRun: boolean
+    delivery?: 'session_send' | 'ask_user_question_answer'
+    error?: string
+  }>
+  onEditQueueItem?: (id: string) => void
+  onRemoveQueueItem?: (id: string) => void
+  onClearQueue?: () => void
+  onClearQueueError?: () => void
   modeSwitching?: boolean
   spaceId: string | null
   placeholder?: string
@@ -96,6 +116,13 @@ export function InputArea({
   onSend,
   onStop,
   isGenerating,
+  queueItems = [],
+  queueError = null,
+  onSendQueueItem,
+  onEditQueueItem,
+  onRemoveQueueItem,
+  onClearQueue,
+  onClearQueueError,
   modeSwitching = false,
   spaceId,
   placeholder,
@@ -121,6 +148,8 @@ export function InputArea({
   const [globalExpandState, setGlobalExpandState] = useState<Record<string, boolean>>({})
   const [mruVersion, setMruVersion] = useState(0)
   const [selectedResourceChips, setSelectedResourceChips] = useState<SelectedComposerResourceChip[]>([])
+  const [queueHint, setQueueHint] = useState<string | null>(null)
+  const [guidingQueueItemIds, setGuidingQueueItemIds] = useState<Set<string>>(new Set())
   const [isComposing, setIsComposing] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -221,7 +250,7 @@ export function InputArea({
   // In onboarding send step, show prefilled prompt
   const onboardingPrompt = getOnboardingPrompt(t)
   const displayContent = isOnboardingSendStep ? onboardingPrompt : content
-  const isTriggerPanelOpen = Boolean(triggerContext) && !isOnboardingSendStep && !isGenerating
+  const isTriggerPanelOpen = Boolean(triggerContext) && !isOnboardingSendStep
 
   const mruSpaceId = spaceId || 'no-space'
   const effectiveSuggestionTab: ComposerSuggestionTab = triggerContext?.type === 'mention'
@@ -544,7 +573,7 @@ export function InputArea({
   }, [])
 
   const refreshTriggerContext = useCallback((nextValue?: string, nextCaret?: number) => {
-    if (isOnboardingSendStep || isGenerating) {
+    if (isOnboardingSendStep) {
       closeTriggerPanel()
       return
     }
@@ -554,13 +583,13 @@ export function InputArea({
     const caret = nextCaret ?? textarea?.selectionStart ?? value.length
     const context = getTriggerContext(value, caret)
     setTriggerContext(context)
-  }, [closeTriggerPanel, content, isGenerating, isOnboardingSendStep])
+  }, [closeTriggerPanel, content, isOnboardingSendStep])
 
   useEffect(() => {
-    if (isGenerating || isOnboardingSendStep) {
+    if (isOnboardingSendStep) {
       closeTriggerPanel()
     }
-  }, [closeTriggerPanel, isGenerating, isOnboardingSendStep])
+  }, [closeTriggerPanel, isOnboardingSendStep])
 
   useEffect(() => {
     if (!isTriggerPanelOpen) return
@@ -710,7 +739,7 @@ export function InputArea({
       : composeInputMessage(content, selectedResourceChips)
     const hasContent = textToSend || images.length > 0 || fileContexts.length > 0
 
-    if (hasContent && !isGenerating) {
+    if (hasContent) {
       closeTriggerPanel()
       onSend(
         textToSend,
@@ -838,10 +867,34 @@ export function InputArea({
   }, [])
 
   // In onboarding mode, can always send (prefilled content)
-  // Can send if has text OR has images OR has file contexts (and not processing/generating)
-  const canSend = isOnboardingSendStep || ((content.trim().length > 0 || selectedResourceChips.length > 0 || images.length > 0 || fileContexts.length > 0) && !isGenerating && !isProcessingImages)
+  // Can send if has text OR has images OR has file contexts (and not processing)
+  const canSend = isOnboardingSendStep || ((content.trim().length > 0 || selectedResourceChips.length > 0 || images.length > 0 || fileContexts.length > 0) && !isProcessingImages)
   const hasImages = images.length > 0
   const hasFileContexts = fileContexts.length > 0
+  const resolveQueueContent = useCallback((item: {
+    content: string
+    images?: ImageAttachment[]
+    fileContexts?: FileContextAttachment[]
+    hasImages?: boolean
+    hasFileContexts?: boolean
+  }): string => {
+    const trimmed = item.content.trim()
+    if (trimmed.length > 0) return trimmed
+    const hasItemImages = Boolean(item.hasImages || (item.images && item.images.length > 0))
+    const hasItemContexts = Boolean(item.hasFileContexts || (item.fileContexts && item.fileContexts.length > 0))
+    if (hasItemImages && hasItemContexts) return t('Image + Context')
+    if (hasItemImages) return t('Image message')
+    if (hasItemContexts) return t('Context message')
+    return t('Queued message')
+  }, [t])
+
+  useEffect(() => {
+    if (!queueHint) return
+    const timer = window.setTimeout(() => {
+      setQueueHint(null)
+    }, 2500)
+    return () => window.clearTimeout(timer)
+  }, [queueHint])
 
   return (
     <div className={`
@@ -877,7 +930,6 @@ export function InputArea({
               ? 'ring-1 ring-primary/30 bg-card shadow-sm'
               : 'bg-secondary/50 hover:bg-secondary/70'
             }
-            ${isGenerating ? 'opacity-60' : ''}
             ${isDragOver ? 'ring-2 ring-primary/50 bg-primary/5' : ''}
           `}
           onDragOver={handleDragOver}
@@ -921,6 +973,124 @@ export function InputArea({
           )}
 
           {/* Textarea area */}
+          {queueItems.length > 0 && (
+            <div className="px-3 pt-3 pb-1">
+              <div className="rounded-2xl border border-border/60 bg-background/60 px-3 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-muted-foreground">{t('Queued {{count}}', { count: queueItems.length })}</span>
+                  {onClearQueue && (
+                    <button
+                      type="button"
+                      onClick={onClearQueue}
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {t('Clear all')}
+                    </button>
+                  )}
+                </div>
+                <div className="mt-2 space-y-1.5 max-h-28 overflow-auto pr-1">
+                  {queueItems.map((item) => {
+                    const isGuiding = guidingQueueItemIds.has(item.id)
+                    return (
+                    <div
+                      key={item.id}
+                      className="flex items-center gap-2 rounded-xl border border-border/50 bg-muted/20 px-2.5 py-1.5"
+                    >
+                      <span className="min-w-0 flex-1 truncate text-sm text-foreground/90">
+                        {resolveQueueContent(item)}
+                      </span>
+                      {onSendQueueItem && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (isGuiding) return
+                            setGuidingQueueItemIds((prev) => {
+                              const next = new Set(prev)
+                              next.add(item.id)
+                              return next
+                            })
+                            try {
+                              const guideResult = await onSendQueueItem(item.id)
+                              if (!guideResult.accepted) {
+                                setQueueHint(guideResult.error || t('Failed to guide message'))
+                                return
+                              }
+                              if (guideResult.guided) {
+                                setQueueHint(t('Guided update embedded into current run.'))
+                                return
+                              }
+                              if (guideResult.fallbackToNewRun) {
+                                setQueueHint(t('Guide could not attach to current run. Sent as a new run.'))
+                                return
+                              }
+                              setQueueHint(t('Queued message guided. It will send without interrupting current work.'))
+                            } finally {
+                              setGuidingQueueItemIds((prev) => {
+                                if (!prev.has(item.id)) return prev
+                                const next = new Set(prev)
+                                next.delete(item.id)
+                                return next
+                              })
+                            }
+                          }}
+                          disabled={isGuiding}
+                          className={`h-6 inline-flex items-center gap-1 rounded-md px-2 text-[11px] transition-colors ${
+                            isGuiding
+                              ? 'bg-primary/15 text-primary/70 cursor-not-allowed'
+                              : 'bg-primary/10 text-primary hover:bg-primary/20'
+                          }`}
+                          title={t('Send immediately without interrupting work')}
+                        >
+                          {isGuiding && <Loader2 size={11} className="animate-spin" />}
+                          <span>{t('Guide')}</span>
+                        </button>
+                      )}
+                      {(onEditQueueItem || onRemoveQueueItem) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setContent(item.content)
+                            setImages(item.images ? [...item.images] : [])
+                            setFileContexts(item.fileContexts ? [...item.fileContexts] : [])
+                            if (onEditQueueItem) {
+                              onEditQueueItem(item.id)
+                            } else {
+                              onRemoveQueueItem?.(item.id)
+                            }
+                            setQueueHint(t('Moved queued message to input for editing'))
+                            textareaRef.current?.focus()
+                          }}
+                          className="h-6 inline-flex items-center gap-1 rounded-md bg-muted/60 px-2 text-[11px] text-foreground/80 hover:bg-muted transition-colors"
+                          title={t('Edit')}
+                        >
+                          <Pencil size={11} />
+                          <span>{t('Edit')}</span>
+                        </button>
+                      )}
+                      {onRemoveQueueItem && (
+                        <button
+                          type="button"
+                          onClick={() => onRemoveQueueItem(item.id)}
+                          className="w-6 h-6 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                          title={t('Remove')}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+          {queueHint && (
+            <div className="px-3 pb-1">
+              <div className="rounded-lg border border-primary/20 bg-primary/10 px-2.5 py-1.5 text-xs text-primary">
+                {queueHint}
+              </div>
+            </div>
+          )}
           <div className="px-3 pt-3 pb-1">
             {selectedResourceChips.length > 0 && (
               <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -966,12 +1136,11 @@ export function InputArea({
                 requestAnimationFrame(syncTriggerWithCursor)
               }}
               placeholder={placeholder || t('Type a message, let Kite help you...')}
-              disabled={isGenerating}
               readOnly={isOnboardingSendStep}
               rows={1}
               className={`w-full bg-transparent resize-none
                 focus:outline-none text-foreground placeholder:text-muted-foreground/50
-                disabled:cursor-not-allowed min-h-[24px]
+                min-h-[24px]
                 ${isOnboardingSendStep ? 'cursor-default' : ''}`}
               style={{ maxHeight: '200px' }}
             />
@@ -1012,6 +1181,22 @@ export function InputArea({
             workDir={workDir}
             onInsertSkill={handleInsertSkill}
           />
+          {queueError && (
+            <div className="px-3 pb-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+              <span>
+                {queueError}
+              </span>
+              {onClearQueueError && (
+                <button
+                  type="button"
+                  onClick={onClearQueueError}
+                  className="rounded px-2 py-0.5 hover:bg-muted/60 transition-colors"
+                >
+                  {t('Clear')}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1080,7 +1265,7 @@ function InputToolbar({
           spaceId={spaceId}
           isGenerating={isGenerating}
         />
-        {!isGenerating && !isOnboarding && (
+        {!isOnboarding && (
           <>
             <button
               onClick={onSystemFileClick}
@@ -1164,8 +1349,27 @@ function InputToolbar({
       </div>
 
       {/* Right section: action button only */}
-      <div className="flex items-center">
-        {isGenerating ? (
+      <div className="flex items-center gap-1.5">
+        {(!isGenerating || canSend) && (
+          <button
+            data-onboarding="send-button"
+            onClick={onSend}
+            disabled={!canSend}
+            className={`
+              h-8 px-2.5 flex items-center justify-center rounded-lg transition-all duration-200 text-xs
+              ${canSend
+                ? 'bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95'
+                : 'bg-muted/50 text-muted-foreground/40 cursor-not-allowed'
+              }
+            `}
+            title={isGenerating
+              ? t('Send')
+              : t(mode === 'plan' ? 'Send (Plan Mode)' : mode === 'ask' ? 'Send (Ask Mode)' : thinkingEnabled ? 'Send (Deep Thinking)' : 'Send')}
+          >
+            <span>{t('Send')}</span>
+          </button>
+        )}
+        {isGenerating && !canSend && (
           <button
             onClick={onStop}
             className="w-8 h-8 flex items-center justify-center
@@ -1175,24 +1379,6 @@ function InputToolbar({
             title={t('Stop generation (Esc)')}
           >
             <div className="w-3 h-3 border-2 border-current rounded-sm" />
-          </button>
-        ) : (
-          <button
-            data-onboarding="send-button"
-            onClick={onSend}
-            disabled={!canSend}
-            className={`
-              w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-200
-              ${canSend
-                ? 'bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95'
-                : 'bg-muted/50 text-muted-foreground/40 cursor-not-allowed'
-              }
-            `}
-            title={t(mode === 'plan' ? 'Send (Plan Mode)' : mode === 'ask' ? 'Send (Ask Mode)' : thinkingEnabled ? 'Send (Deep Thinking)' : 'Send')}
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" />
-            </svg>
           </button>
         )}
       </div>

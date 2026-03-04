@@ -11,10 +11,11 @@
  * - Supports streaming responses and tool calls
  */
 
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { useChatStore } from '../../../stores/chat.store'
 import { useAppStore } from '../../../stores/app.store'
 import { useSpaceStore } from '../../../stores/space.store'
+import { useAIBrowserStore } from '../../../stores/ai-browser.store'
 import { useSmartScroll } from '../../../hooks/useSmartScroll'
 import { useCanvasLifecycle } from '../../../hooks/useCanvasLifecycle'
 import { MessageList } from '../../chat/MessageList'
@@ -36,6 +37,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
   const { conversationId, spaceId, workDir: tabWorkDir } = tab
   const { openPlan } = useCanvasLifecycle()
   const appConfig = useAppStore(state => state.config)
+  const aiBrowserEnabled = useAIBrowserStore(state => state.enabled)
   const { currentSpace, spaces, haloSpace } = useSpaceStore((state) => ({
     currentSpace: state.currentSpace,
     spaces: state.spaces,
@@ -74,7 +76,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
   )
 
   // Store actions
-  const sendMessageToConversation = useChatStore(state => state.sendMessageToConversation)
+  const submitTurn = useChatStore(state => state.submitTurn)
   const executePlan = useChatStore(state => state.executePlan)
   const stopGeneration = useChatStore(state => state.stopGeneration)
   const hydrateConversation = useChatStore(state => state.hydrateConversation)
@@ -86,6 +88,28 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
   const answerQuestion = useChatStore(state => state.answerQuestion)
   const dismissAskUserQuestion = useChatStore(state => state.dismissAskUserQuestion)
   const setConversationMode = useChatStore(state => state.setConversationMode)
+  const sendQueuedTurn = useChatStore(state => state.sendQueuedTurn)
+  const removeQueuedTurn = useChatStore(state => state.removeQueuedTurn)
+  const clearConversationQueue = useChatStore(state => state.clearConversationQueue)
+  const clearQueueError = useChatStore(state => state.clearQueueError)
+  const queuedTurns = useChatStore(state =>
+    conversationId ? (state.queuedTurnsByConversation.get(conversationId) || []) : []
+  )
+  const queueItems = useMemo(
+    () => queuedTurns
+      .map((turn) => ({
+        id: turn.id,
+        content: turn.content,
+        images: turn.images,
+        fileContexts: turn.fileContexts,
+        hasImages: Boolean(turn.images && turn.images.length > 0),
+        hasFileContexts: Boolean(turn.fileContexts && turn.fileContexts.length > 0)
+      })),
+    [queuedTurns]
+  )
+  const queueError = useChatStore(state =>
+    conversationId ? (state.queueErrorByConversation.get(conversationId) || null) : null
+  )
 
   // Load conversation if not in cache
   useEffect(() => {
@@ -104,6 +128,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
   // Extract session state with defaults
   const {
     isGenerating = false,
+    activeRunId = null,
     streamingContent = '',
     isStreaming = false,
     thoughts = [],
@@ -140,7 +165,6 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
 
   const currentChangeSets = conversationId ? (changeSets.get(conversationId) || []) : []
   const activeChangeSet = currentChangeSets[0]
-
   // Smart auto-scroll
   const {
     containerRef,
@@ -162,20 +186,19 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
     mode?: ChatMode
   ) => {
     if (!conversationId || !spaceId) return
-    if ((!content.trim() && (!images || images.length === 0) && (!fileContexts || fileContexts.length === 0)) || isGenerating) return
+    if (!content.trim() && (!images || images.length === 0) && (!fileContexts || fileContexts.length === 0)) return
 
-    // Send directly to the target conversation - no global context switching needed
-    await sendMessageToConversation(
+    await submitTurn({
       spaceId,
       conversationId,
       content,
       images,
-      thinkingEnabled,
       fileContexts,
-      undefined,
+      thinkingEnabled,
+      aiBrowserEnabled,
       mode
-    )
-  }, [conversationId, spaceId, isGenerating, sendMessageToConversation])
+    })
+  }, [aiBrowserEnabled, conversationId, spaceId, submitTurn])
 
   // Handle stop generation
   const handleStop = useCallback(async () => {
@@ -254,6 +277,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
                 messages={messages}
                 streamingContent={streamingContent}
                 isGenerating={isGenerating}
+                activeRunId={activeRunId}
                 isStreaming={isStreaming}
                 thoughts={thoughts}
                 processTrace={processTrace}
@@ -328,16 +352,14 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
             }
             dismissAskUserQuestion(conversationId, derivedFailedAskUserQuestion.id)
             if (!spaceId) return
-            await sendMessageToConversation(
+            await submitTurn({
               spaceId,
               conversationId,
-              answer,
-              undefined,
-              false,
-              undefined,
-              false,
-              'code'
-            )
+              content: answer,
+              thinkingEnabled: false,
+              aiBrowserEnabled,
+              mode: 'code'
+            })
           }}
           isCompact={true}
         />
@@ -346,6 +368,35 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
         onSend={handleSend}
         onStop={handleStop}
         isGenerating={isGenerating}
+        queueItems={queueItems}
+        queueError={queueError}
+        onSendQueueItem={(turnId) => {
+          if (!conversationId) {
+            return Promise.resolve({
+              accepted: false,
+              guided: false,
+              fallbackToNewRun: false,
+              error: 'No active conversation'
+            })
+          }
+          return sendQueuedTurn(conversationId, turnId)
+        }}
+        onEditQueueItem={(turnId) => {
+          if (!conversationId) return
+          removeQueuedTurn(conversationId, turnId)
+        }}
+        onRemoveQueueItem={(turnId) => {
+          if (!conversationId) return
+          removeQueuedTurn(conversationId, turnId)
+        }}
+        onClearQueue={() => {
+          if (!conversationId) return
+          clearConversationQueue(conversationId)
+        }}
+        onClearQueueError={() => {
+          if (!conversationId) return
+          clearQueueError(conversationId)
+        }}
         modeSwitching={modeSwitching}
         placeholder={t('Ask Kite anything, / for commands')}
         isCompact={true}

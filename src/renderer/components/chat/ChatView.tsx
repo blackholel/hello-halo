@@ -50,12 +50,18 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     loadChangeSets,
     acceptChangeSet,
     rollbackChangeSet,
-    sendMessage,
+    submitTurn,
     executePlan,
     stopGeneration,
     answerQuestion,
     dismissAskUserQuestion,
-    setConversationMode
+    setConversationMode,
+    getQueuedTurns,
+    sendQueuedTurn,
+    removeQueuedTurn,
+    clearConversationQueue,
+    getQueueError,
+    clearQueueError
   } = useChatStore()
   const { openPlan } = useCanvasLifecycle()
   const appConfig = useAppStore(state => state.config)
@@ -168,6 +174,17 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
   const currentConversation = getCurrentConversation()
   const currentConversationMeta = getCurrentConversationMeta()
   const currentConversationId = getCurrentConversationId()
+  const queueItems = currentConversationId
+    ? getQueuedTurns(currentConversationId).map((turn) => ({
+        id: turn.id,
+        content: turn.content,
+        images: turn.images,
+        fileContexts: turn.fileContexts,
+        hasImages: Boolean(turn.images && turn.images.length > 0),
+        hasFileContexts: Boolean(turn.fileContexts && turn.fileContexts.length > 0)
+      }))
+    : []
+  const queueError = currentConversationId ? getQueueError(currentConversationId) : null
   const modelSwitcherConversation = currentConversationId
     ? {
         id: currentConversationId,
@@ -180,6 +197,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
   const session = getCurrentSession()
   const {
     isGenerating,
+    activeRunId,
     streamingContent,
     isStreaming,
     thoughts,
@@ -290,10 +308,18 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     }
 
     const hasContent = content.trim() || (images && images.length > 0) || (fileContexts && fileContexts.length > 0)
-    if (!hasContent || isGenerating) return
+    if (!hasContent || !currentSpaceId || !currentConversationId) return
 
-    // Pass AI Browser, thinking, and plan state to sendMessage
-    await sendMessage(content, images, aiBrowserEnabled, thinkingEnabled, fileContexts, mode)
+    await submitTurn({
+      spaceId: currentSpaceId,
+      conversationId: currentConversationId,
+      content,
+      images,
+      fileContexts,
+      thinkingEnabled,
+      mode,
+      aiBrowserEnabled
+    })
   }
 
   const handleModeChange = useCallback((nextMode: ChatMode) => {
@@ -394,6 +420,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
                 messages={displayMessages}
                 streamingContent={displayStreamingContent}
                 isGenerating={displayIsGenerating}
+                activeRunId={activeRunId}
                 isStreaming={displayIsStreaming}
                 thoughts={thoughts}
                 processTrace={processTrace}
@@ -468,7 +495,15 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
               throw new Error('Expected manual answer text')
             }
             dismissAskUserQuestion(currentConversationId, failedAskUserQuestion.id)
-            await sendMessage(answer, undefined, aiBrowserEnabled, false, undefined, 'code')
+            if (!currentSpaceId) return
+            await submitTurn({
+              spaceId: currentSpaceId,
+              conversationId: currentConversationId,
+              content: answer,
+              aiBrowserEnabled,
+              thinkingEnabled: false,
+              mode: 'code'
+            })
           }}
           isCompact={isCompact}
         />
@@ -477,6 +512,35 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
         onSend={handleSend}
         onStop={handleStop}
         isGenerating={isGenerating}
+        queueItems={queueItems}
+        queueError={queueError}
+        onSendQueueItem={(turnId) => {
+          if (!currentConversationId) {
+            return Promise.resolve({
+              accepted: false,
+              guided: false,
+              fallbackToNewRun: false,
+              error: 'No active conversation'
+            })
+          }
+          return sendQueuedTurn(currentConversationId, turnId)
+        }}
+        onEditQueueItem={(turnId) => {
+          if (!currentConversationId) return
+          removeQueuedTurn(currentConversationId, turnId)
+        }}
+        onRemoveQueueItem={(turnId) => {
+          if (!currentConversationId) return
+          removeQueuedTurn(currentConversationId, turnId)
+        }}
+        onClearQueue={() => {
+          if (!currentConversationId) return
+          clearConversationQueue(currentConversationId)
+        }}
+        onClearQueueError={() => {
+          if (!currentConversationId) return
+          clearQueueError(currentConversationId)
+        }}
         modeSwitching={modeSwitching}
         placeholder={t('Ask Kite anything, / for commands')}
         isCompact={isCompact}

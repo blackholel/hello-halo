@@ -95,6 +95,7 @@ export {
   sendMessage,
   setAgentMode,
   stopGeneration,
+  guideLiveInput,
   handleToolApproval,
   handleAskUserQuestionResponse
 } from './message-flow.service'
