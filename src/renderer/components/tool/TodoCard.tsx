@@ -59,8 +59,8 @@ function getTodoStatusDisplay(status: TodoStatus) {
     case 'in_progress':
       return {
         Icon: Loader2,
-        color: 'text-primary',
-        bgColor: 'bg-primary/10',
+        color: 'text-foreground',
+        bgColor: 'bg-secondary',
         textStyle: 'text-foreground font-medium',
         spin: true,
       }
@@ -145,7 +145,7 @@ export function TodoCard({ todos }: TodoCardProps) {
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/15 bg-secondary/15">
           <div className="flex items-center gap-2">
-            <ListTodo size={14} className="text-primary/60" />
+            <ListTodo size={14} className="text-foreground/70" />
             <span className="text-[13px] font-medium text-foreground/80">{t('Task plan')}</span>
           </div>
           <div className="flex items-center gap-2 text-[11px] text-muted-foreground/60">
@@ -153,7 +153,7 @@ export function TodoCard({ todos }: TodoCardProps) {
               <span className="text-green-500">{t('{{count}} completed', { count: stats.completed })}</span>
             )}
             {stats.inProgress > 0 && (
-              <span className="text-primary">{t('{{count}} in progress', { count: stats.inProgress })}</span>
+              <span className="text-foreground">{t('{{count}} in progress', { count: stats.inProgress })}</span>
             )}
             {stats.pending > 0 && (
               <span>{t('{{count}} pending', { count: stats.pending })}</span>

@@ -259,17 +259,17 @@ export function ConversationList({
   return (
     <div
       ref={containerRef}
-      className="border-r border-border/50 flex flex-col bg-card/30 backdrop-blur-sm relative"
+      className="space-studio-sidebar space-studio-reveal flex flex-col relative overflow-hidden"
       style={{ width, transition: isDragging ? 'none' : 'width 0.2s ease' }}
     >
       {/* Header */}
-      <div className="px-4 py-3 flex items-center justify-between">
-        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+      <div className="px-4 py-3.5 flex items-center justify-between border-b border-border/40">
+        <span className="text-[11px] font-semibold text-foreground/60 uppercase tracking-[0.18em]">
           {t('Conversations')}
         </span>
         <button
           onClick={onNew}
-          className="p-1 rounded-lg hover:bg-secondary/80 transition-colors group"
+          className="h-7 w-7 inline-flex items-center justify-center rounded-full border border-border/70 bg-background/70 hover:bg-background transition-colors group"
           title={t('New conversation')}
         >
           <Plus className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
@@ -277,10 +277,10 @@ export function ConversationList({
       </div>
 
       {/* Conversation list */}
-      <div className="flex-1 overflow-auto px-2 py-1">
+      <div className="flex-1 overflow-auto px-2.5 py-2">
         {conversations.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
-            <div className="w-10 h-10 rounded-xl bg-secondary/50 flex items-center justify-center mb-3">
+            <div className="w-10 h-10 rounded-xl bg-background/90 border border-border/70 flex items-center justify-center mb-3">
               <MessageCircle className="w-5 h-5 text-muted-foreground/40" />
             </div>
             <p className="text-xs text-muted-foreground/60">{t('No conversations yet')}</p>
@@ -296,16 +296,16 @@ export function ConversationList({
                   key={conversation.id}
                   onClick={() => editingId !== conversation.id && onSelect(conversation.id)}
                   className={`
-                    w-full px-3 py-2.5 rounded-xl text-left transition-all duration-200 cursor-pointer group relative
+                    space-studio-sidebar-item w-full px-3 py-2.5 rounded-2xl text-left transition-all duration-200 cursor-pointer group relative
                     ${conversation.id === currentConversationId
-                      ? 'bg-primary/10'
-                      : 'hover:bg-secondary/50'
+                      ? 'active'
+                      : 'hover:bg-secondary/40'
                     }
                   `}
                 >
                   {/* Selection indicator */}
                   {conversation.id === currentConversationId && (
-                    <div className="absolute left-0.5 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-primary rounded-full" />
+                    <div className="absolute left-0.5 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-[hsl(var(--space-accent))] rounded-full" />
                   )}
 
                   {/* Edit mode */}
@@ -326,7 +326,7 @@ export function ConversationList({
                     <>
                       <div className="flex items-center justify-between gap-2">
                         <span className={`text-sm truncate flex-1 ${
-                          conversation.id === currentConversationId ? 'font-medium text-foreground' : 'text-foreground/80'
+                          conversation.id === currentConversationId ? 'font-semibold text-foreground' : 'text-foreground/80'
                         }`}>
                           {displayTitle.slice(0, 24)}
                           {displayTitle.length > 24 && '...'}
@@ -352,7 +352,7 @@ export function ConversationList({
                               e.stopPropagation()
                               openChat(spaceId, conversation.id, conversation.title, workDir)
                             }}
-                            className="p-1 hover:bg-secondary rounded-md transition-colors"
+                            className="p-1 hover:bg-background rounded-md transition-colors"
                             title={t('Open in tab')}
                           >
                             <ExternalLink className="w-3 h-3 text-muted-foreground" />
@@ -361,7 +361,7 @@ export function ConversationList({
                         {onRename && (
                           <button
                             onClick={(e) => handleStartEdit(e, conversation)}
-                            className="p-1 hover:bg-secondary rounded-md transition-colors"
+                            className="p-1 hover:bg-background rounded-md transition-colors"
                             title={t('Edit title')}
                           >
                             <Pencil className="w-3 h-3 text-muted-foreground" />
@@ -373,7 +373,7 @@ export function ConversationList({
                               e.stopPropagation()
                               onDelete(conversation.id)
                             }}
-                            className="p-1 hover:bg-destructive/15 rounded-md transition-colors"
+                            className="p-1 hover:bg-destructive/12 rounded-md transition-colors"
                             title={t('Delete conversation')}
                           >
                             <Trash2 className="w-3 h-3 text-destructive/70" />
@@ -390,7 +390,7 @@ export function ConversationList({
       </div>
 
       {/* Skills & Agents panels */}
-      <div className="p-2 border-t border-border/30 space-y-1.5">
+      <div className="p-2.5 border-t border-border/45 bg-background/35 space-y-1.5">
         <SkillsPanel
           workDir={workDir}
           onSelectSkill={onSelectSkill}
@@ -422,10 +422,10 @@ export function ConversationList({
       {/* Drag handle */}
       <div
         className={`
-          absolute right-0 top-0 bottom-0 w-1 cursor-col-resize z-20
+          absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize z-20
           transition-colors duration-150
-          hover:bg-primary/30
-          ${isDragging ? 'bg-primary/30' : ''}
+          hover:bg-[hsl(var(--space-accent)/0.45)]
+          ${isDragging ? 'bg-[hsl(var(--space-accent)/0.45)]' : ''}
         `}
         onMouseDown={handleMouseDown}
         title={t('Drag to resize width')}

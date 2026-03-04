@@ -423,7 +423,7 @@ describe('Config Service', () => {
       expect(config.api.apiKey).toBe('')
       expect(config.api.apiUrl).toBe('https://api.anthropic.com')
       expect(config.permissions.commandExecution).toBe('ask')
-      expect(config.appearance.theme).toBe('dark')
+      expect(config.appearance.theme).toBe('light')
       expect(config.isFirstLaunch).toBe(true)
       expect(config.configSourceMode).toBe('kite')
     })
@@ -448,6 +448,22 @@ describe('Config Service', () => {
       expect(config.api.provider).toBe('anthropic')
       expect(config.api.apiUrl).toBe('https://api.anthropic.com')
       expect(config.permissions.fileAccess).toBe('allow')
+    })
+
+    it('should migrate legacy appearance themes to light and persist', async () => {
+      await initializeApp()
+
+      const configPath = getConfigPath()
+      fs.writeFileSync(configPath, JSON.stringify({
+        appearance: { theme: 'mono' },
+        isFirstLaunch: false
+      }))
+
+      const config = getConfig()
+      expect(config.appearance.theme).toBe('light')
+
+      const persisted = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+      expect(persisted.appearance.theme).toBe('light')
     })
 
     it('should remove legacy taxonomy field on read and persist migrated config', async () => {

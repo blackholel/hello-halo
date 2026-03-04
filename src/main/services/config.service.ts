@@ -34,9 +34,28 @@ type AiConfigChangeHandler = () => void
 const apiConfigChangeHandlers: ApiConfigChangeHandler[] = []
 const aiConfigChangeHandlers: AiConfigChangeHandler[] = []
 const CONFIG_SOURCE_MODE_VALUES = ['kite', 'claude'] as const
+const APPEARANCE_THEME_VALUES = ['light', 'dark'] as const
 const LEGACY_TAXONOMY_CONFIG_KEY = 'extension' + 'Taxonomy'
 
 export type ConfigSourceMode = (typeof CONFIG_SOURCE_MODE_VALUES)[number]
+type AppearanceThemeMode = (typeof APPEARANCE_THEME_VALUES)[number]
+
+function normalizeAppearanceTheme(value: unknown): AppearanceThemeMode {
+  if (value === 'light' || value === 'dark') {
+    return value
+  }
+
+  if (value === 'mono' || value === 'system') {
+    console.warn('[ThemeMode] Legacy theme value detected. Migrated to "light".', value)
+    return 'light'
+  }
+
+  if (value !== undefined && value !== null) {
+    console.warn('[ThemeMode] Invalid theme value detected. Forced to "light".', value)
+  }
+
+  return 'light'
+}
 
 export function normalizeConfigSourceMode(value: unknown): ConfigSourceMode {
   if (value === 'kite') {
@@ -92,7 +111,7 @@ interface KiteConfig {
     trustMode: boolean
   }
   appearance: {
-    theme: 'light' | 'dark' | 'system'
+    theme: AppearanceThemeMode
   }
   system: {
     autoLaunch: boolean
@@ -251,7 +270,7 @@ const DEFAULT_CONFIG: KiteConfig = {
     trustMode: false
   },
   appearance: {
-    theme: 'dark'
+    theme: 'light'
   },
   system: {
     autoLaunch: false,
@@ -699,7 +718,11 @@ export function getConfig(): KiteConfig {
       api: mirroredApi,
       ai,
       permissions: { ...DEFAULT_CONFIG.permissions, ...parsed.permissions },
-      appearance: { ...DEFAULT_CONFIG.appearance, ...parsed.appearance },
+      appearance: {
+        ...DEFAULT_CONFIG.appearance,
+        ...parsed.appearance,
+        theme: normalizeAppearanceTheme(parsed.appearance?.theme)
+      },
       system: { ...DEFAULT_CONFIG.system, ...parsed.system },
       onboarding: { ...DEFAULT_CONFIG.onboarding, ...parsed.onboarding },
       // mcpServers is a flat map, just use parsed value or default
@@ -727,7 +750,10 @@ export function getConfig(): KiteConfig {
       }
     }
 
-    if (hadLegacyTaxonomyField) {
+    const shouldPersistThemeMigration = parsed.appearance?.theme !== undefined
+      && parsed.appearance.theme !== mergedConfig.appearance.theme
+
+    if (hadLegacyTaxonomyField || shouldPersistThemeMigration) {
       writeFileSync(configPath, JSON.stringify(mergedConfig, null, 2))
     }
 
@@ -768,7 +794,11 @@ export function saveConfig(config: Partial<KiteConfig>): KiteConfig {
     newConfig.permissions = { ...currentConfig.permissions, ...config.permissions }
   }
   if (config.appearance) {
-    newConfig.appearance = { ...currentConfig.appearance, ...config.appearance }
+    newConfig.appearance = {
+      ...currentConfig.appearance,
+      ...config.appearance,
+      theme: normalizeAppearanceTheme(config.appearance.theme)
+    }
   }
   if (config.system) {
     newConfig.system = { ...currentConfig.system, ...config.system }

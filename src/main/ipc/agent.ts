@@ -5,6 +5,7 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import {
   sendMessage,
+  guideLiveInput,
   setAgentMode,
   stopGeneration,
   handleToolApproval,
@@ -69,6 +70,14 @@ type SendMessageIpcRequest = {
   }>
 }
 
+type GuideMessageIpcRequest = {
+  spaceId: string
+  conversationId: string
+  message: string
+  runId?: string
+  clientMessageId?: string
+}
+
 export function registerAgentHandlers(window: BrowserWindow | null): void {
   mainWindow = window
 
@@ -111,6 +120,45 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
       } catch (error: unknown) {
         const err = error as Error
         return { success: false, error: err.message }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'agent:guide-message',
+    async (_event, request: GuideMessageIpcRequest) => {
+      try {
+        const data = await guideLiveInput(request)
+        return { success: true, data }
+      } catch (error: unknown) {
+        return toErrorResponse(error)
+      }
+    }
+  )
+
+  // Backward-compatible fallback for old preload bridges (window.kite.guideMessage missing).
+  // Request shape: { spaceId, conversationId, message, runId?, clientMessageId?, replyChannel }.
+  ipcMain.on(
+    'agent:guide-message-fallback',
+    async (event, payload: GuideMessageIpcRequest & { replyChannel?: string }) => {
+      const replyChannel = typeof payload?.replyChannel === 'string' ? payload.replyChannel : ''
+      if (!replyChannel) {
+        const error = '[IPC] agent:guide-message-fallback missing replyChannel'
+        console.error(error)
+        event.sender.send('agent:guide-message-fallback:error', {
+          success: false,
+          error,
+          errorCode: 'IPC_FALLBACK_REPLY_CHANNEL_MISSING'
+        })
+        return
+      }
+
+      try {
+        const { spaceId, conversationId, message, runId, clientMessageId } = payload || {}
+        const data = await guideLiveInput({ spaceId, conversationId, message, runId, clientMessageId })
+        event.sender.send(replyChannel, { success: true, data })
+      } catch (error: unknown) {
+        event.sender.send(replyChannel, toErrorResponse(error))
       }
     }
   )

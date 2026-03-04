@@ -288,6 +288,18 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
     res.json(result)
   })
 
+  app.post('/api/agent/guide-message', async (req: Request, res: Response) => {
+    const { spaceId, conversationId, message, runId, clientMessageId } = req.body
+    const result = await agentController.guideMessage(mainWindow, {
+      spaceId,
+      conversationId,
+      message,
+      runId,
+      clientMessageId
+    })
+    res.json(result)
+  })
+
   app.post('/api/agent/mode', async (req: Request, res: Response) => {
     const { conversationId, mode, runId } = req.body
     const result = await agentController.setMode({ conversationId, mode, runId })

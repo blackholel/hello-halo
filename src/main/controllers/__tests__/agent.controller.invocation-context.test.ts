@@ -4,6 +4,7 @@ const sendMessageMock = vi.hoisted(() => vi.fn())
 
 vi.mock('../../services/agent', () => ({
   sendMessage: sendMessageMock,
+  guideLiveInput: vi.fn(),
   stopGeneration: vi.fn(),
   handleToolApproval: vi.fn(),
   handleAskUserQuestionResponse: vi.fn(),

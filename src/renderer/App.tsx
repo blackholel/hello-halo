@@ -26,6 +26,7 @@ import type {
   AgentCompleteEvent,
   AgentModeEvent,
   AgentProcessEvent,
+  ThemeMode,
   Thought,
   ToolCall
 } from './types'
@@ -49,13 +50,13 @@ function PageLoader() {
 }
 
 // Theme colors for titleBarOverlay
-const THEME_COLORS = {
-  light: { color: '#ffffff', symbolColor: '#1a1a1a' },
-  dark: { color: '#0a0a0a', symbolColor: '#ffffff' }
+const THEME_COLORS: Record<ThemeMode, { color: string; symbolColor: string }> = {
+  light: { color: '#f5f5f5', symbolColor: '#111111' },
+  dark: { color: '#151515', symbolColor: '#f5f5f5' }
 }
 
 // Apply theme to document and sync to localStorage (for anti-flash on reload)
-function applyTheme(theme: 'light' | 'dark' | 'system') {
+function applyTheme(theme: ThemeMode) {
   const root = document.documentElement
 
   // Save to localStorage for anti-flash script
@@ -63,18 +64,13 @@ function applyTheme(theme: 'light' | 'dark' | 'system') {
     localStorage.setItem('kite-theme', theme)
   } catch (e) { /* ignore */ }
 
-  let isDark: boolean
-  if (theme === 'system') {
-    isDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-    root.classList.toggle('light', !isDark)
-  } else {
-    isDark = theme === 'dark'
-    root.classList.toggle('light', theme === 'light')
+  root.classList.remove('dark')
+  if (theme === 'dark') {
+    root.classList.add('dark')
   }
 
   // Update titleBarOverlay colors (Windows/Linux only)
-  const colors = isDark ? THEME_COLORS.dark : THEME_COLORS.light
-  api.setTitleBarOverlay(colors).catch(() => {
+  api.setTitleBarOverlay(THEME_COLORS[theme]).catch(() => {
     // Ignore errors - may not be supported on current platform
   })
 }
@@ -119,17 +115,8 @@ export default function App() {
 
   // Theme switching
   useEffect(() => {
-    // Default to 'dark' before config loads, then use config value
-    const theme = config?.appearance?.theme || 'dark'
+    const theme = config?.appearance?.theme || 'light'
     applyTheme(theme)
-
-    // Listen for system theme changes when using 'system' mode
-    if (theme === 'system') {
-      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-      const handleChange = () => applyTheme('system')
-      mediaQuery.addEventListener('change', handleChange)
-      return () => mediaQuery.removeEventListener('change', handleChange)
-    }
   }, [config?.appearance?.theme])
 
   // Connect WebSocket for remote mode

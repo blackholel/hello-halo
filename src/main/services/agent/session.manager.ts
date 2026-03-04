@@ -497,7 +497,24 @@ export function setActiveSession(conversationId: string, state: SessionState): v
 /**
  * Delete active session state for a conversation
  */
-export function deleteActiveSession(conversationId: string): void {
+export function deleteActiveSession(conversationId: string, expectedRunId?: string): void {
+  if (!expectedRunId) {
+    activeSessions.delete(conversationId)
+    return
+  }
+
+  const current = activeSessions.get(conversationId)
+  if (!current) {
+    return
+  }
+
+  if (current.runId !== expectedRunId) {
+    console.warn(
+      `[Agent][${conversationId}] Skip deleteActiveSession due to run mismatch: expected=${expectedRunId}, actual=${current.runId}`
+    )
+    return
+  }
+
   activeSessions.delete(conversationId)
 }
 

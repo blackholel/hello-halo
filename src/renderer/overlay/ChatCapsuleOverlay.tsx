@@ -5,7 +5,7 @@
  * overlay WebContentsView, ensuring it appears above BrowserViews.
  *
  * Design:
- * - Kite brand color (blue) for high visibility on any background
+ * - Monochrome style for consistency with app theme
  * - Circular button with shadow for depth
  * - Fixed position on left edge, vertically centered
  *
@@ -15,6 +15,7 @@
  * - Hover preview of recent messages
  */
 
+import { useEffect, useState } from 'react'
 import { MessageCircle } from 'lucide-react'
 import { useTranslation } from '../i18n'
 
@@ -24,6 +25,26 @@ interface ChatCapsuleOverlayProps {
 
 export function ChatCapsuleOverlay({ onClick }: ChatCapsuleOverlayProps) {
   const { t } = useTranslation()
+  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'))
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setIsDark(document.documentElement.classList.contains('dark'))
+    })
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    })
+
+    return () => observer.disconnect()
+  }, [])
+
+  const baseBackground = isDark ? '#f3f4f6' : '#111111'
+  const baseBorder = isDark ? '1px solid rgba(243, 244, 246, 0.92)' : '1px solid rgba(17, 17, 17, 0.9)'
+  const baseShadow = isDark ? '0 2px 6px rgba(0, 0, 0, 0.35)' : '0 2px 6px rgba(0, 0, 0, 0.2)'
+  const hoverShadow = isDark ? '0 3px 8px rgba(0, 0, 0, 0.4)' : '0 3px 8px rgba(0, 0, 0, 0.24)'
+  const iconColor = isDark ? '#111111' : '#ffffff'
 
   return (
     <button
@@ -37,25 +58,23 @@ export function ChatCapsuleOverlay({ onClick }: ChatCapsuleOverlayProps) {
         width: '44px',
         height: '44px',
         borderRadius: '50%',
-        border: 'none',
         cursor: 'pointer',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        // Kite brand blue - visible on both light and dark backgrounds
-        backgroundColor: '#3b82f6',
-        // Strong shadow for visibility and depth
-        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3), 0 0 0 2px rgba(255, 255, 255, 0.2)',
+        backgroundColor: baseBackground,
+        border: baseBorder,
+        boxShadow: baseShadow,
         transition: 'transform 0.2s ease, box-shadow 0.2s ease',
         pointerEvents: 'auto',
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.transform = 'translateY(-50%) scale(1.1)'
-        e.currentTarget.style.boxShadow = '0 6px 16px rgba(0, 0, 0, 0.4), 0 0 0 2px rgba(255, 255, 255, 0.3)'
+        e.currentTarget.style.boxShadow = hoverShadow
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.transform = 'translateY(-50%) scale(1)'
-        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.3), 0 0 0 2px rgba(255, 255, 255, 0.2)'
+        e.currentTarget.style.boxShadow = baseShadow
       }}
       onMouseDown={(e) => {
         e.currentTarget.style.transform = 'translateY(-50%) scale(0.95)'
@@ -66,12 +85,12 @@ export function ChatCapsuleOverlay({ onClick }: ChatCapsuleOverlayProps) {
       title={t('Return to conversation')}
       aria-label={t('Exit fullscreen and return to chat')}
     >
-      {/* White icon on blue background for maximum contrast */}
+      {/* High-contrast icon for current theme */}
       <MessageCircle
         style={{
           width: '22px',
           height: '22px',
-          color: 'white',
+          color: iconColor,
         }}
       />
     </button>

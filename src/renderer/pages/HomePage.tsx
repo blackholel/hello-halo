@@ -408,7 +408,7 @@ export function HomePage(): JSX.Element {
   if (isWebMode) {
     customLocationClass = 'cursor-not-allowed opacity-50 border-border'
   } else if (useCustomPath) {
-    customLocationClass = 'cursor-pointer border-primary/30 bg-primary/5'
+    customLocationClass = 'cursor-pointer border-border bg-secondary/70'
   } else {
     customLocationClass = 'cursor-pointer border-border hover:border-muted-foreground/30'
   }
@@ -450,8 +450,8 @@ export function HomePage(): JSX.Element {
       <Header
         left={
           <>
-            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary/50 to-primary/20 flex items-center justify-center">
-              <div className="w-2.5 h-2.5 rounded-full bg-primary/80" />
+            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-secondary to-muted flex items-center justify-center">
+              <div className="w-2.5 h-2.5 rounded-full bg-foreground/60" />
             </div>
             <span className="text-sm font-semibold tracking-tight">Kite</span>
           </>
@@ -478,7 +478,7 @@ export function HomePage(): JSX.Element {
                 onClick={() => setActiveTab('spaces')}
                 className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs transition-all duration-200 ${
                   activeTab === 'spaces'
-                    ? 'bg-primary/15 text-primary font-medium'
+                    ? 'bg-secondary text-foreground font-medium'
                     : 'text-muted-foreground hover:bg-secondary/60'
                 }`}
               >
@@ -490,7 +490,7 @@ export function HomePage(): JSX.Element {
                 onClick={() => setActiveTab('extensions')}
                 className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs transition-all duration-200 ${
                   activeTab === 'extensions'
-                    ? 'bg-primary/15 text-primary font-medium'
+                    ? 'bg-secondary text-foreground font-medium'
                     : 'text-muted-foreground hover:bg-secondary/60'
                 }`}
               >
@@ -514,8 +514,8 @@ export function HomePage(): JSX.Element {
                   >
                     <div className="flex items-center justify-between relative z-10">
                       <div className="flex items-center gap-4">
-                        <div className="w-11 h-11 rounded-2xl bg-primary/15 flex items-center justify-center">
-                          <Sparkles className="w-5 h-5 text-primary" />
+                        <div className="w-11 h-11 rounded-2xl bg-secondary flex items-center justify-center">
+                          <Sparkles className="w-5 h-5 text-foreground" />
                         </div>
                         <div>
                           <h2 className="text-lg font-semibold tracking-tight">{t('Enter Kite')}</h2>
@@ -524,10 +524,10 @@ export function HomePage(): JSX.Element {
                           </p>
                         </div>
                       </div>
-                      <ArrowRight className="w-5 h-5 text-primary/50" />
+                      <ArrowRight className="w-5 h-5 text-foreground/60" />
                     </div>
                     {(kiteSpace.stats.artifactCount > 0 || kiteSpace.stats.conversationCount > 0) && (
-                      <div className="mt-4 pt-4 border-t border-primary/10 relative z-10">
+                      <div className="mt-4 pt-4 border-t border-border/70 relative z-10">
                         <p className="text-xs text-muted-foreground">
                           {t('{{count}} artifacts · {{conversations}} conversations', {
                             count: kiteSpace.stats.artifactCount,
@@ -549,7 +549,7 @@ export function HomePage(): JSX.Element {
                   </h3>
                   <button
                     onClick={() => setShowCreateDialog(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-primary hover:bg-primary/10 rounded-xl transition-all duration-200 font-medium"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-foreground hover:bg-secondary rounded-xl transition-all duration-200 font-medium"
                   >
                     <Plus className="w-4 h-4" />
                     {t('New')}
@@ -680,7 +680,7 @@ export function HomePage(): JSX.Element {
                     onClick={() => setNewSpaceIcon(iconId)}
                     className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 ${
                       newSpaceIcon === iconId
-                        ? 'bg-primary/15 ring-2 ring-primary/40 scale-105'
+                        ? 'bg-secondary ring-2 ring-foreground/15 scale-105'
                         : 'bg-secondary/50 hover:bg-secondary/80'
                     }`}
                   >
@@ -700,14 +700,14 @@ export function HomePage(): JSX.Element {
                 <label
                   className={`flex items-center gap-3 p-3.5 rounded-xl border cursor-pointer transition-all duration-200 ${
                     !useCustomPath
-                      ? 'border-primary/30 bg-primary/5'
+                      ? 'border-border bg-secondary/70'
                       : 'border-border hover:border-muted-foreground/30'
                   }`}
                 >
                   <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
-                    !useCustomPath ? 'border-primary' : 'border-muted-foreground/40'
+                    !useCustomPath ? 'border-foreground/35' : 'border-muted-foreground/40'
                   }`}>
-                    {!useCustomPath && <div className="w-2 h-2 rounded-full bg-primary" />}
+                    {!useCustomPath && <div className="w-2 h-2 rounded-full bg-foreground" />}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium">{t('Default Location')}</div>
@@ -722,9 +722,9 @@ export function HomePage(): JSX.Element {
                   className={`flex items-center gap-3 p-3.5 rounded-xl border transition-all duration-200 ${customLocationClass}`}
                 >
                   <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
-                    useCustomPath ? 'border-primary' : 'border-muted-foreground/40'
+                    useCustomPath ? 'border-foreground/35' : 'border-muted-foreground/40'
                   }`}>
-                    {useCustomPath && <div className="w-2 h-2 rounded-full bg-primary" />}
+                    {useCustomPath && <div className="w-2 h-2 rounded-full bg-foreground" />}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium">{t('Custom Folder')}</div>
@@ -817,7 +817,7 @@ export function HomePage(): JSX.Element {
                     onClick={() => setEditSpaceIcon(iconId)}
                     className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 ${
                       editSpaceIcon === iconId
-                        ? 'bg-primary/15 ring-2 ring-primary/40 scale-105'
+                        ? 'bg-secondary ring-2 ring-foreground/15 scale-105'
                         : 'bg-secondary/50 hover:bg-secondary/80'
                     }`}
                   >

@@ -9,7 +9,13 @@ import { BrowserWindow } from 'electron'
 import { promises as fsPromises } from 'fs'
 import { getConfig } from '../config.service'
 import { getSpaceConfig } from '../space-config.service'
-import { getConversation, saveSessionId, addMessage, updateLastMessage } from '../conversation.service'
+import {
+  getConversation,
+  saveSessionId,
+  addMessage,
+  updateLastMessage,
+  insertUserMessageBeforeTrailingAssistant
+} from '../conversation.service'
 import {
   setMainWindow,
   sendToRenderer,
@@ -118,6 +124,18 @@ interface TokenUsageInfo {
 
 function createRunId(): string {
   return `run-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+export interface GuideLiveInputRequest {
+  spaceId: string
+  conversationId: string
+  message: string
+  runId?: string
+  clientMessageId?: string
+}
+
+export interface GuideLiveInputResult {
+  delivery: 'session_send' | 'ask_user_question_answer'
 }
 
 const ASK_USER_QUESTION_RECENT_RESOLVED_TTL_MS = 2 * 60 * 1000
@@ -275,6 +293,44 @@ function toNonEmptyText(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
   const normalized = value.trim()
   return normalized.length > 0 ? value : undefined
+}
+
+function buildLiveUserUpdateEnvelope(content: string): string {
+  return `<live-user-update>
+${content}
+</live-user-update>
+
+This is a high-priority live user correction for the current run.
+Update your current execution path immediately and continue without restarting the run.`
+}
+
+async function sendLiveUserUpdateEnvelope(
+  sendFn: (message: string) => void | Promise<void>,
+  content: string
+): Promise<void> {
+  const payload = buildLiveUserUpdateEnvelope(content)
+  await Promise.resolve(sendFn(payload))
+}
+
+function buildGuideAskUserQuestionPayload(
+  pending: PendingAskUserQuestionContext,
+  liveInput: string
+): AskUserQuestionAnswerPayload | null {
+  const normalizedInput = normalizeAskUserQuestionInput(pending.inputSnapshot)
+  const firstQuestion = normalizedInput.questions[0]
+  if (!firstQuestion?.id) {
+    return null
+  }
+  const skippedQuestionIds = normalizedInput.questions.slice(1).map((question) => question.id)
+
+  return {
+    runId: pending.runId,
+    toolCallId: pending.expectedToolCallId || '',
+    answersByQuestionId: {
+      [firstQuestion.id]: [liveInput]
+    },
+    skippedQuestionIds
+  }
 }
 
 export function resolveFinalContent(params: {
@@ -1851,7 +1907,7 @@ Keep code snippets, shell commands, file paths, environment variable names, logs
       idleTimeoutId = null
     }
     // Clean up active session state (but keep V2 session for reuse)
-    deleteActiveSession(conversationId)
+    deleteActiveSession(conversationId, runId)
     clearPendingChangeSet(conversationId)
     console.log(
       `[Agent][${conversationId}] Active session state cleaned up. V2 sessions: ${getV2SessionsCount()}`
@@ -2004,6 +2060,94 @@ export async function setAgentMode(
     })
   }
   return result
+}
+
+export async function guideLiveInput(
+  request: GuideLiveInputRequest
+): Promise<GuideLiveInputResult> {
+  const { conversationId } = request
+  const message = typeof request.message === 'string' ? request.message.trim() : ''
+  const requestRunId = typeof request.runId === 'string' ? request.runId.trim() : ''
+  const clientMessageId = typeof request.clientMessageId === 'string'
+    ? request.clientMessageId.trim()
+    : ''
+  if (!message) {
+    throw new Error('Guide message cannot be empty')
+  }
+
+  const session = getActiveSession(conversationId)
+  const v2SessionInfo = getV2SessionInfo(conversationId)
+  if (!session || !v2SessionInfo) {
+    throw new AskUserQuestionError(
+      ASK_USER_QUESTION_ERROR_CODES.NO_ACTIVE_SESSION,
+      'No active session found for this conversation'
+    )
+  }
+  if (session.lifecycle !== 'running') {
+    throw new AskUserQuestionError(
+      ASK_USER_QUESTION_ERROR_CODES.NO_ACTIVE_SESSION,
+      'No active running session found for this conversation'
+    )
+  }
+  if (requestRunId && requestRunId !== session.runId) {
+    throw new AskUserQuestionError(
+      ASK_USER_QUESTION_ERROR_CODES.RUN_MISMATCH,
+      `Guide runId mismatch: expected ${session.runId}, got ${requestRunId}`
+    )
+  }
+
+  if (session.pendingPermissionResolve) {
+    handleToolApproval(conversationId, false)
+  }
+
+  let delivery: GuideLiveInputResult['delivery'] = 'session_send'
+  const awaitingAnswer = getAwaitingAnswerPendingList(session, session.runId)
+  const askPending = awaitingAnswer[0]
+  if (askPending) {
+    const payload = buildGuideAskUserQuestionPayload(askPending, message)
+    if (payload) {
+      try {
+        await handleAskUserQuestionResponse(conversationId, payload)
+        delivery = 'ask_user_question_answer'
+      } catch (error) {
+        if (!(error instanceof AskUserQuestionError)) {
+          throw error
+        }
+        console.warn(
+          `[Agent][${conversationId}] guideLiveInput AskUserQuestion fallback to session.send: ${error.errorCode}`
+        )
+        await sendLiveUserUpdateEnvelope(
+          (payloadMessage) => v2SessionInfo.session.send(payloadMessage),
+          message
+        )
+      }
+    } else {
+      await sendLiveUserUpdateEnvelope(
+        (payloadMessage) => v2SessionInfo.session.send(payloadMessage),
+        message
+      )
+    }
+  } else {
+    await sendLiveUserUpdateEnvelope(
+      (payloadMessage) => v2SessionInfo.session.send(payloadMessage),
+      message
+    )
+  }
+
+  try {
+    insertUserMessageBeforeTrailingAssistant(session.spaceId, conversationId, {
+      role: 'user',
+      content: message,
+      guidedMeta: {
+        runId: session.runId,
+        ...(clientMessageId ? { clientMessageId } : {})
+      }
+    })
+  } catch (error) {
+    console.error('[Agent] Failed to persist guided live user message:', error)
+  }
+
+  return { delivery }
 }
 
 /**

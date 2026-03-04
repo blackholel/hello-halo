@@ -51,6 +51,7 @@ interface MessageListProps {
   messages: Message[]
   streamingContent: string
   isGenerating: boolean
+  activeRunId?: string | null
   isStreaming?: boolean  // True during token-level text streaming
   thoughts?: Thought[]
   processTrace?: ProcessTraceNode[]
@@ -162,6 +163,43 @@ export function getMessageThoughtsForDisplay(message: Message): Thought[] {
   }
 
   return []
+}
+
+export function splitGuidedMessagesForActiveRun(
+  messages: Message[],
+  isGenerating: boolean,
+  activeRunId?: string | null
+): { mainMessages: Message[]; guidedMessages: Message[] } {
+  const displayMessages = isGenerating
+    ? messages.filter((msg, idx) => {
+        const isLastMessage = idx === messages.length - 1
+        const isEmptyAssistant = msg.role === 'assistant' && !msg.content
+        return !(isLastMessage && isEmptyAssistant)
+      })
+    : messages
+
+  if (!isGenerating || !activeRunId) {
+    return { mainMessages: displayMessages, guidedMessages: [] }
+  }
+
+  const mainMessages: Message[] = []
+  const guidedMessages: Message[] = []
+
+  for (const message of displayMessages) {
+    const guidedRunId = message.guidedMeta?.runId
+    const isGuidedForActiveRun =
+      message.role === 'user' &&
+      typeof guidedRunId === 'string' &&
+      guidedRunId === activeRunId
+
+    if (isGuidedForActiveRun) {
+      guidedMessages.push(message)
+      continue
+    }
+    mainMessages.push(message)
+  }
+
+  return { mainMessages, guidedMessages }
 }
 
 /**
@@ -369,7 +407,7 @@ function StreamingBubble({
           <div ref={currentRef} className="break-words leading-relaxed">
             <MarkdownRenderer content={displayContent} workDir={workDir} />
             {isStreaming && (
-              <span className="inline-block w-0.5 h-5 ml-0.5 bg-primary streaming-cursor align-middle" />
+              <span className="inline-block w-0.5 h-5 ml-0.5 bg-foreground/70 streaming-cursor align-middle" />
             )}
             {!isStreaming && (
               <span className="waiting-dots ml-1 text-muted-foreground/60" />
@@ -385,6 +423,7 @@ export function MessageList({
   messages,
   streamingContent,
   isGenerating,
+  activeRunId = null,
   isStreaming = false,
   thoughts = [],
   processTrace = [],
@@ -447,21 +486,16 @@ export function MessageList({
     return status === 'pending' || status === 'running' || status === 'waiting_approval'
   }
 
-  // Filter out empty assistant placeholder message during generation
-  // (Backend adds empty assistant message as placeholder, we show streaming content instead)
-  const displayMessages = isGenerating
-    ? messages.filter((msg, idx) => {
-        const isLastMessage = idx === messages.length - 1
-        const isEmptyAssistant = msg.role === 'assistant' && !msg.content
-        return !(isLastMessage && isEmptyAssistant)
-      })
-    : messages
+  const { mainMessages, guidedMessages } = useMemo(
+    () => splitGuidedMessagesForActiveRun(messages, isGenerating, activeRunId),
+    [messages, isGenerating, activeRunId]
+  )
 
   // Calculate previous cost for each message (for cost diff display)
   const getPreviousCost = (currentIndex: number): number => {
     // Find the previous assistant message with tokenUsage
     for (let i = currentIndex - 1; i >= 0; i--) {
-      const msg = displayMessages[i]
+      const msg = mainMessages[i]
       if (msg.role === 'assistant' && msg.tokenUsage?.totalCostUsd) {
         return msg.tokenUsage.totalCostUsd
       }
@@ -579,7 +613,7 @@ export function MessageList({
       ${isCompact ? 'max-w-full' : 'max-w-3xl mx-auto'}
     `}>
       {/* Render completed messages - thoughts shown above assistant messages */}
-      {displayMessages.map((message, index) => {
+      {mainMessages.map((message, index) => {
         const previousCost = getPreviousCost(index)
         const messageProcessThoughts = getMessageThoughtsForDisplay(message)
         // Show collapsed thoughts ABOVE assistant messages, in same container for consistent width
@@ -739,6 +773,27 @@ export function MessageList({
             {hasTasks && (
               <div className="mb-2">
                 <TaskPanel defaultExpanded={true} />
+              </div>
+            )}
+
+            {/* Guided user updates for active run (rendered inside execution block, not right-side user lane) */}
+            {guidedMessages.length > 0 && (
+              <div className="mb-2 space-y-2">
+                {guidedMessages.map((guidedMessage) => (
+                  <div
+                    key={guidedMessage.id}
+                    className="rounded-xl border border-border bg-secondary/70 px-3 py-2.5"
+                  >
+                    <div className="mb-1">
+                      <span className="inline-flex items-center rounded-md border border-border bg-secondary px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-foreground">
+                        {t('Guide')}
+                      </span>
+                    </div>
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">
+                      {guidedMessage.content}
+                    </p>
+                  </div>
+                ))}
               </div>
             )}
 

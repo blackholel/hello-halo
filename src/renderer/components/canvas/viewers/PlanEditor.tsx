@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Eye, Code, Copy, Save, Check, Hammer } from 'lucide-react'
 import Editor, { type OnMount, type OnChange, loader } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
@@ -19,7 +19,9 @@ interface PlanEditorProps {
 export function PlanEditor({ tab, onContentChange, onBuild }: PlanEditorProps) {
   const { t } = useTranslation()
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit')
-  const [isDarkTheme, setIsDarkTheme] = useState(() => !document.documentElement.classList.contains('light'))
+  const [isDarkTheme, setIsDarkTheme] = useState(() =>
+    document.documentElement.classList.contains('dark')
+  )
   const [copied, setCopied] = useState(false)
   const [saved, setSaved] = useState(false)
   const [building, setBuilding] = useState(false)
@@ -27,7 +29,7 @@ export function PlanEditor({ tab, onContentChange, onBuild }: PlanEditorProps) {
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
-      setIsDarkTheme(!document.documentElement.classList.contains('light'))
+      setIsDarkTheme(document.documentElement.classList.contains('dark'))
     })
 
     observer.observe(document.documentElement, {
@@ -239,4 +241,3 @@ export function PlanEditor({ tab, onContentChange, onBuild }: PlanEditorProps) {
     </div>
   )
 }
-

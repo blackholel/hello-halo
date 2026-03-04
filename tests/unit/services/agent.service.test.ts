@@ -41,7 +41,7 @@ vi.mock('../../../src/main/services/config.service', () => ({
       networkAccess: 'allow'
     },
     mcpServers: {},
-    appearance: { theme: 'system' },
+    appearance: { theme: 'light' },
     system: { autoLaunch: false, minimizeToTray: false },
     remoteAccess: { enabled: false, port: 3000 },
     onboarding: { completed: true },

@@ -50,15 +50,15 @@ export function KiteLogo({ size = 'md', className = '' }: KiteLogoProps) {
       style={{ width: pixelSize, height: pixelSize }}
     >
       {/* Outer glow ring */}
-      <div className={`absolute inset-0 rounded-full bg-primary/20 ${styles.blur} kite-breathe`} />
+      <div className={`absolute inset-0 rounded-full bg-secondary ${styles.blur} kite-breathe`} />
 
       {/* Main ring */}
       <div
-        className={`relative rounded-full ${styles.border} border-primary/60 flex items-center justify-center kite-glow`}
+        className={`relative rounded-full ${styles.border} border-border flex items-center justify-center kite-glow`}
         style={{ width: pixelSize, height: pixelSize }}
       >
         {/* Inner glow */}
-        <div className={`absolute ${styles.inset} rounded-full bg-gradient-to-br from-primary/30 to-transparent`} />
+        <div className={`absolute ${styles.inset} rounded-full bg-gradient-to-br from-foreground/20 to-transparent`} />
 
         {/* Animated ring segment - the key spinning arc */}
         <svg

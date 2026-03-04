@@ -81,6 +81,10 @@ interface Message {
   role: 'user' | 'assistant' | 'system'
   content: string
   timestamp: string
+  guidedMeta?: {
+    runId: string
+    clientMessageId?: string
+  }
   toolCalls?: ToolCall[]
   thoughts?: Thought[]  // Agent reasoning process for this message
   processTrace?: ProcessTraceNode[]
@@ -481,6 +485,48 @@ export function addMessage(spaceId: string, conversationId: string, message: Omi
   writeFileSync(join(conversationsDir, `${conversationId}.json`), JSON.stringify(conversation, null, 2))
 
   // Update index with new messageCount and preview
+  updateIndexEntry(conversationsDir, spaceId, conversationId, toMeta(conversation))
+
+  return newMessage
+}
+
+// Insert user message before trailing assistant placeholder/message.
+// This preserves timeline order for live user guidance injected during a running turn.
+export function insertUserMessageBeforeTrailingAssistant(
+  spaceId: string,
+  conversationId: string,
+  message: Omit<Message, 'id' | 'timestamp'> & { role: 'user' }
+): Message {
+  const conversation = getConversation(spaceId, conversationId)
+
+  if (!conversation) {
+    throw new Error('Conversation not found')
+  }
+
+  const newMessage: Message = {
+    ...message,
+    id: uuidv4(),
+    timestamp: new Date().toISOString()
+  }
+
+  const messages = conversation.messages
+  const lastMessage = messages[messages.length - 1]
+  if (lastMessage?.role === 'assistant') {
+    messages.splice(messages.length - 1, 0, newMessage)
+  } else {
+    messages.push(newMessage)
+  }
+
+  conversation.updatedAt = new Date().toISOString()
+  conversation.messageCount = messages.length
+
+  if (messages.length === 1 && message.role === 'user') {
+    conversation.title = message.content.slice(0, 50) + (message.content.length > 50 ? '...' : '')
+  }
+
+  const conversationsDir = getConversationsDir(spaceId)
+  writeFileSync(join(conversationsDir, `${conversationId}.json`), JSON.stringify(conversation, null, 2))
+
   updateIndexEntry(conversationsDir, spaceId, conversationId, toMeta(conversation))
 
   return newMessage

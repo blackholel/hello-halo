@@ -58,7 +58,7 @@ export const DEFAULT_MODEL = 'claude-opus-4-5-20251101';
 export type PermissionLevel = 'allow' | 'ask' | 'deny';
 
 // Theme Mode
-export type ThemeMode = 'light' | 'dark' | 'system';
+export type ThemeMode = 'light' | 'dark';
 // `claude` is kept only for backward-compatible payload parsing.
 // Runtime behavior is always forced to `kite`.
 export type ConfigSourceMode = 'kite' | 'claude';
@@ -420,6 +420,10 @@ export interface Message {
   role: MessageRole;
   content: string;  // Text content (for backward compatibility)
   timestamp: string;
+  guidedMeta?: {
+    runId: string;
+    clientMessageId?: string;
+  };
   toolCalls?: ToolCall[];
   thoughts?: Thought[];  // Agent's reasoning process for this message
   processTrace?: ProcessTraceNode[];  // Unified process trace (thought/tool/system events)
@@ -798,7 +802,7 @@ export const DEFAULT_CONFIG: KiteConfig = {
     trustMode: false
   },
   appearance: {
-    theme: 'system'
+    theme: 'light'
   },
   system: {
     autoLaunch: false,

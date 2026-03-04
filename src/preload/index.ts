@@ -13,6 +13,14 @@ interface AskUserQuestionAnswerPayload {
   runId?: string
 }
 
+interface GuideMessageRequest {
+  spaceId: string
+  conversationId: string
+  message: string
+  runId?: string
+  clientMessageId?: string
+}
+
 type ChatMode = 'code' | 'plan' | 'ask'
 
 // Type definitions for exposed API
@@ -176,6 +184,7 @@ export interface KiteAPI {
       extension: string
     }>
   }) => Promise<IpcResponse>
+  guideMessage: (request: GuideMessageRequest) => Promise<IpcResponse<{ delivery: 'session_send' | 'ask_user_question_answer' }>>
   stopGeneration: (conversationId?: string) => Promise<IpcResponse>
   approveTool: (conversationId: string) => Promise<IpcResponse>
   rejectTool: (conversationId: string) => Promise<IpcResponse>
@@ -504,6 +513,7 @@ const api: KiteAPI = {
   setAgentMode: (conversationId, mode, runId) =>
     ipcRenderer.invoke('agent:set-mode', { conversationId, mode, runId }),
   sendWorkflowStepMessage: (request) => ipcRenderer.invoke('workflow:send-step-message', request),
+  guideMessage: (request) => ipcRenderer.invoke('agent:guide-message', request),
   stopGeneration: (conversationId) => ipcRenderer.invoke('agent:stop', conversationId),
   approveTool: (conversationId) => ipcRenderer.invoke('agent:approve-tool', conversationId),
   rejectTool: (conversationId) => ipcRenderer.invoke('agent:reject-tool', conversationId),

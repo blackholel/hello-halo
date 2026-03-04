@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChevronDown, Cpu, Info, Repeat2 } from 'lucide-react'
+import { Check, ChevronDown, Cpu, Repeat2 } from 'lucide-react'
 import { useChatStore } from '../../stores/chat.store'
 import { useTranslation } from '../../i18n'
 import type { ApiProfile, ConversationAiConfig, KiteConfig } from '../../types'
@@ -172,13 +172,6 @@ export function ModelSwitcher({
         <span className="truncate">{displayLabel}</span>
         <ChevronDown size={14} className={`flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
-
-      {isGenerating && (
-        <div className="mt-1 flex items-center gap-1 text-[11px] text-amber-500">
-          <Info size={12} />
-          <span>{t('Model switching is disabled while generating a response')}</span>
-        </div>
-      )}
 
       {isOpen && !isDisabled && (
         <div className="absolute bottom-full left-0 mb-2 w-[340px] max-w-[80vw] bg-popover border border-border rounded-xl shadow-xl z-30 p-3 space-y-3">

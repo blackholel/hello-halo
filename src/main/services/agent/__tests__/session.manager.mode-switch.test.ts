@@ -48,6 +48,7 @@ vi.mock('../../plugin-mcp.service', () => ({
 import {
   closeAllV2Sessions,
   deleteActiveSession,
+  getActiveSession,
   getOrCreateV2Session,
   setActiveSession,
   setSessionMode
@@ -177,5 +178,15 @@ describe('session.manager setSessionMode', () => {
     const result = await setSessionMode('conv-1', 'invalid-mode' as unknown, 'run-1')
     expect(result.applied).toBe(false)
     expect(result.reason).toBe('invalid_mode')
+  })
+
+  it('deleteActiveSession keeps newer run when expectedRunId mismatches', async () => {
+    setActiveSession('conv-1', createSessionState({ runId: 'run-new' }))
+
+    deleteActiveSession('conv-1', 'run-old')
+    expect(getActiveSession('conv-1')?.runId).toBe('run-new')
+
+    deleteActiveSession('conv-1', 'run-new')
+    expect(getActiveSession('conv-1')).toBeUndefined()
   })
 })

@@ -10,23 +10,19 @@
   <title>Kite - AI that gets things done</title>
     <style>
       /* Anti-flash: set background before CSS loads */
-      html, body, #root { background-color: #0a0a0a; }
-      html.light, html.light body, html.light #root { background-color: #ffffff; }
+      html, body, #root { background-color: #f5f5f5; }
+      html.dark, html.dark body, html.dark #root { background-color: #121212; }
     </style>
     <script>
-      // Anti-flash: apply theme before render (default: dark)
+      // Anti-flash: apply persisted theme before render (default: light)
       (function() {
         try {
           var theme = localStorage.getItem('kite-theme');
-          if (theme === 'light') {
-            document.documentElement.classList.add('light');
-          } else if (theme === 'system') {
-            // system: check preference
-            if (!window.matchMedia('(prefers-color-scheme: dark)').matches) {
-              document.documentElement.classList.add('light');
-            }
+          if (theme !== 'dark' && theme !== 'light') {
+            theme = 'light';
           }
-          // default (no localStorage or 'dark'): stay dark, do nothing
+          localStorage.setItem('kite-theme', theme);
+          document.documentElement.classList.toggle('dark', theme === 'dark');
         } catch (e) {}
       })();
     </script>

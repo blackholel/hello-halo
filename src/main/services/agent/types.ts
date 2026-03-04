@@ -287,7 +287,7 @@ export interface AgentSetModeResult {
  */
 export interface V2SDKSession {
   readonly sessionId?: string
-  send: (message: unknown) => void
+  send: (message: unknown) => void | Promise<void>
   stream: () => AsyncIterable<unknown>
   close: () => void
   interrupt?: () => Promise<void> | void
