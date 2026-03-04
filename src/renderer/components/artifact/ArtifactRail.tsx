@@ -442,7 +442,7 @@ export function ArtifactRail({
   return (
     <div
       ref={railRef}
-      className="h-full border-l border-border bg-card/30 flex flex-col relative"
+      className="space-studio-rail h-full bg-card/30 flex flex-col relative"
       style={{
         width: displayWidth,
         // Disable transition when: dragging OR browser tab exists (to sync with native BrowserView)

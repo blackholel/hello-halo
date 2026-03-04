@@ -452,7 +452,7 @@ export function SpacePage() {
   })
 
   return (
-    <div className="h-full w-full flex flex-col">
+    <div className="h-full w-full flex flex-col space-studio-root">
       {/*
         ChatCapsule overlay is now managed via IPC to render above BrowserView.
         The overlay SPA is a separate WebContentsView that appears above all views.
@@ -462,16 +462,17 @@ export function SpacePage() {
       {/* Header - replaced with drag region spacer when maximized (for macOS traffic lights) */}
       {isCanvasMaximized ? (
         <div
-          className="h-11 flex-shrink-0 bg-background"
+          className="h-11 flex-shrink-0 space-studio-header"
           style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
         />
       ) : (
       <Header
+        className="space-studio-header"
         left={
           <>
             <button
               onClick={handleBack}
-              className="p-1.5 rounded-xl hover:bg-secondary/80 transition-all duration-200 group"
+              className="space-studio-header-btn p-1.5 rounded-xl transition-all duration-200 group"
             >
               <svg className="w-[18px] h-[18px] text-muted-foreground group-hover:text-foreground transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -509,7 +510,7 @@ export function SpacePage() {
             {/* New conversation */}
             <button
               onClick={handleNewConversation}
-              className="p-2 rounded-xl hover:bg-secondary/80 transition-all duration-200 group"
+              className="space-studio-header-btn p-2 rounded-xl transition-all duration-200 group"
               title={t('New conversation')}
             >
               <svg className="w-[18px] h-[18px] text-muted-foreground group-hover:text-foreground transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -522,8 +523,8 @@ export function SpacePage() {
               onClick={() => setShowConversationList(!showConversationList)}
               className={`p-2 rounded-xl transition-all duration-200 ${
                 showConversationList
-                  ? 'bg-secondary text-foreground'
-                  : 'hover:bg-secondary/80 text-muted-foreground hover:text-foreground'
+                  ? 'space-studio-header-btn space-studio-header-btn-active'
+                  : 'space-studio-header-btn text-muted-foreground hover:text-foreground'
               }`}
               title={t('Sidebar')}
             >
@@ -542,8 +543,8 @@ export function SpacePage() {
               onClick={() => setLayoutMode(layoutMode === 'split' ? 'tabs-only' : 'split')}
               className={`p-2 rounded-xl transition-all duration-200 ${
                 layoutMode === 'tabs-only'
-                  ? 'bg-secondary text-foreground'
-                  : 'hover:bg-secondary/80 text-muted-foreground hover:text-foreground'
+                  ? 'space-studio-header-btn space-studio-header-btn-active'
+                  : 'space-studio-header-btn text-muted-foreground hover:text-foreground'
               }`}
               title={layoutMode === 'split' ? t('Switch to tabs-only mode') : t('Switch to split mode')}
             >
@@ -557,7 +558,7 @@ export function SpacePage() {
             {/* Settings */}
             <button
               onClick={() => setView('settings')}
-              className="p-2 rounded-xl hover:bg-secondary/80 transition-all duration-200 group"
+              className="space-studio-header-btn p-2 rounded-xl transition-all duration-200 group"
               title={t('Settings')}
             >
               <svg className="w-[18px] h-[18px] text-muted-foreground group-hover:text-foreground transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -579,111 +580,113 @@ export function SpacePage() {
       )}
 
       {/* Main content */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Conversation list sidebar - hidden when maximized */}
-        {showConversationList && !isCanvasMaximized && (
-          <ConversationList
-            conversations={conversations}
-            currentConversationId={currentConversationId}
-            spaceId={currentSpace.id}
-            layoutMode={layoutMode}
-            onSelect={handleSelectConversation}
-            onNew={handleNewConversation}
-            onDelete={handleDeleteConversation}
-            onRename={handleRenameConversation}
-            workDir={currentSpace.path}
-            onSelectSkill={setSelectedSkill}
-            onInsertSkill={handleInsertSkill}
-            onCreateSkill={handleCreateSkill}
-            onSelectAgent={setSelectedAgent}
-            onInsertAgent={handleInsertAgent}
-            onCreateAgent={handleCreateAgent}
-            onInsertCommand={handleInsertCommand}
-            onCreateCommand={handleCreateCommand}
-          />
-        )}
+      <div className="space-studio-main flex-1 flex overflow-hidden">
+        <div className={`${isMobile ? 'flex-1 flex overflow-hidden' : 'space-studio-shell flex-1 flex overflow-hidden'}`}>
+          {/* Conversation list sidebar - hidden when maximized */}
+          {showConversationList && !isCanvasMaximized && (
+            <ConversationList
+              conversations={conversations}
+              currentConversationId={currentConversationId}
+              spaceId={currentSpace.id}
+              layoutMode={layoutMode}
+              onSelect={handleSelectConversation}
+              onNew={handleNewConversation}
+              onDelete={handleDeleteConversation}
+              onRename={handleRenameConversation}
+              workDir={currentSpace.path}
+              onSelectSkill={setSelectedSkill}
+              onInsertSkill={handleInsertSkill}
+              onCreateSkill={handleCreateSkill}
+              onSelectAgent={setSelectedAgent}
+              onInsertAgent={handleInsertAgent}
+              onCreateAgent={handleCreateAgent}
+              onInsertCommand={handleInsertCommand}
+              onCreateCommand={handleCreateCommand}
+            />
+          )}
 
-        {/* Desktop Layout */}
-        {!isMobile && (
-          <>
-            {/* Chat view - hidden when maximized or in tabs-only mode, adjusts width based on canvas state */}
-            {!isCanvasMaximized && layoutMode === 'split' && (
+          {/* Desktop Layout */}
+          {!isMobile && (
+            <>
+              {/* Chat view - hidden when maximized or in tabs-only mode, adjusts width based on canvas state */}
+              {!isCanvasMaximized && layoutMode === 'split' && (
+                <div
+                  ref={chatContainerRef}
+                  className={`
+                    space-studio-pane flex flex-col min-w-0 relative overflow-hidden
+                    ${hasBrowserTab ? '' : 'transition-[border-color] duration-300 ease-out'}
+                    ${isCanvasOpen ? 'border-r border-border/30' : 'flex-1 border-r border-transparent'}
+                    ${isCanvasTransitioning ? 'pointer-events-none' : ''}
+                  `}
+                  style={{
+                    width: isCanvasOpen ? dragChatWidth : undefined,
+                    flex: isCanvasOpen ? 'none' : '1',
+                    minWidth: isCanvasOpen ? chatWidthMin : undefined,
+                    maxWidth: isCanvasOpen ? chatWidthMax : undefined,
+                    // Disable transition when browser tab exists (sync with native BrowserView)
+                    transition: (isDraggingChat || hasBrowserTab)
+                      ? 'none'
+                      : 'width 0.3s, flex 0.3s, border-color 0.3s',
+                    willChange: isCanvasTransitioning ? 'width, flex' : 'auto',
+                  }}
+                >
+                  <ChatView isCompact={isCanvasOpen} />
+
+                  {/* Drag handle for chat width - only when canvas is open */}
+                  {isCanvasOpen && (
+                    <div
+                      className={`
+                        absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize z-20
+                        hover:bg-secondary/80 transition-colors
+                        ${isDraggingChat ? 'bg-secondary/80' : ''}
+                      `}
+                      onMouseDown={handleChatDragStart}
+                      title={t('Drag to resize')}
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* Content Canvas - main viewing area, full width in tabs-only mode */}
               <div
-                ref={chatContainerRef}
                 className={`
-                  flex flex-col min-w-0 relative
-                  ${hasBrowserTab ? '' : 'transition-[border-color] duration-300 ease-out'}
-                  ${isCanvasOpen ? 'border-r border-border/60' : 'flex-1 border-r border-transparent'}
+                  space-studio-pane min-w-0 overflow-hidden
+                  ${hasBrowserTab ? '' : 'transition-all duration-300 ease-out'}
+                  ${layoutMode === 'tabs-only' || isCanvasOpen || isCanvasMaximized
+                    ? 'flex-1 opacity-100'
+                    : 'w-0 flex-none opacity-0'}
                   ${isCanvasTransitioning ? 'pointer-events-none' : ''}
                 `}
                 style={{
-                  width: isCanvasOpen ? dragChatWidth : undefined,
-                  flex: isCanvasOpen ? 'none' : '1',
-                  minWidth: isCanvasOpen ? chatWidthMin : undefined,
-                  maxWidth: isCanvasOpen ? chatWidthMax : undefined,
+                  willChange: isCanvasTransitioning ? 'width, opacity, transform' : 'auto',
+                  transform: layoutMode === 'tabs-only' || isCanvasOpen || isCanvasMaximized ? 'translateX(0) scale(1)' : 'translateX(20px) scale(0.98)',
                   // Disable transition when browser tab exists (sync with native BrowserView)
-                  transition: (isDraggingChat || hasBrowserTab)
-                    ? 'none'
-                    : 'width 0.3s, flex 0.3s, border-color 0.3s',
-                  willChange: isCanvasTransitioning ? 'width, flex' : 'auto',
+                  transition: hasBrowserTab ? 'none' : undefined,
                 }}
               >
-                <ChatView isCompact={isCanvasOpen} />
-
-                {/* Drag handle for chat width - only when canvas is open */}
-                {isCanvasOpen && (
-                  <div
-                    className={`
-                      absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize z-20
-                      hover:bg-secondary/80 transition-colors
-                      ${isDraggingChat ? 'bg-secondary/80' : ''}
-                    `}
-                    onMouseDown={handleChatDragStart}
-                    title={t('Drag to resize')}
-                  />
-                )}
+                {(layoutMode === 'tabs-only' || isCanvasOpen || isCanvasMaximized || isCanvasTransitioning) && <ContentCanvas />}
               </div>
-            )}
+            </>
+          )}
 
-            {/* Content Canvas - main viewing area, full width in tabs-only mode */}
-            <div
-              className={`
-                min-w-0 overflow-hidden
-                ${hasBrowserTab ? '' : 'transition-all duration-300 ease-out'}
-                ${layoutMode === 'tabs-only' || isCanvasOpen || isCanvasMaximized
-                  ? 'flex-1 opacity-100'
-                  : 'w-0 flex-none opacity-0'}
-                ${isCanvasTransitioning ? 'pointer-events-none' : ''}
-              `}
-              style={{
-                willChange: isCanvasTransitioning ? 'width, opacity, transform' : 'auto',
-                transform: layoutMode === 'tabs-only' || isCanvasOpen || isCanvasMaximized ? 'translateX(0) scale(1)' : 'translateX(20px) scale(0.98)',
-                // Disable transition when browser tab exists (sync with native BrowserView)
-                transition: hasBrowserTab ? 'none' : undefined,
-              }}
-            >
-              {(layoutMode === 'tabs-only' || isCanvasOpen || isCanvasMaximized || isCanvasTransitioning) && <ContentCanvas />}
+          {/* Mobile Layout */}
+          {isMobile && (
+            <div className="flex-1 flex flex-col min-w-0">
+              <ChatView isCompact={false} />
             </div>
-          </>
-        )}
+          )}
 
-        {/* Mobile Layout */}
-        {isMobile && (
-          <div className="flex-1 flex flex-col min-w-0">
-            <ChatView isCompact={false} />
-          </div>
-        )}
-
-        {/* Artifact rail - auto-collapses when maximized via useEffect above */}
-        {/* Smart collapse: collapses when canvas is open, respects user preference */}
-        {!isMobile && (
-          <ArtifactRail
-            spaceId={currentSpace.id}
-            isTemp={currentSpace.isTemp}
-            externalExpanded={effectiveRailExpanded}
-            onExpandedChange={setRailExpanded}
-          />
-        )}
+          {/* Artifact rail - auto-collapses when maximized via useEffect above */}
+          {/* Smart collapse: collapses when canvas is open, respects user preference */}
+          {!isMobile && (
+            <ArtifactRail
+              spaceId={currentSpace.id}
+              isTemp={currentSpace.isTemp}
+              externalExpanded={effectiveRailExpanded}
+              onExpandedChange={setRailExpanded}
+            />
+          )}
+        </div>
       </div>
 
       {/* Mobile Canvas Overlay */}

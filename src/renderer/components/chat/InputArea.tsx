@@ -898,7 +898,7 @@ export function InputArea({
 
   return (
     <div className={`
-      border-t border-border/50 bg-background/80 backdrop-blur-sm
+      space-studio-input-wrap border-t
       transition-[padding] duration-300 ease-out
       ${isCompact ? 'px-3 py-2' : 'px-4 py-3'}
     `}>
@@ -925,12 +925,12 @@ export function InputArea({
         <div
           ref={inputContainerRef}
           className={`
-            relative flex flex-col rounded-2xl transition-all duration-200
+            space-studio-input-shell relative flex flex-col transition-all duration-200
             ${isFocused
-              ? 'ring-1 ring-foreground/15 bg-card shadow-sm'
-              : 'bg-secondary/50 hover:bg-secondary/70'
+              ? 'focused'
+              : 'hover:bg-card'
             }
-            ${isDragOver ? 'ring-2 ring-foreground/25 bg-secondary/70' : ''}
+            ${isDragOver ? 'ring-2 ring-foreground/25 bg-card' : ''}
           `}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -963,7 +963,7 @@ export function InputArea({
           {/* Drag overlay */}
           {isDragOver && (
             <div className="absolute inset-0 flex items-center justify-center
-              bg-secondary/70 rounded-2xl border-2 border-dashed border-border
+              bg-card/95 rounded-2xl border-2 border-dashed border-border
               pointer-events-none z-10">
               <div className="flex flex-col items-center gap-2 text-foreground/70">
                 <ImagePlus size={24} />
@@ -1036,8 +1036,8 @@ export function InputArea({
                           disabled={isGuiding}
                           className={`h-6 inline-flex items-center gap-1 rounded-md px-2 text-[11px] transition-colors ${
                             isGuiding
-                              ? 'bg-secondary text-foreground/70 cursor-not-allowed'
-                              : 'bg-secondary text-foreground hover:bg-secondary/80'
+                              ? 'bg-muted/60 text-foreground/70 cursor-not-allowed'
+                              : 'bg-muted/60 text-foreground hover:bg-muted/80'
                           }`}
                           title={t('Send immediately without interrupting work')}
                         >
@@ -1086,7 +1086,7 @@ export function InputArea({
           )}
           {queueHint && (
             <div className="px-3 pb-1">
-              <div className="rounded-lg border border-border bg-secondary px-2.5 py-1.5 text-xs text-foreground">
+              <div className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs text-foreground">
                 {queueHint}
               </div>
             </div>
@@ -1099,14 +1099,14 @@ export function InputArea({
                   return (
                     <span
                       key={chip.id}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-secondary px-2 py-1 text-sm text-foreground"
+                      className="space-studio-chip inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm text-foreground"
                     >
                       <Icon size={14} />
                       <span className="font-medium">{chip.displayName}</span>
                       <button
                         type="button"
                         onClick={() => removeResourceChip(chip.id)}
-                        className="rounded p-0.5 hover:bg-secondary"
+                        className="rounded p-0.5 hover:bg-muted/70"
                         aria-label={t('Delete')}
                       >
                         <X size={12} />
@@ -1256,7 +1256,7 @@ function InputToolbar({
   const nextMode: ChatMode = mode === 'code' ? 'plan' : mode === 'plan' ? 'ask' : 'code'
   const modeLabel = mode === 'code' ? t('Code') : mode === 'plan' ? t('Plan') : t('Ask')
   return (
-    <div className="flex items-center justify-between gap-2 px-2.5 pb-2.5 pt-1.5">
+    <div className="space-studio-toolbar flex items-center justify-between gap-2 px-2.5 pb-2.5 pt-1.5">
       {/* Left section: attachment button + mode toggles */}
       <div className="flex items-center gap-1 min-w-0">
         <ModelSwitcher
@@ -1274,7 +1274,7 @@ function InputToolbar({
                 transition-all duration-150
                 ${isProcessingImages
                   ? 'opacity-50 cursor-not-allowed text-muted-foreground/40'
-                  : 'text-muted-foreground/60 hover:text-muted-foreground hover:bg-muted/50'
+                  : 'text-muted-foreground/70 hover:text-foreground hover:bg-foreground/5'
                 }
               `}
               title={t('System files')}
@@ -1286,10 +1286,10 @@ function InputToolbar({
             <button
               onClick={onAIBrowserToggle}
               className={`h-8 flex items-center gap-1.5 px-2.5 rounded-lg
-                transition-colors duration-200 relative
+                transition-colors duration-200 relative border
                 ${aiBrowserEnabled
-                  ? 'bg-secondary text-foreground'
-                  : 'text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50'
+                  ? 'bg-foreground/10 border-foreground/20 text-foreground'
+                  : 'border-border/60 text-muted-foreground/70 hover:text-foreground hover:bg-foreground/5'
                 }
               `}
               title={aiBrowserEnabled ? t('AI Browser enabled (click to disable)') : t('Enable AI Browser')}
@@ -1313,10 +1313,10 @@ function InputToolbar({
             <button
               onClick={onThinkingToggle}
               className={`h-8 flex items-center gap-1.5 px-2.5 rounded-lg
-                transition-colors duration-200
+                transition-colors duration-200 border
                 ${thinkingEnabled
-                  ? 'bg-secondary text-foreground'
-                  : 'text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50'
+                  ? 'bg-foreground/10 border-foreground/20 text-foreground'
+                  : 'border-border/60 text-muted-foreground/70 hover:text-foreground hover:bg-foreground/5'
                 }
               `}
               title={thinkingEnabled ? t('Disable Deep Thinking') : t('Enable Deep Thinking')}
@@ -1331,14 +1331,9 @@ function InputToolbar({
           <button
             onClick={() => onModeChange(nextMode)}
             disabled={modeSwitching}
-            className={`h-8 flex items-center gap-1.5 px-2.5 rounded-lg transition-colors duration-200
-              ${mode === 'plan'
-                ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                : mode === 'ask'
-                  ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400'
-                  : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-              }
-              ${modeSwitching ? 'opacity-60 cursor-not-allowed' : 'hover:bg-muted/50'}
+            className={`h-8 flex items-center gap-1.5 px-2.5 rounded-lg border border-border/60
+              bg-background/70 text-foreground/80 transition-colors duration-200
+              ${modeSwitching ? 'opacity-60 cursor-not-allowed' : 'hover:bg-muted/40'}
             `}
             title={t('Current mode: {{mode}} (click to switch)', { mode: modeLabel })}
           >
@@ -1356,9 +1351,9 @@ function InputToolbar({
             onClick={onSend}
             disabled={!canSend}
             className={`
-              h-8 px-2.5 flex items-center justify-center rounded-lg transition-all duration-200 text-xs
+              h-8 px-2.5 flex items-center justify-center transition-all duration-200 text-xs
               ${canSend
-                ? 'bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95'
+                ? 'space-studio-send-btn active:scale-95'
                 : 'bg-muted/50 text-muted-foreground/40 cursor-not-allowed'
               }
             `}

@@ -393,9 +393,9 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
   return (
     <div
       className={`
-        flex-1 flex flex-col h-full
+        space-studio-chatview flex-1 flex flex-col h-full
         transition-[padding] duration-300 ease-out
-        ${isCompact ? 'bg-background/50' : 'bg-background'}
+        ${isCompact ? 'bg-background/35' : 'bg-transparent'}
       `}
     >
       {/* Messages area wrapper - relative for button positioning */}
@@ -405,7 +405,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
           ref={containerRef}
           onScroll={handleScroll}
           className={`
-            h-full overflow-auto py-6
+            h-full overflow-auto py-7
             transition-[padding] duration-300 ease-out
             ${isCompact ? 'px-3' : 'px-4'}
           `}
@@ -566,101 +566,80 @@ function LoadingState() {
   )
 }
 
-// Empty state component - Apple-inspired welcome screen
+// Empty state component - Editorial workspace style
 function EmptyState({ isTemp, isCompact = false }: { isTemp: boolean; isCompact?: boolean }) {
   const { t } = useTranslation()
 
-  // Compact mode shows minimal UI
   if (isCompact) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-center px-4">
-        <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center">
-          <Sparkles className="w-5 h-5 text-primary/70" />
+        <div className="w-11 h-11 rounded-2xl border border-border/70 bg-background/80 flex items-center justify-center">
+          <Sparkles className="w-5 h-5 text-foreground/80" />
         </div>
-        <p className="mt-3 text-sm text-muted-foreground">
+        <p className="mt-3 text-sm text-muted-foreground/90">
           {t('Ask Kite anything, / for commands')}
         </p>
       </div>
     )
   }
 
-  // Capability cards
   const capabilities = [
-    {
-      icon: '💻',
-      title: t('Programming Development'),
-      desc: t('Write, debug and refactor code'),
-    },
-    {
-      icon: '📄',
-      title: t('File Processing'),
-      desc: t('Create and edit documents'),
-    },
-    {
-      icon: '🔍',
-      title: t('Information Retrieval'),
-      desc: t('Search and analyze data'),
-    },
-    {
-      icon: '✨',
-      title: t('Content Creation'),
-      desc: t('Generate creative content'),
-    },
+    { icon: '💻', title: t('Programming Development') },
+    { icon: '📄', title: t('File Processing') },
+    { icon: '🔍', title: t('Information Retrieval') },
+    { icon: '✨', title: t('Content Creation') },
   ]
 
   return (
     <div className="h-full flex flex-col items-center justify-center text-center px-8 relative">
-      {/* Ambient glow behind logo */}
-      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-foreground/5 rounded-full blur-3xl pointer-events-none" />
-
-      {/* Logo */}
-      <div className="relative mb-8 stagger-item" style={{ animationDelay: '0ms' }}>
-        <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-secondary to-muted flex items-center justify-center border border-border">
-          <Sparkles className="w-9 h-9 text-foreground" />
-        </div>
-        {/* Subtle glow ring */}
-        <div className="absolute -inset-3 rounded-[2rem] bg-foreground/5 blur-xl -z-10" />
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-[24%] left-1/2 -translate-x-1/2 w-80 h-80 rounded-full bg-foreground/5 blur-3xl" />
+        <div className="absolute bottom-[20%] left-1/2 -translate-x-1/2 w-96 h-40 rounded-full bg-[hsl(var(--space-accent)/0.08)] blur-3xl" />
       </div>
 
-      {/* Title */}
-      <h2 className="text-2xl font-semibold tracking-tight stagger-item" style={{ animationDelay: '60ms' }}>
-        {isTemp ? 'Kite' : t('Ready to start')}
-      </h2>
+      <div className="relative mb-7 space-studio-reveal" style={{ animationDelay: '0ms' }}>
+        <div className="w-20 h-20 rounded-[28px] border border-border/80 bg-background/75 shadow-[0_18px_32px_rgba(24,22,20,0.12)] flex items-center justify-center">
+          <Sparkles className="w-9 h-9 text-foreground/90" />
+        </div>
+        <div className="absolute -inset-3 rounded-[2.2rem] border border-border/40 animate-pulse-gentle" />
+      </div>
 
-      {/* Subtitle */}
-      <p className="mt-2 text-sm text-muted-foreground max-w-sm leading-relaxed stagger-item" style={{ animationDelay: '100ms' }}>
-        {isTemp
-          ? t('Aimless time, ideas will crystallize here')
-          : t('Kite, not just chat, can help you get things done')
-        }
+      <p className="space-studio-empty-badge text-[11px] tracking-[0.36em] uppercase text-muted-foreground/70 space-studio-reveal" style={{ animationDelay: '30ms' }}>
+        Workspace
       </p>
 
-      {/* Capability cards grid */}
-      <div className="mt-8 grid grid-cols-2 gap-3 max-w-md w-full stagger-item" style={{ animationDelay: '160ms' }}>
+      <h2 className="mt-3 text-[44px] leading-none font-semibold tracking-tight text-foreground space-studio-reveal" style={{ animationDelay: '80ms' }}>
+        {t('Ready to start')}
+      </h2>
+
+      <p className="mt-2 text-2xl font-medium text-muted-foreground/80 space-studio-reveal" style={{ animationDelay: '120ms' }}>
+        {isTemp ? 'kite' : t('Kite Space')}
+      </p>
+
+      <p className="mt-4 text-sm text-muted-foreground max-w-md leading-relaxed space-studio-reveal" style={{ animationDelay: '160ms' }}>
+        {isTemp
+          ? t('Aimless time, ideas will crystallize here')
+          : t('Kite, not just chat, can help you get things done')}
+      </p>
+
+      <div className="mt-8 flex flex-wrap items-center justify-center gap-2.5 max-w-xl space-studio-reveal" style={{ animationDelay: '220ms' }}>
         {capabilities.map((cap, i) => (
-          <div
-            key={i}
-            className="glass-card !cursor-default p-4 text-left"
-          >
-            <span className="text-xl">{cap.icon}</span>
-            <h4 className="text-[13px] font-medium mt-2">{cap.title}</h4>
-            <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{cap.desc}</p>
+          <div key={i} className="space-studio-chip !cursor-default rounded-full px-3.5 py-2.5 text-left">
+            <span className="text-xs text-muted-foreground/90">
+              <span className="mr-1.5">{cap.icon}</span>
+              <span className="font-medium">{cap.title}</span>
+            </span>
           </div>
         ))}
       </div>
 
-      {/* Powered by badge */}
-      <div className="mt-8 stagger-item" style={{ animationDelay: '220ms' }}>
-        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-secondary/50 border border-border/50">
-          <div className="w-1.5 h-1.5 rounded-full bg-kite-success animate-pulse" />
-          <span className="text-xs text-muted-foreground">
-            {t('Powered by Claude Code with full Agent capabilities')}
-          </span>
-        </div>
+      <div className="mt-8 space-studio-reveal" style={{ animationDelay: '260ms' }}>
+        <p className="text-[11px] tracking-[0.16em] uppercase text-muted-foreground/60">
+          {t('Powered by Claude Code with full Agent capabilities')}
+        </p>
       </div>
 
-      {/* Permission hint */}
-      <p className="mt-3 text-[11px] text-muted-foreground/40 stagger-item" style={{ animationDelay: '260ms' }}>
+      <p className="mt-3 text-[11px] text-muted-foreground/45 space-studio-reveal" style={{ animationDelay: '300ms' }}>
         {t('Kite has full access to the current space')}
       </p>
     </div>
