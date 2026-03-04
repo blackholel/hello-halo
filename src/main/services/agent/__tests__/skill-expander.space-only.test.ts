@@ -3,7 +3,8 @@ import { getExecutionLayerAllowedSources } from '../space-resource-policy.servic
 
 const skillDefinitions = {
   'space-skill': { source: 'space', exposure: 'public' as const },
-  'app-skill': { source: 'app', exposure: 'public' as const }
+  'app-skill': { source: 'app', exposure: 'public' as const },
+  '创建技能': { source: 'space', exposure: 'public' as const }
 }
 
 const commandDefinitions = {
@@ -13,12 +14,14 @@ const commandDefinitions = {
     exposure: 'public' as const,
     requiresSkills: ['space-skill']
   },
-  'app-command': { source: 'app', exposure: 'public' as const }
+  'app-command': { source: 'app', exposure: 'public' as const },
+  '创建命令': { source: 'space', exposure: 'public' as const }
 }
 
 const agentDefinitions = {
   'space-agent': { source: 'space', exposure: 'public' as const },
-  'app-agent': { source: 'app', exposure: 'public' as const }
+  'app-agent': { source: 'app', exposure: 'public' as const },
+  '创建代理': { source: 'space', exposure: 'public' as const }
 }
 
 vi.mock('../../skills.service', () => ({
@@ -111,5 +114,15 @@ describe('skill-expander strict allowSources', () => {
     expect(result.expanded.skills).toEqual(['space-skill'])
     expect(result.expanded.commands).toEqual(['space-command-with-skill'])
     expect(result.text).toContain('<skill name="space-skill" args="target=prod">')
+  })
+
+  it('expands Unicode slash/mention directives', () => {
+    const result = expandLazyDirectives('/创建技能\n@创建代理\n/创建命令', undefined, {
+      allowSources: ['space']
+    })
+
+    expect(result.expanded.skills).toEqual(['创建技能'])
+    expect(result.expanded.agents).toEqual(['创建代理'])
+    expect(result.expanded.commands).toEqual(['创建命令'])
   })
 })

@@ -8,7 +8,7 @@ interface CommandsPanelProps {
   workDir?: string
   onInsertCommand?: (commandName: string) => void
   onCreateCommand?: () => void
-  onOpenTemplateLibrary?: () => void
+  onInsertCreateCommand?: () => void
   preferInsertOnClick?: boolean
 }
 
@@ -21,7 +21,7 @@ export function CommandsPanel({
   workDir,
   onInsertCommand,
   onCreateCommand,
-  onOpenTemplateLibrary,
+  onInsertCreateCommand,
   preferInsertOnClick = false
 }: CommandsPanelProps): JSX.Element {
   const { t } = useTranslation()
@@ -66,7 +66,7 @@ export function CommandsPanel({
             <button className="p-1.5 rounded-md hover:bg-secondary/70" title={t('Create command')} onClick={() => onCreateCommand?.()}>
               <SquarePen size={14} />
             </button>
-            <button className="p-1.5 rounded-md hover:bg-secondary/70" title={t('Template Library')} onClick={onOpenTemplateLibrary}>
+            <button className="p-1.5 rounded-md hover:bg-secondary/70" title={t('Create Commands')} onClick={() => onInsertCreateCommand?.()}>
               <Plus size={14} />
             </button>
           </div>
@@ -86,7 +86,7 @@ export function CommandsPanel({
               <div className="text-[11px] text-muted-foreground px-2 py-2">{t('Loading...')}</div>
             ) : visibleCommands.length === 0 ? (
               <div className="text-[11px] text-muted-foreground px-2 py-2">
-                {t('Agent can suggest creating Commands in chat. You can also click ➕ to import from Template Library.')}
+                {t('Agent can suggest creating Commands in chat. Click ➕ to insert Create Commands.')}
               </div>
             ) : (
               visibleCommands.map((command) => {

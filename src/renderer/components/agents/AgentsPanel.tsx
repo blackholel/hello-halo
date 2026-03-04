@@ -8,7 +8,7 @@ interface AgentsPanelProps {
   onSelectAgent?: (agent: AgentDefinition) => void
   onInsertAgent?: (agentName: string) => void
   onCreateAgent?: () => void
-  onOpenTemplateLibrary?: () => void
+  onInsertCreateAgent?: () => void
   preferInsertOnClick?: boolean
 }
 
@@ -22,7 +22,7 @@ export function AgentsPanel({
   onSelectAgent,
   onInsertAgent,
   onCreateAgent,
-  onOpenTemplateLibrary,
+  onInsertCreateAgent,
   preferInsertOnClick = false
 }: AgentsPanelProps) {
   const { t } = useTranslation()
@@ -67,7 +67,7 @@ export function AgentsPanel({
             <button className="p-1.5 rounded-md hover:bg-secondary/70" title={t('Create agent')} onClick={() => onCreateAgent?.()}>
               <SquarePen size={14} />
             </button>
-            <button className="p-1.5 rounded-md hover:bg-secondary/70" title={t('Template Library')} onClick={onOpenTemplateLibrary}>
+            <button className="p-1.5 rounded-md hover:bg-secondary/70" title={t('Create Agents')} onClick={() => onInsertCreateAgent?.()}>
               <Plus size={14} />
             </button>
           </div>
@@ -87,7 +87,7 @@ export function AgentsPanel({
               <div className="text-[11px] text-muted-foreground px-2 py-2">{t('Loading...')}</div>
             ) : visibleAgents.length === 0 ? (
               <div className="text-[11px] text-muted-foreground px-2 py-2">
-                {t('Agent can suggest creating Agents in chat. You can also click ➕ to import from Template Library.')}
+                {t('Agent can suggest creating Agents in chat. Click ➕ to insert Create Agents.')}
               </div>
             ) : (
               visibleAgents.map((agent) => (

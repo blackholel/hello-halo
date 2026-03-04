@@ -16,9 +16,9 @@ import { toolkitContains } from '../toolkit.service'
 import type { SpaceToolkit } from '../space-config.service'
 import type { InvocationContext, ResourceExposure } from '../../../shared/resource-access'
 
-const SLASH_LINE_RE = /^\/([A-Za-z0-9._:-]+)(?:\s+(.+))?$/
-const AT_LINE_RE = /^@([A-Za-z0-9._:-]+)(?:\s+(.+))?$/
-const TOKEN_CHAR_RE = /[A-Za-z0-9._:-]/
+const SLASH_LINE_RE = /^\/([\p{L}\p{N}._:-]+)(?:\s+(.+))?$/u
+const AT_LINE_RE = /^@([\p{L}\p{N}._:-]+)(?:\s+(.+))?$/u
+const TOKEN_CHAR_RE = /[\p{L}\p{N}._:-]/u
 
 interface ParsedDirectiveToken {
   raw: string
@@ -189,7 +189,7 @@ export function stripFrontmatter(content: string): string {
 
 function findReferencedSkill(commandContent: string): string | null {
   const body = stripFrontmatter(commandContent)
-  const match = body.match(/\b(?:invoke|use|run)\s+(?:the\s+)?([A-Za-z0-9._:-]+)\s+skill\b/i)
+  const match = body.match(/\b(?:invoke|use|run)\s+(?:the\s+)?([\p{L}\p{N}._:-]+)\s+skill\b/iu)
   if (!match) return null
   return match[1]
 }

@@ -31,6 +31,9 @@ import { commandKey } from '../../../shared/command-utils'
 const MIN_WIDTH = 200
 const MAX_WIDTH = 340
 const DEFAULT_WIDTH = 240
+const CREATE_SKILLS_TRIGGER = '创建技能'
+const CREATE_AGENTS_TRIGGER = '创建代理'
+const CREATE_COMMANDS_TRIGGER = '创建命令'
 
 function localizedResourceName(item: { name: string; displayName?: string; namespace?: string }): string {
   const base = item.displayName || item.name
@@ -77,7 +80,7 @@ export function ConversationList({
   onCreateCommand
 }: ConversationListProps) {
   const { t } = useTranslation()
-  const { openChat, openTemplateLibrary } = useCanvasLifecycle()
+  const { openChat } = useCanvasLifecycle()
   const [width, setWidth] = useState(DEFAULT_WIDTH)
   const [isDragging, setIsDragging] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -393,9 +396,7 @@ export function ConversationList({
           onSelectSkill={onSelectSkill}
           onInsertSkill={onInsertSkill}
           onCreateSkill={onCreateSkill}
-          onOpenTemplateLibrary={() => {
-            void openTemplateLibrary(t('Template Library'), 'skills', workDir)
-          }}
+          onInsertCreateSkill={() => onInsertSkill?.(CREATE_SKILLS_TRIGGER)}
           preferInsertOnClick
         />
         <AgentsPanel
@@ -403,18 +404,14 @@ export function ConversationList({
           onSelectAgent={onSelectAgent}
           onInsertAgent={onInsertAgent}
           onCreateAgent={onCreateAgent}
-          onOpenTemplateLibrary={() => {
-            void openTemplateLibrary(t('Template Library'), 'agents', workDir)
-          }}
+          onInsertCreateAgent={() => onInsertAgent?.(CREATE_AGENTS_TRIGGER)}
           preferInsertOnClick
         />
         <CommandsPanel
           workDir={workDir}
           onInsertCommand={onInsertCommand}
           onCreateCommand={onCreateCommand}
-          onOpenTemplateLibrary={() => {
-            void openTemplateLibrary(t('Template Library'), 'commands', workDir)
-          }}
+          onInsertCreateCommand={() => onInsertCommand?.(CREATE_COMMANDS_TRIGGER)}
           preferInsertOnClick
         />
         {spaceId && (

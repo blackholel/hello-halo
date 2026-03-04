@@ -534,6 +534,9 @@
   "Agent can suggest creating Skills in chat. You can also click ➕ to import from Template Library.": "Agent can suggest creating Skills in chat. You can also click ➕ to import from Template Library.",
   "Agent can suggest creating Agents in chat. You can also click ➕ to import from Template Library.": "Agent can suggest creating Agents in chat. You can also click ➕ to import from Template Library.",
   "Agent can suggest creating Commands in chat. You can also click ➕ to import from Template Library.": "Agent can suggest creating Commands in chat. You can also click ➕ to import from Template Library.",
+  "Agent can suggest creating Skills in chat. Click ➕ to insert Create Skills.": "Agent can suggest creating Skills in chat. Click ➕ to insert /创建技能.",
+  "Agent can suggest creating Agents in chat. Click ➕ to insert Create Agents.": "Agent can suggest creating Agents in chat. Click ➕ to insert @创建代理.",
+  "Agent can suggest creating Commands in chat. Click ➕ to insert Create Commands.": "Agent can suggest creating Commands in chat. Click ➕ to insert /创建命令.",
   "Add to toolkit": "Add to toolkit",
   "Remove from toolkit": "Remove from toolkit",
   "Activate in space": "Activate in space",
@@ -598,5 +601,8 @@
   "Show current space files": "Show current space files",
   "New conversation (⌘T)": "New conversation (⌘T)",
   "System files": "System files",
-  "Unable to attach system file in current mode": "Unable to attach system file in current mode"
+  "Unable to attach system file in current mode": "Unable to attach system file in current mode",
+  "Create Skills": "创建技能",
+  "Create Agents": "创建代理",
+  "Create Commands": "创建命令"
 }

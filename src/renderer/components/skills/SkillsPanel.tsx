@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronDown, MoreHorizontal, Plus, Search, SquarePen, Star, Trash2 } from 'lucide-react'
+import { ChevronDown, MoreHorizontal, Plus, Search, SquarePen, Trash2 } from 'lucide-react'
 import { useTranslation } from '../../i18n'
 import { useSkillsStore, type SkillDefinition } from '../../stores/skills.store'
-import { useSpaceStore } from '../../stores/space.store'
 
 interface SkillsPanelProps {
   workDir?: string
   onSelectSkill?: (skill: SkillDefinition) => void
   onInsertSkill?: (skillName: string) => void
   onCreateSkill?: () => void
-  onOpenTemplateLibrary?: () => void
+  onInsertCreateSkill?: () => void
   preferInsertOnClick?: boolean
 }
 
@@ -23,18 +22,15 @@ export function SkillsPanel({
   onSelectSkill,
   onInsertSkill,
   onCreateSkill,
-  onOpenTemplateLibrary,
+  onInsertCreateSkill,
   preferInsertOnClick = false
 }: SkillsPanelProps) {
   const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
   const [query, setQuery] = useState('')
   const [menuPath, setMenuPath] = useState<string | null>(null)
-  const [viewMode, setViewMode] = useState<'all' | 'favorites'>('all')
 
   const { skills, loadedWorkDir, isLoading, loadSkills, deleteSkill } = useSkillsStore()
-  const { currentSpace, updateSpacePreferences } = useSpaceStore()
-  const favorites = currentSpace?.preferences?.skills?.favorites || []
 
   useEffect(() => {
     if (!expanded) return
@@ -46,28 +42,14 @@ export function SkillsPanel({
   const visibleSkills = useMemo(() => {
     const spaceSkills = skills.filter(skill => skill.source === 'space')
     const q = query.trim().toLowerCase()
-    const searched = q
+    return q
       ? spaceSkills.filter(skill => (
         skill.name.toLowerCase().includes(q) ||
         skill.displayName?.toLowerCase().includes(q) ||
         skill.description?.toLowerCase().includes(q)
       ))
       : spaceSkills
-
-    if (viewMode === 'favorites') {
-      return searched.filter(skill => favorites.includes(skill.name))
-    }
-
-    return searched
-  }, [skills, query, viewMode, favorites])
-
-  const toggleFavorite = async (skillName: string): Promise<void> => {
-    if (!currentSpace) return
-    const next = favorites.includes(skillName)
-      ? favorites.filter(item => item !== skillName)
-      : [...favorites, skillName]
-    await updateSpacePreferences(currentSpace.id, { skills: { favorites: next } })
-  }
+  }, [skills, query])
 
   const handleDelete = async (skillPath: string): Promise<void> => {
     await deleteSkill(skillPath)
@@ -96,22 +78,10 @@ export function SkillsPanel({
             </button>
             <button
               className="p-1.5 rounded-md hover:bg-secondary/70"
-              title={t('Template Library')}
-              onClick={onOpenTemplateLibrary}
+              title={t('Create Skills')}
+              onClick={() => onInsertCreateSkill?.()}
             >
               <Plus size={14} />
-            </button>
-            <button
-              className={`px-2 py-1 text-[11px] rounded-md ${viewMode === 'all' ? 'bg-secondary text-foreground' : 'text-muted-foreground'}`}
-              onClick={() => setViewMode('all')}
-            >
-              {t('All')}
-            </button>
-            <button
-              className={`px-2 py-1 text-[11px] rounded-md ${viewMode === 'favorites' ? 'bg-secondary text-foreground' : 'text-muted-foreground'}`}
-              onClick={() => setViewMode('favorites')}
-            >
-              {t('Favorites')}
             </button>
           </div>
 
@@ -130,7 +100,7 @@ export function SkillsPanel({
               <div className="text-[11px] text-muted-foreground px-2 py-2">{t('Loading...')}</div>
             ) : visibleSkills.length === 0 ? (
               <div className="text-[11px] text-muted-foreground px-2 py-2">
-                {t('Agent can suggest creating Skills in chat. You can also click ➕ to import from Template Library.')}
+                {t('Agent can suggest creating Skills in chat. Click ➕ to insert Create Skills.')}
               </div>
             ) : (
               visibleSkills.map((skill) => (
@@ -153,16 +123,6 @@ export function SkillsPanel({
                       )}
                     </div>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
-                      <button
-                        className="p-1 rounded hover:bg-secondary"
-                        title={t('Favorite')}
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          void toggleFavorite(skill.name)
-                        }}
-                      >
-                        <Star size={12} fill={favorites.includes(skill.name) ? 'currentColor' : 'none'} />
-                      </button>
                       <button
                         className="p-1 rounded hover:bg-secondary"
                         onClick={(event) => {

@@ -46,6 +46,127 @@ import { useAgentsStore, type AgentDefinition } from '../stores/agents.store'
 import { useCommandsStore, type CommandDefinition } from '../stores/commands.store'
 import { useToolkitStore } from '../stores/toolkit.store'
 import { useComposerStore } from '../stores/composer.store'
+
+const CREATE_SKILLS_TRIGGER_EN = 'create-skills'
+const CREATE_AGENTS_TRIGGER_EN = 'create-agents'
+const CREATE_COMMANDS_TRIGGER_EN = 'create-commands'
+const CREATE_SKILLS_TRIGGER_ZH = '创建技能'
+const CREATE_AGENTS_TRIGGER_ZH = '创建代理'
+const CREATE_COMMANDS_TRIGGER_ZH = '创建命令'
+
+const CREATE_SKILLS_ALIASES = [CREATE_SKILLS_TRIGGER_EN, CREATE_SKILLS_TRIGGER_ZH] as const
+const CREATE_AGENTS_ALIASES = [CREATE_AGENTS_TRIGGER_EN, CREATE_AGENTS_TRIGGER_ZH] as const
+const CREATE_COMMANDS_ALIASES = [CREATE_COMMANDS_TRIGGER_EN, CREATE_COMMANDS_TRIGGER_ZH] as const
+
+const CREATE_SKILLS_CONTENT_EN = `---
+name: Create Skills
+description: Help create or update skills for the current space.
+---
+
+# Create Skills
+
+Use this skill to create or update space-level skills under \`.claude/skills\`.
+
+When invoked:
+1. Ask the user what capability they want.
+2. Draft or update the target \`SKILL.md\`.
+3. Save it in the current space and explain how to trigger it.
+`
+
+const CREATE_SKILLS_CONTENT_ZH = `---
+name: 创建技能
+description: 帮助在当前空间创建或更新技能。
+---
+
+# 创建技能
+
+用于在当前空间的 \`.claude/skills\` 下创建或更新技能。
+
+执行时：
+1. 先确认用户想要的能力边界；
+2. 生成或更新对应 \`SKILL.md\`；
+3. 保存到当前空间并说明触发方式。
+`
+
+const CREATE_AGENTS_CONTENT_EN = `---
+name: Create Agents
+description: Help create or update agents for the current space.
+---
+
+# Create Agents
+
+Use this agent to create or update space-level agents under \`.claude/agents\`.
+
+When invoked:
+1. Clarify the agent role and boundaries.
+2. Draft or update the agent markdown file.
+3. Save it in the current space and explain how to use it.
+`
+
+const CREATE_AGENTS_CONTENT_ZH = `---
+name: 创建代理
+description: 帮助在当前空间创建或更新代理。
+---
+
+# 创建代理
+
+用于在当前空间的 \`.claude/agents\` 下创建或更新代理文件。
+
+执行时：
+1. 明确代理职责和禁区；
+2. 生成或更新代理 markdown；
+3. 保存到当前空间并给出调用方式。
+`
+
+const CREATE_COMMANDS_CONTENT_EN = `---
+name: Create Commands
+description: Help create or update commands for the current space.
+---
+
+# /create-commands
+
+Use this command to create or update space-level commands under \`.claude/commands\`.
+
+When invoked:
+1. Ask for the command intent and expected inputs.
+2. Draft or update the command markdown file.
+3. Save it in the current space and provide usage examples.
+`
+
+const CREATE_COMMANDS_CONTENT_ZH = `---
+name: 创建命令
+description: 帮助在当前空间创建或更新命令。
+---
+
+# /创建命令
+
+用于在当前空间的 \`.claude/commands\` 下创建或更新命令文件。
+
+执行时：
+1. 明确命令目标和参数；
+2. 生成或更新命令 markdown；
+3. 保存到当前空间并给出使用示例。
+`
+
+function isSpaceResource(source: string): boolean {
+  return source === 'space'
+}
+
+function pickTemplateResource<T extends { name: string; source: string }>(
+  items: T[],
+  name: string
+): T | null {
+  // Prefer app-level templates from ~/.kite, then fall back to other non-space sources.
+  const appLevel = items.find(item => item.name === name && item.source === 'app')
+  if (appLevel) return appLevel
+  const nonSpace = items.find(item => item.name === name && !isSpaceResource(item.source))
+  return nonSpace ?? null
+}
+
+function matchesAlias(value: string, aliases: readonly string[]): boolean {
+  return aliases.includes(value)
+}
+
 // Mobile breakpoint (matches Tailwind sm: 640px)
 const MOBILE_BREAKPOINT = 640
 
@@ -105,17 +226,158 @@ export function SpacePage() {
   const [isCommandEditorOpen, setIsCommandEditorOpen] = useState(false)
   const requestInsert = useComposerStore(state => state.requestInsert)
 
+  const ensureCreateSkillResource = useCallback(async (triggerName: string) => {
+    const workDir = currentSpace?.path
+    if (!workDir) return
+    const store = useSkillsStore.getState()
+    await store.loadSkills(workDir)
+    const skills = useSkillsStore.getState().skills
+    const exists = skills.some(
+      skill => skill.source === 'space' && skill.name === triggerName
+    )
+    if (exists) return
+
+    const template = pickTemplateResource(skills, triggerName)
+      ?? pickTemplateResource(skills, CREATE_SKILLS_TRIGGER_EN)
+    if (template) {
+      if (template.name === triggerName) {
+        await useSkillsStore.getState().copyToSpace(template, workDir, { overwrite: false })
+      } else {
+        const templateContent = await useSkillsStore.getState().loadSkillContent(template.name, workDir)
+        const fallbackContent = triggerName === CREATE_SKILLS_TRIGGER_ZH
+          ? CREATE_SKILLS_CONTENT_ZH
+          : CREATE_SKILLS_CONTENT_EN
+        await useSkillsStore.getState().createSkill(
+          workDir,
+          triggerName,
+          templateContent?.content ?? fallbackContent
+        )
+      }
+      await useSkillsStore.getState().loadSkills(workDir)
+      return
+    }
+
+    const fallbackContent = triggerName === CREATE_SKILLS_TRIGGER_ZH
+      ? CREATE_SKILLS_CONTENT_ZH
+      : CREATE_SKILLS_CONTENT_EN
+    await useSkillsStore.getState().createSkill(workDir, triggerName, fallbackContent)
+    await useSkillsStore.getState().loadSkills(workDir)
+  }, [currentSpace?.path])
+
+  const ensureCreateAgentResource = useCallback(async (triggerName: string) => {
+    const workDir = currentSpace?.path
+    if (!workDir) return
+    const store = useAgentsStore.getState()
+    await store.loadAgents(workDir)
+    const agents = useAgentsStore.getState().agents
+    const exists = agents.some(
+      agent => agent.source === 'space' && agent.name === triggerName
+    )
+    if (exists) return
+
+    const template = pickTemplateResource(agents, triggerName)
+      ?? pickTemplateResource(agents, CREATE_AGENTS_TRIGGER_EN)
+    if (template) {
+      if (template.name === triggerName) {
+        await useAgentsStore.getState().copyToSpace(template, workDir, { overwrite: false })
+      } else {
+        const templateContent = await useAgentsStore.getState().loadAgentContent(template.name, workDir)
+        const fallbackContent = triggerName === CREATE_AGENTS_TRIGGER_ZH
+          ? CREATE_AGENTS_CONTENT_ZH
+          : CREATE_AGENTS_CONTENT_EN
+        await useAgentsStore.getState().createAgent(
+          workDir,
+          triggerName,
+          templateContent?.content ?? fallbackContent
+        )
+      }
+      await useAgentsStore.getState().loadAgents(workDir)
+      return
+    }
+
+    const fallbackContent = triggerName === CREATE_AGENTS_TRIGGER_ZH
+      ? CREATE_AGENTS_CONTENT_ZH
+      : CREATE_AGENTS_CONTENT_EN
+    await useAgentsStore.getState().createAgent(workDir, triggerName, fallbackContent)
+    await useAgentsStore.getState().loadAgents(workDir)
+  }, [currentSpace?.path])
+
+  const ensureCreateCommandResource = useCallback(async (triggerName: string) => {
+    const workDir = currentSpace?.path
+    if (!workDir) return
+    const store = useCommandsStore.getState()
+    await store.loadCommands(workDir)
+    const commands = useCommandsStore.getState().commands
+    const exists = commands.some(
+      command => command.source === 'space' && command.name === triggerName
+    )
+    if (exists) return
+
+    const template = pickTemplateResource(commands, triggerName)
+      ?? pickTemplateResource(commands, CREATE_COMMANDS_TRIGGER_EN)
+    if (template) {
+      if (template.name === triggerName) {
+        await useCommandsStore.getState().copyToSpace(template, workDir, { overwrite: false })
+      } else {
+        const templateContent = await useCommandsStore.getState().getCommandContent(template.name, workDir)
+        const fallbackContent = triggerName === CREATE_COMMANDS_TRIGGER_ZH
+          ? CREATE_COMMANDS_CONTENT_ZH
+          : CREATE_COMMANDS_CONTENT_EN
+        await useCommandsStore.getState().createCommand(
+          workDir,
+          triggerName,
+          templateContent ?? fallbackContent
+        )
+      }
+      await useCommandsStore.getState().loadCommands(workDir)
+      return
+    }
+
+    const fallbackContent = triggerName === CREATE_COMMANDS_TRIGGER_ZH
+      ? CREATE_COMMANDS_CONTENT_ZH
+      : CREATE_COMMANDS_CONTENT_EN
+    await useCommandsStore.getState().createCommand(workDir, triggerName, fallbackContent)
+    await useCommandsStore.getState().loadCommands(workDir)
+  }, [currentSpace?.path])
+
   const handleInsertSkill = useCallback((skillName: string) => {
-    requestInsert(`/${skillName} `, 'skill')
-  }, [requestInsert])
+    const normalized = skillName.trim()
+    if (!normalized) return
+    if (matchesAlias(normalized, CREATE_SKILLS_ALIASES)) {
+      void (async () => {
+        await ensureCreateSkillResource(normalized)
+        requestInsert(`/${normalized} `, 'skill')
+      })()
+      return
+    }
+    requestInsert(`/${normalized} `, 'skill')
+  }, [ensureCreateSkillResource, requestInsert])
 
   const handleInsertAgent = useCallback((agentName: string) => {
-    requestInsert(`@${agentName} `, 'agent')
-  }, [requestInsert])
+    const normalized = agentName.trim()
+    if (!normalized) return
+    if (matchesAlias(normalized, CREATE_AGENTS_ALIASES)) {
+      void (async () => {
+        await ensureCreateAgentResource(normalized)
+        requestInsert(`@${normalized} `, 'agent')
+      })()
+      return
+    }
+    requestInsert(`@${normalized} `, 'agent')
+  }, [ensureCreateAgentResource, requestInsert])
 
   const handleInsertCommand = useCallback((commandName: string) => {
-    requestInsert(`/${commandName} `, 'command')
-  }, [requestInsert])
+    const normalized = commandName.trim()
+    if (!normalized) return
+    if (matchesAlias(normalized, CREATE_COMMANDS_ALIASES)) {
+      void (async () => {
+        await ensureCreateCommandResource(normalized)
+        requestInsert(`/${normalized} `, 'command')
+      })()
+      return
+    }
+    requestInsert(`/${normalized} `, 'command')
+  }, [ensureCreateCommandResource, requestInsert])
 
   const handleCreateSkill = useCallback(() => {
     setEditingSkill(null)
