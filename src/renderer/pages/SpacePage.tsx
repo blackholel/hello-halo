@@ -522,7 +522,7 @@ export function SpacePage() {
               onClick={() => setShowConversationList(!showConversationList)}
               className={`p-2 rounded-xl transition-all duration-200 ${
                 showConversationList
-                  ? 'bg-primary/10 text-primary'
+                  ? 'bg-secondary text-foreground'
                   : 'hover:bg-secondary/80 text-muted-foreground hover:text-foreground'
               }`}
               title={t('Sidebar')}
@@ -542,7 +542,7 @@ export function SpacePage() {
               onClick={() => setLayoutMode(layoutMode === 'split' ? 'tabs-only' : 'split')}
               className={`p-2 rounded-xl transition-all duration-200 ${
                 layoutMode === 'tabs-only'
-                  ? 'bg-primary/10 text-primary'
+                  ? 'bg-secondary text-foreground'
                   : 'hover:bg-secondary/80 text-muted-foreground hover:text-foreground'
               }`}
               title={layoutMode === 'split' ? t('Switch to tabs-only mode') : t('Switch to split mode')}
@@ -635,8 +635,8 @@ export function SpacePage() {
                   <div
                     className={`
                       absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize z-20
-                      hover:bg-primary/50 transition-colors
-                      ${isDraggingChat ? 'bg-primary/50' : ''}
+                      hover:bg-secondary/80 transition-colors
+                      ${isDraggingChat ? 'bg-secondary/80' : ''}
                     `}
                     onMouseDown={handleChatDragStart}
                     title={t('Drag to resize')}

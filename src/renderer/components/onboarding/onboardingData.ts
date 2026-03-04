@@ -128,32 +128,32 @@ export function getOnboardingHtmlArtifact(translator?: TFunction, lang: string =
       width: 160px;
       height: 160px;
       border-radius: 50%;
-      border: 4px solid #3b82f6;
+      border: 4px solid #111111;
       display: flex;
       align-items: center;
       justify-content: center;
       margin-bottom: 48px;
-      box-shadow: 0 0 60px rgba(59, 130, 246, 0.3);
+      box-shadow: 0 0 24px rgba(0, 0, 0, 0.2);
       animation: pulse 3s ease-in-out infinite;
     }
 
     @keyframes pulse {
-      0%, 100% { box-shadow: 0 0 60px rgba(59, 130, 246, 0.3); }
-      50% { box-shadow: 0 0 80px rgba(59, 130, 246, 0.5); }
+      0%, 100% { box-shadow: 0 0 24px rgba(0, 0, 0, 0.2); }
+      50% { box-shadow: 0 0 32px rgba(0, 0, 0, 0.28); }
     }
 
     .logo-inner {
       width: 100px;
       height: 100px;
       border-radius: 50%;
-      background: linear-gradient(135deg, rgba(59, 130, 246, 0.3), transparent);
+      background: linear-gradient(135deg, rgba(17, 17, 17, 0.22), transparent);
     }
 
     h1 {
       font-size: 96px;
       font-weight: 700;
       margin-bottom: 24px;
-      background: linear-gradient(135deg, #fff, #a5b4fc);
+      background: linear-gradient(135deg, #ffffff, #d4d4d8);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
@@ -173,7 +173,7 @@ export function getOnboardingHtmlArtifact(translator?: TFunction, lang: string =
     }
 
     .slide-content h2 span {
-      color: #3b82f6;
+      color: #e5e7eb;
     }
 
     .features {
@@ -191,7 +191,7 @@ export function getOnboardingHtmlArtifact(translator?: TFunction, lang: string =
     }
 
     .feature:hover {
-      border-color: rgba(59, 130, 246, 0.5);
+      border-color: rgba(255, 255, 255, 0.22);
       transform: translateY(-4px);
     }
 
@@ -199,7 +199,7 @@ export function getOnboardingHtmlArtifact(translator?: TFunction, lang: string =
       width: 64px;
       height: 64px;
       border-radius: 16px;
-      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      background: linear-gradient(135deg, #111111, #4b5563);
       display: flex;
       align-items: center;
       justify-content: center;

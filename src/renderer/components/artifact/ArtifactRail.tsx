@@ -272,13 +272,13 @@ export function ArtifactRail({
           ) : artifacts.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center px-2">
               <div className="w-12 h-12 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center mb-3 kite-breathe">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-transparent" />
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-secondary to-transparent" />
               </div>
               <p className="text-xs text-muted-foreground">
                 {isTemp ? t('Ideas will crystallize here') : t('Files will appear here')}
               </p>
               {isGenerating && (
-                <p className="text-xs text-primary/60 mt-2 animate-pulse">
+                <p className="text-xs text-foreground/60 mt-2 animate-pulse">
                   {t('AI is working...')}
                 </p>
               )}

@@ -182,7 +182,7 @@ export function ApiSetup() {
                     key={code}
                     onClick={() => handleLanguageChange(code as LocaleCode)}
                     className={`w-full px-3 py-2 text-left text-sm rounded-lg transition-colors ${
-                      currentLang === code ? 'text-primary bg-primary/10 font-medium' : 'text-foreground hover:bg-secondary/50'
+                      currentLang === code ? 'text-foreground bg-secondary font-medium' : 'text-foreground hover:bg-secondary/50'
                     }`}
                   >
                     {name}
@@ -199,12 +199,12 @@ export function ApiSetup() {
         {/* Logo & Header */}
         <div className="flex flex-col items-center mb-10 stagger-item" style={{ animationDelay: '0ms' }}>
           <div className="relative">
-            <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center border border-primary/10">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary/40 to-primary/10 flex items-center justify-center">
-                <div className="w-6 h-6 rounded-full bg-primary/60" />
+            <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-secondary to-muted flex items-center justify-center border border-border">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-foreground/20 to-foreground/5 flex items-center justify-center">
+                <div className="w-6 h-6 rounded-full bg-foreground/60" />
               </div>
             </div>
-            <div className="absolute -inset-4 rounded-[2rem] bg-primary/5 blur-xl -z-10" />
+            <div className="absolute -inset-4 rounded-[2rem] bg-foreground/5 blur-xl -z-10" />
           </div>
           <h1 className="mt-5 text-2xl font-semibold tracking-tight">Kite</h1>
           <p className="mt-1.5 text-sm text-muted-foreground">{t('Before you start, create your default AI profile')}</p>
@@ -220,14 +220,14 @@ export function ApiSetup() {
                     className={[
                       'inline-flex h-6 w-6 items-center justify-center rounded-full border text-xs font-semibold transition-colors',
                       currentStep >= step
-                        ? 'border-primary/50 bg-primary/20 text-primary'
+                        ? 'border-foreground/35 bg-secondary text-foreground'
                         : 'border-border/50 bg-secondary/40 text-muted-foreground'
                     ].join(' ')}
                   >
                     {step}
                   </span>
                   {index < 2 && (
-                    <span className={`h-px w-8 ${currentStep > step ? 'bg-primary/50' : 'bg-border/60'}`} />
+                    <span className={`h-px w-8 ${currentStep > step ? 'bg-foreground/30' : 'bg-border/60'}`} />
                   )}
                 </div>
               ))}
@@ -245,7 +245,7 @@ export function ApiSetup() {
                     className={[
                       'rounded-xl border px-2 py-2 text-xs transition-colors',
                       selected
-                        ? 'border-primary/60 bg-primary/10 text-primary'
+                        ? 'border-foreground/35 bg-secondary text-foreground'
                         : 'border-border/50 bg-secondary/30 text-foreground/80 hover:bg-secondary/45'
                     ].join(' ')}
                   >

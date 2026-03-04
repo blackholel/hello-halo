@@ -96,7 +96,7 @@ export function MessageItem({
       {/* Working indicator - shows when AI is working */}
       {isWorking && !isUser && (
         <div className="flex items-center gap-2 mb-2.5 pb-2 border-b border-border/20 working-indicator-fade">
-          <Sparkles size={12} className="text-primary/50 animate-pulse-gentle" />
+          <Sparkles size={12} className="text-foreground/60 animate-pulse-gentle" />
           <span className="text-[11px] text-muted-foreground/60 font-medium tracking-wide">{t('Kite is working')}</span>
         </div>
       )}
@@ -118,7 +118,7 @@ export function MessageItem({
                     return (
                       <span
                         key={chip.id}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-primary/10 px-2 py-1 text-sm text-primary"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-secondary px-2 py-1 text-sm text-foreground"
                       >
                         <Icon size={14} />
                         <span className="font-medium">{chip.displayName}</span>
@@ -146,7 +146,7 @@ export function MessageItem({
         )}
         {/* Streaming cursor when actively receiving tokens */}
         {isStreaming && (
-          <span className="inline-block w-0.5 h-5 ml-0.5 bg-primary streaming-cursor align-middle" />
+          <span className="inline-block w-0.5 h-5 ml-0.5 bg-foreground/70 streaming-cursor align-middle" />
         )}
         {/* Waiting dots when content paused but still working (e.g., tool call in progress) */}
         {isWaitingMore && !isStreaming && (

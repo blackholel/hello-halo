@@ -11,7 +11,7 @@
  * - Word wrap support
  */
 
-import { useRef, useEffect, useState, useCallback } from 'react'
+import { useRef, useState, useCallback, useEffect } from 'react'
 import { Save, Check, Map } from 'lucide-react'
 import Editor, { type OnMount, type OnChange, loader } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
@@ -30,18 +30,16 @@ interface CodeEditorProps {
 export function CodeEditor({ tab, onContentChange, onSave }: CodeEditorProps) {
   const { t } = useTranslation()
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
-  const [isDarkTheme, setIsDarkTheme] = useState(() => {
-    // Check if document has 'light' class (our app uses 'light' class for light mode)
-    return !document.documentElement.classList.contains('light')
-  })
+  const [isDarkTheme, setIsDarkTheme] = useState(() =>
+    document.documentElement.classList.contains('dark')
+  )
   const [showMinimap, setShowMinimap] = useState(false)
   const [saved, setSaved] = useState(false)
   const [lineCount, setLineCount] = useState(1)
 
-  // Listen for theme changes
   useEffect(() => {
     const observer = new MutationObserver(() => {
-      setIsDarkTheme(!document.documentElement.classList.contains('light'))
+      setIsDarkTheme(document.documentElement.classList.contains('dark'))
     })
 
     observer.observe(document.documentElement, {
@@ -49,21 +47,7 @@ export function CodeEditor({ tab, onContentChange, onSave }: CodeEditorProps) {
       attributeFilter: ['class']
     })
 
-    // Also listen for system theme changes
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-    const handleMediaChange = () => {
-      // Only update if we're in system mode (no explicit light/dark class)
-      const root = document.documentElement
-      if (!root.classList.contains('light') && !root.classList.contains('dark')) {
-        setIsDarkTheme(mediaQuery.matches)
-      }
-    }
-    mediaQuery.addEventListener('change', handleMediaChange)
-
-    return () => {
-      observer.disconnect()
-      mediaQuery.removeEventListener('change', handleMediaChange)
-    }
+    return () => observer.disconnect()
   }, [])
 
   // Handle editor mount

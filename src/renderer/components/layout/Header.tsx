@@ -55,7 +55,7 @@ export function Header({ left, right, className = '' }: HeaderProps) {
       className={`
         flex items-center justify-between h-11
         border-b border-border/50 drag-region
-        bg-background/80 backdrop-blur-md
+        bg-background
         relative z-20
         ${platformPadding}
         ${className}

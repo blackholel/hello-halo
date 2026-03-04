@@ -50,11 +50,10 @@ function selectFirstEnabledProfileId(profiles: ApiProfile[]): string {
   return enabledProfile?.id || profiles[0]?.id || ''
 }
 
-const THEME_LABELS: Record<string, string> = {
-  light: 'Light',
-  dark: 'Dark',
-  system: 'Follow System',
-}
+const THEME_OPTIONS: Array<{ value: ThemeMode; labelKey: string }> = [
+  { value: 'light', labelKey: 'Light' },
+  { value: 'dark', labelKey: 'Dark' }
+]
 
 // Apple-style toggle component (extracted to top-level to avoid re-creation on every render)
 function AppleToggle({ checked, onChange, disabled = false }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
@@ -119,8 +118,7 @@ export function SettingsPage() {
   const [defaultProfileId, setDefaultProfileId] = useState(initialAiConfig.defaultProfileId)
   const [selectedProfileId, setSelectedProfileId] = useState(initialAiConfig.defaultProfileId)
   const [templateKey, setTemplateKey] = useState(AI_PROFILE_TEMPLATES[0]?.key || 'minimax')
-
-  const [theme, setTheme] = useState<ThemeMode>(config?.appearance.theme || 'system')
+  const [theme, setTheme] = useState<ThemeMode>(config?.appearance?.theme === 'dark' ? 'dark' : 'light')
 
   // Connection status
   const [isValidating, setIsValidating] = useState(false)
@@ -170,6 +168,10 @@ export function SettingsPage() {
       return nextAiConfig.defaultProfileId
     })
   }, [config?.ai, config?.api])
+
+  useEffect(() => {
+    setTheme(config?.appearance?.theme === 'dark' ? 'dark' : 'light')
+  }, [config?.appearance?.theme])
 
   // Load system settings
   useEffect(() => {
@@ -284,23 +286,27 @@ export function SettingsPage() {
     navigator.clipboard.writeText(text)
   }
 
-  // Auto-save helper for appearance settings
-  const autoSave = useCallback(async (partialConfig: Partial<KiteConfig>) => {
-    const newConfig = { ...config, ...partialConfig } as KiteConfig
-    await api.setConfig(partialConfig)
-    setConfig(newConfig)
-  }, [config, setConfig])
+  const handleThemeChange = async (nextTheme: ThemeMode) => {
+    setTheme(nextTheme)
 
-  // Handle theme change with auto-save
-  const handleThemeChange = async (value: ThemeMode) => {
-    setTheme(value)
-    // Sync to localStorage immediately (for anti-flash on reload)
     try {
-      localStorage.setItem('kite-theme', value)
-    } catch (e) { /* ignore */ }
-    await autoSave({
-      appearance: { theme: value }
-    })
+      localStorage.setItem('kite-theme', nextTheme)
+    } catch {
+      // ignore
+    }
+
+    try {
+      await api.setConfig({ appearance: { theme: nextTheme } })
+      if (config) {
+        setConfig({
+          ...config,
+          appearance: { ...config.appearance, theme: nextTheme }
+        } as KiteConfig)
+      }
+    } catch (error) {
+      console.error('[Settings] Failed to save theme:', error)
+      setTheme(config?.appearance?.theme === 'dark' ? 'dark' : 'light')
+    }
   }
 
   const handleLanguageChange = (locale: LocaleCode) => {
@@ -701,8 +707,8 @@ export function SettingsPage() {
           {/* Configuration Source Section */}
           <section className="settings-section">
             <div className="flex items-center gap-3 mb-5">
-              <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center">
-                <svg className="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="currentColor">
+              <div className="w-9 h-9 rounded-xl bg-secondary flex items-center justify-center">
+                <svg className="w-5 h-5 text-foreground" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7z" />
                 </svg>
               </div>
@@ -886,18 +892,18 @@ export function SettingsPage() {
 
             <div>
               <label className="block text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">{t('Theme')}</label>
-              <div className="flex gap-2.5">
-                {(['light', 'dark', 'system'] as ThemeMode[]).map((themeMode) => (
+              <div className="flex gap-2">
+                {THEME_OPTIONS.map((themeOption) => (
                   <button
-                    key={themeMode}
-                    onClick={() => handleThemeChange(themeMode)}
+                    key={themeOption.value}
+                    onClick={() => handleThemeChange(themeOption.value)}
                     className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
-                      theme === themeMode
-                        ? 'bg-primary/15 text-primary ring-2 ring-primary/30'
-                        : 'bg-secondary/50 hover:bg-secondary/80 text-foreground/70'
+                      theme === themeOption.value
+                        ? 'bg-secondary text-foreground ring-2 ring-foreground/15'
+                        : 'bg-secondary/50 hover:bg-secondary/80 text-foreground/75'
                     }`}
                   >
-                    {t(THEME_LABELS[themeMode])}
+                    {t(themeOption.labelKey)}
                   </button>
                 ))}
               </div>
@@ -917,7 +923,7 @@ export function SettingsPage() {
                     onClick={() => handleLanguageChange(code)}
                     className={`rounded-xl px-3 py-2 text-sm text-left transition-all duration-200 ${
                       currentLanguage === code
-                        ? 'bg-primary/15 text-primary ring-2 ring-primary/30'
+                        ? 'bg-secondary text-foreground ring-2 ring-foreground/15'
                         : 'bg-secondary/50 hover:bg-secondary/80 text-foreground/75'
                     }`}
                   >
@@ -1004,7 +1010,7 @@ export function SettingsPage() {
                   href="https://modelcontextprotocol.io/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xs text-primary hover:text-primary/80 transition-colors"
+                  className="text-xs text-foreground hover:text-foreground/80 transition-colors"
                 >
                   {t('Learn about MCP')} →
                 </a>
@@ -1129,7 +1135,7 @@ export function SettingsPage() {
                         className={`px-4 py-2 rounded-lg text-sm transition-colors ${
                           remoteStatus.tunnel.status === 'running'
                             ? 'bg-red-500/20 text-red-500 hover:bg-red-500/30'
-                            : 'bg-primary/20 text-primary hover:bg-primary/30'
+                            : 'bg-secondary text-foreground hover:bg-secondary/80'
                         }`}
                       >
                         {isEnablingTunnel

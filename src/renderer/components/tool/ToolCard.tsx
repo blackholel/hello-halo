@@ -42,7 +42,7 @@ export function ToolCard({ toolCall, conversationId }: ToolCardProps) {
       icon: Loader2,
       text: t('Running'),
       className: 'tool-running',
-      color: 'text-primary',
+      color: 'text-foreground',
       spin: true,
     },
     success: {

@@ -407,7 +407,7 @@ function StreamingBubble({
           <div ref={currentRef} className="break-words leading-relaxed">
             <MarkdownRenderer content={displayContent} workDir={workDir} />
             {isStreaming && (
-              <span className="inline-block w-0.5 h-5 ml-0.5 bg-primary streaming-cursor align-middle" />
+              <span className="inline-block w-0.5 h-5 ml-0.5 bg-foreground/70 streaming-cursor align-middle" />
             )}
             {!isStreaming && (
               <span className="waiting-dots ml-1 text-muted-foreground/60" />
@@ -782,10 +782,10 @@ export function MessageList({
                 {guidedMessages.map((guidedMessage) => (
                   <div
                     key={guidedMessage.id}
-                    className="rounded-xl border border-primary/25 bg-primary/5 px-3 py-2.5"
+                    className="rounded-xl border border-border bg-secondary/70 px-3 py-2.5"
                   >
                     <div className="mb-1">
-                      <span className="inline-flex items-center rounded-md border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                      <span className="inline-flex items-center rounded-md border border-border bg-secondary px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-foreground">
                         {t('Guide')}
                       </span>
                     </div>

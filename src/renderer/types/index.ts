@@ -58,7 +58,7 @@ export const DEFAULT_MODEL = 'claude-opus-4-5-20251101';
 export type PermissionLevel = 'allow' | 'ask' | 'deny';
 
 // Theme Mode
-export type ThemeMode = 'light' | 'dark' | 'system';
+export type ThemeMode = 'light' | 'dark';
 // `claude` is kept only for backward-compatible payload parsing.
 // Runtime behavior is always forced to `kite`.
 export type ConfigSourceMode = 'kite' | 'claude';
@@ -802,7 +802,7 @@ export const DEFAULT_CONFIG: KiteConfig = {
     trustMode: false
   },
   appearance: {
-    theme: 'system'
+    theme: 'light'
   },
   system: {
     autoLaunch: false,

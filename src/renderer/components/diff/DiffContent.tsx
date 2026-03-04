@@ -9,7 +9,7 @@
  * - Support for multiple edit chunks (when same file edited multiple times)
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import ReactDiffViewer, { DiffMethod } from 'react-diff-viewer-continued'
 import { ChevronDown, Columns2, AlignJustify } from 'lucide-react'
 import type { EditChunk } from './utils'
@@ -100,15 +100,6 @@ const customStyles = {
   },
 }
 
-// Detect if dark mode is active
-function useIsDarkMode(): boolean {
-  // Check if html element has 'light' class (our theme system uses dark as default)
-  if (typeof document !== 'undefined') {
-    return !document.documentElement.classList.contains('light')
-  }
-  return true
-}
-
 // Single diff chunk component
 function DiffChunk({
   oldString,
@@ -160,8 +151,23 @@ export function DiffContent({
   editChunks
 }: DiffContentProps) {
   const [splitView, setSplitView] = useState(false)
-  const isDark = useIsDarkMode()
+  const [isDark, setIsDark] = useState(() =>
+    document.documentElement.classList.contains('dark')
+  )
   const { t } = useTranslation()
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setIsDark(document.documentElement.classList.contains('dark'))
+    })
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    })
+
+    return () => observer.disconnect()
+  }, [])
 
   // For write type, show all content as "added"
   const effectiveOldString = type === 'write' ? '' : (oldString || '')

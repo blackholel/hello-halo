@@ -611,15 +611,15 @@ function EmptyState({ isTemp, isCompact = false }: { isTemp: boolean; isCompact?
   return (
     <div className="h-full flex flex-col items-center justify-center text-center px-8 relative">
       {/* Ambient glow behind logo */}
-      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-foreground/5 rounded-full blur-3xl pointer-events-none" />
 
       {/* Logo */}
       <div className="relative mb-8 stagger-item" style={{ animationDelay: '0ms' }}>
-        <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center border border-primary/10">
-          <Sparkles className="w-9 h-9 text-primary" />
+        <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-secondary to-muted flex items-center justify-center border border-border">
+          <Sparkles className="w-9 h-9 text-foreground" />
         </div>
         {/* Subtle glow ring */}
-        <div className="absolute -inset-3 rounded-[2rem] bg-primary/5 blur-xl -z-10" />
+        <div className="absolute -inset-3 rounded-[2rem] bg-foreground/5 blur-xl -z-10" />
       </div>
 
       {/* Title */}

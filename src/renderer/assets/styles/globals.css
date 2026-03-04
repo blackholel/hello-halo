@@ -22,77 +22,67 @@
 
 /* ============================================
    Theme System
-   - Default: dark theme
-   - Add .light class to <html> for light theme
+   - Monochrome light/dark
+   - Runtime switches via .dark class on <html>
    ============================================ */
 
 :root {
-  /* Dark theme (default) - Apple-inspired refined palette */
-  --background: 225 10% 6%;
-  --foreground: 0 0% 95%;
-  --card: 225 8% 10%;
-  --card-foreground: 0 0% 95%;
-  --popover: 225 8% 10%;
-  --popover-foreground: 0 0% 95%;
-  --primary: 217 91% 60%;
+  --background: 0 0% 96%;
+  --foreground: 0 0% 10%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 10%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 10%;
+  --primary: 0 0% 8%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 225 6% 16%;
-  --secondary-foreground: 0 0% 90%;
-  --muted: 225 6% 16%;
-  --muted-foreground: 220 5% 55%;
-  --accent: 217 91% 60%;
-  --accent-foreground: 0 0% 100%;
+  --secondary: 0 0% 94%;
+  --secondary-foreground: 0 0% 24%;
+  --muted: 0 0% 92%;
+  --muted-foreground: 0 0% 44%;
+  --accent: 0 0% 92%;
+  --accent-foreground: 0 0% 10%;
   --destructive: 0 62% 50%;
   --destructive-foreground: 0 0% 98%;
-  --border: 225 6% 18%;
-  --input: 225 6% 13%;
-  --ring: 217 91% 60%;
-  --radius: 0.75rem;
+  --border: 0 0% 84%;
+  --input: 0 0% 98%;
+  --ring: 0 0% 8%;
+  --radius: 0.875rem;
 
-  /* Glass effect tokens */
-  --glass-bg: 225 8% 12% / 0.6;
-  --glass-border: 0 0% 100% / 0.08;
-  --glass-highlight: 0 0% 100% / 0.04;
+  --glass-bg: 0 0% 100%;
+  --glass-border: 0 0% 84%;
+  --glass-highlight: 0 0% 100%;
 
-  /* Kite brand colors */
-  --kite-glow: 217 91% 60%;
+  --kite-glow: 0 0% 45%;
   --kite-success: 152 69% 45%;
   --kite-warning: 38 92% 50%;
   --kite-error: 0 62% 50%;
 }
 
-/* Light theme - Apple-inspired */
-.light {
-  --background: 220 14% 96%;
-  --foreground: 225 15% 12%;
-  --card: 0 0% 100%;
-  --card-foreground: 225 15% 12%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 225 15% 12%;
-  --primary: 217 91% 55%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 220 13% 91%;
-  --secondary-foreground: 225 10% 25%;
-  --muted: 220 13% 91%;
-  --muted-foreground: 220 8% 46%;
-  --accent: 217 91% 55%;
-  --accent-foreground: 0 0% 100%;
-  --destructive: 0 72% 51%;
-  --destructive-foreground: 0 0% 100%;
-  --border: 220 13% 88%;
-  --input: 220 13% 93%;
-  --ring: 217 91% 55%;
+.dark {
+  --background: 0 0% 9%;
+  --foreground: 0 0% 95%;
+  --card: 0 0% 12%;
+  --card-foreground: 0 0% 95%;
+  --popover: 0 0% 12%;
+  --popover-foreground: 0 0% 95%;
+  --primary: 0 0% 96%;
+  --primary-foreground: 0 0% 10%;
+  --secondary: 0 0% 18%;
+  --secondary-foreground: 0 0% 86%;
+  --muted: 0 0% 16%;
+  --muted-foreground: 0 0% 66%;
+  --accent: 0 0% 18%;
+  --accent-foreground: 0 0% 95%;
+  --destructive: 0 70% 52%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 0 0% 28%;
+  --input: 0 0% 14%;
+  --ring: 0 0% 88%;
 
-  /* Glass effect tokens - light */
-  --glass-bg: 0 0% 100% / 0.7;
-  --glass-border: 0 0% 100% / 0.6;
-  --glass-highlight: 0 0% 100% / 0.3;
-
-  /* Kite brand colors (adjusted for light) */
-  --kite-glow: 217 91% 55%;
-  --kite-success: 152 69% 38%;
-  --kite-warning: 38 92% 45%;
-  --kite-error: 0 72% 51%;
+  --glass-bg: 0 0% 12%;
+  --glass-border: 0 0% 28%;
+  --glass-highlight: 0 0% 20%;
+  --kite-glow: 0 0% 72%;
 }
 
 * {
@@ -100,11 +90,11 @@
 }
 
 html {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
-html.light {
-  color-scheme: light;
+html.dark {
+  color-scheme: dark;
 }
 
 body {
@@ -167,10 +157,10 @@ body {
 /* Kite glow animation */
 @keyframes kite-pulse {
   0%, 100% {
-    box-shadow: 0 0 20px hsl(var(--kite-glow) / 0.3);
+    box-shadow: 0 0 0 1px hsl(var(--kite-glow) / 0.08);
   }
   50% {
-    box-shadow: 0 0 40px hsl(var(--kite-glow) / 0.5);
+    box-shadow: 0 0 0 1px hsl(var(--kite-glow) / 0.14);
   }
 }
 
@@ -358,12 +348,12 @@ body {
 /* Thinking pulse animation */
 @keyframes thinking-pulse {
   0%, 100% {
-    border-color: hsl(var(--primary) / 0.3);
-    box-shadow: 0 0 0 0 hsl(var(--primary) / 0.1);
+    border-color: hsl(var(--border));
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0.05);
   }
   50% {
-    border-color: hsl(var(--primary) / 0.6);
-    box-shadow: 0 0 12px 2px hsl(var(--primary) / 0.15);
+    border-color: hsl(var(--foreground) / 0.2);
+    box-shadow: 0 0 0 2px hsl(var(--primary) / 0.08);
   }
 }
 
@@ -428,10 +418,10 @@ body {
 /* Breathing glow */
 @keyframes breathing-glow {
   0%, 100% {
-    opacity: 0.5;
+    opacity: 0.2;
   }
   50% {
-    opacity: 1;
+    opacity: 0.35;
   }
 }
 
@@ -735,75 +725,51 @@ body {
 
 /* Button styles */
 .btn-primary {
-  background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary) / 0.8));
-  transition: all 0.2s ease;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border: 1px solid hsl(var(--primary));
+  border-radius: 9999px;
+  transition: all 0.15s ease;
 }
 
 .btn-primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px hsl(var(--primary) / 0.3);
+  filter: brightness(1.03);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 
 .btn-primary:active {
-  transform: translateY(0);
+  filter: brightness(0.97);
 }
 
 /* ============================================
-   Glass Effect System (Apple Liquid Glass inspired)
+   Surface System
    ============================================ */
 
 .glass {
-  background: hsl(var(--glass-bg));
-  backdrop-filter: blur(20px) saturate(1.2);
-  -webkit-backdrop-filter: blur(20px) saturate(1.2);
-  border: 1px solid hsl(var(--glass-border));
-  box-shadow: 
-    0 8px 32px rgba(0, 0, 0, 0.12),
-    inset 0 1px 0 hsl(var(--glass-highlight));
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
 .glass-subtle {
-  background: hsl(var(--glass-bg));
-  backdrop-filter: blur(12px) saturate(1.1);
-  -webkit-backdrop-filter: blur(12px) saturate(1.1);
-  border: 1px solid hsl(var(--glass-border));
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
 }
 
 /* Glass card base - shared by .glass-card and .space-card */
 .glass-card,
 .space-card {
   background: hsl(var(--card));
-  border: 1px solid hsl(var(--glass-border));
-  border-radius: 1rem;
-  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  border: 1px solid hsl(var(--border));
+  border-radius: 14px;
+  transition: all 0.2s ease;
   cursor: pointer;
-  position: relative;
-  overflow: hidden;
-}
-
-.glass-card::before,
-.space-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, hsl(var(--glass-highlight)), transparent);
-  opacity: 0.6;
 }
 
 .glass-card:hover,
 .space-card:hover {
-  border-color: hsl(0 0% 100% / 0.12);
-  transform: translateY(-3px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
-}
-
-.glass-card:hover {
-  box-shadow: 
-    0 12px 40px rgba(0, 0, 0, 0.15),
-    inset 0 1px 0 hsl(var(--glass-highlight));
+  border-color: hsl(var(--foreground) / 0.16);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 }
 
 .glass-card:active,
@@ -814,39 +780,13 @@ body {
 
 /* Kite space special style - premium glass */
 .kite-space-card {
-  background: linear-gradient(135deg, hsl(var(--primary) / 0.12), hsl(var(--primary) / 0.04));
-  border: 1px solid hsl(var(--primary) / 0.2);
-  position: relative;
-  overflow: hidden;
-}
-
-.kite-space-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, hsl(var(--primary) / 0.3), transparent);
-}
-
-.kite-space-card::after {
-  content: '';
-  position: absolute;
-  top: -50%;
-  right: -50%;
-  width: 100%;
-  height: 100%;
-  background: radial-gradient(circle, hsl(var(--primary) / 0.06) 0%, transparent 70%);
-  pointer-events: none;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
 }
 
 .kite-space-card:hover {
-  border-color: hsl(var(--primary) / 0.35);
-  box-shadow: 
-    0 12px 40px hsl(var(--primary) / 0.1),
-    0 0 0 1px hsl(var(--primary) / 0.1);
-  transform: translateY(-3px);
+  border-color: hsl(var(--foreground) / 0.16);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 }
 
 .kite-space-card:active {
@@ -856,46 +796,23 @@ body {
 
 /* Ambient background for home page */
 .ambient-bg {
-  position: fixed;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-  z-index: 0;
+  display: none;
 }
 
 .ambient-orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.3;
-  animation: ambient-drift 20s ease-in-out infinite;
+  display: none;
 }
 
 .ambient-orb-1 {
-  width: 400px;
-  height: 400px;
-  background: hsl(var(--primary) / 0.15);
-  top: -10%;
-  right: -5%;
-  animation-delay: 0s;
+  display: none;
 }
 
 .ambient-orb-2 {
-  width: 300px;
-  height: 300px;
-  background: hsl(270 60% 50% / 0.1);
-  bottom: -5%;
-  left: -5%;
-  animation-delay: -7s;
+  display: none;
 }
 
 .ambient-orb-3 {
-  width: 200px;
-  height: 200px;
-  background: hsl(var(--kite-success) / 0.08);
-  top: 40%;
-  left: 30%;
-  animation-delay: -14s;
+  display: none;
 }
 
 @keyframes ambient-drift {
@@ -905,81 +822,46 @@ body {
   75% { transform: translate(15px, -10px) scale(1.02); }
 }
 
-.light .ambient-orb {
-  opacity: 0.15;
-}
-
-.light .ambient-orb-1 {
-  background: hsl(var(--primary) / 0.2);
-}
-
-.light .ambient-orb-2 {
-  background: hsl(270 60% 60% / 0.12);
-}
-
-.light .ambient-orb-3 {
-  background: hsl(var(--kite-success) / 0.1);
-}
-
-/* Glass dialog overlay */
 .glass-overlay {
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
 }
 
-.light .glass-overlay {
-  background: rgba(0, 0, 0, 0.25);
-}
-
-/* Glass dialog */
 .glass-dialog {
   background: hsl(var(--card));
-  border: 1px solid hsl(var(--glass-border));
-  box-shadow: 
-    0 24px 80px rgba(0, 0, 0, 0.3),
-    0 0 0 1px hsl(var(--glass-border)),
-    inset 0 1px 0 hsl(var(--glass-highlight));
-  border-radius: 1.25rem;
-}
-
-.light .glass-dialog {
-  box-shadow: 
-    0 24px 80px rgba(0, 0, 0, 0.12),
-    0 0 0 1px hsl(var(--glass-border));
+  border: 1px solid hsl(var(--border));
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+  border-radius: 14px;
 }
 
 /* Refined input style */
 .input-apple {
   background: hsl(var(--input));
   border: 1px solid hsl(var(--border));
-  border-radius: 0.75rem;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  border-radius: 8px;
+  transition: all 0.15s ease;
 }
 
 .input-apple:focus {
   outline: none;
-  border-color: hsl(var(--primary) / 0.5);
-  box-shadow: 
-    0 0 0 3px hsl(var(--primary) / 0.1),
-    0 2px 8px rgba(0, 0, 0, 0.08);
+  border-color: hsl(var(--foreground) / 0.28);
+  box-shadow: 0 0 0 2px hsl(var(--foreground) / 0.08);
 }
 
 /* Apple-style button */
 .btn-apple {
   background: hsl(var(--primary));
   color: hsl(var(--primary-foreground));
-  border-radius: 0.75rem;
+  border-radius: 9999px;
+  border: 1px solid hsl(var(--primary));
   font-weight: 500;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-  position: relative;
-  overflow: hidden;
+  transition: all 0.15s ease;
 }
 
 .btn-apple:hover {
-  filter: brightness(1.1);
-  box-shadow: 0 4px 16px hsl(var(--primary) / 0.3);
-  transform: translateY(-1px);
+  filter: brightness(1.03);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 
 .btn-apple:active {
@@ -998,8 +880,9 @@ body {
 
 .btn-ghost {
   color: hsl(var(--muted-foreground));
-  border-radius: 0.75rem;
-  transition: all 0.2s ease;
+  border-radius: 8px;
+  border: 1px solid hsl(var(--border));
+  transition: all 0.15s ease;
 }
 
 .btn-ghost:hover {
@@ -1139,8 +1022,8 @@ body {
 /* Settings section card */
 .settings-section {
   background: hsl(var(--card));
-  border: 1px solid hsl(var(--glass-border));
-  border-radius: 1rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 14px;
   padding: 1.5rem;
   position: relative;
   overflow: hidden;
@@ -1153,7 +1036,8 @@ body {
   left: 0;
   right: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent 10%, hsl(0 0% 100% / 0.05) 50%, transparent 90%);
+  background: hsl(var(--border));
+  opacity: 0.45;
 }
 
 /* Apple-style toggle switch */
@@ -1198,7 +1082,7 @@ body {
 .select-apple {
   background: hsl(var(--input));
   border: 1px solid hsl(var(--border));
-  border-radius: 0.75rem;
+  border-radius: 8px;
   padding: 0.5rem 1rem;
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   appearance: none;
@@ -1217,7 +1101,7 @@ body {
 /* Settings info banner */
 .settings-info {
   background: hsl(var(--secondary) / 0.5);
-  border-radius: 0.75rem;
+  border-radius: 8px;
   padding: 0.75rem 1rem;
 }
 
@@ -1225,7 +1109,7 @@ body {
 .settings-warning {
   background: hsl(38 92% 50% / 0.08);
   border: 1px solid hsl(38 92% 50% / 0.15);
-  border-radius: 0.75rem;
+  border-radius: 8px;
   padding: 1rem;
 }
 
@@ -1236,16 +1120,6 @@ body {
 }
 
 .message-assistant {
-  background: hsl(var(--card));
-  border: 1px solid hsl(var(--glass-border));
-}
-
-.light .message-user {
-  background: linear-gradient(135deg, hsl(var(--primary) / 0.1), hsl(var(--primary) / 0.05));
-  border: 1px solid hsl(var(--primary) / 0.15);
-}
-
-.light .message-assistant {
   background: hsl(var(--card));
   border: 1px solid hsl(var(--border));
 }

@@ -927,10 +927,10 @@ export function InputArea({
           className={`
             relative flex flex-col rounded-2xl transition-all duration-200
             ${isFocused
-              ? 'ring-1 ring-primary/30 bg-card shadow-sm'
+              ? 'ring-1 ring-foreground/15 bg-card shadow-sm'
               : 'bg-secondary/50 hover:bg-secondary/70'
             }
-            ${isDragOver ? 'ring-2 ring-primary/50 bg-primary/5' : ''}
+            ${isDragOver ? 'ring-2 ring-foreground/25 bg-secondary/70' : ''}
           `}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -963,9 +963,9 @@ export function InputArea({
           {/* Drag overlay */}
           {isDragOver && (
             <div className="absolute inset-0 flex items-center justify-center
-              bg-primary/5 rounded-2xl border-2 border-dashed border-primary/30
+              bg-secondary/70 rounded-2xl border-2 border-dashed border-border
               pointer-events-none z-10">
-              <div className="flex flex-col items-center gap-2 text-primary/70">
+              <div className="flex flex-col items-center gap-2 text-foreground/70">
                 <ImagePlus size={24} />
                 <span className="text-sm font-medium">{t('Drop to add images')}</span>
               </div>
@@ -1036,8 +1036,8 @@ export function InputArea({
                           disabled={isGuiding}
                           className={`h-6 inline-flex items-center gap-1 rounded-md px-2 text-[11px] transition-colors ${
                             isGuiding
-                              ? 'bg-primary/15 text-primary/70 cursor-not-allowed'
-                              : 'bg-primary/10 text-primary hover:bg-primary/20'
+                              ? 'bg-secondary text-foreground/70 cursor-not-allowed'
+                              : 'bg-secondary text-foreground hover:bg-secondary/80'
                           }`}
                           title={t('Send immediately without interrupting work')}
                         >
@@ -1086,7 +1086,7 @@ export function InputArea({
           )}
           {queueHint && (
             <div className="px-3 pb-1">
-              <div className="rounded-lg border border-primary/20 bg-primary/10 px-2.5 py-1.5 text-xs text-primary">
+              <div className="rounded-lg border border-border bg-secondary px-2.5 py-1.5 text-xs text-foreground">
                 {queueHint}
               </div>
             </div>
@@ -1099,14 +1099,14 @@ export function InputArea({
                   return (
                     <span
                       key={chip.id}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-primary/10 px-2 py-1 text-sm text-primary"
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-secondary px-2 py-1 text-sm text-foreground"
                     >
                       <Icon size={14} />
                       <span className="font-medium">{chip.displayName}</span>
                       <button
                         type="button"
                         onClick={() => removeResourceChip(chip.id)}
-                        className="rounded p-0.5 hover:bg-primary/15"
+                        className="rounded p-0.5 hover:bg-secondary"
                         aria-label={t('Delete')}
                       >
                         <X size={12} />
@@ -1288,7 +1288,7 @@ function InputToolbar({
               className={`h-8 flex items-center gap-1.5 px-2.5 rounded-lg
                 transition-colors duration-200 relative
                 ${aiBrowserEnabled
-                  ? 'bg-primary/10 text-primary'
+                  ? 'bg-secondary text-foreground'
                   : 'text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50'
                 }
               `}
@@ -1297,7 +1297,7 @@ function InputToolbar({
               <Globe size={15} />
               <span className="text-xs">{t('Browser')}</span>
               {aiBrowserEnabled && (
-                <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-primary rounded-full" />
+                <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-foreground rounded-full" />
               )}
             </button>
 
@@ -1315,7 +1315,7 @@ function InputToolbar({
               className={`h-8 flex items-center gap-1.5 px-2.5 rounded-lg
                 transition-colors duration-200
                 ${thinkingEnabled
-                  ? 'bg-primary/10 text-primary'
+                  ? 'bg-secondary text-foreground'
                   : 'text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50'
                 }
               `}
