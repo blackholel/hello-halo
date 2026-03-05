@@ -679,5 +679,18 @@
   "API Key": "API 密钥",
   "API URL": "API 地址",
   "Anthropic Official": "Anthropic 官方",
-  "Anthropic Compatible": "Anthropic 兼容"
+  "Anthropic Compatible": "Anthropic 兼容",
+  "First-time guide": "首次使用指引",
+  "Start in 3 simple steps": "3 步开始使用",
+  "Spaces keep your project files and AI conversations together so tasks stay organized.": "空间会把项目文件和 AI 对话放在一起，避免任务混乱。",
+  "Click New to create a dedicated space for one project": "点击「新建」，为一个项目创建专属空间",
+  "Choose your local project folder so generated files are saved there": "选择本地项目文件夹，生成的文件会自动存到这里",
+  "Enter the space and describe your goal in plain language": "进入空间后，直接用自然语言描述你的目标",
+  "Create my first space": "创建我的第一个空间",
+  "Try Kite space first": "先体验 Kite 空间",
+  "Hide guide": "隐藏引导",
+  "Hide onboarding guide?": "要隐藏新手引导吗？",
+  "You can hide it this time or stop showing it permanently.": "你可以只隐藏这一次，或永久不再显示。",
+  "Keep showing": "继续显示",
+  "Don't show again": "不再显示"
 }

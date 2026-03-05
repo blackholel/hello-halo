@@ -623,5 +623,18 @@
   "Context message": "Context message",
   "Remove": "Remove",
   "No active run found for guided update.": "No active run found for guided update.",
-  "Guide update no longer matches the current run.": "Guide update no longer matches the current run."
+  "Guide update no longer matches the current run.": "Guide update no longer matches the current run.",
+  "First-time guide": "First-time guide",
+  "Start in 3 simple steps": "Start in 3 simple steps",
+  "Spaces keep your project files and AI conversations together so tasks stay organized.": "Spaces keep your project files and AI conversations together so tasks stay organized.",
+  "Click New to create a dedicated space for one project": "Click New to create a dedicated space for one project",
+  "Choose your local project folder so generated files are saved there": "Choose your local project folder so generated files are saved there",
+  "Enter the space and describe your goal in plain language": "Enter the space and describe your goal in plain language",
+  "Create my first space": "Create my first space",
+  "Try Kite space first": "Try Kite space first",
+  "Hide guide": "Hide guide",
+  "Hide onboarding guide?": "Hide onboarding guide?",
+  "You can hide it this time or stop showing it permanently.": "You can hide it this time or stop showing it permanently.",
+  "Keep showing": "Keep showing",
+  "Don't show again": "Don't show again"
 }

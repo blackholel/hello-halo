@@ -23,13 +23,11 @@ import { resolveSpacePathKind, shortenDisplayPath } from '../utils/space-path'
 import {
   SpaceIcon,
   Sparkles,
-  Settings,
   Plus,
   Trash2,
   FolderOpen,
   Pencil
 } from '../components/icons/ToolIcons'
-import { Header } from '../components/layout/Header'
 import { SpaceGuide } from '../components/space/SpaceGuide'
 import { HomeActivityBar } from '../components/home/HomeActivityBar'
 import { ExtensionsView } from '../components/home/ExtensionsView'
@@ -40,6 +38,7 @@ import { normalizeEnabledValues } from '../utils/resource-key'
 
 // Check if running in web mode
 const isWebMode = api.isRemoteMode()
+const HOME_ONBOARDING_VISIBILITY_KEY = 'kite-home-onboarding-visibility'
 
 function getLocalizedResourceName(item: { name: string; displayName?: string; namespace?: string }): string {
   const base = item.displayName || item.name
@@ -110,23 +109,27 @@ export function HomePage(): JSX.Element {
   const [customPath, setCustomPath] = useState<string | null>(null)
   const [defaultPath, setDefaultPath] = useState<string>('')
   const [activeTab, setActiveTab] = useState<'spaces' | 'extensions'>('spaces')
+  const [showHomeOnboarding, setShowHomeOnboarding] = useState(true)
+  const [showHomeOnboardingDialog, setShowHomeOnboardingDialog] = useState(false)
 
   // Close dialogs on Escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') {
-        if (editingSpace) {
+        if (showHomeOnboardingDialog) {
+          setShowHomeOnboardingDialog(false)
+        } else if (editingSpace) {
           handleCancelEdit()
         } else if (showCreateDialog) {
           resetDialog()
         }
       }
     }
-    if (showCreateDialog || editingSpace) {
+    if (showCreateDialog || editingSpace || showHomeOnboardingDialog) {
       document.addEventListener('keydown', handleKeyDown)
       return () => document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [showCreateDialog, editingSpace])
+  }, [showCreateDialog, editingSpace, showHomeOnboardingDialog])
 
   // Load spaces on mount
   useEffect(() => {
@@ -145,6 +148,14 @@ export function HomePage(): JSX.Element {
   useEffect(() => {
     void loadDefaultPath()
   }, [loadDefaultPath])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const visibility = localStorage.getItem(HOME_ONBOARDING_VISIBILITY_KEY)
+    if (visibility === 'hide-forever') {
+      setShowHomeOnboarding(false)
+    }
+  }, [])
 
   // Load toolkit when editing space dialog opens
   useEffect(() => {
@@ -283,6 +294,19 @@ export function HomePage(): JSX.Element {
       setToolkitActionError(t('Failed to write toolkit resources'))
     } finally {
       setIsToolkitUpdating(false)
+    }
+  }
+
+  const handleHideHomeOnboardingForNow = (): void => {
+    setShowHomeOnboarding(false)
+    setShowHomeOnboardingDialog(false)
+  }
+
+  const handleHideHomeOnboardingForever = (): void => {
+    setShowHomeOnboarding(false)
+    setShowHomeOnboardingDialog(false)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(HOME_ONBOARDING_VISIBILITY_KEY, 'hide-forever')
     }
   }
 
@@ -438,7 +462,7 @@ export function HomePage(): JSX.Element {
   }
 
   return (
-    <div className="h-full w-full flex flex-col relative">
+    <div className="h-full w-full flex flex-col relative home-surface">
       {/* Ambient background orbs */}
       <div className="ambient-bg">
         <div className="ambient-orb ambient-orb-1" />
@@ -446,32 +470,20 @@ export function HomePage(): JSX.Element {
         <div className="ambient-orb ambient-orb-3" />
       </div>
 
-      {/* Header */}
-      <Header
-        left={
-          <>
-            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-secondary to-muted flex items-center justify-center">
-              <div className="w-2.5 h-2.5 rounded-full bg-foreground/60" />
-            </div>
-            <span className="text-sm font-semibold tracking-tight">Kite</span>
-          </>
-        }
-        right={
-          <button
-            onClick={() => setView('settings')}
-            className="p-2 rounded-xl hover:bg-secondary/80 transition-all duration-200 group"
-          >
-            <Settings className="w-[18px] h-[18px] text-muted-foreground group-hover:text-foreground transition-colors" />
-          </button>
-        }
-      />
-
       {/* Content */}
       <div className="flex-1 flex overflow-hidden relative z-10">
-        <HomeActivityBar activeTab={activeTab} onTabChange={setActiveTab} className="hidden sm:block" />
+        <HomeActivityBar
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          onCreateSpace={() => setShowCreateDialog(true)}
+          onOpenSettings={() => setView('settings')}
+          spacesCount={spaces.length}
+          extensionsCount={skills.length + agents.length + commands.length}
+          className="hidden sm:block"
+        />
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="sm:hidden px-4 pt-4">
+          <div className="sm:hidden px-4 pt-4 space-y-2">
             <div className="glass-card p-2 flex items-center gap-1.5">
               <button
                 type="button"
@@ -498,51 +510,141 @@ export function HomePage(): JSX.Element {
                 {t('Extensions')}
               </button>
             </div>
+            <button
+              type="button"
+              onClick={() => setView('settings')}
+              className="w-full h-10 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-secondary/70 transition-all duration-200 border border-border/70"
+            >
+              {t('Settings')}
+            </button>
           </div>
 
           <main className="flex-1 overflow-auto">
             {activeTab === 'spaces' ? (
-              <div className="max-w-2xl mx-auto px-6 py-8">
-
-                {/* Hero - Kite Space Card */}
-                {kiteSpace && (
-                  <div
-                    data-onboarding="kite-space"
-                    onClick={() => handleSpaceClick(kiteSpace)}
-                    className="kite-space-card rounded-2xl p-7 cursor-pointer mb-10 stagger-item"
-                    style={{ animationDelay: '0ms' }}
-                  >
-                    <div className="flex items-center justify-between relative z-10">
-                      <div className="flex items-center gap-4">
-                        <div className="w-11 h-11 rounded-2xl bg-secondary flex items-center justify-center">
-                          <Sparkles className="w-5 h-5 text-foreground" />
+              <div className="max-w-6xl mx-auto px-6 py-8 lg:py-10">
+                <section className="space-y-4 mb-9">
+                  {kiteSpace ? (
+                    <div
+                      data-onboarding="kite-space"
+                      onClick={() => handleSpaceClick(kiteSpace)}
+                      className="kite-space-card rounded-2xl p-7 cursor-pointer stagger-item relative overflow-hidden"
+                      style={{ animationDelay: '0ms' }}
+                    >
+                      <div className="home-hero-glow" />
+                      <div className="flex items-start justify-between gap-4 relative z-10">
+                        <div className="flex items-center gap-4 min-w-0">
+                          <div className="w-11 h-11 rounded-2xl bg-secondary/95 border border-border/80 flex items-center justify-center">
+                            <Sparkles className="w-5 h-5 text-foreground" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground mb-2">
+                              {t('Your workspace')}
+                            </p>
+                            <h2 className="text-xl font-semibold tracking-tight">{t('Enter Kite')}</h2>
+                            <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+                              {t('Aimless time, ideas will crystallize here')}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <h2 className="text-lg font-semibold tracking-tight">{t('Enter Kite')}</h2>
-                          <p className="text-sm text-muted-foreground mt-0.5 leading-relaxed">
-                            {t('Aimless time, ideas will crystallize here')}
+                        <ArrowRight className="w-5 h-5 mt-1 text-foreground/60 flex-shrink-0" />
+                      </div>
+                      {(kiteSpace.stats.artifactCount > 0 || kiteSpace.stats.conversationCount > 0) && (
+                        <div className="mt-6 pt-4 border-t border-border/70 relative z-10">
+                          <p className="text-xs text-muted-foreground">
+                            {t('{{count}} artifacts · {{conversations}} conversations', {
+                              count: kiteSpace.stats.artifactCount,
+                              conversations: kiteSpace.stats.conversationCount
+                            })}
                           </p>
                         </div>
-                      </div>
-                      <ArrowRight className="w-5 h-5 text-foreground/60" />
+                      )}
                     </div>
-                    {(kiteSpace.stats.artifactCount > 0 || kiteSpace.stats.conversationCount > 0) && (
-                      <div className="mt-4 pt-4 border-t border-border/70 relative z-10">
-                        <p className="text-xs text-muted-foreground">
-                          {t('{{count}} artifacts · {{conversations}} conversations', {
-                            count: kiteSpace.stats.artifactCount,
-                            conversations: kiteSpace.stats.conversationCount
-                          })}
-                        </p>
+                  ) : (
+                    <div
+                      className="kite-space-card rounded-2xl p-7 stagger-item relative overflow-hidden"
+                      style={{ animationDelay: '0ms' }}
+                    >
+                      <div className="home-hero-glow" />
+                      <div className="relative z-10">
+                        <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground mb-2">{t('Get started')}</p>
+                        <h2 className="text-xl font-semibold tracking-tight mb-2">{t('Create your first dedicated space')}</h2>
+                        <p className="text-sm text-muted-foreground mb-5">{t('Organize by project so context stays clear')}</p>
+                        <button
+                          type="button"
+                          onClick={() => setShowCreateDialog(true)}
+                          className="inline-flex items-center gap-2 px-4 h-10 rounded-xl bg-foreground text-background text-sm font-medium hover:opacity-90 transition-opacity"
+                        >
+                          <Plus className="w-4 h-4" />
+                          {t('New')}
+                        </button>
                       </div>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  )}
+
+                  {showHomeOnboarding && (
+                    <div className="home-onboard-card stagger-item" style={{ animationDelay: '60ms' }}>
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground mb-2">
+                            {t('First-time guide')}
+                          </p>
+                          <h3 className="text-lg font-semibold tracking-tight">
+                            {t('Start in 3 simple steps')}
+                          </h3>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {t('Spaces keep your project files and AI conversations together so tasks stay organized.')}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowHomeOnboardingDialog(true)}
+                          className="text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/70 rounded-lg px-2 py-1 transition-colors"
+                        >
+                          {t('Hide guide')}
+                        </button>
+                      </div>
+                      <ol className="mt-4 space-y-2.5">
+                        <li className="home-onboard-step">
+                          <span className="home-onboard-step-index">1</span>
+                          <span>{t('Click New to create a dedicated space for one project')}</span>
+                        </li>
+                        <li className="home-onboard-step">
+                          <span className="home-onboard-step-index">2</span>
+                          <span>{t('Choose your local project folder so generated files are saved there')}</span>
+                        </li>
+                        <li className="home-onboard-step">
+                          <span className="home-onboard-step-index">3</span>
+                          <span>{t('Enter the space and describe your goal in plain language')}</span>
+                        </li>
+                      </ol>
+                      <div className="mt-5 flex flex-wrap items-center gap-2.5">
+                        <button
+                          type="button"
+                          onClick={() => setShowCreateDialog(true)}
+                          className="inline-flex items-center gap-2 px-4 h-10 rounded-xl bg-foreground text-background text-sm font-medium hover:opacity-90 transition-opacity"
+                        >
+                          <Plus className="w-4 h-4" />
+                          {t('Create my first space')}
+                        </button>
+                        {kiteSpace && (
+                          <button
+                            type="button"
+                            onClick={() => handleSpaceClick(kiteSpace)}
+                            className="inline-flex items-center gap-1.5 px-4 h-10 rounded-xl border border-border bg-card hover:bg-secondary/60 text-sm transition-colors"
+                          >
+                            {t('Try Kite space first')}
+                            <ArrowRight className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </section>
 
                 {/* Spaces Section Header */}
                 <div
                   className="mb-5 flex items-center justify-between stagger-item"
-                  style={{ animationDelay: '60ms' }}
+                  style={{ animationDelay: '120ms' }}
                 >
                   <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     {t('Dedicated Spaces')}
@@ -557,7 +659,7 @@ export function HomePage(): JSX.Element {
                 </div>
 
                 {/* Space Guide */}
-                <div className="stagger-item" style={{ animationDelay: '90ms' }}>
+                <div className="stagger-item mb-5" style={{ animationDelay: '150ms' }}>
                   <SpaceGuide />
                 </div>
 
@@ -565,7 +667,7 @@ export function HomePage(): JSX.Element {
                 {spaces.length === 0 ? (
                   <div
                     className="text-center py-16 stagger-item"
-                    style={{ animationDelay: '120ms' }}
+                    style={{ animationDelay: '190ms' }}
                   >
                     <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-secondary/60 flex items-center justify-center">
                       <FolderOpen className="w-6 h-6 text-muted-foreground/50" />
@@ -576,13 +678,13 @@ export function HomePage(): JSX.Element {
                     </p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                     {spaces.map((space, index) => (
                       <div
                         key={space.id}
                         onClick={() => handleSpaceClick(space)}
-                        className="space-card p-5 group stagger-item"
-                        style={{ animationDelay: `${120 + index * 50}ms` }}
+                        className="space-card p-5 group stagger-item home-space-card"
+                        style={{ animationDelay: `${190 + index * 50}ms` }}
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-3 min-w-0">
@@ -629,6 +731,50 @@ export function HomePage(): JSX.Element {
           </main>
         </div>
       </div>
+
+      {/* Create Space Dialog */}
+      {showHomeOnboardingDialog && (
+        <div
+          className="fixed inset-0 glass-overlay flex items-center justify-center z-50 animate-fade-in"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setShowHomeOnboardingDialog(false)}
+        >
+          <div
+            className="glass-dialog p-6 w-full max-w-md mx-4 animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-semibold tracking-tight">{t('Hide onboarding guide?')}</h3>
+            <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+              {t('You can hide it this time or stop showing it permanently.')}
+            </p>
+
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowHomeOnboardingDialog(false)}
+                className="px-3.5 py-2 text-sm rounded-lg border border-border hover:bg-secondary/60"
+              >
+                {t('Keep showing')}
+              </button>
+              <button
+                type="button"
+                onClick={handleHideHomeOnboardingForNow}
+                className="px-3.5 py-2 text-sm rounded-lg bg-secondary hover:bg-secondary/80"
+              >
+                {t('Hide for now')}
+              </button>
+              <button
+                type="button"
+                onClick={handleHideHomeOnboardingForever}
+                className="px-3.5 py-2 text-sm rounded-lg bg-foreground text-background hover:opacity-90"
+              >
+                {t("Don't show again")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Create Space Dialog */}
       {showCreateDialog && (
