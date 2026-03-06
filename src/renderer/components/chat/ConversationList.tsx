@@ -263,13 +263,13 @@ export function ConversationList({
       style={{ width, transition: isDragging ? 'none' : 'width 0.2s ease' }}
     >
       {/* Header */}
-      <div className="px-4 py-3.5 flex items-center justify-between border-b border-border/40">
-        <span className="text-[11px] font-semibold text-foreground/60 uppercase tracking-[0.18em]">
+      <div className="px-4 pt-4 pb-3 flex items-center justify-between border-b border-border/20">
+        <span className="text-[11px] font-semibold text-foreground/50 uppercase tracking-[0.2em]">
           {t('Conversations')}
         </span>
         <button
           onClick={onNew}
-          className="h-7 w-7 inline-flex items-center justify-center rounded-full border border-border/70 bg-background/70 hover:bg-background transition-colors group"
+          className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-border/40 bg-background/50 hover:bg-background hover:border-border/60 transition-all duration-200 group"
           title={t('New conversation')}
         >
           <Plus className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
@@ -277,16 +277,16 @@ export function ConversationList({
       </div>
 
       {/* Conversation list */}
-      <div className="flex-1 overflow-auto px-2.5 py-2">
+      <div className="flex-1 overflow-auto px-3 py-4">
         {conversations.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
-            <div className="w-10 h-10 rounded-xl bg-background/90 border border-border/70 flex items-center justify-center mb-3">
-              <MessageCircle className="w-5 h-5 text-muted-foreground/40" />
+          <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-background/60 border border-border/40 flex items-center justify-center mb-4">
+              <MessageCircle className="w-6 h-6 text-muted-foreground/30" />
             </div>
-            <p className="text-xs text-muted-foreground/60">{t('No conversations yet')}</p>
+            <p className="text-xs text-muted-foreground/50">{t('No conversations yet')}</p>
           </div>
         ) : (
-          <div className="space-y-0.5">
+          <div className="space-y-2.5">
             {conversations.map((conversation) => {
               const displayTitle = localizeTriggerText(conversation.title)
               const displayPreview = conversation.preview ? localizeTriggerText(conversation.preview) : undefined
@@ -296,16 +296,16 @@ export function ConversationList({
                   key={conversation.id}
                   onClick={() => editingId !== conversation.id && onSelect(conversation.id)}
                   className={`
-                    space-studio-sidebar-item w-full px-3 py-2.5 rounded-2xl text-left transition-all duration-200 cursor-pointer group relative
+                    space-studio-sidebar-item w-full px-3.5 py-3.5 pr-14 rounded-2xl text-left transition-all duration-200 cursor-pointer group relative
                     ${conversation.id === currentConversationId
                       ? 'active'
-                      : 'hover:bg-secondary/40'
+                      : 'hover:bg-secondary/30'
                     }
                   `}
                 >
                   {/* Selection indicator */}
                   {conversation.id === currentConversationId && (
-                    <div className="absolute left-0.5 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-[hsl(var(--space-accent))] rounded-full" />
+                    <div className="absolute left-1.5 top-1/2 -translate-y-1/2 w-[3px] h-7 bg-[hsl(var(--space-accent))] rounded-full" />
                   )}
 
                   {/* Edit mode */}
@@ -318,53 +318,53 @@ export function ConversationList({
                         onChange={(e) => setEditingTitle(e.target.value)}
                         onKeyDown={handleEditKeyDown}
                         onBlur={handleSaveEdit}
-                        className="flex-1 text-sm bg-input border border-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 min-w-0 transition-all"
+                        className="flex-1 text-sm bg-input border border-border/50 rounded-lg px-3 py-2 focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 min-w-0 transition-all"
                         placeholder={t('Conversation title...')}
                       />
                     </div>
                   ) : (
                     <>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className={`text-sm truncate flex-1 ${
-                          conversation.id === currentConversationId ? 'font-semibold text-foreground' : 'text-foreground/80'
+                      <div className="flex items-start justify-between gap-2">
+                        <span className={`text-sm truncate flex-1 leading-5 ${
+                          conversation.id === currentConversationId ? 'font-medium text-foreground' : 'text-foreground/75'
                         }`}>
                           {displayTitle.slice(0, 24)}
                           {displayTitle.length > 24 && '...'}
                         </span>
-                        <span className="text-[11px] text-muted-foreground/50 flex-shrink-0 tabular-nums">
+                        <span className="text-[11px] text-muted-foreground/40 flex-shrink-0 tabular-nums">
                           {formatDate(conversation.updatedAt)}
                         </span>
                       </div>
 
                       {displayPreview && (
-                        <div className="mt-0.5 flex items-center gap-1.5">
-                          <p className="text-xs text-muted-foreground/50 truncate flex-1">
+                        <div className="mt-1.5 flex items-center gap-1.5">
+                          <p className="text-xs text-muted-foreground/45 truncate flex-1">
                             {displayPreview.slice(0, 40)}
                           </p>
                         </div>
                       )}
 
                       {/* Action buttons (on hover) */}
-                      <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all duration-150">
+                      <div className="absolute right-2 top-2 flex items-center gap-1 px-1 py-0.5 rounded-lg border border-border/40 bg-background/80 shadow-sm opacity-0 group-hover:opacity-100 transition-all duration-150">
                         {spaceId && layoutMode !== 'tabs-only' && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
                               openChat(spaceId, conversation.id, conversation.title, workDir)
                             }}
-                            className="p-1 hover:bg-background rounded-md transition-colors"
+                            className="p-1.5 hover:bg-background/90 rounded-lg transition-colors"
                             title={t('Open in tab')}
                           >
-                            <ExternalLink className="w-3 h-3 text-muted-foreground" />
+                            <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
                           </button>
                         )}
                         {onRename && (
                           <button
                             onClick={(e) => handleStartEdit(e, conversation)}
-                            className="p-1 hover:bg-background rounded-md transition-colors"
+                            className="p-1.5 hover:bg-background/90 rounded-lg transition-colors"
                             title={t('Edit title')}
                           >
-                            <Pencil className="w-3 h-3 text-muted-foreground" />
+                            <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
                           </button>
                         )}
                         {onDelete && (
@@ -373,10 +373,10 @@ export function ConversationList({
                               e.stopPropagation()
                               onDelete(conversation.id)
                             }}
-                            className="p-1 hover:bg-destructive/12 rounded-md transition-colors"
+                            className="p-1.5 hover:bg-destructive/10 rounded-lg transition-colors"
                             title={t('Delete conversation')}
                           >
-                            <Trash2 className="w-3 h-3 text-destructive/70" />
+                            <Trash2 className="w-3.5 h-3.5 text-destructive/70" />
                           </button>
                         )}
                       </div>
@@ -390,7 +390,7 @@ export function ConversationList({
       </div>
 
       {/* Skills & Agents panels */}
-      <div className="p-2.5 border-t border-border/45 bg-background/35 space-y-1.5">
+      <div className="space-studio-sidebar-tools p-3.5 space-y-2">
         <SkillsPanel
           workDir={workDir}
           onSelectSkill={onSelectSkill}
@@ -422,10 +422,10 @@ export function ConversationList({
       {/* Drag handle */}
       <div
         className={`
-          absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize z-20
-          transition-colors duration-150
-          hover:bg-[hsl(var(--space-accent)/0.45)]
-          ${isDragging ? 'bg-[hsl(var(--space-accent)/0.45)]' : ''}
+          absolute right-0 top-0 bottom-0 w-1 cursor-col-resize z-20
+          transition-colors duration-200
+          hover:bg-[hsl(var(--space-accent)/0.3)]
+          ${isDragging ? 'bg-[hsl(var(--space-accent)/0.4)]' : ''}
         `}
         onMouseDown={handleMouseDown}
         title={t('Drag to resize width')}

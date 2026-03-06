@@ -426,11 +426,7 @@ export default function App() {
     if (response.success && response.data) {
       const loadedConfig = response.data as any
       setConfig(loadedConfig)  // Sync config to store (was missing, causing empty apiKey in settings)
-      if (loadedConfig.isFirstLaunch || !loadedConfig.api.apiKey) {
-        setView('setup')
-      } else {
-        setView('home')
-      }
+      setView('home')
     } else {
       setView('setup')
     }

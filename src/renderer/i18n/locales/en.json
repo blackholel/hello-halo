@@ -636,5 +636,22 @@
   "Hide onboarding guide?": "Hide onboarding guide?",
   "You can hide it this time or stop showing it permanently.": "You can hide it this time or stop showing it permanently.",
   "Keep showing": "Keep showing",
-  "Don't show again": "Don't show again"
+  "Don't show again": "Don't show again",
+  "Please configure AI profile first": "Please configure AI profile first",
+  "Complete model setup before chatting": "Complete model setup before chatting",
+  "You can browse spaces now, but sending tasks requires configuring API Key first.": "You can browse spaces now, but sending tasks requires configuring API Key first.",
+  "Go to model settings": "Go to model settings",
+  "Model setup": "Model setup",
+  "Connect model first, then start in 1 minute": "Connect model first, then start in 1 minute",
+  "Later": "Later",
+  "Choose provider": "Choose provider",
+  "Enter API Key": "Enter API Key",
+  "Save and test connection": "Save and test connection",
+  "Model connected, you can start chatting": "Model connected, you can start chatting",
+  "Quick setup for beginners": "Quick setup for beginners",
+  "Just complete these three items first: protocol, API Key, and default model.": "Just complete these three items first: protocol, API Key, and default model.",
+  "Choose protocol": "Choose protocol",
+  "Set default model": "Set default model",
+  "Advanced options": "Advanced options",
+  "Return to conversation": "Return to conversation"
 }

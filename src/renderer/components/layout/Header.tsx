@@ -54,18 +54,19 @@ export function Header({ left, right, className = '' }: HeaderProps) {
     <header
       className={`
         flex items-center justify-between h-11
-        border-b border-border/50 drag-region
-        bg-background
+        border-b border-border/30 drag-region
+        bg-background/95
+        backdrop-filter backdrop-blur-xl backdrop-saturate-180
         relative z-20
         ${platformPadding}
         ${className}
       `.trim().replace(/\s+/g, ' ')}
     >
-      <div className="flex items-center gap-3 no-drag min-w-0">
+      <div className="flex items-center gap-4 no-drag min-w-0">
         {left}
       </div>
 
-      <div className="flex items-center gap-1.5 no-drag flex-shrink-0">
+      <div className="flex items-center gap-2 no-drag flex-shrink-0">
         {right}
       </div>
     </header>

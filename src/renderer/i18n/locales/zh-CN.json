@@ -692,5 +692,22 @@
   "Hide onboarding guide?": "要隐藏新手引导吗？",
   "You can hide it this time or stop showing it permanently.": "你可以只隐藏这一次，或永久不再显示。",
   "Keep showing": "继续显示",
-  "Don't show again": "不再显示"
+  "Don't show again": "不再显示",
+  "Please configure AI profile first": "请先完成模型配置",
+  "Complete model setup before chatting": "聊天前请先完成模型配置",
+  "You can browse spaces now, but sending tasks requires configuring API Key first.": "你现在可以先浏览首页，但发送任务前需要先配置 API Key。",
+  "Go to model settings": "去设置模型",
+  "Model setup": "模型配置",
+  "Connect model first, then start in 1 minute": "先连接模型，1 分钟即可开始",
+  "Later": "稍后再说",
+  "Choose provider": "选择服务商",
+  "Enter API Key": "填写 API Key",
+  "Save and test connection": "保存并测试连接",
+  "Model connected, you can start chatting": "模型已连接，可以开始对话",
+  "Quick setup for beginners": "新手快速配置",
+  "Just complete these three items first: protocol, API Key, and default model.": "先完成这三项即可开始：协议、API Key、默认模型。",
+  "Choose protocol": "选择协议",
+  "Set default model": "设置默认模型",
+  "Advanced options": "高级选项",
+  "Return to conversation": "返回会话"
 }

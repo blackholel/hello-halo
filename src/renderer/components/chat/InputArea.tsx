@@ -39,6 +39,7 @@ import { useTranslation } from '../../i18n'
 import { useComposerStore } from '../../stores/composer.store'
 import { getTriggerContext, type TriggerContext } from '../../utils/composer-trigger'
 import { isResourceEnabled } from '../../utils/resource-key'
+import { getAiSetupState } from '../../../shared/types/ai-profile'
 import {
   composeInputMessage,
   normalizeChipDisplayName,
@@ -252,6 +253,8 @@ export function InputArea({
   const isTriggerPanelOpen = Boolean(triggerContext) && !isOnboardingSendStep
 
   const mruSpaceId = spaceId || 'no-space'
+  const aiSetupState = useMemo(() => getAiSetupState(config), [config])
+  const isAiConfigured = aiSetupState.configured
   const effectiveSuggestionTab: ComposerSuggestionTab = triggerContext?.type === 'mention'
     ? 'agents'
     : activeSuggestionTab
@@ -733,6 +736,18 @@ export function InputArea({
 
   // Handle send
   const handleSend = () => {
+    if (!isAiConfigured && !isOnboardingSendStep) {
+      const reason = aiSetupState.reason
+      if (reason === 'missing_api_key') {
+        showError(t('Please configure API Key in Settings'))
+      } else if (reason === 'disabled_profile') {
+        showError(t('Please enable the AI provider in Settings'))
+      } else {
+        showError(t('Please configure AI profile first'))
+      }
+      return
+    }
+
     const textToSend = isOnboardingSendStep
       ? onboardingPrompt
       : composeInputMessage(content, selectedResourceChips)
@@ -851,7 +866,26 @@ export function InputArea({
 
   // In onboarding mode, can always send (prefilled content)
   // Can send if has text OR has images OR has file contexts (and not processing)
-  const canSend = isOnboardingSendStep || ((content.trim().length > 0 || selectedResourceChips.length > 0 || images.length > 0 || fileContexts.length > 0) && !isProcessingImages)
+  const canSend = isOnboardingSendStep || (
+    isAiConfigured &&
+    (content.trim().length > 0 || selectedResourceChips.length > 0 || images.length > 0 || fileContexts.length > 0) &&
+    !isProcessingImages
+  )
+
+  // Debug: log canSend state
+  useEffect(() => {
+    console.log('[InputArea] canSend debug:', {
+      canSend,
+      isOnboardingSendStep,
+      isAiConfigured,
+      aiSetupState,
+      contentLength: content.trim().length,
+      selectedResourceChipsLength: selectedResourceChips.length,
+      imagesLength: images.length,
+      fileContextsLength: fileContexts.length,
+      isProcessingImages
+    })
+  }, [canSend, isOnboardingSendStep, isAiConfigured, aiSetupState, content, selectedResourceChips.length, images.length, fileContexts.length, isProcessingImages])
   const hasImages = images.length > 0
   const hasFileContexts = fileContexts.length > 0
   const resolveQueueContent = useCallback((item: {

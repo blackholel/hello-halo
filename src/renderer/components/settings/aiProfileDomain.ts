@@ -1,5 +1,8 @@
 import type { ApiProfile, ProviderProtocol, ProviderVendor } from '../../types'
 import { DEFAULT_MODEL } from '../../types'
+import { isValidOpenAICompatEndpoint } from '../../../shared/types/ai-profile'
+
+export { isValidOpenAICompatEndpoint }
 
 export interface AiProfileTemplate {
   key: string
@@ -100,11 +103,6 @@ export const API_URL_PLACEHOLDER_BY_PROTOCOL: Record<ProviderProtocol, string> =
   anthropic_official: 'https://api.anthropic.com',
   anthropic_compat: 'https://provider.example.com/anthropic',
   openai_compat: 'https://provider.example.com/v1/chat/completions or /v1/responses'
-}
-
-export function isValidOpenAICompatEndpoint(url: string): boolean {
-  const normalized = url.trim().replace(/\/+$/, '')
-  return normalized.endsWith('/chat/completions') || normalized.endsWith('/responses')
 }
 
 export function normalizeModelCatalog(defaultModel: string, rawCatalog: string[] | string): string[] {

@@ -32,6 +32,7 @@ import {
 import { api } from '../../api'
 import type { ChatMode, FileContextAttachment, ImageAttachment, ToolCall } from '../../types'
 import { useTranslation } from '../../i18n'
+import { getAiSetupState } from '../../../shared/types/ai-profile'
 
 interface ChatViewProps {
   isCompact?: boolean
@@ -64,7 +65,10 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     clearQueueError
   } = useChatStore()
   const { openPlan } = useCanvasLifecycle()
-  const appConfig = useAppStore(state => state.config)
+  const { appConfig, setView } = useAppStore((state) => ({
+    appConfig: state.config,
+    setView: state.setView
+  }))
 
   // Onboarding state
   const {
@@ -372,6 +376,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
   const displayIsThinking = isMockThinking || isThinking
   const displayIsStreaming = isStreaming  // Only real streaming (not mock)
   const hasMessages = displayMessages.length > 0 || Boolean(displayStreamingContent) || displayIsThinking
+  const aiSetupState = getAiSetupState(appConfig)
   const currentConversationSpaceId = currentSpaceId
   const currentChangeSets = currentConversationId ? (changeSets.get(currentConversationId) || []) : []
   const activeChangeSet = currentChangeSets[0]
@@ -395,7 +400,6 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
       className={`
         space-studio-chatview flex-1 flex flex-col h-full
         transition-[padding] duration-300 ease-out
-        ${isCompact ? 'bg-background/35' : 'bg-transparent'}
       `}
     >
       {/* Messages area wrapper - relative for button positioning */}
@@ -413,7 +417,12 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
           {isLoadingConversation ? (
             <LoadingState />
           ) : !hasMessages ? (
-            <EmptyState isTemp={currentSpace?.isTemp || false} isCompact={isCompact} />
+            <EmptyState
+              isTemp={currentSpace?.isTemp || false}
+              isCompact={isCompact}
+              isAiConfigured={aiSetupState.configured}
+              onOpenSettings={() => setView('settings')}
+            />
           ) : (
             <>
               <MessageList
@@ -567,8 +576,39 @@ function LoadingState() {
 }
 
 // Empty state component - Editorial workspace style
-function EmptyState({ isTemp, isCompact = false }: { isTemp: boolean; isCompact?: boolean }) {
+function EmptyState({
+  isTemp,
+  isCompact = false,
+  isAiConfigured,
+  onOpenSettings
+}: {
+  isTemp: boolean
+  isCompact?: boolean
+  isAiConfigured: boolean
+  onOpenSettings: () => void
+}) {
   const { t } = useTranslation()
+
+  if (!isAiConfigured) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center text-center px-6">
+        <div className="w-12 h-12 rounded-2xl border border-border/70 bg-background/80 flex items-center justify-center">
+          <Sparkles className="w-5 h-5 text-foreground/80" />
+        </div>
+        <h3 className="mt-4 text-xl font-semibold tracking-tight">{t('Complete model setup before chatting')}</h3>
+        <p className="mt-2 text-sm text-muted-foreground max-w-md leading-relaxed">
+          {t('You can browse spaces now, but sending tasks requires configuring API Key first.')}
+        </p>
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          className="mt-5 rounded-xl btn-apple px-4 py-2 text-sm"
+        >
+          {t('Go to model settings')}
+        </button>
+      </div>
+    )
+  }
 
   if (isCompact) {
     return (

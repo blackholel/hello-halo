@@ -734,16 +734,16 @@ export function SpacePage() {
           <>
             <button
               onClick={handleBack}
-              className="space-studio-header-btn p-1.5 rounded-xl transition-all duration-200 group"
+              className="space-studio-header-btn p-2 rounded-lg transition-all duration-200 group"
             >
               <svg className="w-[18px] h-[18px] text-muted-foreground group-hover:text-foreground transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               <SpaceIcon iconId={currentSpace.icon} size={20} />
-              <span className="font-semibold text-sm tracking-tight">
+              <span className="font-medium text-sm tracking-tight">
                 {currentSpace.isTemp ? 'Kite' : currentSpace.name}
               </span>
             </div>
@@ -772,7 +772,7 @@ export function SpacePage() {
             {/* New conversation */}
             <button
               onClick={handleNewConversation}
-              className="space-studio-header-btn p-2 rounded-xl transition-all duration-200 group"
+              className="space-studio-header-btn p-2 rounded-lg transition-all duration-200 group"
               title={t('New conversation')}
             >
               <svg className="w-[18px] h-[18px] text-muted-foreground group-hover:text-foreground transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -783,7 +783,7 @@ export function SpacePage() {
             {/* Sidebar toggle */}
             <button
               onClick={() => setShowConversationList(!showConversationList)}
-              className={`p-2 rounded-xl transition-all duration-200 ${
+              className={`p-2 rounded-lg transition-all duration-200 ${
                 showConversationList
                   ? 'space-studio-header-btn space-studio-header-btn-active'
                   : 'space-studio-header-btn text-muted-foreground hover:text-foreground'
@@ -803,7 +803,7 @@ export function SpacePage() {
             {/* Layout mode toggle */}
             <button
               onClick={() => setLayoutMode(layoutMode === 'split' ? 'tabs-only' : 'split')}
-              className={`p-2 rounded-xl transition-all duration-200 ${
+              className={`p-2 rounded-lg transition-all duration-200 ${
                 layoutMode === 'tabs-only'
                   ? 'space-studio-header-btn space-studio-header-btn-active'
                   : 'space-studio-header-btn text-muted-foreground hover:text-foreground'
@@ -820,7 +820,7 @@ export function SpacePage() {
             {/* Settings */}
             <button
               onClick={() => setView('settings')}
-              className="space-studio-header-btn p-2 rounded-xl transition-all duration-200 group"
+              className="space-studio-header-btn p-2 rounded-lg transition-all duration-200 group"
               title={t('Settings')}
             >
               <svg className="w-[18px] h-[18px] text-muted-foreground group-hover:text-foreground transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -875,9 +875,9 @@ export function SpacePage() {
                 <div
                   ref={chatContainerRef}
                   className={`
-                    space-studio-pane flex flex-col min-w-0 relative overflow-hidden
+                    space-studio-pane space-studio-chat-pane flex flex-col min-w-0 relative overflow-hidden
                     ${hasBrowserTab ? '' : 'transition-[border-color] duration-300 ease-out'}
-                    ${isCanvasOpen ? 'border-r border-border/30' : 'flex-1 border-r border-transparent'}
+                    ${isCanvasOpen ? '' : 'flex-1'}
                     ${isCanvasTransitioning ? 'pointer-events-none' : ''}
                   `}
                   style={{
@@ -912,7 +912,7 @@ export function SpacePage() {
               {/* Content Canvas - main viewing area, full width in tabs-only mode */}
               <div
                 className={`
-                  space-studio-pane min-w-0 overflow-hidden
+                  space-studio-pane space-studio-canvas-pane min-w-0 overflow-hidden
                   ${hasBrowserTab ? '' : 'transition-all duration-300 ease-out'}
                   ${layoutMode === 'tabs-only' || isCanvasOpen || isCanvasMaximized
                     ? 'flex-1 opacity-100'

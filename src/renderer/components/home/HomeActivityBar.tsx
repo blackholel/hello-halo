@@ -37,11 +37,11 @@ export function HomeActivityBar({
   ]
 
   return (
-    <aside className={`w-64 border-r border-border/70 bg-card/75 backdrop-blur-xl ${className}`}>
+    <aside className={`w-64 border-r border-border/80 bg-secondary/55 backdrop-blur-md ${className}`}>
       <div className="h-full flex flex-col px-3 py-4">
-        <div className="flex items-center gap-3 px-2 pb-4 border-b border-border/60">
-          <div className="w-9 h-9 rounded-xl bg-secondary/85 flex items-center justify-center">
-            <Sparkles className="w-4.5 h-4.5 text-foreground/85" />
+        <div className="flex items-center gap-3 px-2 pb-4 border-b border-border/70">
+          <div className="w-9 h-9 rounded-xl bg-card/80 border border-border/80 flex items-center justify-center">
+            <Sparkles className="w-4.5 h-4.5 text-foreground/80" />
           </div>
           <div className="min-w-0">
             <p className="text-sm font-semibold tracking-tight text-foreground">Kite</p>
@@ -59,8 +59,8 @@ export function HomeActivityBar({
                 onClick={() => onTabChange(tab)}
                 className={`w-full h-10 rounded-xl px-3 flex items-center justify-between transition-all duration-200 ${
                   isActive
-                    ? 'bg-primary/12 text-primary border border-primary/20'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary/65 border border-transparent'
+                    ? 'bg-card/90 text-foreground border border-border/85'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-card/55 border border-transparent'
                 }`}
               >
                 <span className="flex items-center gap-2.5 text-sm">
@@ -68,7 +68,7 @@ export function HomeActivityBar({
                   <span>{label}</span>
                 </span>
                 <span className={`text-[11px] px-1.5 py-0.5 rounded-md ${
-                  isActive ? 'bg-primary/15 text-primary/85' : 'bg-secondary/70 text-muted-foreground'
+                  isActive ? 'bg-background/90 text-foreground/80' : 'bg-secondary/80 text-muted-foreground'
                 }`}>
                   {count}
                 </span>
@@ -80,7 +80,7 @@ export function HomeActivityBar({
         <button
           type="button"
           onClick={onCreateSpace}
-          className="mt-3 w-full h-10 rounded-xl px-3 flex items-center justify-center gap-2 text-sm font-medium bg-foreground text-background hover:opacity-90 transition-opacity"
+          className="mt-3 w-full h-10 rounded-xl px-3 flex items-center justify-center gap-2 text-sm font-medium border border-border/85 bg-card/92 text-foreground hover:bg-card transition-colors"
         >
           <Plus className="w-4 h-4" />
           {t('New')}
@@ -90,7 +90,7 @@ export function HomeActivityBar({
           <button
             type="button"
             onClick={onOpenSettings}
-            className="w-full h-10 rounded-xl px-3 flex items-center gap-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary/70 transition-all duration-200"
+            className="w-full h-10 rounded-xl px-3 flex items-center gap-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-card/60 transition-all duration-200"
           >
             <Settings className="w-4 h-4" />
             <span>{t('Settings')}</span>

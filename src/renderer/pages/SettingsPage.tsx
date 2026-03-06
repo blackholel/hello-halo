@@ -193,6 +193,7 @@ export function SettingsPage() {
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('model')
   const [showApiKey, setShowApiKey] = useState(false)
   const [modelInput, setModelInput] = useState('')
+  const [showAdvancedModelFields, setShowAdvancedModelFields] = useState(false)
 
   // Connection status
   const [isValidating, setIsValidating] = useState(false)
@@ -249,6 +250,7 @@ export function SettingsPage() {
   useEffect(() => {
     setShowApiKey(false)
     setModelInput('')
+    setShowAdvancedModelFields(false)
   }, [selectedProfileId])
 
   useEffect(() => {
@@ -610,7 +612,7 @@ export function SettingsPage() {
         ai: aiConfig
       } as KiteConfig
       setConfig(nextConfig)
-      setValidationResult({ valid: true, message: t('Saved') })
+      setValidationResult({ valid: true, message: t('Model connected, you can start chatting') })
     } catch (error) {
       setValidationResult({ valid: false, message: t('Save failed') })
     } finally {
@@ -684,6 +686,18 @@ export function SettingsPage() {
                   checked={selectedProfile.enabled !== false}
                   onChange={handleSelectedProfileEnabledChange}
                 />
+              </div>
+
+              <div className="rounded-2xl border border-border/70 bg-secondary/25 p-4">
+                <p className="text-sm font-medium">{t('Quick setup for beginners')}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {t('Just complete these three items first: protocol, API Key, and default model.')}
+                </p>
+                <ol className="mt-3 space-y-1.5 text-xs text-muted-foreground">
+                  <li>1. {t('Choose protocol')}</li>
+                  <li>2. {t('Enter API Key')}</li>
+                  <li>3. {t('Set default model')}</li>
+                </ol>
               </div>
 
               <div>
@@ -786,51 +800,81 @@ export function SettingsPage() {
                     />
                   </div>
 
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('Model Catalog')}</label>
-                    <div className="mb-2 flex flex-wrap gap-1.5">
-                      {selectedCatalog.map((modelId) => (
-                        <button
-                          type="button"
-                          key={modelId}
-                          onClick={() => {
-                            if (modelId === selectedProfile.defaultModel) return
-                            updateSelectedProfile({
-                              modelCatalog: selectedCatalog.filter(item => item !== modelId)
-                            })
-                          }}
-                          className={`rounded-full border px-2.5 py-1 text-xs ${
-                            modelId === selectedProfile.defaultModel
-                              ? 'cursor-default border-[#305a45] bg-[#f1f6f3] text-[#2e5642]'
-                              : 'border-border bg-background text-muted-foreground hover:bg-secondary/50'
-                          }`}
-                        >
-                          {modelId}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={modelInput}
-                        onChange={(event) => setModelInput(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') {
-                            event.preventDefault()
-                            handleAddModelId()
-                          }
-                        }}
-                        className="w-full input-apple px-4 py-2 text-sm"
-                        placeholder={t('Add model id')}
-                      />
-                      <button
-                        type="button"
-                        onClick={handleAddModelId}
-                        className="rounded-xl border border-border/70 px-3 text-sm hover:bg-secondary/50"
-                      >
-                        {t('Add')}
-                      </button>
-                    </div>
+                  <div className="rounded-2xl border border-dashed border-border/70 bg-secondary/20 p-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowAdvancedModelFields((prev) => !prev)}
+                      className="flex w-full items-center justify-between text-left"
+                    >
+                      <span className="text-sm font-medium">{t('Advanced options')}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {showAdvancedModelFields ? t('Hide') : t('Show')}
+                      </span>
+                    </button>
+
+                    {showAdvancedModelFields && (
+                      <div className="mt-3 space-y-3">
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('Model Catalog')}</label>
+                          <div className="mb-2 flex flex-wrap gap-1.5">
+                            {selectedCatalog.map((modelId) => (
+                              <button
+                                type="button"
+                                key={modelId}
+                                onClick={() => {
+                                  if (modelId === selectedProfile.defaultModel) return
+                                  updateSelectedProfile({
+                                    modelCatalog: selectedCatalog.filter(item => item !== modelId)
+                                  })
+                                }}
+                                className={`rounded-full border px-2.5 py-1 text-xs ${
+                                  modelId === selectedProfile.defaultModel
+                                    ? 'cursor-default border-[#305a45] bg-[#f1f6f3] text-[#2e5642]'
+                                    : 'border-border bg-background text-muted-foreground hover:bg-secondary/50'
+                                }`}
+                              >
+                                {modelId}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={modelInput}
+                              onChange={(event) => setModelInput(event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter') {
+                                  event.preventDefault()
+                                  handleAddModelId()
+                                }
+                              }}
+                              className="w-full input-apple px-4 py-2 text-sm"
+                              placeholder={t('Add model id')}
+                            />
+                            <button
+                              type="button"
+                              onClick={handleAddModelId}
+                              className="rounded-xl border border-border/70 px-3 text-sm hover:bg-secondary/50"
+                            >
+                              {t('Add')}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('Doc URL')}</label>
+                          <input
+                            type="text"
+                            value={selectedProfile.docUrl || ''}
+                            onChange={(event) => {
+                              updateSelectedProfile({ docUrl: event.target.value })
+                              setValidationResult(null)
+                            }}
+                            className="w-full input-apple px-4 py-2.5 text-sm"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -878,6 +922,15 @@ export function SettingsPage() {
                 <p className={`text-sm ${validationResult.valid ? 'text-green-500' : 'text-red-500'}`}>
                   {validationResult.message}
                 </p>
+              )}
+              {validationResult?.valid && (
+                <button
+                  type="button"
+                  onClick={goBack}
+                  className="inline-flex rounded-xl border border-border/70 px-4 py-2 text-sm hover:bg-secondary/50"
+                >
+                  {t('Return to conversation')}
+                </button>
               )}
             </div>
           )}

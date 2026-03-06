@@ -94,6 +94,7 @@ import {
   normalizeChatMode
 } from './types'
 import { normalizeLocale, type LocaleCode } from '../../../shared/i18n/locale'
+import { assertAiProfileConfigured } from './ai-setup-guard'
 
 function trackChangeFileFromToolUse(
   conversationId: string,
@@ -709,6 +710,7 @@ export async function sendMessage(
     )
   }
   const config = getConfig()
+  assertAiProfileConfigured(config)
   const conversation = getConversation(spaceId, conversationId) as
     | ({ ai?: { profileId?: string }; sessionId?: string } & Record<string, unknown>)
     | null

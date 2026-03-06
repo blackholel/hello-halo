@@ -35,10 +35,12 @@ import { Monitor, ArrowRight, X, LayoutGrid, Puzzle } from 'lucide-react'
 import { api } from '../api'
 import { useTranslation } from '../i18n'
 import { normalizeEnabledValues } from '../utils/resource-key'
+import { getAiSetupState } from '../../shared/types/ai-profile'
 
 // Check if running in web mode
 const isWebMode = api.isRemoteMode()
 const HOME_ONBOARDING_VISIBILITY_KEY = 'kite-home-onboarding-visibility'
+const MODEL_SETUP_HINT_DISMISSED_KEY = 'kite-model-setup-hint-dismissed'
 
 function getLocalizedResourceName(item: { name: string; displayName?: string; namespace?: string }): string {
   const base = item.displayName || item.name
@@ -56,7 +58,7 @@ function directiveLookupKeys(ref: DirectiveRef): string[] {
 
 export function HomePage(): JSX.Element {
   const { t } = useTranslation()
-  const { setView } = useAppStore()
+  const { setView, config } = useAppStore()
   const {
     kiteSpace,
     spaces,
@@ -111,6 +113,8 @@ export function HomePage(): JSX.Element {
   const [activeTab, setActiveTab] = useState<'spaces' | 'extensions'>('spaces')
   const [showHomeOnboarding, setShowHomeOnboarding] = useState(true)
   const [showHomeOnboardingDialog, setShowHomeOnboardingDialog] = useState(false)
+  const [showModelSetupHint, setShowModelSetupHint] = useState(true)
+  const aiSetupState = useMemo(() => getAiSetupState(config), [config])
 
   // Close dialogs on Escape key
   useEffect(() => {
@@ -156,6 +160,18 @@ export function HomePage(): JSX.Element {
       setShowHomeOnboarding(false)
     }
   }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (aiSetupState.configured) {
+      localStorage.removeItem(MODEL_SETUP_HINT_DISMISSED_KEY)
+      setShowModelSetupHint(false)
+      return
+    }
+
+    const dismissed = localStorage.getItem(MODEL_SETUP_HINT_DISMISSED_KEY) === 'dismissed'
+    setShowModelSetupHint(!dismissed)
+  }, [aiSetupState.configured])
 
   // Load toolkit when editing space dialog opens
   useEffect(() => {
@@ -307,6 +323,13 @@ export function HomePage(): JSX.Element {
     setShowHomeOnboardingDialog(false)
     if (typeof window !== 'undefined') {
       localStorage.setItem(HOME_ONBOARDING_VISIBILITY_KEY, 'hide-forever')
+    }
+  }
+
+  const handleDismissModelSetupHint = (): void => {
+    setShowModelSetupHint(false)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(MODEL_SETUP_HINT_DISMISSED_KEY, 'dismissed')
     }
   }
 
@@ -491,7 +514,7 @@ export function HomePage(): JSX.Element {
                 className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs transition-all duration-200 ${
                   activeTab === 'spaces'
                     ? 'bg-secondary text-foreground font-medium'
-                    : 'text-muted-foreground hover:bg-secondary/60'
+                    : 'text-muted-foreground hover:bg-secondary/75'
                 }`}
               >
                 <LayoutGrid className="w-4 h-4" />
@@ -503,7 +526,7 @@ export function HomePage(): JSX.Element {
                 className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs transition-all duration-200 ${
                   activeTab === 'extensions'
                     ? 'bg-secondary text-foreground font-medium'
-                    : 'text-muted-foreground hover:bg-secondary/60'
+                    : 'text-muted-foreground hover:bg-secondary/75'
                 }`}
               >
                 <Puzzle className="w-4 h-4" />
@@ -513,7 +536,7 @@ export function HomePage(): JSX.Element {
             <button
               type="button"
               onClick={() => setView('settings')}
-              className="w-full h-10 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-secondary/70 transition-all duration-200 border border-border/70"
+              className="w-full h-10 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-all duration-200 border border-border/75 bg-card/70"
             >
               {t('Settings')}
             </button>
@@ -523,6 +546,57 @@ export function HomePage(): JSX.Element {
             {activeTab === 'spaces' ? (
               <div className="max-w-6xl mx-auto px-6 py-8 lg:py-10">
                 <section className="space-y-4 mb-9">
+                  {!aiSetupState.configured && showModelSetupHint && (
+                    <div className="home-onboard-card stagger-item" style={{ animationDelay: '0ms' }}>
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground mb-2">
+                            {t('Model setup')}
+                          </p>
+                          <h3 className="text-lg font-semibold tracking-tight">
+                            {t('Connect model first, then start in 1 minute')}
+                          </h3>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {t('You can browse the homepage now, but sending tasks requires configuring API Key first.')}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleDismissModelSetupHint}
+                          className="text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/80 rounded-lg px-2 py-1 transition-colors"
+                        >
+                          {t('Later')}
+                        </button>
+                      </div>
+
+                      <ol className="mt-4 space-y-2.5">
+                        <li className="home-onboard-step">
+                          <span className="home-onboard-step-index">1</span>
+                          <span>{t('Choose provider')}</span>
+                        </li>
+                        <li className="home-onboard-step">
+                          <span className="home-onboard-step-index">2</span>
+                          <span>{t('Enter API Key')}</span>
+                        </li>
+                        <li className="home-onboard-step">
+                          <span className="home-onboard-step-index">3</span>
+                          <span>{t('Save and test connection')}</span>
+                        </li>
+                      </ol>
+
+                      <div className="mt-5 flex flex-wrap items-center gap-2.5">
+                        <button
+                          type="button"
+                          onClick={() => setView('settings')}
+                          className="inline-flex items-center gap-1.5 px-4 h-10 rounded-xl border border-border/85 bg-card hover:bg-secondary/80 text-sm transition-colors"
+                        >
+                          {t('Go to model settings')}
+                          <ArrowRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {kiteSpace ? (
                     <div
                       data-onboarding="kite-space"
@@ -533,7 +607,7 @@ export function HomePage(): JSX.Element {
                       <div className="home-hero-glow" />
                       <div className="flex items-start justify-between gap-4 relative z-10">
                         <div className="flex items-center gap-4 min-w-0">
-                          <div className="w-11 h-11 rounded-2xl bg-secondary/95 border border-border/80 flex items-center justify-center">
+                          <div className="w-11 h-11 rounded-2xl bg-card/90 border border-border/85 flex items-center justify-center">
                             <Sparkles className="w-5 h-5 text-foreground" />
                           </div>
                           <div className="min-w-0">
@@ -572,7 +646,7 @@ export function HomePage(): JSX.Element {
                         <button
                           type="button"
                           onClick={() => setShowCreateDialog(true)}
-                          className="inline-flex items-center gap-2 px-4 h-10 rounded-xl bg-foreground text-background text-sm font-medium hover:opacity-90 transition-opacity"
+                          className="inline-flex items-center gap-2 px-4 h-10 rounded-xl border border-border/85 bg-card/92 text-foreground text-sm font-medium hover:bg-card transition-colors"
                         >
                           <Plus className="w-4 h-4" />
                           {t('New')}
@@ -598,7 +672,7 @@ export function HomePage(): JSX.Element {
                         <button
                           type="button"
                           onClick={() => setShowHomeOnboardingDialog(true)}
-                          className="text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/70 rounded-lg px-2 py-1 transition-colors"
+                          className="text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/80 rounded-lg px-2 py-1 transition-colors"
                         >
                           {t('Hide guide')}
                         </button>
@@ -621,7 +695,7 @@ export function HomePage(): JSX.Element {
                         <button
                           type="button"
                           onClick={() => setShowCreateDialog(true)}
-                          className="inline-flex items-center gap-2 px-4 h-10 rounded-xl bg-foreground text-background text-sm font-medium hover:opacity-90 transition-opacity"
+                          className="inline-flex items-center gap-2 px-4 h-10 rounded-xl border border-border/85 bg-card/92 text-foreground text-sm font-medium hover:bg-card transition-colors"
                         >
                           <Plus className="w-4 h-4" />
                           {t('Create my first space')}
@@ -630,7 +704,7 @@ export function HomePage(): JSX.Element {
                           <button
                             type="button"
                             onClick={() => handleSpaceClick(kiteSpace)}
-                            className="inline-flex items-center gap-1.5 px-4 h-10 rounded-xl border border-border bg-card hover:bg-secondary/60 text-sm transition-colors"
+                            className="inline-flex items-center gap-1.5 px-4 h-10 rounded-xl border border-border/85 bg-card hover:bg-secondary/80 text-sm transition-colors"
                           >
                             {t('Try Kite space first')}
                             <ArrowRight className="w-4 h-4" />
@@ -669,7 +743,7 @@ export function HomePage(): JSX.Element {
                     className="text-center py-16 stagger-item"
                     style={{ animationDelay: '190ms' }}
                   >
-                    <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-secondary/60 flex items-center justify-center">
+                    <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-secondary/80 border border-border/75 flex items-center justify-center">
                       <FolderOpen className="w-6 h-6 text-muted-foreground/50" />
                     </div>
                     <p className="text-sm text-muted-foreground">{t('No dedicated spaces yet')}</p>
@@ -688,7 +762,7 @@ export function HomePage(): JSX.Element {
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-10 h-10 rounded-xl bg-secondary/60 flex items-center justify-center flex-shrink-0">
+                            <div className="w-10 h-10 rounded-xl bg-secondary/80 border border-border/75 flex items-center justify-center flex-shrink-0">
                               <SpaceIcon iconId={space.icon} size={20} />
                             </div>
                             <div className="min-w-0">
@@ -753,7 +827,7 @@ export function HomePage(): JSX.Element {
               <button
                 type="button"
                 onClick={() => setShowHomeOnboardingDialog(false)}
-                className="px-3.5 py-2 text-sm rounded-lg border border-border hover:bg-secondary/60"
+                className="px-3.5 py-2 text-sm rounded-lg border border-border/85 bg-card/80 hover:bg-secondary/80"
               >
                 {t('Keep showing')}
               </button>
@@ -767,7 +841,7 @@ export function HomePage(): JSX.Element {
               <button
                 type="button"
                 onClick={handleHideHomeOnboardingForever}
-                className="px-3.5 py-2 text-sm rounded-lg bg-foreground text-background hover:opacity-90"
+                className="px-3.5 py-2 text-sm rounded-lg border border-border/85 bg-card text-foreground hover:bg-secondary/80"
               >
                 {t("Don't show again")}
               </button>

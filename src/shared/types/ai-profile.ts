@@ -55,6 +55,22 @@ export interface AiConfig {
   defaultProfileId: string
 }
 
+export type AiSetupMissingReason =
+  | 'missing_profile'
+  | 'missing_api_key'
+  | 'disabled_profile'
+  | 'invalid_url'
+
+export interface AiSetupState {
+  configured: boolean
+  reason: AiSetupMissingReason | null
+}
+
+export interface AiSetupConfigInput {
+  ai?: Partial<AiConfig> | null
+  api?: Partial<LegacyApiConfig> | null
+}
+
 export const LEGACY_DEFAULT_PROFILE_ID = 'legacy-default'
 export const LEGACY_DEFAULT_PROFILE_NAME = 'Default'
 export const DEFAULT_LEGACY_MODEL = 'claude-opus-4-5-20251101'
@@ -282,6 +298,38 @@ export function selectDefaultApiProfile(
   const profileId = selectDefaultProfileId(normalizedAi)
   if (!profileId) return null
   return normalizedAi.profiles.find(profile => profile.id === profileId) || null
+}
+
+export function isValidOpenAICompatEndpoint(url: string): boolean {
+  const normalized = url.trim().replace(/\/+$/, '')
+  return normalized.endsWith('/chat/completions') || normalized.endsWith('/responses')
+}
+
+export function getAiSetupState(config: AiSetupConfigInput | null | undefined): AiSetupState {
+  if (config?.ai && Array.isArray(config.ai.profiles) && config.ai.profiles.length === 0) {
+    return { configured: false, reason: 'missing_profile' }
+  }
+
+  const fallbackApi = ensureLegacyApiConfig(config?.api, DEFAULT_LEGACY_API_CONFIG)
+  const profile = selectDefaultApiProfile(config?.ai, fallbackApi)
+
+  if (!profile) {
+    return { configured: false, reason: 'missing_profile' }
+  }
+
+  if (profile.enabled === false) {
+    return { configured: false, reason: 'disabled_profile' }
+  }
+
+  if (!isNonEmptyString(profile.apiKey)) {
+    return { configured: false, reason: 'missing_api_key' }
+  }
+
+  if (profile.protocol === 'openai_compat' && !isValidOpenAICompatEndpoint(profile.apiUrl)) {
+    return { configured: false, reason: 'invalid_url' }
+  }
+
+  return { configured: true, reason: null }
 }
 
 export function mirrorAiToLegacyApi(
