@@ -1343,15 +1343,15 @@ function InputToolbar({
             </button>
 
             {/* Skills dropdown */}
-            {workDir && (
+            {/* {workDir && (
               <SkillsDropdown
                 workDir={workDir}
                 onInsertSkill={onInsertSkill}
               />
-            )}
+            )} */}
 
             {/* Thinking mode toggle */}
-            <button
+            {/* <button
               onClick={onThinkingToggle}
               className={`h-8 flex items-center gap-1.5 px-2.5 rounded-lg
                 transition-colors duration-200 border
@@ -1364,7 +1364,7 @@ function InputToolbar({
             >
               <Atom size={15} />
               <span className="text-xs">{t('Deep Thinking')}</span>
-            </button>
+            </button> */}
 
           </>
         )}
