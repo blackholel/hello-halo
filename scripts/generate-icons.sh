@@ -11,7 +11,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 RESOURCES_DIR="$PROJECT_ROOT/resources"
 SOURCE_SVG="$RESOURCES_DIR/icon.svg"
+SOURCE_PNG="$RESOURCES_DIR/icon-source.png"
 ICONSET_DIR="$RESOURCES_DIR/icon.iconset"
+SOURCE_TYPE="svg"
+SOURCE_IMAGE="$SOURCE_SVG"
+SUBJECT_SCALE_PERCENT=82
+EDGE_ALPHA_THRESHOLD_PERCENT=20
+WORK_DIR=""
 
 echo "🎨 Kite Icon Generator"
 echo "======================"
@@ -44,16 +50,86 @@ check_tools() {
     echo "✅ All required tools available"
 }
 
+cleanup() {
+    if [ -n "$WORK_DIR" ] && [ -d "$WORK_DIR" ]; then
+        rm -rf "$WORK_DIR"
+    fi
+}
+
+trap cleanup EXIT
+
+prepare_source_png() {
+    local trimmed_size
+    local trim_width
+    local trim_height
+    local max_dim
+    local padded_canvas
+
+    WORK_DIR="$(mktemp -d)"
+
+    trimmed_size=$(magick "$SOURCE_PNG" -trim -format "%w %h" info: 2>/dev/null || \
+        convert "$SOURCE_PNG" -trim -format "%w %h" info: 2>/dev/null)
+
+    read -r trim_width trim_height <<< "$trimmed_size"
+    max_dim=$(( trim_width > trim_height ? trim_width : trim_height ))
+    padded_canvas=$(( (max_dim * 100 + SUBJECT_SCALE_PERCENT - 1) / SUBJECT_SCALE_PERCENT ))
+
+    magick "$SOURCE_PNG" -trim +repage \
+        -channel A -threshold "${EDGE_ALPHA_THRESHOLD_PERCENT}%" +channel \
+        -background none -gravity center \
+        -extent "${padded_canvas}x${padded_canvas}" "$WORK_DIR/icon-prepared.png" 2>/dev/null || \
+    convert "$SOURCE_PNG" -trim +repage \
+        -channel A -threshold "${EDGE_ALPHA_THRESHOLD_PERCENT}%" +channel \
+        -background none -gravity center \
+        -extent "${padded_canvas}x${padded_canvas}" "$WORK_DIR/icon-prepared.png" 2>/dev/null
+
+    SOURCE_TYPE="png"
+    SOURCE_IMAGE="$WORK_DIR/icon-prepared.png"
+
+    echo "✅ Using PNG source: $SOURCE_PNG"
+    echo "   Trimmed subject: ${trim_width}x${trim_height}, padded to: ${padded_canvas}x${padded_canvas}, fill: ~${SUBJECT_SCALE_PERCENT}%"
+    echo "   Edge cleanup alpha threshold: ${EDGE_ALPHA_THRESHOLD_PERCENT}%"
+}
+
+init_source() {
+    if [ -f "$SOURCE_PNG" ]; then
+        prepare_source_png
+        return
+    fi
+
+    if [ -f "$SOURCE_SVG" ]; then
+        SOURCE_TYPE="svg"
+        SOURCE_IMAGE="$SOURCE_SVG"
+        echo "✅ Using SVG source: $SOURCE_SVG"
+        return
+    fi
+
+    echo "❌ No source icon found. Expected one of:"
+    echo "   - $SOURCE_PNG"
+    echo "   - $SOURCE_SVG"
+    exit 1
+}
+
 # Generate PNG from SVG at specific size
 generate_png() {
     local size=$1
     local output=$2
     local temp_dir=$(mktemp -d)
 
+    if [ "$SOURCE_TYPE" = "png" ]; then
+        magick "$SOURCE_IMAGE" -background none -resize "${size}x${size}" \
+            -gravity center -extent "${size}x${size}" "$output" 2>/dev/null || \
+        convert "$SOURCE_IMAGE" -background none -resize "${size}x${size}" \
+            -gravity center -extent "${size}x${size}" "$output" 2>/dev/null
+        rm -rf "$temp_dir"
+        echo "   Generated: $output (${size}x${size})"
+        return
+    fi
+
     # Use qlmanage (macOS Quick Look) for proper SVG gradient rendering
     if [[ "$OSTYPE" == "darwin"* ]]; then
         # Generate at larger size for quality
-        qlmanage -t -s 1024 -o "$temp_dir" "$SOURCE_SVG" 2>/dev/null
+        qlmanage -t -s 1024 -o "$temp_dir" "$SOURCE_IMAGE" 2>/dev/null
         if [ -f "$temp_dir/icon.svg.png" ]; then
             # Remove white background and resize
             magick "$temp_dir/icon.svg.png" -fuzz 1% -transparent white -resize "${size}x${size}" "$output" 2>/dev/null || \
@@ -65,8 +141,8 @@ generate_png() {
     fi
 
     # Fallback to ImageMagick
-    magick -background none -density 300 "$SOURCE_SVG" -resize "${size}x${size}" -gravity center -extent "${size}x${size}" "$output" 2>/dev/null || \
-    convert -background none -density 300 "$SOURCE_SVG" -resize "${size}x${size}" -gravity center -extent "${size}x${size}" "$output" 2>/dev/null
+    magick -background none -density 300 "$SOURCE_IMAGE" -resize "${size}x${size}" -gravity center -extent "${size}x${size}" "$output" 2>/dev/null || \
+    convert -background none -density 300 "$SOURCE_IMAGE" -resize "${size}x${size}" -gravity center -extent "${size}x${size}" "$output" 2>/dev/null
     rm -rf "$temp_dir"
     echo "   Generated: $output (${size}x${size})"
 }
@@ -123,6 +199,7 @@ generate_windows_ico() {
     done
 
     # Create ICO with all sizes
+    magick "${png_files[@]}" "$RESOURCES_DIR/icon.ico" 2>/dev/null || \
     convert "${png_files[@]}" "$RESOURCES_DIR/icon.ico"
     echo "   Generated: $RESOURCES_DIR/icon.ico"
 
@@ -166,10 +243,16 @@ generate_tray_icons() {
     generate_png 48 "$tray_dir/tray-24@2x.png"
 
     # Template icons for macOS (white silhouette)
-    convert -background none -density 400 "$SOURCE_SVG" -resize "22x22" \
+    magick -background none -density 400 "$SOURCE_IMAGE" -resize "22x22" \
+        -colorspace gray -fill white -colorize 100% \
+        "$tray_dir/trayTemplate.png" 2>/dev/null || \
+    convert -background none -density 400 "$SOURCE_IMAGE" -resize "22x22" \
         -colorspace gray -fill white -colorize 100% \
         "$tray_dir/trayTemplate.png"
-    convert -background none -density 400 "$SOURCE_SVG" -resize "44x44" \
+    magick -background none -density 400 "$SOURCE_IMAGE" -resize "44x44" \
+        -colorspace gray -fill white -colorize 100% \
+        "$tray_dir/trayTemplate@2x.png" 2>/dev/null || \
+    convert -background none -density 400 "$SOURCE_IMAGE" -resize "44x44" \
         -colorspace gray -fill white -colorize 100% \
         "$tray_dir/trayTemplate@2x.png"
 
@@ -178,14 +261,10 @@ generate_tray_icons() {
 
 # Main execution
 main() {
-    echo "Source: $SOURCE_SVG"
+    init_source
+    echo "Source: $SOURCE_IMAGE"
     echo "Output: $RESOURCES_DIR"
     echo ""
-
-    if [ ! -f "$SOURCE_SVG" ]; then
-        echo "❌ Source SVG not found: $SOURCE_SVG"
-        exit 1
-    fi
 
     check_tools
 
@@ -206,7 +285,7 @@ main() {
     echo "  - tray/         (System tray icons)"
     echo "  - icon.iconset/ (macOS iconset source)"
     echo ""
-    echo "To rebuild icons, place your new icon.svg in"
+    echo "To rebuild icons, place your new icon-source.png (preferred) or icon.svg in"
     echo "resources/ and run this script again."
     echo "============================================"
 }
