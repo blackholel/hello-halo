@@ -84,8 +84,8 @@ const DEFAULT_UPDATE_SETTINGS: UpdateSettings = {
   lastDismissedVersion: null
 }
 
-const GITHUB_OWNER = 'openkursar'
-const GITHUB_REPO = 'hello-halo'
+const GITHUB_OWNER = 'blackholel'
+const GITHUB_REPO = 'buddykite'
 const GITHUB_LATEST_RELEASE_URL = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`
 const GITHUB_RELEASE_TAG_URL = (version: string) =>
   `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/tag/v${version}`

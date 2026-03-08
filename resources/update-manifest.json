@@ -7,28 +7,28 @@
       "publishedAt": "2026-03-07T00:00:00.000Z",
       "platforms": {
         "darwin-arm64": {
-          "github": "https://github.com/openkursar/hello-halo/releases/tag/v1.2.1",
+          "github": "https://github.com/blackholel/buddykite/releases/tag/v1.2.1",
           "baidu": {
             "url": "https://pan.baidu.com/s/replace-with-real-link-macos",
             "extractCode": "0000"
           }
         },
         "win32-x64": {
-          "github": "https://github.com/openkursar/hello-halo/releases/tag/v1.2.1",
+          "github": "https://github.com/blackholel/buddykite/releases/tag/v1.2.1",
           "baidu": {
             "url": "https://pan.baidu.com/s/replace-with-real-link-windows",
             "extractCode": "0000"
           }
         },
         "linux-x64": {
-          "github": "https://github.com/openkursar/hello-halo/releases/tag/v1.2.1",
+          "github": "https://github.com/blackholel/buddykite/releases/tag/v1.2.1",
           "baidu": {
             "url": "https://pan.baidu.com/s/replace-with-real-link-linux",
             "extractCode": "0000"
           }
         },
         "default": {
-          "github": "https://github.com/openkursar/hello-halo/releases/tag/v1.2.1",
+          "github": "https://github.com/blackholel/buddykite/releases/tag/v1.2.1",
           "baidu": {
             "url": "https://pan.baidu.com/s/replace-with-real-link-default",
             "extractCode": "0000"

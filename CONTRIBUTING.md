@@ -6,8 +6,8 @@ Thanks for your interest in contributing to Kite! This guide will help you get s
 
 ```bash
 # Clone the repository
-git clone https://github.com/openkursar/hello-halo.git
-cd hello-halo
+git clone https://github.com/blackholel/buddykite.git
+cd buddykite
 
 # Install dependencies
 npm install
@@ -118,7 +118,7 @@ npm run release      # or release:mac / release:win / release:linux
 
 ## Questions?
 
-- Open a [GitHub Discussion](https://github.com/openkursar/hello-halo/discussions)
-- Check existing [Issues](https://github.com/openkursar/hello-halo/issues)
+- Open a [GitHub Discussion](https://github.com/blackholel/buddykite/discussions)
+- Check existing [Issues](https://github.com/blackholel/buddykite/issues)
 
 Thank you for contributing!

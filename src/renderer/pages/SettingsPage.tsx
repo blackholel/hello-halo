@@ -346,7 +346,7 @@ export function SettingsPage() {
   const handleDownloadUpdate = async () => {
     const version = updaterState?.latestVersion || updaterState?.currentVersion
     if (!version) return
-    const targetUrl = updaterState?.downloadUrl || `https://github.com/openkursar/hello-halo/releases/tag/v${version}`
+    const targetUrl = updaterState?.downloadUrl || `https://github.com/blackholel/buddykite/releases/tag/v${version}`
     await api.openExternal(targetUrl)
   }
 

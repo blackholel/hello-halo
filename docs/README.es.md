@@ -8,10 +8,10 @@
 
 Lleva Claude Code en tu bolsillo — el cliente de escritorio de código abierto que hace accesible el poder de Claude Code para todos. Sin terminal, nunca.
 
-[![GitHub Stars](https://img.shields.io/github/stars/openkursar/hello-halo?style=social)](https://github.com/openkursar/hello-halo/stargazers)
+[![GitHub Stars](https://img.shields.io/github/stars/blackholel/buddykite?style=social)](https://github.com/blackholel/buddykite/stargazers)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](../LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20Web-lightgrey.svg)](#instalación)
-[![Downloads](https://img.shields.io/github/downloads/openkursar/hello-halo/total.svg)](https://github.com/openkursar/hello-halo/releases)
+[![Downloads](https://img.shields.io/github/downloads/blackholel/buddykite/total.svg)](https://github.com/blackholel/buddykite/releases)
 
 [Descargar](#instalación) · [Documentación](#documentación) · [Contribuir](#contribuir)
 
@@ -122,10 +122,10 @@ Extiende capacidades con Model Context Protocol. Compatible con servidores MCP d
 
 | Plataforma | Descargar | Requisitos |
 |----------|----------|--------------|
-| **macOS** (Apple Silicon) | [Descargar .dmg](https://github.com/openkursar/hello-halo/releases/latest) | macOS 11+ |
+| **macOS** (Apple Silicon) | [Descargar .dmg](https://github.com/blackholel/buddykite/releases/latest) | macOS 11+ |
 | **macOS** (Intel) | Próximamente | macOS 11+ |
-| **Windows** | [Descargar .exe](https://github.com/openkursar/hello-halo/releases/latest) | Windows 10+ |
-| **Linux** | [Descargar .AppImage](https://github.com/openkursar/hello-halo/releases/latest) | Ubuntu 20.04+ |
+| **Windows** | [Descargar .exe](https://github.com/blackholel/buddykite/releases/latest) | Windows 10+ |
+| **Linux** | [Descargar .AppImage](https://github.com/blackholel/buddykite/releases/latest) | Ubuntu 20.04+ |
 | **Web** (PC/Móvil) | Habilita Acceso Remoto en la app de escritorio | Cualquier navegador moderno |
 
 **Eso es todo.** Descarga, instala, ejecuta. Sin Node.js. Sin npm. Sin comandos de terminal.
@@ -135,8 +135,8 @@ Extiende capacidades con Model Context Protocol. Compatible con servidores MCP d
 Para desarrolladores que quieran contribuir o personalizar:
 
 ```bash
-git clone https://github.com/openkursar/hello-halo.git
-cd hello-halo
+git clone https://github.com/blackholel/buddykite.git
+cd buddykite
 npm install
 npm run dev
 ```
@@ -246,8 +246,8 @@ Damos la bienvenida a contribuciones de todo tipo:
 
 ```bash
 # Configuración de desarrollo
-git clone https://github.com/openkursar/hello-halo.git
-cd hello-halo
+git clone https://github.com/blackholel/buddykite.git
+cd buddykite
 npm install
 npm run dev
 ```
@@ -258,8 +258,8 @@ Ver [CONTRIBUTING.md](../CONTRIBUTING.md) para guías.
 
 ## Comunidad
 
-- [GitHub Discussions](https://github.com/openkursar/hello-halo/discussions) — Preguntas e ideas
-- [Issues](https://github.com/openkursar/hello-halo/issues) — Reportes de bugs y solicitudes de funciones
+- [GitHub Discussions](https://github.com/blackholel/buddykite/discussions) — Preguntas e ideas
+- [Issues](https://github.com/blackholel/buddykite/issues) — Reportes de bugs y solicitudes de funciones
 
 ---
 
@@ -296,7 +296,7 @@ Si Kite te ayuda a construir algo increíble, nos encantaría saberlo.
 
 **Dale Star a este repo** para ayudar a otros a descubrir Kite.
 
-[![Star History Chart](https://api.star-history.com/svg?repos=openkursar/hello-halo&type=Date)](https://star-history.com/#openkursar/hello-halo&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=blackholel/buddykite&type=Date)](https://star-history.com/#blackholel/buddykite&Date)
 
 [⬆ Volver Arriba](#kite)
 
