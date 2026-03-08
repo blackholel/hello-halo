@@ -47,6 +47,7 @@ import { useAgentsStore, type AgentDefinition } from '../stores/agents.store'
 import { useCommandsStore, type CommandDefinition } from '../stores/commands.store'
 import { useToolkitStore } from '../stores/toolkit.store'
 import { useComposerStore } from '../stores/composer.store'
+import { pickEntryConversation } from '../utils/space-entry-conversation'
 
 const CREATE_SKILLS_TRIGGER_EN = 'create-skills'
 const CREATE_AGENTS_TRIGGER_EN = 'create-agents'
@@ -687,9 +688,10 @@ export function SpacePage() {
     }
   }, [currentSpace?.id, isCanvasOpen])
 
-  // Initialize space when entering
-  // On first entry: load conversations but don't auto-select (show welcome state)
-  // Only auto-select if user previously had a conversation selected
+  // Initialize space when entering:
+  // - Never auto-open historical conversation by default
+  // - Prefer reusable empty draft conversation
+  // - Otherwise create a fresh conversation so user can start immediately
   useEffect(() => {
     if (!currentSpace) return
 
@@ -711,10 +713,14 @@ export function SpacePage() {
 
       const store = useChatStore.getState()
       const spaceState = store.getSpaceState(currentSpace.id)
+      const entryConversation = pickEntryConversation(spaceState.conversations)
 
-      if (spaceState.conversations.length === 0) {
-        await createConversation(currentSpace.id)
+      if (entryConversation) {
+        await selectConversation(entryConversation.id)
+        return
       }
+
+      await createConversation(currentSpace.id)
     }
 
     void initSpace()
@@ -722,17 +728,16 @@ export function SpacePage() {
     return () => {
       cancelled = true
     }
-  }, [createConversation, currentSpace?.id, loadConversations, setCurrentSpace]) // Only re-run when space ID changes
+  }, [createConversation, currentSpace?.id, loadConversations, selectConversation, setCurrentSpace]) // Only re-run when space ID changes
 
-  // In tabs-only mode, auto-open conversation in tab when entering space
+  // In tabs-only mode, auto-open the current entry conversation tab
   useEffect(() => {
     if (layoutMode !== 'tabs-only' || !currentSpace || isLoading) return
     if (currentSpaceId !== currentSpace.id) return
 
-    const store = useChatStore.getState()
-    const spaceState = store.getSpaceState(currentSpace.id)
-    const spaceConversations = spaceState.conversations
-    if (spaceConversations.length === 0) return
+    if (!currentConversationId) return
+    const currentConversationMeta = conversations.find((conversation) => conversation.id === currentConversationId)
+    if (!currentConversationMeta) return
 
     // Check if any chat tab is already open for this space
     const tabs = canvasLifecycle.getTabs()
@@ -740,17 +745,16 @@ export function SpacePage() {
       tab => tab.type === 'chat' && tab.spaceId === currentSpace.id
     )
 
-    // If no chat tab is open, open the current or first conversation
+    // If no chat tab is open, open the current conversation
     if (!hasOpenChatTab) {
-      const convToOpen = spaceState.currentConversationId
-        ? spaceConversations.find(c => c.id === spaceState.currentConversationId)
-        : spaceConversations[0]
-
-      if (convToOpen) {
-        openChat(currentSpace.id, convToOpen.id, convToOpen.title, currentSpace.path)
-      }
+      openChat(
+        currentSpace.id,
+        currentConversationMeta.id,
+        currentConversationMeta.title,
+        currentSpace.path
+      )
     }
-  }, [layoutMode, currentSpace?.id, currentSpaceId, isLoading, openChat])
+  }, [layoutMode, currentSpace?.id, currentSpace?.path, conversations, currentConversationId, currentSpaceId, isLoading, openChat])
 
   // Handle back
   const handleBack = () => {

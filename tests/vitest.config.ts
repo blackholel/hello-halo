@@ -48,7 +48,8 @@ export default defineConfig({
       '../src/renderer/stores/__tests__/chat.store.response-language.test.ts',
       '../src/renderer/stores/__tests__/workflows.store.validation.test.ts',
       '../src/renderer/stores/__tests__/composer-mru.store.test.ts',
-      '../src/renderer/utils/__tests__/composer-suggestion-ranking.test.ts'
+      '../src/renderer/utils/__tests__/composer-suggestion-ranking.test.ts',
+      '../src/renderer/utils/__tests__/space-entry-conversation.test.ts'
     ],
 
     // Root directory for tests
