@@ -98,6 +98,8 @@ function inputToUrl(input: string): string {
 export function BrowserViewer({ tab }: BrowserViewerProps) {
   const { t } = useTranslation()
   const containerRef = useRef<HTMLDivElement>(null)
+  const resizeRafRef = useRef<number | null>(null)
+  const lastSizeRef = useRef<{ width: number; height: number } | null>(null)
   const [addressBarValue, setAddressBarValue] = useState(tab.url || '')
   const [isAddressBarFocused, setIsAddressBarFocused] = useState(false)
   const [zoomLevel, setZoomLevel] = useState(100)
@@ -152,14 +154,34 @@ export function BrowserViewer({ tab }: BrowserViewerProps) {
   useEffect(() => {
     if (!containerRef.current) return
 
-    const resizeObserver = new ResizeObserver(() => {
-      if (tab.browserViewId) {
-        canvasLifecycle.updateActiveBounds()
+    const resizeObserver = new ResizeObserver((entries) => {
+      if (!tab.browserViewId) return
+      const target = entries[0]
+      if (!target) return
+      const width = Math.round(target.contentRect.width)
+      const height = Math.round(target.contentRect.height)
+      const previous = lastSizeRef.current
+      if (previous && previous.width === width && previous.height === height) {
+        return
       }
+      lastSizeRef.current = { width, height }
+      if (resizeRafRef.current != null) {
+        cancelAnimationFrame(resizeRafRef.current)
+      }
+      resizeRafRef.current = requestAnimationFrame(() => {
+        canvasLifecycle.updateActiveBounds()
+        resizeRafRef.current = null
+      })
     })
 
     resizeObserver.observe(containerRef.current)
-    return () => resizeObserver.disconnect()
+    return () => {
+      if (resizeRafRef.current != null) {
+        cancelAnimationFrame(resizeRafRef.current)
+        resizeRafRef.current = null
+      }
+      resizeObserver.disconnect()
+    }
   }, [tab.browserViewId])
 
   // ============================================

@@ -367,13 +367,25 @@ function StreamingBubble({
     }
   }, [segments])
 
-  if (!content) return null
-
   // Calculate what to show in current content area
   // activeSnapshotLen is updated AFTER segments render, ensuring no content loss
   const displayContent = activeSnapshotLen > 0 && content.length >= activeSnapshotLen
     ? content.slice(activeSnapshotLen)
     : content
+  const [throttledMarkdownContent, setThrottledMarkdownContent] = useState(displayContent)
+
+  useEffect(() => {
+    if (!isStreaming) {
+      setThrottledMarkdownContent(displayContent)
+      return
+    }
+    const timer = window.setTimeout(() => {
+      setThrottledMarkdownContent(displayContent)
+    }, 200)
+    return () => window.clearTimeout(timer)
+  }, [displayContent, isStreaming])
+
+  if (!content) return null
 
   const containerHeight = currentHeight > 0 ? currentHeight : 'auto'
 
@@ -405,7 +417,11 @@ function StreamingBubble({
 
           {/* Current content - always visible, shows only NEW part after snapshots */}
           <div ref={currentRef} className="break-words leading-relaxed">
-            <MarkdownRenderer content={displayContent} workDir={workDir} />
+            {isStreaming ? (
+              <span className="whitespace-pre-wrap">{displayContent}</span>
+            ) : (
+              <MarkdownRenderer content={throttledMarkdownContent} workDir={workDir} />
+            )}
             {isStreaming && (
               <span className="inline-block w-0.5 h-5 ml-0.5 bg-foreground/70 streaming-cursor align-middle" />
             )}
@@ -491,17 +507,17 @@ export function MessageList({
     [messages, isGenerating, activeRunId]
   )
 
-  // Calculate previous cost for each message (for cost diff display)
-  const getPreviousCost = (currentIndex: number): number => {
-    // Find the previous assistant message with tokenUsage
-    for (let i = currentIndex - 1; i >= 0; i--) {
-      const msg = mainMessages[i]
-      if (msg.role === 'assistant' && msg.tokenUsage?.totalCostUsd) {
-        return msg.tokenUsage.totalCostUsd
+  const previousCostByMessageId = useMemo(() => {
+    const map = new Map<string, number>()
+    let previousCost = 0
+    for (const message of mainMessages) {
+      map.set(message.id, previousCost)
+      if (message.role === 'assistant' && message.tokenUsage?.totalCostUsd) {
+        previousCost = message.tokenUsage.totalCostUsd
       }
     }
-    return 0
-  }
+    return map
+  }, [mainMessages])
 
   // Build timeline segments from thoughts - preserves original order of Skill and SubAgent calls
   const timelineSegments = useMemo(() => {
@@ -613,8 +629,8 @@ export function MessageList({
       ${isCompact ? 'max-w-full' : 'max-w-3xl mx-auto'}
     `}>
       {/* Render completed messages - thoughts shown above assistant messages */}
-      {mainMessages.map((message, index) => {
-        const previousCost = getPreviousCost(index)
+      {mainMessages.map((message) => {
+        const previousCost = previousCostByMessageId.get(message.id) ?? 0
         const messageProcessThoughts = getMessageThoughtsForDisplay(message)
         // Show collapsed thoughts ABOVE assistant messages, in same container for consistent width
         if (message.role === 'assistant' && messageProcessThoughts.length > 0) {

@@ -23,25 +23,66 @@
  * BrowserView lifecycle is managed centrally by CanvasLifecycle.
  */
 
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, lazy, Suspense } from 'react'
 import { X, ChevronLeft, Minimize2, Maximize2 } from 'lucide-react'
 import { useCanvasLifecycle, type TabState, type ContentType } from '../../hooks/useCanvasLifecycle'
 import { CanvasTabBar } from './CanvasTabs'
-import { CodeEditor } from './viewers/CodeEditor'
-import { MarkdownViewer } from './viewers/MarkdownViewer'
-import { ImageViewer } from './viewers/ImageViewer'
-import { HtmlViewer } from './viewers/HtmlViewer'
-import { JsonViewer } from './viewers/JsonViewer'
-import { CsvViewer } from './viewers/CsvViewer'
-import { TextViewer } from './viewers/TextViewer'
-import { PlanEditor } from './viewers/PlanEditor'
-import { BrowserViewer, BrowserViewerFallback } from './viewers/BrowserViewer'
 import { ChatTabViewer } from './viewers/ChatTabViewer'
-import { TemplateLibraryViewer } from './viewers/TemplateLibraryViewer'
 import { api } from '../../api'
 import { useTranslation } from '../../i18n'
 import { useChatStore } from '../../stores/chat.store'
 import { useSpaceStore } from '../../stores/space.store'
+
+const loadCodeEditor = () => import('./viewers/CodeEditor')
+const loadMarkdownViewer = () => import('./viewers/MarkdownViewer')
+const loadImageViewer = () => import('./viewers/ImageViewer')
+const loadHtmlViewer = () => import('./viewers/HtmlViewer')
+const loadJsonViewer = () => import('./viewers/JsonViewer')
+const loadCsvViewer = () => import('./viewers/CsvViewer')
+const loadTextViewer = () => import('./viewers/TextViewer')
+const loadPlanEditor = () => import('./viewers/PlanEditor')
+const loadBrowserViewer = () => import('./viewers/BrowserViewer')
+const loadTemplateLibraryViewer = () => import('./viewers/TemplateLibraryViewer')
+
+const LazyCodeEditor = lazy(async () => ({ default: (await loadCodeEditor()).CodeEditor }))
+const LazyMarkdownViewer = lazy(async () => ({ default: (await loadMarkdownViewer()).MarkdownViewer }))
+const LazyImageViewer = lazy(async () => ({ default: (await loadImageViewer()).ImageViewer }))
+const LazyHtmlViewer = lazy(async () => ({ default: (await loadHtmlViewer()).HtmlViewer }))
+const LazyJsonViewer = lazy(async () => ({ default: (await loadJsonViewer()).JsonViewer }))
+const LazyCsvViewer = lazy(async () => ({ default: (await loadCsvViewer()).CsvViewer }))
+const LazyTextViewer = lazy(async () => ({ default: (await loadTextViewer()).TextViewer }))
+const LazyPlanEditor = lazy(async () => ({ default: (await loadPlanEditor()).PlanEditor }))
+const LazyBrowserViewer = lazy(async () => ({ default: (await loadBrowserViewer()).BrowserViewer }))
+const LazyBrowserViewerFallback = lazy(async () => ({
+  default: (await loadBrowserViewer()).BrowserViewerFallback
+}))
+const LazyTemplateLibraryViewer = lazy(async () => ({
+  default: (await loadTemplateLibraryViewer()).TemplateLibraryViewer
+}))
+
+const preloadedViewerTypes = new Set<ContentType>()
+const viewerPreloaders: Partial<Record<ContentType, () => Promise<unknown>>> = {
+  code: loadCodeEditor,
+  markdown: loadMarkdownViewer,
+  image: loadImageViewer,
+  html: loadHtmlViewer,
+  json: loadJsonViewer,
+  csv: loadCsvViewer,
+  text: loadTextViewer,
+  plan: loadPlanEditor,
+  browser: loadBrowserViewer,
+  pdf: loadBrowserViewer,
+  'template-library': loadTemplateLibraryViewer
+}
+
+function preloadViewer(type: ContentType): void {
+  const loader = viewerPreloaders[type]
+  if (!loader || preloadedViewerTypes.has(type)) {
+    return
+  }
+  preloadedViewerTypes.add(type)
+  void loader()
+}
 
 interface ContentCanvasProps {
   className?: string
@@ -149,6 +190,11 @@ export function ContentCanvas({ className = '' }: ContentCanvasProps) {
     }
   }, [activeTabId, saveFile])
 
+  useEffect(() => {
+    if (!activeTab) return
+    preloadViewer(activeTab.type)
+  }, [activeTab?.type])
+
   // Don't render if not open
   if (!isOpen) return null
 
@@ -187,6 +233,15 @@ interface TabContentProps {
 function TabContent({ tab, onScrollChange, onContentChange, onSave }: TabContentProps) {
   const { t } = useTranslation()
   const executePlan = useChatStore(state => state.executePlan)
+  const viewerFallback = (
+    <div className="flex items-center justify-center h-full">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+        <p className="text-sm text-muted-foreground">{t('Loading...')}</p>
+      </div>
+    </div>
+  )
+
   // Chat tabs have their own component with full chat functionality
   if (tab.type === 'chat') {
     return <ChatTabViewer tab={tab} />
@@ -195,9 +250,17 @@ function TabContent({ tab, onScrollChange, onContentChange, onSave }: TabContent
   // Browser and PDF tabs use BrowserView (handle their own loading state)
   if (tab.type === 'browser' || tab.type === 'pdf') {
     if (api.isRemoteMode()) {
-      return <BrowserViewerFallback tab={tab} />
+      return (
+        <Suspense fallback={viewerFallback}>
+          <LazyBrowserViewerFallback tab={tab} />
+        </Suspense>
+      )
     }
-    return <BrowserViewer tab={tab} />
+    return (
+      <Suspense fallback={viewerFallback}>
+        <LazyBrowserViewer tab={tab} />
+      </Suspense>
+    )
   }
 
   // Handle loading state for non-browser tabs
@@ -230,40 +293,70 @@ function TabContent({ tab, onScrollChange, onContentChange, onSave }: TabContent
   // Render appropriate viewer based on content type
   switch (tab.type) {
     case 'code':
-      return <CodeEditor tab={tab} onContentChange={onContentChange} onSave={onSave} />
+      return (
+        <Suspense fallback={viewerFallback}>
+          <LazyCodeEditor tab={tab} onContentChange={onContentChange} onSave={onSave} />
+        </Suspense>
+      )
 
     case 'markdown':
-      return <MarkdownViewer tab={tab} onScrollChange={onScrollChange} />
+      return (
+        <Suspense fallback={viewerFallback}>
+          <LazyMarkdownViewer tab={tab} onScrollChange={onScrollChange} />
+        </Suspense>
+      )
 
     case 'plan':
       return (
-        <PlanEditor
-          tab={tab}
-          onContentChange={onContentChange}
-          onBuild={async (content) => {
-            if (!tab.spaceId || !tab.conversationId) {
-              console.error('[ContentCanvas] Plan tab missing conversation binding')
-              return
-            }
-            await executePlan(tab.spaceId, tab.conversationId, content)
-          }}
-        />
+        <Suspense fallback={viewerFallback}>
+          <LazyPlanEditor
+            tab={tab}
+            onContentChange={onContentChange}
+            onBuild={async (content) => {
+              if (!tab.spaceId || !tab.conversationId) {
+                console.error('[ContentCanvas] Plan tab missing conversation binding')
+                return
+              }
+              await executePlan(tab.spaceId, tab.conversationId, content)
+            }}
+          />
+        </Suspense>
       )
 
     case 'image':
-      return <ImageViewer tab={tab} />
+      return (
+        <Suspense fallback={viewerFallback}>
+          <LazyImageViewer tab={tab} />
+        </Suspense>
+      )
 
     case 'html':
-      return <HtmlViewer tab={tab} />
+      return (
+        <Suspense fallback={viewerFallback}>
+          <LazyHtmlViewer tab={tab} />
+        </Suspense>
+      )
 
     case 'json':
-      return <JsonViewer tab={tab} onScrollChange={onScrollChange} />
+      return (
+        <Suspense fallback={viewerFallback}>
+          <LazyJsonViewer tab={tab} onScrollChange={onScrollChange} />
+        </Suspense>
+      )
 
     case 'csv':
-      return <CsvViewer tab={tab} onScrollChange={onScrollChange} />
+      return (
+        <Suspense fallback={viewerFallback}>
+          <LazyCsvViewer tab={tab} onScrollChange={onScrollChange} />
+        </Suspense>
+      )
 
     case 'text':
-      return <TextViewer tab={tab} onScrollChange={onScrollChange} />
+      return (
+        <Suspense fallback={viewerFallback}>
+          <LazyTextViewer tab={tab} onScrollChange={onScrollChange} />
+        </Suspense>
+      )
 
     case 'terminal':
       // Terminal view placeholder (future feature)
@@ -277,10 +370,18 @@ function TabContent({ tab, onScrollChange, onContentChange, onSave }: TabContent
       )
 
     case 'template-library':
-      return <TemplateLibraryViewer tab={tab} />
+      return (
+        <Suspense fallback={viewerFallback}>
+          <LazyTemplateLibraryViewer tab={tab} />
+        </Suspense>
+      )
 
     default:
-      return <TextViewer tab={tab} onScrollChange={onScrollChange} />
+      return (
+        <Suspense fallback={viewerFallback}>
+          <LazyTextViewer tab={tab} onScrollChange={onScrollChange} />
+        </Suspense>
+      )
   }
 }
 

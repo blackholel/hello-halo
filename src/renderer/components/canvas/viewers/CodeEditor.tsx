@@ -11,7 +11,7 @@
  * - Word wrap support
  */
 
-import { useRef, useState, useCallback, useEffect } from 'react'
+import { useRef, useState, useCallback, useEffect, useMemo } from 'react'
 import { Save, Check, Map } from 'lucide-react'
 import Editor, { type OnMount, type OnChange, loader } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
@@ -30,12 +30,60 @@ interface CodeEditorProps {
 export function CodeEditor({ tab, onContentChange, onSave }: CodeEditorProps) {
   const { t } = useTranslation()
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
+  const flushTimerRef = useRef<number | null>(null)
+  const pendingDraftRef = useRef<string | null>(null)
+  const debounceMs = 250
   const [isDarkTheme, setIsDarkTheme] = useState(() =>
     document.documentElement.classList.contains('dark')
   )
   const [showMinimap, setShowMinimap] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [lineCount, setLineCount] = useState(1)
+  const [draftContent, setDraftContent] = useState(tab.content || '')
+  const lineCount = useMemo(() => {
+    if (!draftContent) return 1
+    return draftContent.split('\n').length
+  }, [draftContent])
+
+  const clearFlushTimer = useCallback(() => {
+    if (flushTimerRef.current != null) {
+      window.clearTimeout(flushTimerRef.current)
+      flushTimerRef.current = null
+    }
+  }, [])
+
+  const flushDraft = useCallback((nextContent: string) => {
+    if (onContentChange) {
+      onContentChange(nextContent)
+    }
+    pendingDraftRef.current = null
+  }, [onContentChange])
+
+  const flushPendingDraft = useCallback(() => {
+    clearFlushTimer()
+    if (pendingDraftRef.current != null) {
+      flushDraft(pendingDraftRef.current)
+    }
+  }, [clearFlushTimer, flushDraft])
+
+  const scheduleFlushDraft = useCallback((nextContent: string) => {
+    pendingDraftRef.current = nextContent
+    clearFlushTimer()
+    flushTimerRef.current = window.setTimeout(() => {
+      flushDraft(nextContent)
+    }, debounceMs)
+  }, [clearFlushTimer, flushDraft])
+
+  useEffect(() => {
+    setDraftContent(tab.content || '')
+    pendingDraftRef.current = null
+    clearFlushTimer()
+  }, [tab.id, tab.content, clearFlushTimer])
+
+  useEffect(() => {
+    return () => {
+      flushPendingDraft()
+    }
+  }, [flushPendingDraft])
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
@@ -54,12 +102,10 @@ export function CodeEditor({ tab, onContentChange, onSave }: CodeEditorProps) {
   const handleEditorMount: OnMount = useCallback((editor, monaco) => {
     editorRef.current = editor
 
-    // Update line count
-    setLineCount(editor.getModel()?.getLineCount() || 1)
-
     // Add Cmd+S / Ctrl+S save shortcut
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
       if (onSave) {
+        flushPendingDraft()
         onSave()
         setSaved(true)
         setTimeout(() => setSaved(false), 2000)
@@ -68,27 +114,24 @@ export function CodeEditor({ tab, onContentChange, onSave }: CodeEditorProps) {
 
     // Focus editor
     editor.focus()
-  }, [onSave])
+  }, [flushPendingDraft, onSave])
 
   // Handle content change
   const handleChange: OnChange = useCallback((value) => {
-    if (value !== undefined && onContentChange) {
-      onContentChange(value)
-    }
-    // Update line count
-    if (editorRef.current) {
-      setLineCount(editorRef.current.getModel()?.getLineCount() || 1)
-    }
-  }, [onContentChange])
+    if (value === undefined) return
+    setDraftContent(value)
+    scheduleFlushDraft(value)
+  }, [scheduleFlushDraft])
 
   // Handle save button click
   const handleSaveClick = useCallback(() => {
     if (onSave) {
+      flushPendingDraft()
       onSave()
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     }
-  }, [onSave])
+  }, [flushPendingDraft, onSave])
 
   // Toggle minimap
   const toggleMinimap = useCallback(() => {
@@ -143,6 +186,35 @@ export function CodeEditor({ tab, onContentChange, onSave }: CodeEditorProps) {
     return languageMap[lower] || lower
   }
 
+  const editorOptions = useMemo<monaco.editor.IStandaloneEditorConstructionOptions>(() => ({
+    fontSize: 13,
+    fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+    lineNumbers: 'on',
+    minimap: {
+      enabled: showMinimap,
+    },
+    wordWrap: 'on',
+    scrollBeyondLastLine: false,
+    automaticLayout: true,
+    tabSize: 2,
+    insertSpaces: true,
+    renderWhitespace: 'selection',
+    bracketPairColorization: {
+      enabled: true,
+    },
+    guides: {
+      bracketPairs: true,
+      indentation: true,
+    },
+    smoothScrolling: true,
+    cursorBlinking: 'smooth',
+    cursorSmoothCaretAnimation: 'on',
+    padding: {
+      top: 16,
+      bottom: 16,
+    },
+  }), [showMinimap])
+
   return (
     <div className="relative flex flex-col h-full bg-background">
       {/* Toolbar */}
@@ -191,38 +263,11 @@ export function CodeEditor({ tab, onContentChange, onSave }: CodeEditorProps) {
         <Editor
           height="100%"
           language={getMonacoLanguage(tab.language)}
-          value={tab.content || ''}
+          value={draftContent}
           theme={isDarkTheme ? 'vs-dark' : 'light'}
           onMount={handleEditorMount}
           onChange={handleChange}
-          options={{
-            fontSize: 13,
-            fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
-            lineNumbers: 'on',
-            minimap: {
-              enabled: showMinimap,
-            },
-            wordWrap: 'on',
-            scrollBeyondLastLine: false,
-            automaticLayout: true,
-            tabSize: 2,
-            insertSpaces: true,
-            renderWhitespace: 'selection',
-            bracketPairColorization: {
-              enabled: true,
-            },
-            guides: {
-              bracketPairs: true,
-              indentation: true,
-            },
-            smoothScrolling: true,
-            cursorBlinking: 'smooth',
-            cursorSmoothCaretAnimation: 'on',
-            padding: {
-              top: 16,
-              bottom: 16,
-            },
-          }}
+          options={editorOptions}
           loading={
             <div className="flex items-center justify-center h-full text-muted-foreground">
               {t('Loading editor...')}

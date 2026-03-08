@@ -8,7 +8,7 @@
  * - When complete: indicator fades out smoothly
  */
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, memo } from 'react'
 import {
   Sparkles,
   Copy,
@@ -47,7 +47,7 @@ const EMPTY_RESOURCE_DISPLAY_LOOKUPS: ComposerResourceDisplayLookups = {
   agents: new Map()
 }
 
-export function MessageItem({
+export const MessageItem = memo(function MessageItem({
   message,
   previousCost = 0,
   isInContainer = false,
@@ -185,7 +185,10 @@ export function MessageItem({
   if (isInContainer) {
     // Even in container, we need data-message-id for search navigation
     return (
-      <div data-message-id={message.id}>
+      <div
+        data-message-id={message.id}
+        style={{ contentVisibility: 'auto', containIntrinsicSize: '180px' }}
+      >
         {bubble}
       </div>
     )
@@ -196,8 +199,22 @@ export function MessageItem({
     <div
       className={`flex ${isUser ? 'justify-end' : 'justify-start'} animate-fade-in`}
       data-message-id={message.id}
+      style={{ contentVisibility: 'auto', containIntrinsicSize: '180px' }}
     >
       {bubble}
     </div>
   )
-}
+}, (prev, next) => {
+  return (
+    prev.message === next.message &&
+    prev.previousCost === next.previousCost &&
+    prev.hideThoughts === next.hideThoughts &&
+    prev.isInContainer === next.isInContainer &&
+    prev.isWorking === next.isWorking &&
+    prev.isWaitingMore === next.isWaitingMore &&
+    prev.workDir === next.workDir &&
+    prev.resourceDisplayLookups === next.resourceDisplayLookups &&
+    prev.onOpenPlanInCanvas === next.onOpenPlanInCanvas &&
+    prev.onExecutePlan === next.onExecutePlan
+  )
+})
