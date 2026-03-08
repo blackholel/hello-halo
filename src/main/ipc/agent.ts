@@ -224,13 +224,19 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
       _event,
       spaceId: string,
       conversationId: string,
-      responseLanguage?: LocaleCode | string
+      responseLanguage?: LocaleCode | string,
+      options?: { waitForReady?: boolean }
     ) => {
     try {
-      // Async initialization, non-blocking IPC call
-      ensureSessionWarm(spaceId, conversationId, responseLanguage).catch((error: unknown) => {
-        console.error('[IPC] ensureSessionWarm error:', error)
-      })
+      const waitForReady = options?.waitForReady === true
+      if (waitForReady) {
+        await ensureSessionWarm(spaceId, conversationId, responseLanguage)
+      } else {
+        // Async initialization, non-blocking IPC call
+        ensureSessionWarm(spaceId, conversationId, responseLanguage).catch((error: unknown) => {
+          console.error('[IPC] ensureSessionWarm error:', error)
+        })
+      }
       return { success: true }
     } catch (error: unknown) {
       return toErrorResponse(error)

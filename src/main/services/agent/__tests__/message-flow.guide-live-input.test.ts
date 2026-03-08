@@ -3,7 +3,7 @@ import { ASK_USER_QUESTION_ERROR_CODES, type PendingAskUserQuestionContext, type
 import { guideLiveInput, sendMessage } from '../message-flow.service'
 
 const sessionManagerMocks = vi.hoisted(() => ({
-  getOrCreateV2Session: vi.fn(),
+  acquireSessionWithResumeFallback: vi.fn(),
   closeV2Session: vi.fn(),
   getActiveSession: vi.fn(),
   setActiveSession: vi.fn(),
@@ -32,7 +32,7 @@ const changeSetMocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../session.manager', () => ({
-  getOrCreateV2Session: sessionManagerMocks.getOrCreateV2Session,
+  acquireSessionWithResumeFallback: sessionManagerMocks.acquireSessionWithResumeFallback,
   closeV2Session: sessionManagerMocks.closeV2Session,
   getActiveSession: sessionManagerMocks.getActiveSession,
   setActiveSession: sessionManagerMocks.setActiveSession,

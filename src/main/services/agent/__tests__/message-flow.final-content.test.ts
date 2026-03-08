@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { buildForcedAssumptionResponse, resolveFinalContent } from '../message-flow.service'
+import {
+  buildConversationHistoryBootstrap,
+  buildForcedAssumptionResponse,
+  resolveFinalContent
+} from '../message-flow.service'
 
 describe('resolveFinalContent priority', () => {
   it('prefers result content first', () => {
@@ -47,5 +51,24 @@ describe('buildForcedAssumptionResponse', () => {
 
     expect(content).toContain('Clarification budget is exhausted')
     expect(content).toContain('## Default Assumption Execution')
+  })
+})
+
+describe('buildConversationHistoryBootstrap', () => {
+  it('当单个 turn 超过预算时，不应强制塞入 fallback turn', () => {
+    const result = buildConversationHistoryBootstrap({
+      historyMessages: [
+        {
+          role: 'user',
+          content: 'x'.repeat(30000),
+          images: [{ type: 'image', data: 'y'.repeat(20000) }]
+        }
+      ],
+      maxBootstrapTokens: 10
+    })
+
+    expect(result.block).toBe('')
+    expect(result.tokenEstimate).toBe(0)
+    expect(result.appliedTurnCount).toBe(0)
   })
 })

@@ -156,6 +156,44 @@ describe('Chat Store - queued turn flow', () => {
     expect(useChatStore.getState().getQueueCount(conversationId)).toBe(0)
   })
 
+  it('submitTurn 在 conversationReady=preparing 时等待并在 3 秒超时后放行', async () => {
+    vi.useFakeTimers()
+    try {
+      const spaceId = 'space-1'
+      const conversationId = 'conv-ready-timeout'
+      seedConversation(spaceId, conversationId)
+      useChatStore.setState({
+        conversationReadyByConversation: new Map([
+          [
+            conversationId,
+            {
+              status: 'preparing',
+              updatedAt: Date.now()
+            }
+          ]
+        ])
+      } as any)
+
+      const submitPromise = useChatStore.getState().submitTurn({
+        spaceId,
+        conversationId,
+        content: 'send after timeout',
+        aiBrowserEnabled: false,
+        mode: 'code'
+      })
+
+      await vi.advanceTimersByTimeAsync(3050)
+      await submitPromise
+
+      expect(mockSendMessage).toHaveBeenCalledTimes(1)
+      expect(
+        useChatStore.getState().conversationReadyByConversation.get(conversationId)?.status
+      ).toBe('timeout')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('does not flush when pending AskUserQuestion exists', async () => {
     const spaceId = 'space-1'
     const conversationId = 'conv-queue-pending-ask'

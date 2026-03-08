@@ -81,6 +81,22 @@ describe('renderer api language passthrough', () => {
     expect(ensureSessionWarmMock).toHaveBeenCalledWith('space-1', 'conv-3', 'fr')
   })
 
+  it('ensureSessionWarm 在 Electron 模式可透传 waitForReady', async () => {
+    isElectronMock.mockReturnValue(true)
+    const ensureSessionWarmMock = vi.fn().mockResolvedValue({ success: true })
+    ;(globalThis as any).window = {
+      kite: {
+        ensureSessionWarm: ensureSessionWarmMock
+      }
+    }
+
+    const { api } = await import('..')
+    const result = await api.ensureSessionWarm('space-1', 'conv-5', 'en', { waitForReady: true })
+
+    expect(result.success).toBe(true)
+    expect(ensureSessionWarmMock).toHaveBeenCalledWith('space-1', 'conv-5', 'en', { waitForReady: true })
+  })
+
   it('ensureSessionWarm 在 HTTP 模式透传 responseLanguage', async () => {
     isElectronMock.mockReturnValue(false)
     const { api } = await import('..')

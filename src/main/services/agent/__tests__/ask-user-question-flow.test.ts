@@ -7,24 +7,28 @@ import type {
 import { ASK_USER_QUESTION_ERROR_CODES } from '../types'
 
 const sessionManagerMocks = vi.hoisted(() => ({
-  getOrCreateV2Session: vi.fn(),
+  acquireSessionWithResumeFallback: vi.fn(),
   closeV2Session: vi.fn(),
   getActiveSession: vi.fn(),
   setActiveSession: vi.fn(),
   deleteActiveSession: vi.fn(),
   getV2SessionInfo: vi.fn(),
+  getV2SessionConversationIds: vi.fn(() => []),
   getV2SessionsCount: vi.fn(() => 0),
+  setSessionMode: vi.fn(),
   touchV2Session: vi.fn()
 }))
 
 vi.mock('../session.manager', () => ({
-  getOrCreateV2Session: sessionManagerMocks.getOrCreateV2Session,
+  acquireSessionWithResumeFallback: sessionManagerMocks.acquireSessionWithResumeFallback,
   closeV2Session: sessionManagerMocks.closeV2Session,
   getActiveSession: sessionManagerMocks.getActiveSession,
   setActiveSession: sessionManagerMocks.setActiveSession,
   deleteActiveSession: sessionManagerMocks.deleteActiveSession,
   getV2SessionInfo: sessionManagerMocks.getV2SessionInfo,
+  getV2SessionConversationIds: sessionManagerMocks.getV2SessionConversationIds,
   getV2SessionsCount: sessionManagerMocks.getV2SessionsCount,
+  setSessionMode: sessionManagerMocks.setSessionMode,
   touchV2Session: sessionManagerMocks.touchV2Session
 }))
 

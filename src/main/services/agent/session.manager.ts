@@ -19,7 +19,9 @@ import type {
   SessionConfig,
   SessionState,
   ChatMode,
-  AgentSetModeResult
+  AgentSetModeResult,
+  SessionAcquireResult,
+  ResumeErrorCode
 } from './types'
 import { getPermissionModeForChatMode, isChatMode } from './types'
 import { getEnabledPluginMcpHash, getEnabledPluginMcpList } from '../plugin-mcp.service'
@@ -38,6 +40,7 @@ const MIN_SESSION_IDLE_TIMEOUT_MS = 1000
 const RESOURCE_INDEX_REBUILD_DEBOUNCE_MS = 3000
 let cleanupIntervalId: NodeJS.Timeout | null = null
 const lastResourceIndexRebuildAt = new Map<string, number>()
+const sessionAcquireLockChains = new Map<string, Promise<void>>()
 
 function toNonEmptyString(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
@@ -91,6 +94,74 @@ function errorMessage(error: unknown): string {
 
 function isAbortLikeError(error: unknown): boolean {
   return /abort/i.test(errorMessage(error))
+}
+
+function normalizePathForCompare(pathValue: string): string {
+  const normalized = resolve(pathValue)
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized
+}
+
+function withSessionAcquireLock<T>(
+  conversationId: string,
+  operation: () => Promise<T>
+): Promise<T> {
+  const previous = sessionAcquireLockChains.get(conversationId) || Promise.resolve()
+  let release!: () => void
+  const gate = new Promise<void>((resolveGate) => {
+    release = resolveGate
+  })
+  const chain = previous.then(() => gate)
+  sessionAcquireLockChains.set(conversationId, chain)
+
+  const run = async (): Promise<T> => {
+    await previous
+    try {
+      return await operation()
+    } finally {
+      release()
+      if (sessionAcquireLockChains.get(conversationId) === chain) {
+        sessionAcquireLockChains.delete(conversationId)
+      }
+    }
+  }
+
+  return run()
+}
+
+export function classifyResumeError(error: unknown): {
+  code: ResumeErrorCode
+  retryable: boolean
+} {
+  const rawCode = (() => {
+    if (!error || typeof error !== 'object') return ''
+    const maybeCode = (error as { code?: unknown; errorCode?: unknown }).code
+      ?? (error as { code?: unknown; errorCode?: unknown }).errorCode
+    return typeof maybeCode === 'string' ? maybeCode.trim() : ''
+  })()
+  const normalizedCode = rawCode
+    .toUpperCase()
+    .replace(/[\s-]+/g, '_')
+  if (normalizedCode === 'SESSION_NOT_FOUND') {
+    return { code: 'SESSION_NOT_FOUND', retryable: true }
+  }
+  if (normalizedCode === 'INVALID_SESSION') {
+    return { code: 'INVALID_SESSION', retryable: true }
+  }
+
+  const message = errorMessage(error).toLowerCase()
+
+  if (!message) {
+    return { code: 'UNKNOWN', retryable: false }
+  }
+
+  if (message.includes('session') && message.includes('not found')) {
+    return { code: 'SESSION_NOT_FOUND', retryable: true }
+  }
+  if (message.includes('invalid') && message.includes('session')) {
+    return { code: 'INVALID_SESSION', retryable: true }
+  }
+
+  return { code: 'UNKNOWN', retryable: false }
 }
 
 function closeSessionSafely(session: V2SDKSession, context: string): void {
@@ -282,6 +353,8 @@ export async function getOrCreateV2Session(
 
   if (sessionId) {
     sdkOptions.resume = sessionId
+  } else if (Object.prototype.hasOwnProperty.call(sdkOptions, 'resume')) {
+    delete sdkOptions.resume
   }
 
   const session = (await unstable_v2_createSession(sdkOptions as any)) as unknown as V2SDKSession
@@ -306,6 +379,198 @@ export async function getOrCreateV2Session(
   return session
 }
 
+export async function acquireSessionWithResumeFallback(params: {
+  spaceId: string
+  conversationId: string
+  sdkOptions: Record<string, any>
+  sessionConfig?: SessionConfig
+  persistedSessionId?: string
+  persistedSessionScope?: { spaceId?: string; workDir?: string } | undefined
+  resolvedWorkDir: string
+  historyMessageCount: number
+}): Promise<SessionAcquireResult> {
+  const {
+    spaceId,
+    conversationId,
+    sdkOptions,
+    sessionConfig,
+    persistedSessionId,
+    persistedSessionScope,
+    resolvedWorkDir,
+    historyMessageCount
+  } = params
+
+  return withSessionAcquireLock(conversationId, async () => {
+    const startedAt = Date.now()
+    const scopeSpaceId =
+      typeof persistedSessionScope?.spaceId === 'string' ? persistedSessionScope.spaceId.trim() : ''
+    const scopeWorkDir =
+      typeof persistedSessionScope?.workDir === 'string' ? persistedSessionScope.workDir.trim() : ''
+    const scopeMatches =
+      scopeSpaceId === spaceId &&
+      scopeWorkDir.length > 0 &&
+      normalizePathForCompare(scopeWorkDir) === normalizePathForCompare(resolvedWorkDir)
+    const hasSessionId = Boolean(persistedSessionId)
+
+    const logBase = {
+      spaceId,
+      conversationId,
+      hasSessionId,
+      historyMessageCount
+    }
+
+    if (persistedSessionId && !scopeMatches) {
+      console.warn('[Agent] resume_scope_guard blocked persisted sessionId due to scope mismatch', {
+        ...logBase,
+        phase: 'resume_scope_guard',
+        outcome: 'blocked_space_mismatch',
+        errorCode: null,
+        retryCount: 0,
+        durationMs: Date.now() - startedAt,
+        bootstrapTokenEstimate: 0,
+        scopeSpaceId: scopeSpaceId || null,
+        scopeWorkDir: scopeWorkDir || null,
+        resolvedWorkDir
+      })
+      try {
+        clearSessionId(spaceId, conversationId)
+      } catch (clearError) {
+        console.warn('[Agent] Failed to clear stale sessionId in scope guard', {
+          ...logBase,
+          phase: 'resume_scope_guard',
+          outcome: 'blocked_space_mismatch',
+          errorCode: null,
+          retryCount: 0,
+          durationMs: Date.now() - startedAt,
+          bootstrapTokenEstimate: 0,
+          cause: clearError instanceof Error ? clearError.message : String(clearError)
+        })
+      }
+
+      const session = await getOrCreateV2Session(
+        spaceId,
+        conversationId,
+        sdkOptions,
+        undefined,
+        sessionConfig
+      )
+
+      return {
+        session,
+        outcome: 'blocked_space_mismatch',
+        retryCount: 0,
+        errorCode: null
+      }
+    }
+
+    if (persistedSessionId) {
+      try {
+        const session = await getOrCreateV2Session(
+          spaceId,
+          conversationId,
+          sdkOptions,
+          persistedSessionId,
+          sessionConfig
+        )
+        console.log('[Agent] resume_attempt', {
+          ...logBase,
+          phase: 'resume_attempt',
+          outcome: 'resumed',
+          errorCode: null,
+          retryCount: 0,
+          durationMs: Date.now() - startedAt,
+          bootstrapTokenEstimate: 0,
+          scopeMatches
+        })
+        return {
+          session,
+          outcome: 'resumed',
+          retryCount: 0,
+          errorCode: null
+        }
+      } catch (error) {
+        const classified = classifyResumeError(error)
+        if (!classified.retryable) {
+          console.error('[Agent] resume_attempt failed without fallback', {
+            ...logBase,
+            phase: 'resume_attempt',
+            outcome: 'fatal',
+            errorCode: classified.code,
+            retryCount: 0,
+            durationMs: Date.now() - startedAt,
+            bootstrapTokenEstimate: 0
+          })
+          throw error
+        }
+
+        console.warn('[Agent] resume_failed_retry_new', {
+          ...logBase,
+          phase: 'resume_failed_retry_new',
+          outcome: 'new_after_resume_fail',
+          errorCode: classified.code,
+          retryCount: 1,
+          durationMs: Date.now() - startedAt,
+          bootstrapTokenEstimate: 0
+        })
+
+        try {
+          clearSessionId(spaceId, conversationId)
+        } catch (clearError) {
+          console.warn('[Agent] Failed to clear stale sessionId after resume failure', {
+            ...logBase,
+            phase: 'resume_failed_retry_new',
+            outcome: 'new_after_resume_fail',
+            errorCode: classified.code,
+            retryCount: 1,
+            durationMs: Date.now() - startedAt,
+            bootstrapTokenEstimate: 0,
+            cause: clearError instanceof Error ? clearError.message : String(clearError)
+          })
+        }
+
+        const session = await getOrCreateV2Session(
+          spaceId,
+          conversationId,
+          sdkOptions,
+          undefined,
+          sessionConfig
+        )
+
+        return {
+          session,
+          outcome: 'new_after_resume_fail',
+          retryCount: 1,
+          errorCode: classified.code
+        }
+      }
+    }
+
+    const session = await getOrCreateV2Session(
+      spaceId,
+      conversationId,
+      sdkOptions,
+      undefined,
+      sessionConfig
+    )
+    console.log('[Agent] resume_attempt', {
+      ...logBase,
+      phase: 'resume_attempt',
+      outcome: 'new_no_resume',
+      errorCode: null,
+      retryCount: 0,
+      durationMs: Date.now() - startedAt,
+      bootstrapTokenEstimate: 0,
+      scopeMatches
+    })
+    return {
+      session,
+      outcome: 'new_no_resume',
+      retryCount: 0,
+      errorCode: null
+    }
+  })
+}
+
 /**
  * Warm up V2 Session for faster message sending.
  * Called when user switches conversations.
@@ -323,50 +588,18 @@ export async function ensureSessionWarm(
       ai?: { profileId?: string }
       sessionId?: string
       sessionScope?: { spaceId?: string; workDir?: string }
+      messages?: Array<Record<string, unknown>>
     } & Record<string, unknown>)
     | null
-  const toComparablePath = (path: string): string =>
-    process.platform === 'win32' ? resolve(path).toLowerCase() : resolve(path)
   const persistedSessionId =
     typeof conversation?.sessionId === 'string' && conversation.sessionId.trim().length > 0
       ? conversation.sessionId.trim()
       : undefined
-  let sessionId = persistedSessionId
-  if (persistedSessionId) {
-    const sessionScope =
-      conversation && typeof conversation.sessionScope === 'object' && conversation.sessionScope
-        ? conversation.sessionScope
-        : undefined
-    const scopeSpaceId =
-      typeof sessionScope?.spaceId === 'string' ? sessionScope.spaceId.trim() : ''
-    const scopeWorkDir =
-      typeof sessionScope?.workDir === 'string' ? sessionScope.workDir.trim() : ''
-    const scopeMatches =
-      scopeSpaceId === spaceId &&
-      scopeWorkDir.length > 0 &&
-      toComparablePath(scopeWorkDir) === toComparablePath(workDir)
-    if (!scopeMatches) {
-      console.warn('[Agent] Warmup ignored persisted sessionId due to scope mismatch', {
-        phase: 'resume_scope_guard',
-        spaceId,
-        conversationId,
-        scopeSpaceId: scopeSpaceId || null,
-        scopeWorkDir: scopeWorkDir || null,
-        resolvedWorkDir: workDir
-      })
-      sessionId = undefined
-      try {
-        clearSessionId(spaceId, conversationId)
-      } catch (error) {
-        console.warn('[Agent] Warmup failed to clear stale sessionId', {
-          phase: 'resume_scope_guard',
-          spaceId,
-          conversationId,
-          cause: error instanceof Error ? error.message : String(error)
-        })
-      }
-    }
-  }
+  const persistedSessionScope =
+    conversation && typeof conversation.sessionScope === 'object' && conversation.sessionScope
+      ? conversation.sessionScope
+      : undefined
+  const historyMessageCount = Array.isArray(conversation?.messages) ? conversation.messages.length : 0
   const electronPath = getHeadlessElectronPath()
   const { effectiveLazyLoad: skillsLazyLoad } = getEffectiveSkillsLazyLoad(workDir, config)
   const effectiveAi = resolveEffectiveConversationAi(spaceId, conversationId)
@@ -409,12 +642,15 @@ export async function ensureSessionWarm(
 
   try {
     console.log(`[Agent] Warming up V2 session: ${conversationId}`)
-    await getOrCreateV2Session(
+    await acquireSessionWithResumeFallback({
       spaceId,
       conversationId,
       sdkOptions,
-      sessionId,
-      {
+      persistedSessionId,
+      persistedSessionScope,
+      resolvedWorkDir: workDir,
+      historyMessageCount,
+      sessionConfig: {
         spaceId,
         workDir,
         aiBrowserEnabled: false,
@@ -427,10 +663,11 @@ export async function ensureSessionWarm(
         resourceIndexHash: getResourceIndexHash(workDir),
         hasCanUseTool: true // Session has canUseTool callback
       }
-    )
+    })
     console.log(`[Agent] V2 session warmed up: ${conversationId}`)
   } catch (error) {
     console.error(`[Agent] Failed to warm up session ${conversationId}:`, error)
+    throw error
   }
 }
 

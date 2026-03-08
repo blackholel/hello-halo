@@ -774,16 +774,17 @@ export function SpacePage() {
   }, [currentSpace, createConversation, layoutMode, openChat])
 
   // Handle select conversation - smart behavior based on layout mode
-  const handleSelectConversation = useCallback((id: string) => {
+  const handleSelectConversation = useCallback(async (id: string) => {
     if (layoutMode === 'tabs-only' && currentSpace) {
-      // In tabs-only mode, open conversation in a tab
+      // In tabs-only mode, ensure hydration/warm is done before opening chat tab
       const conv = conversations.find(c => c.id === id)
       if (conv) {
-        openChat(currentSpace.id, id, conv.title, currentSpace.path)
+        await selectConversation(id)
+        await openChat(currentSpace.id, id, conv.title, currentSpace.path)
       }
     } else {
       // In split mode, update the main ChatView
-      selectConversation(id)
+      await selectConversation(id)
     }
   }, [layoutMode, currentSpace, conversations, openChat, selectConversation])
 

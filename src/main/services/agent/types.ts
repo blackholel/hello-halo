@@ -112,6 +112,30 @@ export interface AgentRequest {
 }
 
 // ============================================
+// Session Resume Types
+// ============================================
+
+export type ResumeOutcome =
+  | 'resumed'
+  | 'new_after_resume_fail'
+  | 'new_no_resume'
+  | 'blocked_space_mismatch'
+  | 'fatal'
+
+export type ResumeErrorCode =
+  | 'SESSION_NOT_FOUND'
+  | 'INVALID_SESSION'
+  | 'UNKNOWN'
+  | null
+
+export interface SessionAcquireResult {
+  session: V2SDKSession
+  outcome: ResumeOutcome
+  retryCount: number
+  errorCode: ResumeErrorCode
+}
+
+// ============================================
 // Tool and Thought Types
 // ============================================
 

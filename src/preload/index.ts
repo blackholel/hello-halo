@@ -196,7 +196,8 @@ export interface KiteAPI {
   ensureSessionWarm: (
     spaceId: string,
     conversationId: string,
-    responseLanguage?: LocaleCode | string
+    responseLanguage?: LocaleCode | string,
+    options?: { waitForReady?: boolean }
   ) => Promise<IpcResponse>
   getAgentResourceHash: (
     params?: { spaceId?: string; workDir?: string; conversationId?: string }
@@ -522,8 +523,8 @@ const api: KiteAPI = {
   answerQuestion: (conversationId, answer) =>
     ipcRenderer.invoke('agent:answer-question', conversationId, answer),
   getSessionState: (conversationId) => ipcRenderer.invoke('agent:get-session-state', conversationId),
-  ensureSessionWarm: (spaceId, conversationId, responseLanguage) =>
-    ipcRenderer.invoke('agent:ensure-session-warm', spaceId, conversationId, responseLanguage),
+  ensureSessionWarm: (spaceId, conversationId, responseLanguage, options) =>
+    ipcRenderer.invoke('agent:ensure-session-warm', spaceId, conversationId, responseLanguage, options),
   getAgentResourceHash: (params) => ipcRenderer.invoke('agent:get-resource-hash', params),
   testMcpConnections: () => ipcRenderer.invoke('agent:test-mcp'),
   reconnectMcpServer: (conversationId, serverName) => ipcRenderer.invoke('agent:reconnect-mcp', conversationId, serverName),

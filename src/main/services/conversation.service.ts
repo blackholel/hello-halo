@@ -8,7 +8,7 @@
  */
 
 import { join } from 'path'
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, rmSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, rmSync, renameSync } from 'fs'
 import { getConfig, getTempSpacePath } from './config.service'
 import { getSpace } from './space.service'
 import { v4 as uuidv4 } from 'uuid'
@@ -347,6 +347,73 @@ function updateIndexEntry(
   writeIndex(conversationsDir, index.conversations)
 }
 
+function writeJsonAtomic(filePath: string, payload: unknown): void {
+  const tmpPath = `${filePath}.${process.pid}.${Date.now()}.tmp`
+  try {
+    writeFileSync(tmpPath, JSON.stringify(payload, null, 2))
+    renameSync(tmpPath, filePath)
+  } catch (error) {
+    if (existsSync(tmpPath)) {
+      try {
+        rmSync(tmpPath, { force: true })
+      } catch {
+        // Ignore cleanup failures to preserve original error.
+      }
+    }
+    throw error
+  }
+}
+
+function writeConversationFile(
+  conversationsDir: string,
+  conversationId: string,
+  conversation: Conversation
+): void {
+  writeJsonAtomic(join(conversationsDir, `${conversationId}.json`), conversation)
+}
+
+function resolveExpectedSessionScope(spaceId: string): { spaceId: string; workDir: string } | null {
+  if (spaceId === 'kite-temp') {
+    const artifactsDir = join(getTempSpacePath(), 'artifacts')
+    if (!existsSync(artifactsDir)) {
+      mkdirSync(artifactsDir, { recursive: true })
+    }
+    return { spaceId, workDir: artifactsDir }
+  }
+  const space = getSpace(spaceId)
+  if (!space) {
+    return null
+  }
+  return { spaceId, workDir: space.path }
+}
+
+function shouldBackfillSessionScope(
+  conversation: Conversation,
+  expectedScope: { spaceId: string; workDir: string } | null
+): boolean {
+  if (!conversation.sessionId || !expectedScope) {
+    return false
+  }
+  const currentScope = conversation.sessionScope
+  if (!currentScope) return true
+  if (typeof currentScope.spaceId !== 'string' || currentScope.spaceId.trim().length === 0) return true
+  if (typeof currentScope.workDir !== 'string' || currentScope.workDir.trim().length === 0) return true
+  return false
+}
+
+function validateBackfillPayload(
+  conversation: Conversation,
+  spaceId: string,
+  conversationId: string
+): boolean {
+  if (conversation.id !== conversationId) return false
+  if (conversation.spaceId !== spaceId) return false
+  if (!Array.isArray(conversation.messages)) return false
+  if (!conversation.sessionScope) return false
+  if (!conversation.sessionScope.spaceId || !conversation.sessionScope.workDir) return false
+  return true
+}
+
 // ============================================================================
 // Core Functions
 // ============================================================================
@@ -421,7 +488,7 @@ export function createConversation(spaceId: string, title?: string): Conversatio
     mkdirSync(conversationsDir, { recursive: true })
   }
 
-  writeFileSync(join(conversationsDir, `${id}.json`), JSON.stringify(conversation, null, 2))
+  writeConversationFile(conversationsDir, id, conversation)
 
   // Update index
   updateIndexEntry(conversationsDir, spaceId, id, toMeta(conversation))
@@ -442,6 +509,48 @@ export function getConversation(spaceId: string, conversationId: string): Conver
   if (existsSync(filePath)) {
     try {
       const conversation = normalizeConversation(JSON.parse(readFileSync(filePath, 'utf-8')) as Conversation)
+      const expectedScope = resolveExpectedSessionScope(spaceId)
+      if (shouldBackfillSessionScope(conversation, expectedScope) && expectedScope) {
+        const backfilled: Conversation = {
+          ...conversation,
+          sessionScope: {
+            spaceId: expectedScope.spaceId,
+            workDir: expectedScope.workDir,
+            recordedAt: new Date().toISOString()
+          }
+        }
+        if (validateBackfillPayload(backfilled, spaceId, conversationId)) {
+          try {
+            writeConversationFile(conversationsDir, conversationId, backfilled)
+            console.log('[Agent] resume_bind_backfill', {
+              phase: 'resume_bind_backfill',
+              spaceId,
+              conversationId,
+              hasSessionId: Boolean(backfilled.sessionId),
+              historyMessageCount: Array.isArray(backfilled.messages) ? backfilled.messages.length : 0,
+              outcome: 'session_scope_backfilled',
+              errorCode: null,
+              durationMs: 0,
+              retryCount: 0,
+              bootstrapTokenEstimate: 0
+            })
+            return backfilled
+          } catch (error) {
+            console.warn('[Conversation] Failed to persist sessionScope backfill', {
+              phase: 'resume_bind_backfill',
+              spaceId,
+              conversationId,
+              cause: error instanceof Error ? error.message : String(error)
+            })
+          }
+        } else {
+          console.warn('[Conversation] Skip sessionScope backfill due to schema validation failure', {
+            phase: 'resume_bind_backfill',
+            spaceId,
+            conversationId
+          })
+        }
+      }
       console.log(`[Conversation] Found conversation: ${conversation.title}`)
       return conversation
     } catch (error) {
@@ -477,7 +586,7 @@ export function updateConversation(
   }
 
   const conversationsDir = getConversationsDir(spaceId)
-  writeFileSync(join(conversationsDir, `${conversationId}.json`), JSON.stringify(updated, null, 2))
+  writeConversationFile(conversationsDir, conversationId, updated)
 
   // Update index (title or other metadata may have changed)
   updateIndexEntry(conversationsDir, spaceId, conversationId, toMeta(updated))
@@ -509,7 +618,7 @@ export function addMessage(spaceId: string, conversationId: string, message: Omi
   }
 
   const conversationsDir = getConversationsDir(spaceId)
-  writeFileSync(join(conversationsDir, `${conversationId}.json`), JSON.stringify(conversation, null, 2))
+  writeConversationFile(conversationsDir, conversationId, conversation)
 
   // Update index with new messageCount and preview
   updateIndexEntry(conversationsDir, spaceId, conversationId, toMeta(conversation))
@@ -552,7 +661,7 @@ export function insertUserMessageBeforeTrailingAssistant(
   }
 
   const conversationsDir = getConversationsDir(spaceId)
-  writeFileSync(join(conversationsDir, `${conversationId}.json`), JSON.stringify(conversation, null, 2))
+  writeConversationFile(conversationsDir, conversationId, conversation)
 
   updateIndexEntry(conversationsDir, spaceId, conversationId, toMeta(conversation))
 
@@ -579,7 +688,7 @@ export function updateLastMessage(
     conversation.updatedAt = new Date().toISOString()
 
     const conversationsDir = getConversationsDir(spaceId)
-    writeFileSync(join(conversationsDir, `${conversationId}.json`), JSON.stringify(conversation, null, 2))
+    writeConversationFile(conversationsDir, conversationId, conversation)
 
     // Update index (preview may have changed)
     updateIndexEntry(conversationsDir, spaceId, conversationId, toMeta(conversation))
@@ -634,7 +743,7 @@ export function saveSessionId(
       }
     }
     const conversationsDir = getConversationsDir(spaceId)
-    writeFileSync(join(conversationsDir, `${conversationId}.json`), JSON.stringify(conversation, null, 2))
+    writeConversationFile(conversationsDir, conversationId, conversation)
   }
 }
 
@@ -649,7 +758,7 @@ export function clearSessionId(spaceId: string, conversationId: string): void {
   delete conversation.sessionId
   delete conversation.sessionScope
   const conversationsDir = getConversationsDir(spaceId)
-  writeFileSync(join(conversationsDir, `${conversationId}.json`), JSON.stringify(conversation, null, 2))
+  writeConversationFile(conversationsDir, conversationId, conversation)
 }
 
 // Generate a default title

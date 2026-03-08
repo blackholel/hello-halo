@@ -136,6 +136,16 @@ export type QueueSendResult = {
   error?: string
 }
 
+type ConversationReadyStatus = 'preparing' | 'ready' | 'timeout' | 'failed'
+
+interface ConversationReadyState {
+  status: ConversationReadyStatus
+  updatedAt: number
+  error?: string
+}
+
+const CONVERSATION_READY_TIMEOUT_MS = 3000
+
 const GUIDE_FALLBACK_TO_NEW_RUN_ERROR_CODES = new Set<string>([
   'ASK_USER_QUESTION_NO_ACTIVE_SESSION',
   'ASK_USER_QUESTION_RUN_MISMATCH'
@@ -519,6 +529,7 @@ interface ChatState {
   // Loading
   isLoading: boolean
   loadingConversationCounts: Map<string, number>
+  conversationReadyByConversation: Map<string, ConversationReadyState>
   queuedTurnsByConversation: Map<string, QueuedUserTurn[]>
   queueDispatchingByConversation: Map<string, boolean>
   queueErrorByConversation: Map<string, string | null>
@@ -656,6 +667,46 @@ function setConversationLoadingState(
   })
 }
 
+function setConversationReadyState(
+  set: (partial: Partial<ChatState> | ((state: ChatState) => Partial<ChatState>)) => void,
+  conversationId: string,
+  status: ConversationReadyStatus,
+  error?: string
+): void {
+  set((state) => {
+    const next = new Map(state.conversationReadyByConversation)
+    next.set(conversationId, {
+      status,
+      updatedAt: Date.now(),
+      ...(error ? { error } : {})
+    })
+    return { conversationReadyByConversation: next }
+  })
+}
+
+async function waitForConversationReady(
+  get: () => ChatState,
+  set: (partial: Partial<ChatState> | ((state: ChatState) => Partial<ChatState>)) => void,
+  conversationId: string,
+  timeoutMs: number = CONVERSATION_READY_TIMEOUT_MS
+): Promise<void> {
+  const startAt = Date.now()
+  while (Date.now() - startAt < timeoutMs) {
+    const current = get().conversationReadyByConversation.get(conversationId)
+    if (!current || current.status !== 'preparing') {
+      return
+    }
+    await new Promise<void>((resolveWait) => {
+      setTimeout(resolveWait, 50)
+    })
+  }
+
+  const latest = get().conversationReadyByConversation.get(conversationId)
+  if (latest?.status === 'preparing') {
+    setConversationReadyState(set, conversationId, 'timeout')
+  }
+}
+
 function resolveConversationMode(
   state: ChatState,
   spaceId: string,
@@ -735,6 +786,10 @@ async function ensureConversationLoadedImpl(
 
   const conversationMeta = spaceState.conversations.find((c) => c.id === conversationId)
   if (!conversationMeta) return
+
+  if (warmSession) {
+    setConversationReadyState(set, conversationId, 'preparing')
+  }
 
   if (subscribe) {
     api.subscribeToConversation(conversationId)
@@ -868,11 +923,33 @@ async function ensureConversationLoadedImpl(
 
   if (warmSession) {
     try {
-      api.ensureSessionWarm(spaceId, conversationId, getCurrentLanguage())
-        .catch((error) => console.error('[ChatStore] Session warm up failed:', error))
+      const timeoutPromise = new Promise<{ success: false; error: string }>((resolveTimeout) => {
+        setTimeout(() => {
+          resolveTimeout({ success: false, error: 'conversation_ready_timeout' })
+        }, CONVERSATION_READY_TIMEOUT_MS)
+      })
+      const warmResult = await Promise.race([
+        api.ensureSessionWarm(spaceId, conversationId, getCurrentLanguage(), { waitForReady: true }),
+        timeoutPromise
+      ])
+      if (warmResult?.success) {
+        setConversationReadyState(set, conversationId, 'ready')
+      } else if (warmResult?.error === 'conversation_ready_timeout') {
+        setConversationReadyState(set, conversationId, 'timeout')
+      } else {
+        setConversationReadyState(
+          set,
+          conversationId,
+          'failed',
+          typeof warmResult?.error === 'string' ? warmResult.error : 'Failed to warm session'
+        )
+      }
     } catch (error) {
       console.error('[ChatStore] Failed to trigger session warm up:', error)
+      setConversationReadyState(set, conversationId, 'failed', 'Failed to trigger session warm up')
     }
+  } else {
+    setConversationReadyState(set, conversationId, 'ready')
   }
 }
 
@@ -886,6 +963,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   artifacts: [],
   isLoading: false,
   loadingConversationCounts: new Map<string, number>(),
+  conversationReadyByConversation: new Map<string, ConversationReadyState>(),
   queuedTurnsByConversation: new Map<string, QueuedUserTurn[]>(),
   queueDispatchingByConversation: new Map<string, boolean>(),
   queueErrorByConversation: new Map<string, string | null>(),
@@ -1289,6 +1367,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           newChangeSets.delete(conversationId)
           const newLoadingConversationCounts = new Map(state.loadingConversationCounts)
           newLoadingConversationCounts.delete(conversationId)
+          const conversationReadyByConversation = new Map(state.conversationReadyByConversation)
+          conversationReadyByConversation.delete(conversationId)
           const queuedTurnsByConversation = new Map(state.queuedTurnsByConversation)
           queuedTurnsByConversation.delete(conversationId)
           const queueDispatchingByConversation = new Map(state.queueDispatchingByConversation)
@@ -1320,6 +1400,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             conversationCache: newCache,
             changeSets: newChangeSets,
             loadingConversationCounts: newLoadingConversationCounts,
+            conversationReadyByConversation,
             queuedTurnsByConversation,
             queueDispatchingByConversation,
             queueErrorByConversation,
@@ -2214,6 +2295,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       mode: normalizeChatMode(turnInput.mode, undefined, 'code'),
       createdAt: Date.now()
     }
+
+    await waitForConversationReady(get, set, turn.conversationId, CONVERSATION_READY_TIMEOUT_MS)
 
     const enqueueTurn = (errorMessage: string | null) => {
       set((state) => {
@@ -3704,6 +3787,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       currentSpaceId: null,
       artifacts: [],
       loadingConversationCounts: new Map(),
+      conversationReadyByConversation: new Map(),
       queuedTurnsByConversation: new Map(),
       queueDispatchingByConversation: new Map(),
       queueErrorByConversation: new Map(),
@@ -3727,11 +3811,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
       }
       const queuedTurnsByConversation = new Map(state.queuedTurnsByConversation)
+      const conversationReadyByConversation = new Map(state.conversationReadyByConversation)
       const queueDispatchingByConversation = new Map(state.queueDispatchingByConversation)
       const queueErrorByConversation = new Map(state.queueErrorByConversation)
       const queueInFlightTurnByConversation = new Map(state.queueInFlightTurnByConversation)
       const queueSuppressedRestoreByConversation = new Map(state.queueSuppressedRestoreByConversation)
       for (const conversationId of targetConversationIds) {
+        conversationReadyByConversation.delete(conversationId)
         queuedTurnsByConversation.delete(conversationId)
         queueDispatchingByConversation.delete(conversationId)
         queueErrorByConversation.delete(conversationId)
@@ -3741,6 +3827,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return {
         spaceStates: newSpaceStates,
         changeSets: newChangeSets,
+        conversationReadyByConversation,
         queuedTurnsByConversation,
         queueDispatchingByConversation,
         queueErrorByConversation,

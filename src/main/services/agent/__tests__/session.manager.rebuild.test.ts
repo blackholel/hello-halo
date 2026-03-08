@@ -52,6 +52,8 @@ import { resolveEffectiveConversationAi } from '../ai-config-resolver'
 import { resolveProvider } from '../provider-resolver'
 import { buildSdkOptions, getWorkingDir } from '../sdk-config.builder'
 import {
+  acquireSessionWithResumeFallback,
+  classifyResumeError,
   closeAllV2Sessions,
   deleteActiveSession,
   ensureSessionWarm,
@@ -241,6 +243,123 @@ describe('session.manager rebuild', () => {
     expect(unstable_v2_createSession).toHaveBeenCalledTimes(1)
     const createArgs = vi.mocked(unstable_v2_createSession).mock.calls[0]?.[0] as Record<string, unknown>
     expect(createArgs?.resume).toBeUndefined()
+  })
+
+  it('scope 不匹配时会清理旧 sessionId 并直接新建', async () => {
+    const close = vi.fn()
+    vi.mocked(unstable_v2_createSession).mockReset().mockResolvedValueOnce({ close } as any)
+
+    const result = await acquireSessionWithResumeFallback({
+      spaceId: 'space-1',
+      conversationId: 'conv-scope-mismatch',
+      sdkOptions: {},
+      persistedSessionId: 'legacy-session-id',
+      persistedSessionScope: { spaceId: 'space-other', workDir: '/workspace/project' },
+      resolvedWorkDir: '/workspace/project',
+      historyMessageCount: 2
+    })
+
+    expect(result.outcome).toBe('blocked_space_mismatch')
+    expect(result.retryCount).toBe(0)
+    expect(result.errorCode).toBe(null)
+    expect(clearSessionId).toHaveBeenCalledWith('space-1', 'conv-scope-mismatch')
+    expect(unstable_v2_createSession).toHaveBeenCalledTimes(1)
+    const createArgs = vi.mocked(unstable_v2_createSession).mock.calls[0]?.[0] as Record<string, unknown>
+    expect(createArgs?.resume).toBeUndefined()
+  })
+
+  it('resume 失败命中白名单后会清理并重试新建', async () => {
+    const close = vi.fn()
+    vi.mocked(unstable_v2_createSession)
+      .mockReset()
+      .mockRejectedValueOnce(new Error('Session not found: stale id'))
+      .mockResolvedValueOnce({ close } as any)
+
+    const result = await acquireSessionWithResumeFallback({
+      spaceId: 'space-1',
+      conversationId: 'conv-retry',
+      sdkOptions: {},
+      persistedSessionId: 'stale-id',
+      persistedSessionScope: { spaceId: 'space-1', workDir: '/workspace/project' },
+      resolvedWorkDir: '/workspace/project',
+      historyMessageCount: 4
+    })
+
+    expect(result.outcome).toBe('new_after_resume_fail')
+    expect(result.retryCount).toBe(1)
+    expect(result.errorCode).toBe('SESSION_NOT_FOUND')
+    expect(clearSessionId).toHaveBeenCalledWith('space-1', 'conv-retry')
+    expect(unstable_v2_createSession).toHaveBeenCalledTimes(2)
+    const secondArgs = vi.mocked(unstable_v2_createSession).mock.calls[1]?.[0] as Record<string, unknown>
+    expect(secondArgs?.resume).toBeUndefined()
+  })
+
+  it('resume 失败非白名单错误直接抛出，不 fallback', async () => {
+    vi.mocked(unstable_v2_createSession)
+      .mockReset()
+      .mockRejectedValueOnce(new Error('network disconnected'))
+
+    await expect(
+      acquireSessionWithResumeFallback({
+        spaceId: 'space-1',
+        conversationId: 'conv-fatal',
+        sdkOptions: {},
+        persistedSessionId: 'session-id',
+        persistedSessionScope: { spaceId: 'space-1', workDir: '/workspace/project' },
+        resolvedWorkDir: '/workspace/project',
+        historyMessageCount: 2
+      })
+    ).rejects.toThrow('network disconnected')
+
+    expect(clearSessionId).not.toHaveBeenCalled()
+    expect(unstable_v2_createSession).toHaveBeenCalledTimes(1)
+  })
+
+  it('classifyResumeError 按白名单分类', () => {
+    expect(classifyResumeError({ code: 'SESSION_NOT_FOUND' }).code).toBe('SESSION_NOT_FOUND')
+    expect(classifyResumeError({ errorCode: 'invalid-session' }).code).toBe('INVALID_SESSION')
+    expect(classifyResumeError(new Error('Session not found')).code).toBe('SESSION_NOT_FOUND')
+    expect(classifyResumeError(new Error('invalid session id')).code).toBe('INVALID_SESSION')
+    expect(classifyResumeError(new Error('permission denied')).code).toBe('UNKNOWN')
+  })
+
+  it('同一 conversationId 并发恢复链路会被互斥串行化', async () => {
+    vi.useRealTimers()
+    let inFlight = 0
+    let maxInFlight = 0
+    vi.mocked(unstable_v2_createSession).mockReset().mockImplementation(async (options: any) => {
+      inFlight += 1
+      maxInFlight = Math.max(maxInFlight, inFlight)
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      inFlight -= 1
+      if (options?.resume) {
+        throw new Error('Session not found: stale id')
+      }
+      return { close: vi.fn() } as any
+    })
+
+    await Promise.all([
+      acquireSessionWithResumeFallback({
+        spaceId: 'space-1',
+        conversationId: 'conv-serial',
+        sdkOptions: {},
+        persistedSessionId: 'stale-id',
+        persistedSessionScope: { spaceId: 'space-1', workDir: '/workspace/project' },
+        resolvedWorkDir: '/workspace/project',
+        historyMessageCount: 3
+      }),
+      acquireSessionWithResumeFallback({
+        spaceId: 'space-1',
+        conversationId: 'conv-serial',
+        sdkOptions: {},
+        persistedSessionId: 'stale-id',
+        persistedSessionScope: { spaceId: 'space-1', workDir: '/workspace/project' },
+        resolvedWorkDir: '/workspace/project',
+        historyMessageCount: 3
+      })
+    ])
+
+    expect(maxInFlight).toBe(1)
   })
 })
 

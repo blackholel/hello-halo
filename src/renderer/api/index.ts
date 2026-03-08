@@ -570,17 +570,28 @@ export const api = {
   ensureSessionWarm: async (
     spaceId: string,
     conversationId: string,
-    responseLanguage?: LocaleCode | string
+    responseLanguage?: LocaleCode | string,
+    options?: { waitForReady?: boolean }
   ): Promise<ApiResponse> => {
     if (isElectron()) {
-      // No need to wait, initialize in background
-      window.kite.ensureSessionWarm(spaceId, conversationId, responseLanguage).catch((error: unknown) => {
+      const invokeWarm = () =>
+        options
+          ? window.kite.ensureSessionWarm(spaceId, conversationId, responseLanguage, options)
+          : window.kite.ensureSessionWarm(spaceId, conversationId, responseLanguage)
+      if (options?.waitForReady === true) {
+        return invokeWarm()
+      }
+      // No need to wait by default, initialize in background
+      invokeWarm().catch((error: unknown) => {
         console.error('[API] ensureSessionWarm error:', error)
       })
       return { success: true }
     }
     // HTTP mode: send warm-up request to backend
-    return httpRequest('POST', '/api/agent/warm', { spaceId, conversationId, responseLanguage }).catch(() => ({
+    const warmPayload = options
+      ? { spaceId, conversationId, responseLanguage, options }
+      : { spaceId, conversationId, responseLanguage }
+    return httpRequest('POST', '/api/agent/warm', warmPayload).catch(() => ({
       success: false // Warm-up failure should not block
     }))
   },
