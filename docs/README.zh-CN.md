@@ -8,10 +8,10 @@
 
 把 Claude Code 装进口袋 — 开源桌面客户端，让每个人都能轻松使用 Claude Code 的强大能力。告别终端。
 
-[![GitHub Stars](https://img.shields.io/github/stars/openkursar/hello-halo?style=social)](https://github.com/openkursar/hello-halo/stargazers)
+[![GitHub Stars](https://img.shields.io/github/stars/blackholel/buddykite?style=social)](https://github.com/blackholel/buddykite/stargazers)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](../LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20Web-lightgrey.svg)](#安装)
-[![Downloads](https://img.shields.io/github/downloads/openkursar/hello-halo/total.svg)](https://github.com/openkursar/hello-halo/releases)
+[![Downloads](https://img.shields.io/github/downloads/blackholel/buddykite/total.svg)](https://github.com/blackholel/buddykite/releases)
 
 [下载](#安装) · [文档](#文档) · [参与贡献](#参与贡献)
 
@@ -122,10 +122,10 @@
 
 | 平台 | 下载 | 要求 |
 |----------|----------|--------------|
-| **macOS** (Apple Silicon) | [下载 .dmg](https://github.com/openkursar/hello-halo/releases/latest) | macOS 11+ |
+| **macOS** (Apple Silicon) | [下载 .dmg](https://github.com/blackholel/buddykite/releases/latest) | macOS 11+ |
 | **macOS** (Intel) | 即将推出 | macOS 11+ |
-| **Windows** | [下载 .exe](https://github.com/openkursar/hello-halo/releases/latest) | Windows 10+ |
-| **Linux** | [下载 .AppImage](https://github.com/openkursar/hello-halo/releases/latest) | Ubuntu 20.04+ |
+| **Windows** | [下载 .exe](https://github.com/blackholel/buddykite/releases/latest) | Windows 10+ |
+| **Linux** | [下载 .AppImage](https://github.com/blackholel/buddykite/releases/latest) | Ubuntu 20.04+ |
 | **Web** (PC/移动端) | 在桌面应用中启用远程访问 | 任何现代浏览器 |
 
 **就这么简单。** 下载、安装、运行。不需要 Node.js，不需要 npm，不需要终端命令。
@@ -135,8 +135,8 @@
 想要贡献或自定义的开发者：
 
 ```bash
-git clone https://github.com/openkursar/hello-halo.git
-cd hello-halo
+git clone https://github.com/blackholel/buddykite.git
+cd buddykite
 npm install
 npm run dev
 ```
@@ -246,8 +246,8 @@ Kite 开源是因为 AI 应该人人可及。
 
 ```bash
 # 开发环境设置
-git clone https://github.com/openkursar/hello-halo.git
-cd hello-halo
+git clone https://github.com/blackholel/buddykite.git
+cd buddykite
 npm install
 npm run dev
 ```
@@ -258,8 +258,8 @@ npm run dev
 
 ## 社区
 
-- [GitHub Discussions](https://github.com/openkursar/hello-halo/discussions) — 问题与想法
-- [Issues](https://github.com/openkursar/hello-halo/issues) — Bug 报告与功能请求
+- [GitHub Discussions](https://github.com/blackholel/buddykite/discussions) — 问题与想法
+- [Issues](https://github.com/blackholel/buddykite/issues) — Bug 报告与功能请求
 
 ---
 
@@ -296,7 +296,7 @@ AI 构建 AI。现在人人可用。
 
 **Star 这个仓库** 帮助更多人发现 Kite。
 
-[![Star History Chart](https://api.star-history.com/svg?repos=openkursar/hello-halo&type=Date)](https://star-history.com/#openkursar/hello-halo&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=blackholel/buddykite&type=Date)](https://star-history.com/#blackholel/buddykite&Date)
 
 [⬆ 返回顶部](#kite)
 

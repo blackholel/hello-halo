@@ -8,10 +8,10 @@
 
 Mettez Claude Code dans votre poche — le client de bureau open-source qui rend la puissance de Claude Code accessible à tous. Sans terminal, jamais.
 
-[![GitHub Stars](https://img.shields.io/github/stars/openkursar/hello-halo?style=social)](https://github.com/openkursar/hello-halo/stargazers)
+[![GitHub Stars](https://img.shields.io/github/stars/blackholel/buddykite?style=social)](https://github.com/blackholel/buddykite/stargazers)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](../LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20Web-lightgrey.svg)](#installation)
-[![Downloads](https://img.shields.io/github/downloads/openkursar/hello-halo/total.svg)](https://github.com/openkursar/hello-halo/releases)
+[![Downloads](https://img.shields.io/github/downloads/blackholel/buddykite/total.svg)](https://github.com/blackholel/buddykite/releases)
 
 [Télécharger](#installation) · [Documentation](#documentation) · [Contribuer](#contribuer)
 
@@ -122,10 +122,10 @@ Laissez l'IA contrôler un vrai navigateur intégré. Web scraping, remplissage 
 
 | Plateforme | Télécharger | Prérequis |
 |----------|----------|--------------|
-| **macOS** (Apple Silicon) | [Télécharger .dmg](https://github.com/openkursar/hello-halo/releases/latest) | macOS 11+ |
+| **macOS** (Apple Silicon) | [Télécharger .dmg](https://github.com/blackholel/buddykite/releases/latest) | macOS 11+ |
 | **macOS** (Intel) | Bientôt disponible | macOS 11+ |
-| **Windows** | [Télécharger .exe](https://github.com/openkursar/hello-halo/releases/latest) | Windows 10+ |
-| **Linux** | [Télécharger .AppImage](https://github.com/openkursar/hello-halo/releases/latest) | Ubuntu 20.04+ |
+| **Windows** | [Télécharger .exe](https://github.com/blackholel/buddykite/releases/latest) | Windows 10+ |
+| **Linux** | [Télécharger .AppImage](https://github.com/blackholel/buddykite/releases/latest) | Ubuntu 20.04+ |
 | **Web** (PC/Mobile) | Activez l'Accès Distant dans l'app de bureau | N'importe quel navigateur moderne |
 
 **C'est tout.** Téléchargez, installez, lancez. Pas de Node.js. Pas de npm. Pas de commandes terminal.
@@ -135,8 +135,8 @@ Laissez l'IA contrôler un vrai navigateur intégré. Web scraping, remplissage 
 Pour les développeurs qui veulent contribuer ou personnaliser :
 
 ```bash
-git clone https://github.com/openkursar/hello-halo.git
-cd hello-halo
+git clone https://github.com/blackholel/buddykite.git
+cd buddykite
 npm install
 npm run dev
 ```
@@ -246,8 +246,8 @@ Nous accueillons les contributions de toute nature :
 
 ```bash
 # Configuration de développement
-git clone https://github.com/openkursar/hello-halo.git
-cd hello-halo
+git clone https://github.com/blackholel/buddykite.git
+cd buddykite
 npm install
 npm run dev
 ```
@@ -258,8 +258,8 @@ Voir [CONTRIBUTING.md](../CONTRIBUTING.md) pour les directives.
 
 ## Communauté
 
-- [GitHub Discussions](https://github.com/openkursar/hello-halo/discussions) — Questions et idées
-- [Issues](https://github.com/openkursar/hello-halo/issues) — Rapports de bugs et demandes de fonctionnalités
+- [GitHub Discussions](https://github.com/blackholel/buddykite/discussions) — Questions et idées
+- [Issues](https://github.com/blackholel/buddykite/issues) — Rapports de bugs et demandes de fonctionnalités
 
 ---
 
@@ -296,7 +296,7 @@ Si Kite vous aide à construire quelque chose d'incroyable, on aimerait en enten
 
 **Donnez une Star à ce repo** pour aider les autres à découvrir Kite.
 
-[![Star History Chart](https://api.star-history.com/svg?repos=openkursar/hello-halo&type=Date)](https://star-history.com/#openkursar/hello-halo&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=blackholel/buddykite&type=Date)](https://star-history.com/#blackholel/buddykite&Date)
 
 [⬆ Retour en Haut](#kite)
 

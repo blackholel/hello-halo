@@ -45,9 +45,9 @@
 
 ### 关键文件
 
-1. `/Users/dl/ProjectSpace/ownerAgent/hello-halo/src/shared/types/ai-profile.ts`
-2. `/Users/dl/ProjectSpace/ownerAgent/hello-halo/src/main/services/config.service.ts`
-3. `/Users/dl/ProjectSpace/ownerAgent/hello-halo/src/renderer/types/index.ts`
+1. `/Users/dl/ProjectSpace/ownerAgent/buddykite/src/shared/types/ai-profile.ts`
+2. `/Users/dl/ProjectSpace/ownerAgent/buddykite/src/main/services/config.service.ts`
+3. `/Users/dl/ProjectSpace/ownerAgent/buddykite/src/renderer/types/index.ts`
 
 ---
 
@@ -63,10 +63,10 @@
 
 ### 关键文件
 
-1. `/Users/dl/ProjectSpace/ownerAgent/hello-halo/src/main/services/conversation.service.ts`
-2. `/Users/dl/ProjectSpace/ownerAgent/hello-halo/src/main/services/agent/ai-config-resolver.ts`
-3. `/Users/dl/ProjectSpace/ownerAgent/hello-halo/src/main/services/agent/message-flow.service.ts`
-4. `/Users/dl/ProjectSpace/ownerAgent/hello-halo/src/main/services/agent/session.manager.ts`
+1. `/Users/dl/ProjectSpace/ownerAgent/buddykite/src/main/services/conversation.service.ts`
+2. `/Users/dl/ProjectSpace/ownerAgent/buddykite/src/main/services/agent/ai-config-resolver.ts`
+3. `/Users/dl/ProjectSpace/ownerAgent/buddykite/src/main/services/agent/message-flow.service.ts`
+4. `/Users/dl/ProjectSpace/ownerAgent/buddykite/src/main/services/agent/session.manager.ts`
 
 ---
 
@@ -84,7 +84,7 @@
 
 ### 关键文件
 
-1. `/Users/dl/ProjectSpace/ownerAgent/hello-halo/src/main/services/agent/provider-resolver.ts`
+1. `/Users/dl/ProjectSpace/ownerAgent/buddykite/src/main/services/agent/provider-resolver.ts`
 
 ---
 
@@ -111,9 +111,9 @@
 
 ### 关键文件
 
-1. `/Users/dl/ProjectSpace/ownerAgent/hello-halo/src/main/services/agent/provider-resolver.ts`
-2. `/Users/dl/ProjectSpace/ownerAgent/hello-halo/src/main/services/agent/sdk-config.builder.ts`
-3. `/Users/dl/ProjectSpace/ownerAgent/hello-halo/src/main/services/agent/mcp-status.service.ts`
+1. `/Users/dl/ProjectSpace/ownerAgent/buddykite/src/main/services/agent/provider-resolver.ts`
+2. `/Users/dl/ProjectSpace/ownerAgent/buddykite/src/main/services/agent/sdk-config.builder.ts`
+3. `/Users/dl/ProjectSpace/ownerAgent/buddykite/src/main/services/agent/mcp-status.service.ts`
 
 ---
 
@@ -127,11 +127,11 @@
 
 ### 关键文件
 
-1. `/Users/dl/ProjectSpace/ownerAgent/hello-halo/src/preload/index.ts`
-2. `/Users/dl/ProjectSpace/ownerAgent/hello-halo/src/main/ipc/agent.ts`
-3. `/Users/dl/ProjectSpace/ownerAgent/hello-halo/src/main/controllers/agent.controller.ts`
-4. `/Users/dl/ProjectSpace/ownerAgent/hello-halo/src/main/http/routes/index.ts`
-5. `/Users/dl/ProjectSpace/ownerAgent/hello-halo/src/renderer/api/index.ts`
+1. `/Users/dl/ProjectSpace/ownerAgent/buddykite/src/preload/index.ts`
+2. `/Users/dl/ProjectSpace/ownerAgent/buddykite/src/main/ipc/agent.ts`
+3. `/Users/dl/ProjectSpace/ownerAgent/buddykite/src/main/controllers/agent.controller.ts`
+4. `/Users/dl/ProjectSpace/ownerAgent/buddykite/src/main/http/routes/index.ts`
+5. `/Users/dl/ProjectSpace/ownerAgent/buddykite/src/renderer/api/index.ts`
 
 ---
 
@@ -146,12 +146,12 @@
 
 ### 关键文件
 
-1. `/Users/dl/ProjectSpace/ownerAgent/hello-halo/src/renderer/pages/SettingsPage.tsx`
-2. `/Users/dl/ProjectSpace/ownerAgent/hello-halo/src/renderer/components/setup/ApiSetup.tsx`
-3. `/Users/dl/ProjectSpace/ownerAgent/hello-halo/src/renderer/components/chat/ModelSwitcher.tsx`
-4. `/Users/dl/ProjectSpace/ownerAgent/hello-halo/src/renderer/components/chat/InputArea.tsx`
-5. `/Users/dl/ProjectSpace/ownerAgent/hello-halo/src/renderer/components/chat/ConversationList.tsx`
-6. `/Users/dl/ProjectSpace/ownerAgent/hello-halo/src/renderer/components/chat/ChatHistoryPanel.tsx`
+1. `/Users/dl/ProjectSpace/ownerAgent/buddykite/src/renderer/pages/SettingsPage.tsx`
+2. `/Users/dl/ProjectSpace/ownerAgent/buddykite/src/renderer/components/setup/ApiSetup.tsx`
+3. `/Users/dl/ProjectSpace/ownerAgent/buddykite/src/renderer/components/chat/ModelSwitcher.tsx`
+4. `/Users/dl/ProjectSpace/ownerAgent/buddykite/src/renderer/components/chat/InputArea.tsx`
+5. `/Users/dl/ProjectSpace/ownerAgent/buddykite/src/renderer/components/chat/ConversationList.tsx`
+6. `/Users/dl/ProjectSpace/ownerAgent/buddykite/src/renderer/components/chat/ChatHistoryPanel.tsx`
 
 ---
 

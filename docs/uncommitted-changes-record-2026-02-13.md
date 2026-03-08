@@ -1,7 +1,7 @@
 # 未提交代码变更记录（全量）
 
 - 记录时间: 2026-02-13 10:00:19 +0800
-- 工作目录: /Users/dl/ProjectSpace/ownerAgent/hello-halo/worktrees/kite
+- 工作目录: /Users/dl/ProjectSpace/ownerAgent/buddykite/worktrees/kite
 - 记录范围: 当前所有未提交变更（staged/unstaged/untracked）
 
 ## 1. 总体统计

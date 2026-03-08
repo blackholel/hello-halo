@@ -123,8 +123,8 @@
     ],
     "publish": {
       "provider": "github",
-      "owner": "openkursar",
-      "repo": "hello-halo",
+      "owner": "blackholel",
+      "repo": "buddykite",
       "releaseType": "release"
     },
     "mac": {

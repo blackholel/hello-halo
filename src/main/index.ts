@@ -201,7 +201,7 @@ function createAppMenu(): void {
         {
           label: 'Learn More',
           click: async () => {
-            await shell.openExternal('https://github.com/openkursar/hello-halo')
+            await shell.openExternal('https://github.com/blackholel/buddykite')
           }
         }
       ]

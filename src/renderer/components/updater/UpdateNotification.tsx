@@ -89,7 +89,7 @@ export function UpdateNotification() {
 
   const handleDownload = async () => {
     if (!notificationVersion) return
-    const targetUrl = downloadUrl || `https://github.com/openkursar/hello-halo/releases/tag/v${notificationVersion}`
+    const targetUrl = downloadUrl || `https://github.com/blackholel/buddykite/releases/tag/v${notificationVersion}`
     await api.openExternal(targetUrl)
   }
 
