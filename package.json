@@ -176,26 +176,21 @@
       ]
     },
     "dmg": {
+      "background": "resources/dmg-background.png",
       "window": {
-        "width": 540,
-        "height": 380
+        "width": 700,
+        "height": 480
       },
       "contents": [
         {
-          "x": 130,
-          "y": 180
+          "x": 180,
+          "y": 170
         },
         {
-          "x": 410,
-          "y": 180,
+          "x": 520,
+          "y": 170,
           "type": "link",
           "path": "/Applications"
-        },
-        {
-          "x": 270,
-          "y": 120,
-          "type": "file",
-          "path": "resources/README.txt"
         }
       ]
     },
