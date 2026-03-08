@@ -15,7 +15,8 @@ vi.mock('../../toolkit.service', () => ({
 }))
 
 vi.mock('../../conversation.service', () => ({
-  getConversation: vi.fn(() => null)
+  getConversation: vi.fn(() => null),
+  clearSessionId: vi.fn()
 }))
 
 vi.mock('../electron-path', () => ({

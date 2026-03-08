@@ -123,6 +123,11 @@ export interface ConversationMeta {
 interface Conversation extends ConversationMeta {
   messages: Message[]
   sessionId?: string
+  sessionScope?: {
+    spaceId: string
+    workDir: string
+    recordedAt: string
+  }
 }
 
 // Index file structure
@@ -153,11 +158,33 @@ function normalizeConversationMeta(
 
 function normalizeConversation(conversation: Conversation): Conversation {
   const messages = Array.isArray(conversation.messages) ? conversation.messages : []
+  const sessionScope = (() => {
+    const raw = (conversation as Conversation & {
+      sessionScope?: {
+        spaceId?: unknown
+        workDir?: unknown
+        recordedAt?: unknown
+      }
+    }).sessionScope
+    if (!raw || typeof raw !== 'object') return undefined
+    const spaceId = typeof raw.spaceId === 'string' ? raw.spaceId.trim() : ''
+    const workDir = typeof raw.workDir === 'string' ? raw.workDir.trim() : ''
+    if (!spaceId || !workDir) return undefined
+    return {
+      spaceId,
+      workDir,
+      recordedAt:
+        typeof raw.recordedAt === 'string' && raw.recordedAt.trim().length > 0
+          ? raw.recordedAt
+          : new Date().toISOString()
+    }
+  })()
   return {
     ...conversation,
     mode: normalizeChatMode((conversation as Partial<Conversation>).mode),
     messages,
-    messageCount: messages.length
+    messageCount: messages.length,
+    ...(sessionScope ? { sessionScope } : {})
   }
 }
 
@@ -579,14 +606,50 @@ export function deleteConversation(spaceId: string, conversationId: string): boo
 }
 
 // Save session ID for a conversation
-export function saveSessionId(spaceId: string, conversationId: string, sessionId: string): void {
+export function saveSessionId(
+  spaceId: string,
+  conversationId: string,
+  sessionId: string,
+  scope?: { spaceId?: string; workDir?: string; recordedAt?: string }
+): void {
   const conversation = getConversation(spaceId, conversationId)
 
   if (conversation) {
     conversation.sessionId = sessionId
+    const scopedWorkDir =
+      typeof scope?.workDir === 'string' && scope.workDir.trim().length > 0
+        ? scope.workDir.trim()
+        : null
+    if (scopedWorkDir) {
+      conversation.sessionScope = {
+        spaceId:
+          typeof scope?.spaceId === 'string' && scope.spaceId.trim().length > 0
+            ? scope.spaceId.trim()
+            : spaceId,
+        workDir: scopedWorkDir,
+        recordedAt:
+          typeof scope?.recordedAt === 'string' && scope.recordedAt.trim().length > 0
+            ? scope.recordedAt
+            : new Date().toISOString()
+      }
+    }
     const conversationsDir = getConversationsDir(spaceId)
     writeFileSync(join(conversationsDir, `${conversationId}.json`), JSON.stringify(conversation, null, 2))
   }
+}
+
+export function clearSessionId(spaceId: string, conversationId: string): void {
+  const conversation = getConversation(spaceId, conversationId)
+  if (!conversation) {
+    return
+  }
+  if (!conversation.sessionId && !conversation.sessionScope) {
+    return
+  }
+  delete conversation.sessionId
+  delete conversation.sessionScope
+  const conversationsDir = getConversationsDir(spaceId)
+  writeFileSync(join(conversationsDir, `${conversationId}.json`), JSON.stringify(conversation, null, 2))
 }
 
 // Generate a default title

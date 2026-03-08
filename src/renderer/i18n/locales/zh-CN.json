@@ -735,6 +735,13 @@
   "Anthropic compatible URL should not end with /chat/completions or /responses": "Anthropic 兼容协议的 URL 不应以 /chat/completions 或 /responses 结尾",
   "Please configure API Key in Settings": "请先在设置中填写 API Key",
   "Please enable the AI provider in Settings": "请先在设置中启用该 AI 配置",
+  "Conversation does not belong to the selected space.": "会话不属于当前选中的空间。",
+  "Conversation space mapping is invalid.": "会话与空间映射无效。",
+  "Space working directory was not found.": "未找到空间工作目录。",
+  "Final Directory": "最终目录",
+  "Please choose location and enter space name": "请选择位置并输入空间名称",
+  "Space created": "空间已创建",
+  "Dismiss": "关闭",
   "Switch profile and model": "切换配置与模型",
   "Advanced options": "高级选项",
   "Return to conversation": "返回会话"

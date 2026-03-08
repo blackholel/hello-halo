@@ -7,9 +7,11 @@
 
 import { BrowserWindow } from 'electron'
 import { promises as fsPromises } from 'fs'
+import { resolve } from 'path'
 import { getConfig } from '../config.service'
 import { getSpaceConfig } from '../space-config.service'
 import {
+  clearSessionId,
   getConversation,
   saveSessionId,
   addMessage,
@@ -37,7 +39,7 @@ import { parseSDKMessages, formatCanvasContext, buildMessageContent } from './me
 import { broadcastMcpStatus } from './mcp-status.service'
 import { expandLazyDirectives } from './skill-expander'
 import {
-  getExecutionLayerAllowedSources,
+  getAllowedSources,
   getSpaceResourcePolicy,
   isStrictSpaceOnlyPolicy
 } from './space-resource-policy.service'
@@ -121,6 +123,35 @@ interface TokenUsageInfo {
   cacheCreationTokens: number
   totalCostUsd: number
   contextWindow: number
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message
+  }
+  if (typeof error === 'string') {
+    return error
+  }
+  return ''
+}
+
+function isAbortLikeError(error: unknown): boolean {
+  const message = getErrorMessage(error)
+  if (error instanceof Error && error.name === 'AbortError') {
+    return true
+  }
+  return /abort/i.test(message)
+}
+
+function createAgentRoutingError(errorCode: string, message: string): Error & { errorCode: string } {
+  const error = new Error(message) as Error & { errorCode: string }
+  error.errorCode = errorCode
+  return error
+}
+
+function normalizePathForCompare(path: string): string {
+  const resolved = resolve(path)
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved
 }
 
 function createRunId(): string {
@@ -702,6 +733,66 @@ export async function sendMessage(
     fileContexts,
     invocationContext
   } = request
+  let conversation: ({
+    ai?: { profileId?: string }
+    sessionId?: string
+    sessionScope?: { spaceId?: string; workDir?: string }
+    spaceId?: string
+  } & Record<string, unknown>) | null = null
+  try {
+    conversation = getConversation(spaceId, conversationId) as
+      | ({
+        ai?: { profileId?: string }
+        sessionId?: string
+        sessionScope?: { spaceId?: string; workDir?: string }
+        spaceId?: string
+      } & Record<string, unknown>)
+      | null
+  } catch (error) {
+    const errorCode = 'SPACE_CONVERSATION_MISMATCH'
+    console.error('[Agent] sendMessage failed to load conversation', {
+      phase: 'send_entry_guard',
+      spaceId,
+      conversationId,
+      errorCode,
+      cause: error instanceof Error ? error.message : String(error)
+    })
+    throw createAgentRoutingError(
+      errorCode,
+      `Conversation ${conversationId} is not available under space ${spaceId}`
+    )
+  }
+
+  if (!conversation) {
+    const errorCode = 'SPACE_CONVERSATION_MISMATCH'
+    console.error('[Agent] sendMessage missing conversation', {
+      phase: 'send_entry_guard',
+      spaceId,
+      conversationId,
+      errorCode
+    })
+    throw createAgentRoutingError(
+      errorCode,
+      `Conversation ${conversationId} is not available under space ${spaceId}`
+    )
+  }
+
+  const persistedSpaceId = typeof conversation.spaceId === 'string' ? conversation.spaceId : ''
+  if (persistedSpaceId !== spaceId) {
+    const errorCode = 'CONVERSATION_SPACE_MISMATCH'
+    console.error('[Agent] sendMessage conversation-space mismatch', {
+      phase: 'send_entry_guard',
+      spaceId,
+      conversationId,
+      persistedSpaceId: persistedSpaceId || null,
+      errorCode
+    })
+    throw createAgentRoutingError(
+      errorCode,
+      `Conversation ${conversationId} belongs to ${persistedSpaceId || 'unknown-space'}, not ${spaceId}`
+    )
+  }
+
   const effectiveMode = normalizeChatMode(mode, planEnabled, 'code')
   const runtimeInvocationContext = invocationContext === 'workflow-step' ? 'workflow-step' : 'interactive'
   if (invocationContext && invocationContext !== runtimeInvocationContext) {
@@ -710,11 +801,9 @@ export async function sendMessage(
     )
   }
   const config = getConfig()
-  const conversation = getConversation(spaceId, conversationId) as
-    | ({ ai?: { profileId?: string }; sessionId?: string } & Record<string, unknown>)
-    | null
   const configuredConversationProfileId = toNonEmptyText(conversation?.ai?.profileId)
   console.log('[Agent] sendMessage entry', {
+    phase: 'send_entry',
     spaceId,
     conversationId,
     invocationContext: runtimeInvocationContext,
@@ -761,7 +850,27 @@ export async function sendMessage(
   console.log(
     `[Agent] sendMessage: conv=${conversationId}, responseLanguage=${effectiveResponseLanguage}${effectiveImages && effectiveImages.length > 0 ? `, images=${effectiveImages.length}` : ''}${effectiveAiBrowserEnabled ? ', AI Browser enabled' : ''}${effectiveThinkingEnabled ? ', thinking=ON' : ''}${canvasContext?.isOpen ? `, canvas tabs=${canvasContext.tabCount}` : ''}${fileContexts && fileContexts.length > 0 ? `, fileContexts=${fileContexts.length}` : ''}`
   )
-  const workDir = getWorkingDir(spaceId)
+  let workDir: string
+  try {
+    workDir = getWorkingDir(spaceId)
+  } catch (error) {
+    const typed = error as Error & { errorCode?: string }
+    console.error('[Agent] sendMessage failed to resolve workDir', {
+      phase: 'resolve_workdir',
+      spaceId,
+      conversationId,
+      errorCode: typed.errorCode || null,
+      configDir: null
+    })
+    throw error
+  }
+  console.log('[Agent] sendMessage routing resolved', {
+    phase: 'resolve_workdir',
+    spaceId,
+    conversationId,
+    resolvedWorkDir: workDir,
+    configDir: null
+  })
   beginChangeSet(spaceId, conversationId, workDir)
   const spaceConfig = getSpaceConfig(workDir)
   const { effectiveLazyLoad: skillsLazyLoad, toolkit } = getEffectiveSkillsLazyLoad(workDir, config)
@@ -788,8 +897,60 @@ export async function sendMessage(
     )
   }
 
-  // Get conversation for session resumption
-  const sessionId = resumeSessionId || conversation?.sessionId
+  const persistedSessionId =
+    typeof conversation?.sessionId === 'string' && conversation.sessionId.trim().length > 0
+      ? conversation.sessionId.trim()
+      : undefined
+  const requestedResumeSessionId =
+    typeof resumeSessionId === 'string' && resumeSessionId.trim().length > 0
+      ? resumeSessionId.trim()
+      : undefined
+
+  if (requestedResumeSessionId && !persistedSessionId) {
+    console.warn('[Agent] Ignoring unscoped resumeSessionId from request', {
+      phase: 'resume_scope_guard',
+      spaceId,
+      conversationId
+    })
+  }
+
+  let sessionId = persistedSessionId
+  if (sessionId) {
+    const sessionScope =
+      conversation && typeof conversation.sessionScope === 'object' && conversation.sessionScope
+        ? conversation.sessionScope
+        : undefined
+    const scopeSpaceId =
+      typeof sessionScope?.spaceId === 'string' ? sessionScope.spaceId.trim() : ''
+    const scopeWorkDir =
+      typeof sessionScope?.workDir === 'string' ? sessionScope.workDir.trim() : ''
+    const scopeMatches =
+      scopeSpaceId === spaceId &&
+      scopeWorkDir.length > 0 &&
+      normalizePathForCompare(scopeWorkDir) === normalizePathForCompare(workDir)
+
+    if (!scopeMatches) {
+      console.warn('[Agent] Ignoring persisted sessionId due to scope mismatch', {
+        phase: 'resume_scope_guard',
+        spaceId,
+        conversationId,
+        scopeSpaceId: scopeSpaceId || null,
+        scopeWorkDir: scopeWorkDir || null,
+        resolvedWorkDir: workDir
+      })
+      sessionId = undefined
+      try {
+        clearSessionId(spaceId, conversationId)
+      } catch (error) {
+        console.warn('[Agent] Failed to clear stale sessionId', {
+          phase: 'resume_scope_guard',
+          spaceId,
+          conversationId,
+          cause: error instanceof Error ? error.message : String(error)
+        })
+      }
+    }
+  }
 
   // Create abort controller for this session
   const abortController = new AbortController()
@@ -967,6 +1128,8 @@ export async function sendMessage(
 
     // Session config for rebuild detection
     const sessionConfig: SessionConfig = {
+      spaceId,
+      workDir,
       aiBrowserEnabled: !!effectiveAiBrowserEnabled,
       skillsLazyLoad,
       responseLanguage: effectiveResponseLanguage,
@@ -1052,7 +1215,7 @@ export async function sendMessage(
 
     const expandedMessage = (effectiveMode !== 'ask' && (skillsLazyLoad || strictSpaceOnly))
       ? expandLazyDirectives(messageForSend, workDir, toolkit, {
-        allowSources: getExecutionLayerAllowedSources(),
+        allowSources: getAllowedSources(getSpaceResourcePolicy(workDir)),
         bypassToolkitAllowlist: true,
         invocationContext: runtimeInvocationContext,
         resourceExposureEnabled: exposureFlags.exposureEnabled,
@@ -1090,7 +1253,7 @@ export async function sendMessage(
           token,
           context: runtimeInvocationContext,
           workDir,
-          sourceCandidates: getExecutionLayerAllowedSources()
+          sourceCandidates: getAllowedSources(getSpaceResourcePolicy(workDir))
         })
       }
     }
@@ -1104,7 +1267,7 @@ export async function sendMessage(
           token,
           context: runtimeInvocationContext,
           workDir,
-          sourceCandidates: getExecutionLayerAllowedSources()
+          sourceCandidates: getAllowedSources(getSpaceResourcePolicy(workDir))
         })
       }
     }
@@ -1118,7 +1281,7 @@ export async function sendMessage(
           token,
           context: runtimeInvocationContext,
           workDir,
-          sourceCandidates: getExecutionLayerAllowedSources()
+          sourceCandidates: getAllowedSources(getSpaceResourcePolicy(workDir))
         })
       }
     }
@@ -1184,6 +1347,15 @@ Keep code snippets, shell commands, file paths, environment variable names, logs
 
 `
 
+    const workspaceGroundingPrefix = `<workspace-grounding>
+Current workspace: ${workDir}.
+Treat this workspace as the only project context for this run.
+Do not reuse project identity, architecture, or file facts from previous workspaces or past sessions.
+If the user asks about this project/codebase, inspect files in current workspace first and answer from observed evidence.
+</workspace-grounding>
+
+`
+
     // Inject file contexts + canvas context + mode guards + original message for AI
     const messageWithContext =
       fileContextBlock +
@@ -1193,6 +1365,7 @@ Keep code snippets, shell commands, file paths, environment variable names, logs
       clarificationPolicyPrefix +
       clarificationBudgetPrefix +
       responseLanguagePrefix +
+      workspaceGroundingPrefix +
       expandedMessage.text
 
     // Build message content (text-only or multi-modal with images)
@@ -1201,7 +1374,7 @@ Keep code snippets, shell commands, file paths, environment variable names, logs
     // Send message to V2 session and stream response
     // For multi-modal messages, we need to send as SDKUserMessage
     if (typeof messageContent === 'string') {
-      v2Session.send(messageContent)
+      await Promise.resolve(v2Session.send(messageContent))
     } else {
       // Multi-modal message: construct SDKUserMessage
       const userMessage = {
@@ -1211,7 +1384,7 @@ Keep code snippets, shell commands, file paths, environment variable names, logs
           content: messageContent
         }
       }
-      v2Session.send(userMessage as any)
+      await Promise.resolve(v2Session.send(userMessage as any))
     }
 
     // Stream messages from V2 session
@@ -1749,7 +1922,10 @@ Keep code snippets, shell commands, file paths, environment variable names, logs
 
     // Save session ID for future resumption
     if (capturedSessionId) {
-      saveSessionId(spaceId, conversationId, capturedSessionId)
+      saveSessionId(spaceId, conversationId, capturedSessionId, {
+        spaceId,
+        workDir
+      })
       console.log(`[Agent][${conversationId}] Session ID saved:`, capturedSessionId)
     }
 
@@ -1791,10 +1967,8 @@ Keep code snippets, shell commands, file paths, environment variable names, logs
       console.log(`[Agent][${conversationId}] Terminal state already emitted, skip duplicate finalize`)
     }
   } catch (error: unknown) {
-    const err = error as Error
-
     // Don't report abort as error
-    if (err.name === 'AbortError') {
+    if (isAbortLikeError(error)) {
       if (abortedByCompatIdleTimeout) {
         const compatModel = resolved.effectiveModel || resolved.sdkModel
         const compatProvider = effectiveAi.profile.name || effectiveAi.profile.vendor
@@ -1846,7 +2020,7 @@ Keep code snippets, shell commands, file paths, environment variable names, logs
     console.error(`[Agent][${conversationId}] Error:`, error)
 
     // Extract detailed error message from stderr if available
-    let errorMessage = err.message || 'Unknown error occurred'
+    let errorMessage = getErrorMessage(error) || 'Unknown error occurred'
 
     // Windows: Check for Git Bash related errors
     if (process.platform === 'win32') {
@@ -2371,7 +2545,7 @@ export async function handleAskUserQuestionResponse(
       message: 'AskUserQuestion handled by Halo UI. Continue with the latest user message answer.'
     })
     if (legacyAnswer) {
-      v2SessionInfo.session.send(legacyAnswer)
+      await Promise.resolve(v2SessionInfo.session.send(legacyAnswer))
     }
     return
   }

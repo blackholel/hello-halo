@@ -5,8 +5,9 @@
  */
 
 import { unstable_v2_createSession } from '@anthropic-ai/claude-agent-sdk'
+import { resolve } from 'path'
 import { getConfig, onApiConfigChange } from '../config.service'
-import { getConversation } from '../conversation.service'
+import { clearSessionId, getConversation } from '../conversation.service'
 import { getHeadlessElectronPath } from './electron-path'
 import { resolveProvider } from './provider-resolver'
 import { resolveEffectiveConversationAi } from './ai-config-resolver'
@@ -78,6 +79,41 @@ function resolveSessionIdleTimeoutMs(): number | null {
   return rawTimeout
 }
 
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message
+  }
+  if (typeof error === 'string') {
+    return error
+  }
+  return ''
+}
+
+function isAbortLikeError(error: unknown): boolean {
+  return /abort/i.test(errorMessage(error))
+}
+
+function closeSessionSafely(session: V2SDKSession, context: string): void {
+  try {
+    const maybePromise = session.close()
+    if (maybePromise && typeof (maybePromise as Promise<void>).then === 'function') {
+      void (maybePromise as Promise<void>).catch((error) => {
+        if (isAbortLikeError(error)) {
+          console.debug(`${context} Session close aborted`, error)
+          return
+        }
+        console.error(`${context} Error closing session:`, error)
+      })
+    }
+  } catch (error) {
+    if (isAbortLikeError(error)) {
+      console.debug(`${context} Session close aborted`, error)
+      return
+    }
+    console.error(`${context} Error closing session:`, error)
+  }
+}
+
 /**
  * Start session cleanup interval
  */
@@ -97,11 +133,7 @@ function startSessionCleanup(): void {
       const idleMs = now - info.lastUsedAt
       if (idleMs > idleTimeoutMs) {
         console.log(`[Agent] Cleaning up idle V2 session: ${convId} (idleMs=${idleMs}, timeoutMs=${idleTimeoutMs})`)
-        try {
-          info.session.close()
-        } catch (e) {
-          console.error(`[Agent] Error closing session ${convId}:`, e)
-        }
+        closeSessionSafely(info.session, `[Agent][${convId}]`)
         v2Sessions.delete(convId)
         lastResourceIndexRebuildAt.delete(convId)
       }
@@ -111,6 +143,8 @@ function startSessionCleanup(): void {
 
 function getSessionRebuildReasons(existing: SessionConfig, next: SessionConfig): string[] {
   const reasons: string[] = []
+  if ((existing.spaceId || '') !== (next.spaceId || '')) reasons.push('spaceId')
+  if ((existing.workDir || '') !== (next.workDir || '')) reasons.push('workDir')
   if (existing.aiBrowserEnabled !== next.aiBrowserEnabled) reasons.push('aiBrowserEnabled')
   if (existing.skillsLazyLoad !== next.skillsLazyLoad) reasons.push('skillsLazyLoad')
   if ((existing.responseLanguage || 'en') !== (next.responseLanguage || 'en')) reasons.push('responseLanguage')
@@ -125,6 +159,8 @@ function getSessionRebuildReasons(existing: SessionConfig, next: SessionConfig):
 
 function buildSessionConfigSignature(config: SessionConfig): string {
   return JSON.stringify({
+    spaceId: config.spaceId || '',
+    workDir: config.workDir || '',
     aiBrowserEnabled: config.aiBrowserEnabled,
     skillsLazyLoad: config.skillsLazyLoad,
     responseLanguage: config.responseLanguage || 'en',
@@ -171,11 +207,7 @@ function closeV2SessionForRebuild(conversationId: string): void {
   const existing = v2Sessions.get(conversationId)
   if (existing) {
     console.log(`[Agent][${conversationId}] Closing V2 session for rebuild`)
-    try {
-      existing.session.close()
-    } catch (e) {
-      console.error(`[Agent][${conversationId}] Error closing session:`, e)
-    }
+    closeSessionSafely(existing.session, `[Agent][${conversationId}]`)
     v2Sessions.delete(conversationId)
   }
 }
@@ -201,23 +233,32 @@ export async function getOrCreateV2Session(
 ): Promise<V2SDKSession> {
   const existing = v2Sessions.get(conversationId)
   if (existing) {
-    const reasons = config ? getSessionRebuildReasons(existing.config, config) : []
+    if (existing.spaceId !== spaceId) {
+      console.warn(
+        `[Agent][${conversationId}] Session scope mismatch (existing=${existing.spaceId}, incoming=${spaceId}), rebuilding session`
+      )
+      closeV2SessionForRebuild(conversationId)
+    }
+  }
+  const rebuiltExisting = v2Sessions.get(conversationId)
+  if (rebuiltExisting) {
+    const reasons = config ? getSessionRebuildReasons(rebuiltExisting.config, config) : []
     if (config && reasons.length > 0) {
       if (shouldDebounceResourceIndexRebuild(conversationId, reasons)) {
         console.log(
           `[Agent][${conversationId}] Skip session rebuild due to resourceIndexHash debounce (${RESOURCE_INDEX_REBUILD_DEBOUNCE_MS}ms)`
         )
         touchV2Session(conversationId)
-        return existing.session
+        return rebuiltExisting.session
       }
       console.log(
         `[Agent][${conversationId}] Session config changed, rebuilding session`,
         {
           from: {
-            aiBrowserEnabled: existing.config.aiBrowserEnabled,
-            responseLanguage: existing.config.responseLanguage || 'en',
-            profileId: existing.config.profileId,
-            effectiveModel: existing.config.effectiveModel
+            aiBrowserEnabled: rebuiltExisting.config.aiBrowserEnabled,
+            responseLanguage: rebuiltExisting.config.responseLanguage || 'en',
+            profileId: rebuiltExisting.config.profileId,
+            effectiveModel: rebuiltExisting.config.effectiveModel
           },
           to: {
             aiBrowserEnabled: config.aiBrowserEnabled,
@@ -227,12 +268,12 @@ export async function getOrCreateV2Session(
           }
         }
       )
-      emitAgentSessionRebuildEvent(conversationId, reasons, existing.config, config)
+      emitAgentSessionRebuildEvent(conversationId, reasons, rebuiltExisting.config, config)
       closeV2SessionForRebuild(conversationId)
     } else {
       console.log(`[Agent][${conversationId}] Reusing existing V2 session`)
       touchV2Session(conversationId)
-      return existing.session
+      return rebuiltExisting.session
     }
   }
 
@@ -252,7 +293,13 @@ export async function getOrCreateV2Session(
     conversationId,
     createdAt: Date.now(),
     lastUsedAt: Date.now(),
-    config: config || { aiBrowserEnabled: false, skillsLazyLoad: false, enabledPluginMcpsHash: '' }
+    config: config || {
+      spaceId,
+      workDir: typeof sdkOptions?.cwd === 'string' ? sdkOptions.cwd : undefined,
+      aiBrowserEnabled: false,
+      skillsLazyLoad: false,
+      enabledPluginMcpsHash: ''
+    }
   })
 
   startSessionCleanup()
@@ -272,9 +319,54 @@ export async function ensureSessionWarm(
   const workDir = getWorkingDir(spaceId)
   const normalizedResponseLanguage = normalizeLocale(responseLanguage)
   const conversation = getConversation(spaceId, conversationId) as
-    | ({ ai?: { profileId?: string }; sessionId?: string } & Record<string, unknown>)
+    | ({
+      ai?: { profileId?: string }
+      sessionId?: string
+      sessionScope?: { spaceId?: string; workDir?: string }
+    } & Record<string, unknown>)
     | null
-  const sessionId = conversation?.sessionId
+  const toComparablePath = (path: string): string =>
+    process.platform === 'win32' ? resolve(path).toLowerCase() : resolve(path)
+  const persistedSessionId =
+    typeof conversation?.sessionId === 'string' && conversation.sessionId.trim().length > 0
+      ? conversation.sessionId.trim()
+      : undefined
+  let sessionId = persistedSessionId
+  if (persistedSessionId) {
+    const sessionScope =
+      conversation && typeof conversation.sessionScope === 'object' && conversation.sessionScope
+        ? conversation.sessionScope
+        : undefined
+    const scopeSpaceId =
+      typeof sessionScope?.spaceId === 'string' ? sessionScope.spaceId.trim() : ''
+    const scopeWorkDir =
+      typeof sessionScope?.workDir === 'string' ? sessionScope.workDir.trim() : ''
+    const scopeMatches =
+      scopeSpaceId === spaceId &&
+      scopeWorkDir.length > 0 &&
+      toComparablePath(scopeWorkDir) === toComparablePath(workDir)
+    if (!scopeMatches) {
+      console.warn('[Agent] Warmup ignored persisted sessionId due to scope mismatch', {
+        phase: 'resume_scope_guard',
+        spaceId,
+        conversationId,
+        scopeSpaceId: scopeSpaceId || null,
+        scopeWorkDir: scopeWorkDir || null,
+        resolvedWorkDir: workDir
+      })
+      sessionId = undefined
+      try {
+        clearSessionId(spaceId, conversationId)
+      } catch (error) {
+        console.warn('[Agent] Warmup failed to clear stale sessionId', {
+          phase: 'resume_scope_guard',
+          spaceId,
+          conversationId,
+          cause: error instanceof Error ? error.message : String(error)
+        })
+      }
+    }
+  }
   const electronPath = getHeadlessElectronPath()
   const { effectiveLazyLoad: skillsLazyLoad } = getEffectiveSkillsLazyLoad(workDir, config)
   const effectiveAi = resolveEffectiveConversationAi(spaceId, conversationId)
@@ -323,6 +415,8 @@ export async function ensureSessionWarm(
       sdkOptions,
       sessionId,
       {
+        spaceId,
+        workDir,
         aiBrowserEnabled: false,
         skillsLazyLoad,
         responseLanguage: normalizedResponseLanguage,
@@ -347,11 +441,7 @@ export function closeV2Session(conversationId: string): void {
   const info = v2Sessions.get(conversationId)
   if (info) {
     console.log(`[Agent][${conversationId}] Closing V2 session`)
-    try {
-      info.session.close()
-    } catch (e) {
-      console.error(`[Agent] Error closing session:`, e)
-    }
+    closeSessionSafely(info.session, `[Agent][${conversationId}]`)
     v2Sessions.delete(conversationId)
   }
   lastResourceIndexRebuildAt.delete(conversationId)
@@ -364,11 +454,7 @@ export function closeAllV2Sessions(): void {
   console.log(`[Agent] Closing all ${v2Sessions.size} V2 sessions`)
   // Avoid TS downlevelIteration requirement
   for (const [convId, info] of Array.from(v2Sessions.entries())) {
-    try {
-      info.session.close()
-    } catch (e) {
-      console.error(`[Agent] Error closing session ${convId}:`, e)
-    }
+    closeSessionSafely(info.session, `[Agent][${convId}]`)
   }
   v2Sessions.clear()
   lastResourceIndexRebuildAt.clear()
@@ -396,12 +482,8 @@ function invalidateAllSessions(): void {
   console.log(`[Agent] Invalidating ${count} sessions due to API config change`)
 
   for (const [convId, info] of Array.from(v2Sessions.entries())) {
-    try {
-      console.log(`[Agent] Closing session: ${convId}`)
-      info.session.close()
-    } catch (e) {
-      console.error(`[Agent] Error closing session ${convId}:`, e)
-    }
+    console.log(`[Agent] Closing session: ${convId}`)
+    closeSessionSafely(info.session, `[Agent][${convId}]`)
   }
 
   v2Sessions.clear()

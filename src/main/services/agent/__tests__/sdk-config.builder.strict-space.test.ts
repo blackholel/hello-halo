@@ -83,7 +83,8 @@ import {
   buildPluginsConfig,
   buildSdkOptions,
   buildSettingSources,
-  buildSystemPromptAppend
+  buildSystemPromptAppend,
+  getWorkingDir
 } from '../sdk-config.builder'
 import { ensureSpaceResourcePolicy, getExecutionLayerAllowedSources } from '../space-resource-policy.service'
 
@@ -117,14 +118,14 @@ describe('sdk-config.builder strict space-only', () => {
     expect(sources).toEqual(['local'])
   })
 
-  it('loads global and space plugin directories under strict policy', () => {
+  it('loads only space plugin directories under strict policy', () => {
     const plugins = buildPluginsConfig('/workspace/project')
     const paths = plugins.map(plugin => plugin.path)
 
-    expect(paths).toContain('/enabled/plugin-a')
-    expect(paths).toContain('/home/test/.kite')
     expect(paths).toContain('/workspace/project/.local-plugins')
     expect(paths).toContain('/workspace/project/.claude')
+    expect(paths).not.toContain('/enabled/plugin-a')
+    expect(paths).not.toContain('/home/test/.kite')
     expect(paths).not.toContain('/global/plugins')
   })
 
@@ -247,5 +248,16 @@ describe('sdk-config.builder strict space-only', () => {
     expect(append).toContain('Language policy')
     expect(append).toContain('zh-CN')
     expect(append).not.toContain('Do NOT use resources outside this list.')
+  })
+
+  it('getWorkingDir throws explicit SPACE_NOT_FOUND_FOR_WORKDIR for missing normal space', () => {
+    expect(() => getWorkingDir('missing-space')).toThrow(/missing-space/)
+
+    try {
+      getWorkingDir('missing-space')
+    } catch (error) {
+      const typedError = error as Error & { errorCode?: string }
+      expect(typedError.errorCode).toBe('SPACE_NOT_FOUND_FOR_WORKDIR')
+    }
   })
 })

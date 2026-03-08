@@ -32,6 +32,7 @@ vi.mock('../../../src/renderer/services/canvas-lifecycle', () => ({
 }))
 
 import { useChatStore } from '../../../src/renderer/stores/chat.store'
+import { useAppStore } from '../../../src/renderer/stores/app.store'
 
 function seedConversation(spaceId: string, conversationId: string): void {
   const now = new Date().toISOString()
@@ -91,6 +92,33 @@ describe('Chat Store - queued turn flow', () => {
     mockGetConversation.mockResolvedValue({ success: false })
     mockListChangeSets.mockResolvedValue({ success: false })
     mockDeleteConversation.mockResolvedValue({ success: true })
+
+    useAppStore.setState({
+      config: {
+        api: {
+          provider: 'anthropic',
+          apiKey: 'test-key',
+          apiUrl: 'https://api.anthropic.com',
+          model: 'claude-sonnet-4-5-20250929'
+        },
+        ai: {
+          defaultProfileId: 'p-default',
+          profiles: [
+            {
+              id: 'p-default',
+              name: 'Default',
+              vendor: 'anthropic',
+              protocol: 'anthropic_official',
+              apiUrl: 'https://api.anthropic.com',
+              apiKey: 'test-key',
+              defaultModel: 'claude-sonnet-4-5-20250929',
+              modelCatalog: ['claude-sonnet-4-5-20250929'],
+              enabled: true
+            }
+          ]
+        }
+      }
+    } as any)
   })
 
   it('queues turn while generating and flushes on terminal complete', async () => {
@@ -853,5 +881,77 @@ describe('Chat Store - queued turn flow', () => {
 
     useChatStore.getState().reset()
     expect(useChatStore.getState().getQueueCount(conversationA)).toBe(0)
+  })
+
+  it('returns SPACE_CONVERSATION_MISMATCH when space does not contain the conversation', async () => {
+    const spaceId = 'space-1'
+    const wrongSpaceId = 'space-2'
+    const conversationId = 'conv-space-mismatch'
+    seedConversation(spaceId, conversationId)
+
+    const result = await useChatStore.getState().dispatchTurnInternal({
+      id: 'queued-turn-space-mismatch',
+      spaceId: wrongSpaceId,
+      conversationId,
+      content: 'should be blocked',
+      aiBrowserEnabled: false,
+      createdAt: Date.now()
+    })
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        accepted: false,
+        errorCode: 'SPACE_CONVERSATION_MISMATCH'
+      })
+    )
+    expect(mockSendMessage).toHaveBeenCalledTimes(0)
+  })
+
+  it('does not enqueue non-retriable mismatch error on submitTurn', async () => {
+    const spaceId = 'space-1'
+    const wrongSpaceId = 'space-2'
+    const conversationId = 'conv-space-mismatch-submit'
+    seedConversation(spaceId, conversationId)
+
+    await useChatStore.getState().submitTurn({
+      spaceId: wrongSpaceId,
+      conversationId,
+      content: 'should not enter queue',
+      aiBrowserEnabled: false,
+      mode: 'code'
+    })
+
+    expect(mockSendMessage).toHaveBeenCalledTimes(0)
+    expect(useChatStore.getState().getQueueCount(conversationId)).toBe(0)
+    expect(useChatStore.getState().getQueueError(conversationId)).toMatch(/space/i)
+  })
+
+  it('drops non-retriable mismatch queue head during flush instead of replaying forever', async () => {
+    const spaceId = 'space-1'
+    const wrongSpaceId = 'space-2'
+    const conversationId = 'conv-space-mismatch-flush'
+    seedConversation(spaceId, conversationId)
+
+    useChatStore.setState((state) => {
+      const queuedTurnsByConversation = new Map(state.queuedTurnsByConversation)
+      queuedTurnsByConversation.set(conversationId, [
+        {
+          id: 'queued-turn-head-mismatch',
+          spaceId: wrongSpaceId,
+          conversationId,
+          content: 'head mismatch',
+          aiBrowserEnabled: false,
+          mode: 'code',
+          createdAt: Date.now()
+        }
+      ])
+      return { queuedTurnsByConversation }
+    })
+
+    await useChatStore.getState().flushQueuedTurns(conversationId, 'submit')
+
+    expect(mockSendMessage).toHaveBeenCalledTimes(0)
+    expect(useChatStore.getState().getQueueCount(conversationId)).toBe(0)
+    expect(useChatStore.getState().getQueueError(conversationId)).toMatch(/space/i)
   })
 })

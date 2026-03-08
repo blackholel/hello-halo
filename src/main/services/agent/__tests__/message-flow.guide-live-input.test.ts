@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ASK_USER_QUESTION_ERROR_CODES, type PendingAskUserQuestionContext, type SessionState } from '../types'
-import { guideLiveInput } from '../message-flow.service'
+import { guideLiveInput, sendMessage } from '../message-flow.service'
 
 const sessionManagerMocks = vi.hoisted(() => ({
   getOrCreateV2Session: vi.fn(),
@@ -9,16 +9,26 @@ const sessionManagerMocks = vi.hoisted(() => ({
   setActiveSession: vi.fn(),
   deleteActiveSession: vi.fn(),
   getV2SessionInfo: vi.fn(),
+  getV2SessionConversationIds: vi.fn(() => []),
   getV2SessionsCount: vi.fn(() => 0),
-  setSessionMode: vi.fn()
+  setSessionMode: vi.fn(),
+  touchV2Session: vi.fn()
 }))
 
 const conversationServiceMocks = vi.hoisted(() => ({
   getConversation: vi.fn(),
+  clearSessionId: vi.fn(),
   saveSessionId: vi.fn(),
   addMessage: vi.fn(),
   updateLastMessage: vi.fn(),
   insertUserMessageBeforeTrailingAssistant: vi.fn()
+}))
+
+const changeSetMocks = vi.hoisted(() => ({
+  beginChangeSet: vi.fn(),
+  clearPendingChangeSet: vi.fn(),
+  finalizeChangeSet: vi.fn(),
+  trackChangeFile: vi.fn()
 }))
 
 vi.mock('../session.manager', () => ({
@@ -28,16 +38,34 @@ vi.mock('../session.manager', () => ({
   setActiveSession: sessionManagerMocks.setActiveSession,
   deleteActiveSession: sessionManagerMocks.deleteActiveSession,
   getV2SessionInfo: sessionManagerMocks.getV2SessionInfo,
+  getV2SessionConversationIds: sessionManagerMocks.getV2SessionConversationIds,
   getV2SessionsCount: sessionManagerMocks.getV2SessionsCount,
-  setSessionMode: sessionManagerMocks.setSessionMode
+  setSessionMode: sessionManagerMocks.setSessionMode,
+  touchV2Session: sessionManagerMocks.touchV2Session
 }))
 
 vi.mock('../../conversation.service', () => ({
   getConversation: conversationServiceMocks.getConversation,
+  clearSessionId: conversationServiceMocks.clearSessionId,
   saveSessionId: conversationServiceMocks.saveSessionId,
   addMessage: conversationServiceMocks.addMessage,
   updateLastMessage: conversationServiceMocks.updateLastMessage,
   insertUserMessageBeforeTrailingAssistant: conversationServiceMocks.insertUserMessageBeforeTrailingAssistant
+}))
+
+vi.mock('../../change-set.service', () => ({
+  beginChangeSet: changeSetMocks.beginChangeSet,
+  clearPendingChangeSet: changeSetMocks.clearPendingChangeSet,
+  finalizeChangeSet: changeSetMocks.finalizeChangeSet,
+  trackChangeFile: changeSetMocks.trackChangeFile
+}))
+
+vi.mock('../ai-setup-guard', () => ({
+  assertAiProfileConfigured: vi.fn(() => {
+    const error = new Error('AI profile not configured') as Error & { errorCode?: string }
+    error.errorCode = 'AI_PROFILE_NOT_CONFIGURED'
+    throw error
+  })
 }))
 
 function createSessionState(overrides: Partial<SessionState> = {}): SessionState {
@@ -294,5 +322,50 @@ describe('message-flow guideLiveInput', () => {
     expect(send).toHaveBeenCalledTimes(1)
     expect(resolveOne).toHaveBeenCalledTimes(0)
     expect(resolveTwo).toHaveBeenCalledTimes(0)
+  })
+})
+
+describe('message-flow sendMessage space/conversation mismatch guard', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('throws SPACE_CONVERSATION_MISMATCH before creating session when conversation is missing', async () => {
+    conversationServiceMocks.getConversation.mockReturnValueOnce(null)
+
+    await expect(
+      sendMessage(null, {
+        spaceId: 'space-1',
+        conversationId: 'conv-missing',
+        message: 'test missing conversation'
+      })
+    ).rejects.toMatchObject({
+      errorCode: 'SPACE_CONVERSATION_MISMATCH'
+    })
+
+    expect(sessionManagerMocks.setActiveSession).toHaveBeenCalledTimes(0)
+    expect(changeSetMocks.beginChangeSet).toHaveBeenCalledTimes(0)
+    expect(conversationServiceMocks.addMessage).toHaveBeenCalledTimes(0)
+  })
+
+  it('throws CONVERSATION_SPACE_MISMATCH before creating session when conversation belongs to another space', async () => {
+    conversationServiceMocks.getConversation.mockReturnValueOnce({
+      id: 'conv-wrong-space',
+      spaceId: 'space-other'
+    })
+
+    await expect(
+      sendMessage(null, {
+        spaceId: 'space-1',
+        conversationId: 'conv-wrong-space',
+        message: 'test wrong mapping'
+      })
+    ).rejects.toMatchObject({
+      errorCode: 'CONVERSATION_SPACE_MISMATCH'
+    })
+
+    expect(sessionManagerMocks.setActiveSession).toHaveBeenCalledTimes(0)
+    expect(changeSetMocks.beginChangeSet).toHaveBeenCalledTimes(0)
+    expect(conversationServiceMocks.addMessage).toHaveBeenCalledTimes(0)
   })
 })

@@ -289,7 +289,7 @@ export interface V2SDKSession {
   readonly sessionId?: string
   send: (message: unknown) => void | Promise<void>
   stream: () => AsyncIterable<unknown>
-  close: () => void
+  close: () => void | Promise<void>
   interrupt?: () => Promise<void> | void
   setModel?: (model: string | undefined) => Promise<void>
   setMaxThinkingTokens?: (maxThinkingTokens: number | null) => Promise<void>
@@ -302,6 +302,8 @@ export interface V2SDKSession {
  * Session configuration that requires session rebuild when changed
  */
 export interface SessionConfig {
+  spaceId?: string
+  workDir?: string
   aiBrowserEnabled: boolean
   skillsLazyLoad: boolean
   responseLanguage?: import('../../../shared/i18n/locale').LocaleCode

@@ -60,7 +60,16 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
 
   // Get conversation and session from store
   const conversation = useChatStore(state =>
-    conversationId ? state.conversationCache.get(conversationId) : null
+    conversationId
+      ? (() => {
+          const cached = state.conversationCache.get(conversationId) || null
+          if (!cached) return null
+          if (spaceId && cached.spaceId !== spaceId) {
+            return null
+          }
+          return cached
+        })()
+      : null
   )
   const modelSwitcherConversation = conversationId
     ? {

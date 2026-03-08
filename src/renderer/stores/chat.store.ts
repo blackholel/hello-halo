@@ -122,7 +122,7 @@ type QueueDispatchTrigger = 'submit' | 'agent_complete' | 'agent_error' | 'stop_
 
 type DispatchResult =
   | { accepted: true }
-  | { accepted: false; error: string }
+  | { accepted: false; error: string; errorCode?: string }
 
 type GuideDispatchResult =
   | { accepted: true; delivery?: 'session_send' | 'ask_user_question_answer' }
@@ -140,6 +140,26 @@ const GUIDE_FALLBACK_TO_NEW_RUN_ERROR_CODES = new Set<string>([
   'ASK_USER_QUESTION_NO_ACTIVE_SESSION',
   'ASK_USER_QUESTION_RUN_MISMATCH'
 ])
+
+const SPACE_ROUTING_ERROR_CODES = {
+  SPACE_CONVERSATION_MISMATCH: 'SPACE_CONVERSATION_MISMATCH',
+  SPACE_NOT_FOUND_FOR_WORKDIR: 'SPACE_NOT_FOUND_FOR_WORKDIR',
+  CONVERSATION_SPACE_MISMATCH: 'CONVERSATION_SPACE_MISMATCH'
+} as const
+
+type SpaceRoutingErrorCode =
+  (typeof SPACE_ROUTING_ERROR_CODES)[keyof typeof SPACE_ROUTING_ERROR_CODES]
+
+const NON_RETRIABLE_DISPATCH_ERROR_CODES = new Set<string>(
+  Object.values(SPACE_ROUTING_ERROR_CODES)
+)
+
+function isNonRetriableDispatchError(
+  result: { accepted: boolean; errorCode?: string }
+): boolean {
+  if (result.accepted) return false
+  return typeof result.errorCode === 'string' && NON_RETRIABLE_DISPATCH_ERROR_CODES.has(result.errorCode)
+}
 
 function normalizeToolStatus(status: unknown): ToolStatus {
   switch (status) {
@@ -329,6 +349,15 @@ function toErrorMessage(error: unknown, fallback: string): string {
 function resolveSendErrorMessage(error: string | undefined, errorCode?: string): string {
   if (errorCode === 'AI_PROFILE_NOT_CONFIGURED') {
     return i18n.t('Please configure AI profile first')
+  }
+  if (errorCode === SPACE_ROUTING_ERROR_CODES.SPACE_CONVERSATION_MISMATCH) {
+    return i18n.t('Conversation does not belong to the selected space.')
+  }
+  if (errorCode === SPACE_ROUTING_ERROR_CODES.CONVERSATION_SPACE_MISMATCH) {
+    return i18n.t('Conversation space mapping is invalid.')
+  }
+  if (errorCode === SPACE_ROUTING_ERROR_CODES.SPACE_NOT_FOUND_FOR_WORKDIR) {
+    return i18n.t('Space working directory was not found.')
   }
   if (typeof error === 'string' && error.trim().length > 0) {
     return error
@@ -1413,10 +1442,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const conversation = get().getCurrentConversation()
     const conversationMeta = get().getCurrentConversationMeta()
     const { currentSpaceId } = get()
-    const conversationProfileId =
-      toNonEmptyProfileId(conversation?.ai?.profileId) ??
-      toNonEmptyProfileId(conversationMeta?.ai?.profileId)
-    const aiSetupState = getAiSetupState(useAppStore.getState().config, conversationProfileId)
 
     if ((!conversation && !conversationMeta) || !currentSpaceId) {
       console.error('[ChatStore] No conversation or space selected')
@@ -1425,178 +1450,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     const conversationId = conversationMeta?.id || conversation?.id
     if (!conversationId) return
-
-    const snapshotSession = get().sessions.get(conversationId)
-    const effectiveMode = normalizeChatMode(mode, undefined, snapshotSession?.mode || 'code')
-    if (!aiSetupState.configured) {
-      console.warn('[ChatStore] sendMessage blocked by ai setup guard', {
-        spaceId: currentSpaceId,
-        conversationId,
-        conversationProfileId: conversationProfileId || null,
-        reason: aiSetupState.reason
-      })
-      set((state) => {
-        const newSessions = new Map(state.sessions)
-        const session = newSessions.get(conversationId) || createEmptySessionState()
-        newSessions.set(conversationId, {
-          ...session,
-          error: i18n.t('Please configure AI profile first'),
-          isGenerating: false,
-          isThinking: false,
-          isStreaming: false,
-          activePlanTabId: session.activePlanTabId,
-        })
-        return { sessions: newSessions }
-      })
-      return
-    }
-
-    try {
-      // Initialize/reset session state for this conversation
-      set((state) => {
-        const newSessions = new Map(state.sessions)
-        const latestSession = newSessions.get(conversationId)
-        newSessions.set(conversationId, {
-          ...createEmptySessionState(),
-          mode: effectiveMode,
-          lifecycle: 'running',
-          terminalReason: null,
-          isGenerating: true,
-          isThinking: true,
-          activePlanTabId: latestSession?.activePlanTabId,
-        })
-        return { sessions: newSessions }
-      })
-
-      // Add user message to UI immediately (update cache if exists)
-      const userMessage: Message = {
-        id: `msg-${Date.now()}`,
-        role: 'user',
-        content,
-        timestamp: new Date().toISOString(),
-        images: images  // Include images in message for display
-      }
-
-      set((state) => {
-        // Update cache if conversation is loaded
-        const newCache = new Map(state.conversationCache)
-        const cached = newCache.get(conversationId)
-        if (cached) {
-          newCache.set(conversationId, {
-            ...cached,
-            messages: [...cached.messages, userMessage],
-            updatedAt: new Date().toISOString()
-          })
-        }
-
-        // Update metadata (messageCount)
-        const newSpaceStates = new Map(state.spaceStates)
-        const spaceState = newSpaceStates.get(currentSpaceId)
-        if (spaceState) {
-          newSpaceStates.set(currentSpaceId, {
-            ...spaceState,
-            conversations: spaceState.conversations.map((c) =>
-              c.id === conversationId
-                ? { ...c, messageCount: c.messageCount + 1, updatedAt: new Date().toISOString() }
-                : c
-            )
-          })
-        }
-        return { spaceStates: newSpaceStates, conversationCache: newCache }
-      })
-
-      // Build Canvas Context for AI awareness
-      // This allows AI to naturally understand what the user is currently viewing
-      const buildCanvasContext = (): CanvasContext | undefined => {
-        if (!canvasLifecycle.getIsOpen() || canvasLifecycle.getTabCount() === 0) {
-          return undefined
-        }
-
-        const tabs = canvasLifecycle.getTabs()
-        const activeTabId = canvasLifecycle.getActiveTabId()
-        const activeTab = canvasLifecycle.getActiveTab()
-
-        return {
-          isOpen: true,
-          tabCount: tabs.length,
-          activeTab: activeTab ? {
-            type: activeTab.type,
-            title: activeTab.title,
-            url: activeTab.url,
-            path: activeTab.path
-          } : null,
-          tabs: tabs.map(t => ({
-            type: t.type,
-            title: t.title,
-            url: t.url,
-            path: t.path,
-            isActive: t.id === activeTabId
-          }))
-        }
-      }
-
-      const context = invocationContext || 'interactive'
-      if (context !== 'interactive' && context !== 'workflow-step') {
-        throw new Error(`Unsupported invocationContext from renderer: ${context}`)
-      }
-
-      const baseRequest = {
-        spaceId: currentSpaceId,
-        conversationId,
-        message: content,
-        responseLanguage: getCurrentLanguage(),
-        images: images,  // Pass images to API
-        aiBrowserEnabled,  // Pass AI Browser state to API
-        thinkingEnabled,  // Pass thinking mode to API
-        mode: effectiveMode,
-        planEnabled: effectiveMode === 'plan',  // Compatibility (deprecated)
-        canvasContext: buildCanvasContext(),  // Pass canvas context for AI awareness
-        fileContexts: fileContexts  // Pass file contexts for context injection
-      }
-
-      if (context === 'workflow-step') {
-        const response = await api.sendWorkflowStepMessage(baseRequest)
-        if (!response.success) {
-          console.error('[ChatStore] sendWorkflowStepMessage failed', {
-            spaceId: currentSpaceId,
-            conversationId,
-            errorCode: response.errorCode,
-            error: response.error
-          })
-          throw new Error(resolveSendErrorMessage(response.error, response.errorCode))
-        }
-      } else {
-        const response = await api.sendMessage({
-          ...baseRequest,
-          invocationContext: 'interactive'
-        })
-        if (!response.success) {
-          console.error('[ChatStore] sendMessage API failed', {
-            spaceId: currentSpaceId,
-            conversationId,
-            errorCode: response.errorCode,
-            error: response.error
-          })
-          throw new Error(resolveSendErrorMessage(response.error, response.errorCode))
-        }
-      }
-    } catch (error) {
-      const reason = toErrorMessage(error, i18n.t('Failed to send message'))
-      console.error('[ChatStore] Failed to send message:', error)
-      // Update session error state
-      set((state) => {
-        const newSessions = new Map(state.sessions)
-        const session = newSessions.get(conversationId) || createEmptySessionState()
-        newSessions.set(conversationId, {
-          ...session,
-          error: reason,
-          isGenerating: false,
-          isThinking: false,
-          activePlanTabId: session.activePlanTabId,
-        })
-        return { sessions: newSessions }
-      })
-    }
+    await get().submitTurn({
+      spaceId: currentSpaceId,
+      conversationId,
+      content,
+      images,
+      fileContexts,
+      thinkingEnabled,
+      mode,
+      aiBrowserEnabled: aiBrowserEnabled ?? false,
+      invocationContext
+    })
   },
 
   // Send message to a specific conversation (for Chat Tabs - avoids global context switching)
@@ -1909,10 +1773,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }
         }
 
+        const nonRetriable = isNonRetriableDispatchError(result)
+
         if (result.accepted) {
           queueErrorByConversation.delete(conversationId)
         } else {
-          if (shouldRestore) {
+          if (nonRetriable) {
+            queueErrorByConversation.set(conversationId, result.error)
+          } else if (shouldRestore) {
             const recoveredQueue = [...currentQueue]
             const insertIndex = Math.min(Math.max(targetIndex, 0), recoveredQueue.length)
             recoveredQueue.splice(insertIndex, 0, targetTurn)
@@ -1955,14 +1823,69 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return { accepted: false, error: '[ChatStore] spaceId and conversationId are required' }
     }
     const snapshot = get()
+    const spaceState = snapshot.spaceStates.get(spaceId)
+    const conversationMeta = spaceState?.conversations.find((conversation) => conversation.id === conversationId)
+    if (!spaceState || !conversationMeta) {
+      const reason = resolveSendErrorMessage(undefined, SPACE_ROUTING_ERROR_CODES.SPACE_CONVERSATION_MISMATCH)
+      console.warn('[ChatStore] dispatchTurnInternal blocked by space mapping guard', {
+        phase: 'renderer_dispatch_validation',
+        spaceId,
+        conversationId,
+        errorCode: SPACE_ROUTING_ERROR_CODES.SPACE_CONVERSATION_MISMATCH
+      })
+      set((state) => {
+        const newSessions = new Map(state.sessions)
+        const session = newSessions.get(conversationId) || createEmptySessionState()
+        newSessions.set(conversationId, {
+          ...session,
+          error: reason,
+          isGenerating: false,
+          isThinking: false,
+          isStreaming: false,
+          activePlanTabId: session.activePlanTabId
+        })
+        return { sessions: newSessions }
+      })
+      return {
+        accepted: false,
+        error: reason,
+        errorCode: SPACE_ROUTING_ERROR_CODES.SPACE_CONVERSATION_MISMATCH
+      }
+    }
+
+    const cachedConversation = snapshot.conversationCache.get(conversationId)
+    if (cachedConversation && cachedConversation.spaceId !== spaceId) {
+      const reason = resolveSendErrorMessage(undefined, SPACE_ROUTING_ERROR_CODES.SPACE_CONVERSATION_MISMATCH)
+      console.warn('[ChatStore] dispatchTurnInternal blocked by cache space mismatch', {
+        phase: 'renderer_dispatch_validation',
+        spaceId,
+        conversationId,
+        cachedSpaceId: cachedConversation.spaceId,
+        errorCode: SPACE_ROUTING_ERROR_CODES.SPACE_CONVERSATION_MISMATCH
+      })
+      set((state) => {
+        const newSessions = new Map(state.sessions)
+        const session = newSessions.get(conversationId) || createEmptySessionState()
+        newSessions.set(conversationId, {
+          ...session,
+          error: reason,
+          isGenerating: false,
+          isThinking: false,
+          isStreaming: false,
+          activePlanTabId: session.activePlanTabId
+        })
+        return { sessions: newSessions }
+      })
+      return {
+        accepted: false,
+        error: reason,
+        errorCode: SPACE_ROUTING_ERROR_CODES.SPACE_CONVERSATION_MISMATCH
+      }
+    }
+
     const conversationProfileId =
-      toNonEmptyProfileId(snapshot.conversationCache.get(conversationId)?.ai?.profileId) ??
-      toNonEmptyProfileId(
-        snapshot.spaceStates
-          .get(spaceId)
-          ?.conversations.find((conversation) => conversation.id === conversationId)
-          ?.ai?.profileId
-      )
+      toNonEmptyProfileId(cachedConversation?.ai?.profileId) ??
+      toNonEmptyProfileId(conversationMeta.ai?.profileId)
     const aiSetupState = getAiSetupState(useAppStore.getState().config, conversationProfileId)
     if (!aiSetupState.configured) {
       console.warn('[ChatStore] dispatchTurnInternal blocked by ai setup guard', {
@@ -2070,11 +1993,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
           invocationContext: 'interactive'
         })
       if (!response.success) {
-        throw new Error(resolveSendErrorMessage(response.error, response.errorCode))
+        const transportError = new Error(
+          resolveSendErrorMessage(response.error, response.errorCode)
+        ) as Error & { errorCode?: string }
+        if (response.errorCode) {
+          transportError.errorCode = response.errorCode
+        }
+        throw transportError
       }
 
       return { accepted: true }
     } catch (error) {
+      const typedError = error as Error & { errorCode?: string }
+      const errorCode =
+        typeof typedError?.errorCode === 'string' ? typedError.errorCode : undefined
       const reason = toErrorMessage(error, 'Failed to send message')
       console.error('[ChatStore] Failed to dispatch turn:', error)
       set((state) => {
@@ -2133,7 +2065,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
           spaceStates: newSpaceStates
         }
       })
-      return { accepted: false, error: reason }
+      return {
+        accepted: false,
+        error: reason,
+        ...(errorCode ? { errorCode } : {})
+      }
     }
   },
 
@@ -2318,6 +2254,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return
     }
 
+    if (isNonRetriableDispatchError(result)) {
+      set((state) => {
+        const queueErrorByConversation = new Map(state.queueErrorByConversation)
+        queueErrorByConversation.set(turn.conversationId, result.error)
+        return { queueErrorByConversation }
+      })
+      return
+    }
+
     enqueueTurn(result.error)
   },
 
@@ -2356,7 +2301,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const currentQueue = queuedTurnsByConversation.get(conversationId) || []
         const queueErrorByConversation = new Map(state.queueErrorByConversation)
 
-        if (result.accepted) {
+        const nonRetriable = isNonRetriableDispatchError(result)
+        if (result.accepted || nonRetriable) {
           const nextQueue =
             currentQueue[0]?.id === headTurn.id
               ? currentQueue.slice(1)
@@ -2366,7 +2312,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
           } else {
             queuedTurnsByConversation.delete(conversationId)
           }
-          queueErrorByConversation.delete(conversationId)
+          if (result.accepted) {
+            queueErrorByConversation.delete(conversationId)
+          } else {
+            queueErrorByConversation.set(conversationId, result.error)
+          }
         } else {
           queueErrorByConversation.set(conversationId, result.error)
         }

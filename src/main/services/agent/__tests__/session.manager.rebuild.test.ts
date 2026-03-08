@@ -10,7 +10,8 @@ vi.mock('../../config.service', () => ({
 }))
 
 vi.mock('../../conversation.service', () => ({
-  getConversation: vi.fn(() => null)
+  getConversation: vi.fn(() => null),
+  clearSessionId: vi.fn()
 }))
 
 vi.mock('../electron-path', () => ({
@@ -40,11 +41,20 @@ vi.mock('../../plugin-mcp.service', () => ({
   getEnabledPluginMcpList: vi.fn(() => [])
 }))
 
+vi.mock('../../resource-index.service', () => ({
+  getResourceIndexHash: vi.fn(() => 'resource-hash')
+}))
+
 import { unstable_v2_createSession } from '@anthropic-ai/claude-agent-sdk'
 import { getConfig } from '../../config.service'
+import { clearSessionId, getConversation } from '../../conversation.service'
+import { resolveEffectiveConversationAi } from '../ai-config-resolver'
+import { resolveProvider } from '../provider-resolver'
+import { buildSdkOptions, getWorkingDir } from '../sdk-config.builder'
 import {
   closeAllV2Sessions,
   deleteActiveSession,
+  ensureSessionWarm,
   getOrCreateV2Session,
   setActiveSession,
   touchV2Session
@@ -192,6 +202,46 @@ describe('session.manager rebuild', () => {
     expect(closeA).toHaveBeenCalledTimes(1)
     expect(closeB).not.toHaveBeenCalled()
   })
+
+  it('warmup 对缺少 scope 的旧 sessionId 不做 resume，并清理持久化 sessionId', async () => {
+    const close = vi.fn()
+    vi.mocked(unstable_v2_createSession).mockReset().mockResolvedValueOnce({ close } as any)
+    vi.mocked(getWorkingDir).mockReturnValue('/workspace/project')
+    vi.mocked(getConversation).mockReturnValue({
+      id: 'conv-warm',
+      spaceId: 'space-1',
+      sessionId: 'legacy-session-id',
+      ai: { profileId: 'profile-a' }
+    } as any)
+    vi.mocked(resolveEffectiveConversationAi).mockReturnValue({
+      profileId: 'profile-a',
+      profile: {
+        id: 'profile-a',
+        vendor: 'anthropic',
+        protocol: 'anthropic_official'
+      },
+      effectiveModel: 'claude-test',
+      providerSignature: 'provider-signature',
+      disableToolsForCompat: false
+    } as any)
+    vi.mocked(resolveProvider).mockResolvedValue({
+      anthropicApiKey: 'test-key',
+      anthropicBaseUrl: 'https://api.anthropic.com',
+      sdkModel: 'claude-test',
+      effectiveModel: 'claude-test',
+      useAnthropicCompatModelMapping: false
+    } as any)
+    vi.mocked(buildSdkOptions).mockReturnValue({
+      cwd: '/workspace/project'
+    } as any)
+
+    await ensureSessionWarm('space-1', 'conv-warm', 'en')
+
+    expect(clearSessionId).toHaveBeenCalledWith('space-1', 'conv-warm')
+    expect(unstable_v2_createSession).toHaveBeenCalledTimes(1)
+    const createArgs = vi.mocked(unstable_v2_createSession).mock.calls[0]?.[0] as Record<string, unknown>
+    expect(createArgs?.resume).toBeUndefined()
+  })
 })
 
 describe('session.manager cleanup', () => {
@@ -289,5 +339,19 @@ describe('session.manager cleanup', () => {
 
     await vi.advanceTimersByTimeAsync(DEFAULT_SESSION_IDLE_TIMEOUT_MS)
     expect(close).toHaveBeenCalledTimes(1)
+  })
+
+  it('close 返回 rejected Promise(Abort) 时不会产生未处理拒绝', async () => {
+    const close = vi.fn(() => Promise.reject(new Error('Operation aborted')))
+    const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {})
+    vi.mocked(unstable_v2_createSession).mockResolvedValueOnce({ close } as any)
+
+    await getOrCreateV2Session('space-1', 'conv-abort', {}, undefined, baseConfig)
+    await vi.advanceTimersByTimeAsync(DEFAULT_SESSION_IDLE_TIMEOUT_MS + 60 * 1000)
+    await Promise.resolve()
+
+    expect(close).toHaveBeenCalledTimes(1)
+    expect(debugSpy).toHaveBeenCalled()
+    debugSpy.mockRestore()
   })
 })

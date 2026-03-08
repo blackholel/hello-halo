@@ -679,6 +679,13 @@
   "Anthropic compatible URL should not end with /chat/completions or /responses": "Anthropic compatible URL should not end with /chat/completions or /responses",
   "Please configure API Key in Settings": "Please configure API Key in Settings",
   "Please enable the AI provider in Settings": "Please enable the AI provider in Settings",
+  "Conversation does not belong to the selected space.": "Conversation does not belong to the selected space.",
+  "Conversation space mapping is invalid.": "Conversation space mapping is invalid.",
+  "Space working directory was not found.": "Space working directory was not found.",
+  "Final Directory": "Final Directory",
+  "Please choose location and enter space name": "Please choose location and enter space name",
+  "Space created": "Space created",
+  "Dismiss": "Dismiss",
   "Switch profile and model": "Switch profile and model",
   "Advanced options": "Advanced options",
   "Return to conversation": "Return to conversation"

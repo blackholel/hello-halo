@@ -31,34 +31,54 @@ import type { PluginConfig, SettingSource, ToolCall } from './types'
 // Re-export types for convenience
 export type { PluginConfig, SettingSource }
 
+function createWorkDirResolutionError(errorCode: string, message: string): Error & { errorCode: string } {
+  const error = new Error(message) as Error & { errorCode: string }
+  error.errorCode = errorCode
+  return error
+}
+
 /**
  * Get working directory for a space
  */
 export function getWorkingDir(spaceId: string): string {
-  console.log(`[Agent] getWorkingDir called with spaceId: ${spaceId}`)
+  console.log('[Agent] getWorkingDir entry', { phase: 'resolve_workdir', spaceId })
 
   if (spaceId === 'kite-temp') {
     const artifactsDir = join(getTempSpacePath(), 'artifacts')
     if (!existsSync(artifactsDir)) {
       mkdirSync(artifactsDir, { recursive: true })
     }
-    console.log(`[Agent] Using temp space artifacts dir: ${artifactsDir}`)
+    console.log('[Agent] getWorkingDir resolved temp dir', {
+      phase: 'resolve_workdir',
+      spaceId,
+      resolvedWorkDir: artifactsDir
+    })
     return artifactsDir
   }
 
   const space = getSpace(spaceId)
-  console.log(
-    `[Agent] getSpace result:`,
-    space ? { id: space.id, name: space.name, path: space.path } : null
-  )
+  console.log('[Agent] getWorkingDir getSpace result', {
+    phase: 'resolve_workdir',
+    spaceId,
+    resolvedWorkDir: space?.path ?? null
+  })
 
   if (space) {
-    console.log(`[Agent] Using space path: ${space.path}`)
+    console.log('[Agent] getWorkingDir resolved space dir', {
+      phase: 'resolve_workdir',
+      spaceId,
+      resolvedWorkDir: space.path
+    })
     return space.path
   }
 
-  console.log(`[Agent] WARNING: Space not found, falling back to temp path`)
-  return getTempSpacePath()
+  const errorCode = 'SPACE_NOT_FOUND_FOR_WORKDIR'
+  console.error('[Agent] getWorkingDir failed', {
+    phase: 'resolve_workdir',
+    spaceId,
+    errorCode
+  })
+  throw createWorkDirResolutionError(errorCode, `Space not found for workdir: ${spaceId}`)
 }
 
 function getConfigSkillsLazyLoad(
@@ -122,18 +142,13 @@ export function buildPluginsConfig(workDir: string): PluginConfig[] {
   }
 
   if (strictSpaceOnly) {
-    for (const plugin of listEnabledPlugins()) {
-      addIfValid(plugin.installPath)
-    }
-    addIfValid(getLockedUserConfigRootDir())
-
     const spacePaths = spaceConfig?.claudeCode?.plugins?.paths || []
     for (const spacePath of spacePaths) {
       const resolvedPath = spacePath.startsWith('/') ? spacePath : join(workDir, spacePath)
       addIfValid(resolvedPath)
     }
     addIfValid(join(workDir, '.claude'))
-    console.log('[Agent] Strict space-only mode: loading global and space plugin directories')
+    console.log('[Agent] Strict space-only mode: loading space plugin directories only')
     return plugins
   }
 
@@ -307,6 +322,13 @@ All created files will be saved in the user's workspace. Current workspace: ${wo
 Use ${languageName} (${normalizedLanguage}) for all natural-language responses by default.
 Keep code snippets, shell commands, file paths, environment variable names, logs, and error messages in their original language.
 If the user explicitly requests a different output language in the current turn, follow that request for the current turn only.
+
+## Workspace isolation policy
+Current workspace: ${workDir}
+Treat the current workspace as the only project context for this run.
+Do not reuse project identity or file facts from previous workspaces/sessions.
+When user asks about this project/codebase, inspect current workspace files first and answer from evidence.
+If evidence is unavailable in current workspace, state uncertainty explicitly instead of guessing.
 
 ## AskUserQuestion batching policy
 When information is missing, only ask AskUserQuestion for execution-blocking gaps.
