@@ -1,303 +1,338 @@
 <div align="center">
 
-<img src="../resources/icon.png" alt="Kite Logo" width="120" height="120">
+<img src="./resources/icon.png" alt="Kite Logo" width="120" height="120">
 
 # Kite
 
-### Claude Code 的图形界面
+### 让每个人都能体验前沿 AI 的魔法
 
-把 Claude Code 装进口袋 — 开源桌面客户端，让每个人都能轻松使用 Claude Code 的强大能力。告别终端。
+一个为所有人设计的 AI 助手 —— 无需编程，无需配置，打开即用。
 
 [![GitHub Stars](https://img.shields.io/github/stars/blackholel/buddykite?style=social)](https://github.com/blackholel/buddykite/stargazers)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](../LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20Web-lightgrey.svg)](#安装)
-[![Downloads](https://img.shields.io/github/downloads/blackholel/buddykite/total.svg)](https://github.com/blackholel/buddykite/releases)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey.svg)](#下载安装)
 
-[下载](#安装) · [文档](#文档) · [参与贡献](#参与贡献)
+[立即下载](#下载安装) · [快速开始](#快速开始) · [使用场景](#你能用-kite-做什么)
 
-**[English](../README.md)** | **[繁體中文](./README.zh-TW.md)** | **[Español](./README.es.md)** | **[Deutsch](./README.de.md)** | **[Français](./README.fr.md)** | **[日本語](./README.ja.md)**
+**[English](./README.md)** | **[Español](./docs/README.es.md)** | **[Deutsch](./docs/README.de.md)** | **[Français](./docs/README.fr.md)** | **[日本語](./docs/README.ja.md)**
 
 </div>
 
 ---
 
-<div align="center">
+## 为什么创建 Kite？
 
-![Space Home](./assets/space_home.jpg)
+每次我想把最新的 AI 工具推荐给朋友时，都会遇到同样的问题：
 
-</div>
+> "听起来很酷，但我不会用命令行..."
+> "要安装 Node.js？那是什么？"
+> "算了，太复杂了。"
+
+**AI 技术正在飞速发展，但大多数人却被挡在门外。**
+
+不是因为他们不想尝试，而是因为：
+- 安装步骤太复杂
+- 需要懂编程
+- 界面不友好
+- 不知道从哪里开始
+
+**Kite 的诞生就是为了打破这些障碍。**
+
+我们相信，前沿的 AI 技术不应该只属于程序员。设计师、作家、学生、创业者、任何有想法的人，都应该能轻松使用 AI 来实现他们的创意。
+
+---
+
+## Kite 是什么？
+
+Kite 是一个**开箱即用的 AI 助手桌面应用**。
+
+它将世界上最强大的 AI 编程助手（Claude Code）包装成任何人都能使用的图形界面。你不需要：
+- ❌ 学习命令行
+- ❌ 安装开发环境
+- ❌ 懂编程知识
+- ❌ 看复杂的文档
+
+你只需要：
+- ✅ 下载并打开 Kite
+- ✅ 输入你的想法
+- ✅ 看着 AI 帮你实现
+
+**就像和一个超级聪明的助手对话一样简单。**
+
+---
+
+## 你能用 Kite 做什么？
+
+### 🎨 创意工作者
+"帮我设计一个简约风格的个人网站，要有深色模式"
+- AI 会为你写代码、创建文件、实时预览
+- 你可以看到每一步的过程，随时提出修改意见
+
+### 📊 数据分析
+"分析这个 Excel 表格，找出销售趋势并生成图表"
+- 上传文件，AI 自动处理
+- 生成可视化报告，一目了然
+
+### 📝 内容创作
+"把这篇文章翻译成英文，并优化 SEO"
+- AI 理解上下文，提供专业建议
+- 支持多轮对话，不断完善
+
+### 🚀 快速原型
+"做一个待办事项应用，要能添加、删除和标记完成"
+- 几分钟内看到可运行的应用
+- 不满意？告诉 AI 修改，立即生效
+
+### 🔄 自动化重复工作
+"每次我上传图片，自动压缩并转换成 WebP 格式"
+- 创建自定义 Skill，一键执行
+- 节省大量重复劳动时间
 
 ---
 
 ## 为什么选择 Kite？
 
-**Claude Code 是目前最强大的 AI 编程助手。** 但有一个问题：
+### 🌟 真正的零门槛
+- **一键安装**：下载 → 打开 → 开始使用
+- **可视化界面**：所有操作都在图形界面完成
+- **实时反馈**：看到 AI 的每一步思考和操作
 
-> **它被困在终端里。**
+### 🎯 为普通人设计
+- **自然对话**：用日常语言描述你的需求
+- **即时预览**：创建的文件立即显示，支持代码、网页、图片等
+- **错了就改**：随时告诉 AI 哪里不对，它会立即调整
 
-对于熟悉命令行的开发者来说，这没什么。但对于设计师、产品经理、学生，以及所有希望 AI *帮忙做事* 的人来说，终端是一道门槛。
+### 🔧 内置丰富能力
+- **预装技能库**：开箱即带数十个实用 Skills
+- **可扩展**：创建你自己的 Skills、Commands 和 Agents
+- **工作空间**：不同项目隔离管理，互不干扰
 
-**Kite 打破了这道门槛。**
-
-我们把 Claude Code 100% 的 Agent 能力，包装进一个人人都能用的可视化界面。同样的能力，零摩擦。
-
-| | Claude Code CLI | Kite |
-|---|:---:|:---:|
-| 完整 Agent 能力 | ✅ | ✅ |
-| 可视化界面 | ❌ | ✅ |
-| 一键安装 | ❌ | ✅ |
-| 任意设备远程访问 | ❌ | ✅ |
-| 文件预览与管理 | ❌ | ✅ |
-| 内置 AI 浏览器 | ❌ | ✅ |
-
-> 可以这样理解：
-> **Windows** 把 DOS 变成了可视化桌面。
-> **Kite** 把 Claude Code CLI 变成了可视化 AI 伙伴。
-
----
-
-## 功能特性
-
-<table>
-<tr>
-<td width="50%">
-
-### 真正的 Agent 循环
-不只是聊天。Kite 能**真正做事** — 写代码、创建文件、执行命令，持续迭代直到任务完成。
-
-### 空间系统
-隔离的工作空间让你的项目井井有条。每个空间都有独立的文件、对话和上下文。
-
-### 优雅的产物栏
-实时查看 AI 创建的每个文件。预览代码、HTML、图片 — 无需离开应用。
-
-</td>
-<td width="50%">
-
-### 远程访问
-从手机或任何浏览器控制你的桌面 Kite。随时随地工作 — 甚至在医院病床上（真实故事）。
-
-### AI 浏览器
-让 AI 控制真实的内嵌浏览器。网页抓取、表单填写、测试 — 全部自动化。
-
-### MCP 支持
-通过 Model Context Protocol 扩展能力。兼容 Claude Desktop MCP 服务器。
-
-</td>
-</tr>
-</table>
-
-### 更多特性...
-
-- **多供应商支持** — Anthropic、OpenAI、DeepSeek，以及任何 OpenAI 兼容 API
-- **实时思考过程** — 观看 AI 的思考过程
-- **工具权限控制** — 批准或自动允许文件/命令操作
-- **深色/浅色主题** — 跟随系统主题
-- **多语言支持** — 英文、中文、西班牙语等
-- **自动更新** — 一键保持最新
-
----
-
-## 截图
-
-![Chat Intro](./assets/chat_intro.jpg)
-
-![Chat Todo](./assets/chat_todo.jpg)
-
-
-*远程访问：从任何地方控制 Kite*
-
-![Remote Settings](./assets/remote_setting.jpg)
-<p align="center">
-  <img src="./assets/mobile_remote_access.jpg" width="45%" alt="移动端远程访问">
-  &nbsp;&nbsp;
-  <img src="./assets/mobile_chat.jpg" width="45%" alt="移动端聊天">
-</p>
-
----
-
-## 安装
-
-### 下载（推荐）
-
-| 平台 | 下载 | 要求 |
-|----------|----------|--------------|
-| **macOS** (Apple Silicon) | [下载 .dmg](https://github.com/blackholel/buddykite/releases/latest) | macOS 11+ |
-| **macOS** (Intel) | 即将推出 | macOS 11+ |
-| **Windows** | [下载 .exe](https://github.com/blackholel/buddykite/releases/latest) | Windows 10+ |
-| **Linux** | [下载 .AppImage](https://github.com/blackholel/buddykite/releases/latest) | Ubuntu 20.04+ |
-| **Web** (PC/移动端) | 在桌面应用中启用远程访问 | 任何现代浏览器 |
-
-**就这么简单。** 下载、安装、运行。不需要 Node.js，不需要 npm，不需要终端命令。
-
-### 从源码构建
-
-想要贡献或自定义的开发者：
-
-```bash
-git clone https://github.com/blackholel/buddykite.git
-cd buddykite
-npm install
-npm run dev
-```
+### 🌐 随时随地使用
+- **远程访问**：在手机或平板上控制电脑上的 Kite
+- **多语言支持**：中文、英文、西班牙文等
+- **跨平台**：macOS、Windows、Linux 全支持
 
 ---
 
 ## 快速开始
 
-1. **启动 Kite** 并输入你的 API 密钥（推荐 Anthropic）
-2. **开始聊天** — 试试 "用 React 创建一个简单的待办事项应用"
-3. **见证魔法** — 看着文件在产物栏中出现
-4. **预览和迭代** — 点击任何文件预览，要求修改
+### 1. 下载安装
 
-> **小技巧:** 为获得最佳效果，使用 Claude Sonnet 4.5 或 Opus 4.5 模型。
+| 平台 | 下载链接 | 系统要求 |
+|------|---------|---------|
+| **macOS** (Apple 芯片) | [下载 .dmg](https://github.com/blackholel/buddykite/releases/latest) | macOS 11+ |
+| **Windows** | [下载 .exe](https://github.com/blackholel/buddykite/releases/latest) | Windows 10+ |
+| **Linux** | [下载 .AppImage](https://github.com/blackholel/buddykite/releases/latest) | Ubuntu 20.04+ |
 
----
+**就这么简单。** 双击安装，无需其他任何配置。
 
-## 破坏性变更：配置目录策略
+### 2. 获取 API 密钥
 
-Kite 现在仅支持 `~/.kite/`。
-旧版 `~/.halo/` 不会被读取，也不会自动迁移。
+Kite 使用 Claude AI（推荐）或其他 AI 服务。你需要一个 API 密钥：
 
-### 升级指引（手动迁移）
+1. 访问 [Anthropic Console](https://console.anthropic.com/)
+2. 注册账号（如果还没有）
+3. 创建 API 密钥
+4. 在 Kite 设置中粘贴密钥
 
-如需保留旧数据，请在 Kite 关闭时手动将所需文件/目录从 `~/.halo/` 复制到 `~/.kite/`：
+> 💡 **提示**：首次使用 Anthropic 通常有免费额度，足够你体验所有功能。
 
-- `config.json`
-- `spaces/`
-- `temp/`
-- `skills/`、`commands/`、`agents/`、`plugins/`（如有使用）
+### 3. 开始创造
 
----
+打开 Kite，试试这些：
 
-## 工作原理
-
+**第一次尝试**：
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                          Kite 桌面端                             │
-│  ┌─────────────┐    ┌─────────────┐    ┌───────────────────┐   │
-│  │   React UI  │◄──►│    主进程    │◄──►│  Claude Code SDK  │   │
-│  │  (渲染进程)  │IPC │   (Main)    │    │   (Agent 循环)    │   │
-│  └─────────────┘    └─────────────┘    └───────────────────┘   │
-│                            │                                    │
-│                            ▼                                    │
-│                    ┌───────────────┐                           │
-│                    │   本地文件     │                           │
-│                    │   ~/.kite/    │                           │
-│                    └───────────────┘                           │
-└─────────────────────────────────────────────────────────────────┘
+"你好！帮我创建一个简单的计算器网页"
 ```
 
-- **100% 本地** — 你的数据永远不会离开你的电脑（除了 API 调用）
-- **无需后端** — 纯桌面客户端，使用你自己的 API 密钥
-- **真正的 Agent 循环** — 工具执行，而不只是文本生成
+**进阶一点**：
+```
+"分析我桌面上的 sales.csv 文件，告诉我哪个月销量最高"
+```
+
+**更有创意**：
+```
+"设计一个番茄钟应用，25分钟工作，5分钟休息，要有提示音"
+```
 
 ---
 
-## 用户在用 Kite 做什么
+## 核心功能
 
-Kite 不只是给开发者用的。我们看到：
+### 💬 智能对话
+- 像和朋友聊天一样描述你的需求
+- AI 会问问题确认细节
+- 支持上传图片、文件作为参考
 
-- **金融团队** 从零开始构建全栈应用 — 完全没有编程经验
-- **设计师** 制作交互原型
-- **学生** 以 AI 作为编程伙伴学习编程
-- **开发者** 以前所未有的速度交付功能
+### 📁 工作空间（Spaces）
+- 为不同项目创建独立空间
+- 每个空间有自己的对话历史和文件
+- 轻松切换，互不干扰
 
-障碍不再是 AI 的能力，**而是可及性**。Kite 消除了这个障碍。
+### 🎨 实时预览
+- 右侧面板显示 AI 创建的所有文件
+- 支持代码高亮、网页预览、图片查看
+- 点击任意文件即可查看或编辑
 
----
+### 🔧 自定义能力
+- **Skills**：创建可重复使用的技能（如"压缩图片"、"生成报告"）
+- **Commands**：定义快捷命令
+- **Agents**：配置专门的 AI 助手（如"前端专家"、"数据分析师"）
 
-## 技术栈
+### 📱 远程访问
+- 在设置中开启远程访问
+- 用手机浏览器访问显示的地址
+- 在任何地方控制你的 Kite
 
-| 层 | 技术 |
-|-------|------------|
-| 框架 | Electron + electron-vite |
-| 前端 | React 18 + TypeScript |
-| 样式 | Tailwind CSS + shadcn/ui 风格 |
-| 状态管理 | Zustand |
-| Agent 核心 | @anthropic-ai/claude-code SDK |
-| Markdown | react-markdown + highlight.js |
-
----
-
-## 路线图
-
-- [x] 基于 Claude Code SDK 的核心 Agent 循环
-- [x] 空间与对话管理
-- [x] 产物预览（代码、HTML、图片、Markdown）
-- [x] 远程访问（浏览器控制）
-- [x] AI 浏览器（基于 CDP）
-- [x] MCP 服务器支持
-- [ ] 插件系统
-- [ ] 语音输入
+### 🌍 多语言
+- 界面支持中文、英文等多种语言
+- AI 对话自动适应你的语言
 
 ---
 
-## 参与贡献
+## 使用技巧
 
-Kite 开源是因为 AI 应该人人可及。
+### 💡 如何提出好问题
 
-我们欢迎各种贡献：
+**不够清晰**：
+```
+"做个网站"
+```
 
-- **翻译** — 帮助我们触达更多用户（见 `src/renderer/i18n/`）
-- **Bug 报告** — 发现问题？告诉我们
-- **功能建议** — 什么能让 Kite 更好用？
-- **代码贡献** — 欢迎 PR！
+**更好的方式**：
+```
+"创建一个个人作品集网站，包含首页、关于我、项目展示三个页面，
+使用现代简约风格，主色调用深蓝色"
+```
 
+### 🔄 迭代改进
+
+不要期望一次就完美。告诉 AI 哪里需要调整：
+
+```
+"首页的标题太大了，改小一点"
+"把按钮颜色改成绿色"
+"添加一个联系表单"
+```
+
+### 📦 创建自己的 Skills
+
+发现自己经常做同样的事？创建一个 Skill：
+
+1. 点击左侧 Skills 面板
+2. 点击"创建新 Skill"
+3. 描述这个 Skill 要做什么
+4. 以后一键调用
+
+---
+
+## 真实案例
+
+### 案例 1：非技术创始人的产品原型
+> "我是一个创业者，不懂编程。用 Kite 在一个下午做出了产品的第一个可用原型，
+> 展示给投资人看。他们都很惊讶。"
+
+### 案例 2：设计师的代码助手
+> "我是 UI 设计师，经常需要做交互原型。以前要求前端同事帮忙，
+> 现在用 Kite 自己就能实现，效率提升了 10 倍。"
+
+### 案例 3：学生的学习伙伴
+> "我在学编程，Kite 不仅帮我写代码，还会解释每一步在做什么。
+> 比看教程学得快多了。"
+
+### 案例 4：内容创作者的效率工具
+> "我需要处理大量图片和文档。创建了几个自定义 Skills 后，
+> 原本要花一天的工作现在 10 分钟搞定。"
+
+---
+
+## 常见问题
+
+### Q: 我完全不懂编程，能用 Kite 吗？
+**A:** 当然可以！Kite 就是为你设计的。用自然语言描述你想做什么，AI 会处理所有技术细节。
+
+### Q: 需要付费吗？
+**A:** Kite 本身完全免费开源。你只需要支付 AI 服务（如 Claude）的 API 费用，通常很便宜，新用户还有免费额度。
+
+### Q: 我的数据安全吗？
+**A:** 所有数据都存储在你的电脑上，不会上传到任何服务器（除了发送给 AI 的对话内容）。你完全掌控自己的数据。
+
+### Q: 支持哪些 AI 服务？
+**A:** 支持 Anthropic Claude（推荐）、OpenAI、DeepSeek 以及任何兼容 OpenAI API 的服务。
+
+### Q: 可以离线使用吗？
+**A:** 需要网络连接来调用 AI 服务，但所有文件管理和预览功能都是本地的。
+
+---
+
+## 技术细节
+
+<details>
+<summary>点击展开技术栈信息（给开发者看的）</summary>
+
+### 架构
+- **框架**：Electron + React 18 + TypeScript
+- **状态管理**：Zustand
+- **样式**：Tailwind CSS
+- **AI 核心**：@anthropic-ai/claude-code SDK
+- **Markdown 渲染**：react-markdown + highlight.js
+
+### 核心能力
+- 完整的 Agent Loop（工具执行、文件操作、命令运行）
+- MCP (Model Context Protocol) 服务器支持
+- 多模态输入（文本、图片、文件）
+- 流式消息处理
+- 工具权限管理
+
+### 本地开发
 ```bash
-# 开发环境设置
 git clone https://github.com/blackholel/buddykite.git
 cd buddykite
 npm install
 npm run dev
 ```
 
-查看 [CONTRIBUTING.md](../CONTRIBUTING.md) 了解详细指南。
+</details>
 
 ---
 
-## 社区
+## 加入社区
 
-- [GitHub Discussions](https://github.com/blackholel/buddykite/discussions) — 问题与想法
-- [Issues](https://github.com/blackholel/buddykite/issues) — Bug 报告与功能请求
-
----
-
-## 许可证
-
-MIT 许可证 — 详见 [LICENSE](../LICENSE)。
+- [GitHub Discussions](https://github.com/blackholel/buddykite/discussions) — 提问、分享经验
+- [Issues](https://github.com/blackholel/buddykite/issues) — 报告问题、建议新功能
+- [贡献指南](CONTRIBUTING.md) — 帮助改进 Kite
 
 ---
 
-## Kite 背后的故事
+## 开源协议
 
-几个月前，一切始于一个简单的困扰：**我想用 Claude Code，但整天都在开会。**
+MIT License — 详见 [LICENSE](LICENSE)
 
-在无聊的会议中（我们都经历过），我想：*如果我能从手机控制家里电脑上的 Claude Code 呢？*
+---
 
-然后又遇到另一个问题 — 我的非技术同事看到 Claude Code 能做什么后也想试试。但他们卡在了安装环节。*"什么是 npm？怎么安装 Node.js？"* 有些人花了好几天也没搞定。
+## 我们的愿景
 
-所以我为自己做了 Kite：
-- **可视化界面** — 不用再盯着终端输出
-- **一键安装** — 不需要 Node.js，不需要 npm，下载即用
-- **远程访问** — 从手机、平板或任何浏览器控制
+**AI 不应该是少数人的特权。**
 
-第一版只用了几个小时。之后的所有功能？**100% 由 Kite 自己构建。** 我们已经日常使用好几个月了。
+每个人都有创造的权利，每个人都应该能使用最先进的工具来实现自己的想法。
 
-AI 构建 AI。现在人人可用。
+Kite 只是一个开始。我们希望：
+- 让更多人发现 AI 的魔力
+- 激发人们的好奇心和创造力
+- 降低技术的使用门槛
+- 让每个人都能成为创造者
+
+如果 Kite 帮助你实现了什么有趣的想法，我们很想听听你的故事。
+
+**给这个项目点个星 ⭐**，让更多人发现 Kite。
 
 ---
 
 <div align="center">
 
-### 由 AI 构建，为人类服务。
+### 为每个人而生的 AI
 
-如果 Kite 帮你创造了精彩的东西，我们很想听听。
-
-**Star 这个仓库** 帮助更多人发现 Kite。
-
-[![Star History Chart](https://api.star-history.com/svg?repos=blackholel/buddykite&type=Date)](https://star-history.com/#blackholel/buddykite&Date)
-
-[⬆ 返回顶部](#kite)
+[⬆ 回到顶部](#kite)
 
 </div>

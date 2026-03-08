@@ -4,26 +4,17 @@
 
 # Kite
 
-### Die Fehlende Benutzeroberfläche für Claude Code
+### Modernste KI für Alle Erleben
 
-Claude Code in deiner Tasche — der Open-Source Desktop-Client, der die Leistung von Claude Code für alle zugänglich macht. Kein Terminal, niemals.
+Ein KI-Assistent für jeden — keine Programmierung erforderlich, keine Einrichtung nötig, einfach öffnen und nutzen.
 
 [![GitHub Stars](https://img.shields.io/github/stars/blackholel/buddykite?style=social)](https://github.com/blackholel/buddykite/stargazers)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](../LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20Web-lightgrey.svg)](#installation)
-[![Downloads](https://img.shields.io/github/downloads/blackholel/buddykite/total.svg)](https://github.com/blackholel/buddykite/releases)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey.svg)](#installation)
 
-[Download](#installation) · [Dokumentation](#dokumentation) · [Mitwirken](#mitwirken)
+[Download](#installation) · [Schnellstart](#schnellstart) · [Anwendungsfälle](#was-können-sie-mit-kite-tun)
 
-**[English](../README.md)** | **[简体中文](./README.zh-CN.md)** | **[繁體中文](./README.zh-TW.md)** | **[Español](./README.es.md)** | **[Français](./README.fr.md)** | **[日本語](./README.ja.md)**
-
-</div>
-
----
-
-<div align="center">
-
-![Space Home](./assets/space_home.jpg)
+**[English](../README.md)** | **[中文](./README.zh-CN.md)** | **[Español](./README.es.md)** | **[Français](./README.fr.md)** | **[日本語](./README.ja.md)**
 
 </div>
 
@@ -31,272 +22,84 @@ Claude Code in deiner Tasche — der Open-Source Desktop-Client, der die Leistun
 
 ## Warum Kite?
 
-**Claude Code ist der leistungsfähigste verfügbare KI-Programmieragent.** Aber es gibt ein Problem:
+Jedes Mal, wenn ich versuche, meinen Freunden die neuesten KI-Tools zu empfehlen, stoße ich auf dasselbe Problem:
 
-> **Er ist in einem Terminal gefangen.**
+> "Klingt cool, aber ich kann keine Kommandozeile bedienen..."
+> "Node.js installieren? Was ist das?"
+> "Vergiss es, das ist zu kompliziert."
 
-Für Entwickler, die sich mit CLI wohlfühlen, ist das in Ordnung. Aber für Designer, PMs, Studenten und alle, die einfach wollen, dass KI *Dinge erledigt* — das Terminal ist eine Hürde.
+**KI-Technologie entwickelt sich rasant, aber die meisten Menschen bleiben zurück.**
 
-**Kite überwindet diese Hürde.**
-
-Wir haben 100% der Agent-Fähigkeiten von Claude Code genommen und sie in eine visuelle Oberfläche verpackt, die jeder nutzen kann. Gleiche Leistung, null Reibung.
-
-| | Claude Code CLI | Kite |
-|---|:---:|:---:|
-| Volle Agent-Fähigkeiten | ✅ | ✅ |
-| Visuelle Oberfläche | ❌ | ✅ |
-| Ein-Klick-Installation | ❌ | ✅ |
-| Fernzugriff von jedem Gerät | ❌ | ✅ |
-| Dateivorschau & Verwaltung | ❌ | ✅ |
-| Integrierter KI-Browser | ❌ | ✅ |
-
-> Stell es dir so vor:
-> **Windows** verwandelte DOS in visuelle Desktops.
-> **Kite** verwandelt Claude Code CLI in einen visuellen KI-Begleiter.
+**Kite wurde geschaffen, um diese Barrieren abzubauen.**
 
 ---
 
-## Funktionen
+## Was ist Kite?
 
-<table>
-<tr>
-<td width="50%">
+Kite ist eine **sofort einsatzbereite KI-Assistenten-Desktop-Anwendung**.
 
-### Echter Agent-Loop
-Nicht nur Chat. Kite kann **wirklich Dinge tun** — Code schreiben, Dateien erstellen, Befehle ausführen und iterieren, bis die Aufgabe erledigt ist.
+Es verpackt den leistungsstärksten KI-Coding-Assistenten der Welt (Claude Code) in eine grafische Oberfläche, die jeder nutzen kann.
 
-### Space-System
-Isolierte Arbeitsbereiche halten deine Projekte organisiert. Jeder Space hat seine eigenen Dateien, Konversationen und Kontext.
-
-### Elegante Artefakt-Leiste
-Sieh jede Datei, die die KI erstellt, in Echtzeit. Vorschau von Code, HTML, Bildern — alles ohne die App zu verlassen.
-
-</td>
-<td width="50%">
-
-### Fernzugriff
-Steuere dein Desktop-Kite von deinem Handy oder jedem Browser. Arbeite von überall — sogar von einem Krankenhausbett (wahre Geschichte).
-
-### KI-Browser
-Lass die KI einen echten eingebetteten Browser steuern. Web-Scraping, Formularausfüllung, Tests — alles automatisiert.
-
-### MCP-Unterstützung
-Erweitere Fähigkeiten mit Model Context Protocol. Kompatibel mit Claude Desktop MCP-Servern.
-
-</td>
-</tr>
-</table>
-
-### Und Mehr...
-
-- **Multi-Anbieter-Unterstützung** — Anthropic, OpenAI, DeepSeek und jede OpenAI-kompatible API
-- **Echtzeit-Denken** — Beobachte den Denkprozess der KI während sie arbeitet
-- **Tool-Berechtigungen** — Genehmige oder erlaube automatisch Datei-/Befehlsoperationen
-- **Dunkel/Hell Themes** — Systemabhängige Thematisierung
-- **i18n Bereit** — Englisch, Chinesisch, Spanisch (mehr kommen)
-- **Auto-Updates** — Bleib aktuell mit Ein-Klick-Updates
+**So einfach wie ein Gespräch mit einem super intelligenten Assistenten.**
 
 ---
 
-## Screenshots
+## Was Können Sie mit Kite Tun?
 
-![Chat Intro](./assets/chat_intro.jpg)
+### 🎨 Kreative Arbeit
+"Hilf mir, eine minimalistische persönliche Website mit Dark Mode zu gestalten"
 
-![Chat Todo](./assets/chat_todo.jpg)
+### 📊 Datenanalyse
+"Analysiere diese Excel-Datei, finde Verkaufstrends und erstelle Diagramme"
 
+### 📝 Content-Erstellung
+"Übersetze diesen Artikel ins Englische und optimiere für SEO"
 
-*Fernzugriff: Steuere Kite von überall*
+### 🚀 Schnelles Prototyping
+"Erstelle eine Todo-App mit Hinzufügen, Löschen und Abhaken-Funktionen"
 
-![Remote Settings](./assets/remote_setting.jpg)
-<p align="center">
-  <img src="./assets/mobile_remote_access.jpg" width="45%" alt="Mobiler Fernzugriff">
-  &nbsp;&nbsp;
-  <img src="./assets/mobile_chat.jpg" width="45%" alt="Mobiler Chat">
-</p>
-
----
-
-## Installation
-
-### Download (Empfohlen)
-
-| Plattform | Download | Anforderungen |
-|----------|----------|--------------|
-| **macOS** (Apple Silicon) | [Download .dmg](https://github.com/blackholel/buddykite/releases/latest) | macOS 11+ |
-| **macOS** (Intel) | Kommt bald | macOS 11+ |
-| **Windows** | [Download .exe](https://github.com/blackholel/buddykite/releases/latest) | Windows 10+ |
-| **Linux** | [Download .AppImage](https://github.com/blackholel/buddykite/releases/latest) | Ubuntu 20.04+ |
-| **Web** (PC/Mobil) | Aktiviere Fernzugriff in der Desktop-App | Jeder moderne Browser |
-
-**Das ist alles.** Herunterladen, installieren, ausführen. Kein Node.js. Kein npm. Keine Terminal-Befehle.
-
-### Aus Quellcode Kompilieren
-
-Für Entwickler, die beitragen oder anpassen möchten:
-
-```bash
-git clone https://github.com/blackholel/buddykite.git
-cd buddykite
-npm install
-npm run dev
-```
+### 🔄 Wiederkehrende Aufgaben Automatisieren
+"Jedes Mal, wenn ich ein Bild hochlade, komprimiere es automatisch und konvertiere zu WebP"
 
 ---
 
 ## Schnellstart
 
-1. **Starte Kite** und gib deinen API-Schlüssel ein (Anthropic empfohlen)
-2. **Beginne zu chatten** — probiere "Erstelle eine einfache Todo-App mit React"
-3. **Beobachte die Magie** — sieh Dateien in der Artefakt-Leiste erscheinen
-4. **Vorschau & Iteration** — klicke auf jede Datei zur Vorschau, bitte um Änderungen
+### 1. Installation
 
-> **Profi-Tipp:** Für beste Ergebnisse nutze Claude Sonnet 4.5 oder Opus 4.5 Modelle.
+| Plattform | Download | Anforderungen |
+|-----------|----------|---------------|
+| **macOS** (Apple Silicon) | [Download .dmg](https://github.com/blackholel/buddykite/releases/latest) | macOS 11+ |
+| **Windows** | [Download .exe](https://github.com/blackholel/buddykite/releases/latest) | Windows 10+ |
+| **Linux** | [Download .AppImage](https://github.com/blackholel/buddykite/releases/latest) | Ubuntu 20.04+ |
 
----
+### 2. API-Schlüssel Erhalten
 
-## Breaking Change: Konfigurationsverzeichnis-Richtlinie
+1. Besuchen Sie [Anthropic Console](https://console.anthropic.com/)
+2. Erstellen Sie einen API-Schlüssel
+3. Fügen Sie den Schlüssel in den Kite-Einstellungen ein
 
-Kite unterstützt jetzt nur noch `~/.kite/`.
-Das alte `~/.halo/` wird nicht gelesen und nicht automatisch migriert.
-
-### Upgrade-Leitfaden (manuell)
-
-Wenn du alte Daten behalten willst, kopiere benötigte Dateien/Ordner bei geschlossenem Kite manuell von `~/.halo/` nach `~/.kite/`:
-
-- `config.json`
-- `spaces/`
-- `temp/`
-- `skills/`, `commands/`, `agents/`, `plugins/` (falls verwendet)
-
----
-
-## Wie es Funktioniert
+### 3. Loslegen
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Kite Desktop                             │
-│  ┌─────────────┐    ┌─────────────┐    ┌───────────────────┐   │
-│  │   React UI  │◄──►│    Haupt-   │◄──►│  Claude Code SDK  │   │
-│  │  (Renderer) │IPC │   prozess   │    │   (Agent-Loop)    │   │
-│  └─────────────┘    └─────────────┘    └───────────────────┘   │
-│                            │                                    │
-│                            ▼                                    │
-│                    ┌───────────────┐                           │
-│                    │ Lokale Dateien│                           │
-│                    │   ~/.kite/    │                           │
-│                    └───────────────┘                           │
-└─────────────────────────────────────────────────────────────────┘
+"Hallo! Hilf mir, eine einfache Taschenrechner-Webseite zu erstellen"
 ```
 
-- **100% Lokal** — Deine Daten verlassen niemals deinen Rechner (außer API-Aufrufe)
-- **Kein Backend Erforderlich** — Reiner Desktop-Client, nutze deine eigenen API-Schlüssel
-- **Echter Agent-Loop** — Tool-Ausführung, nicht nur Textgenerierung
-
 ---
 
-## Was Leute Bauen
+## Unsere Vision
 
-Kite ist nicht nur für Entwickler. Wir haben gesehen:
+**KI sollte kein Privileg für wenige sein.**
 
-- **Finanzteams** bauen Full-Stack-Apps von Grund auf — ohne Programmiererfahrung
-- **Designer** prototypen interaktive Mockups
-- **Studenten** lernen Programmieren mit KI als Pair-Programming-Partner
-- **Entwickler** liefern Features schneller als je zuvor
+Jeder hat das Recht zu erschaffen, jeder sollte die fortschrittlichsten Werkzeuge nutzen können, um seine Ideen zu verwirklichen.
 
-Die Hürde ist nicht mehr die KI-Fähigkeit. **Es ist die Zugänglichkeit.** Kite beseitigt diese Hürde.
-
----
-
-## Tech-Stack
-
-| Schicht | Technologie |
-|-------|------------|
-| Framework | Electron + electron-vite |
-| Frontend | React 18 + TypeScript |
-| Styling | Tailwind CSS + shadcn/ui Muster |
-| Zustand | Zustand |
-| Agent-Kern | @anthropic-ai/claude-code SDK |
-| Markdown | react-markdown + highlight.js |
-
----
-
-## Roadmap
-
-- [x] Kern-Agent-Loop mit Claude Code SDK
-- [x] Space & Konversationsverwaltung
-- [x] Artefakt-Vorschau (Code, HTML, Bilder, Markdown)
-- [x] Fernzugriff (Browser-Steuerung)
-- [x] KI-Browser (CDP-basiert)
-- [x] MCP-Server-Unterstützung
-- [ ] Plugin-System
-- [ ] Spracheingabe
-
----
-
-## Mitwirken
-
-Kite ist Open Source, weil KI für alle zugänglich sein sollte.
-
-Wir begrüßen Beiträge aller Art:
-
-- **Übersetzungen** — Hilf uns, mehr Nutzer zu erreichen (siehe `src/renderer/i18n/`)
-- **Bug-Reports** — Etwas Kaputtes gefunden? Lass es uns wissen
-- **Feature-Ideen** — Was würde Kite für dich besser machen?
-- **Code-Beiträge** — PRs willkommen!
-
-```bash
-# Entwicklungsumgebung einrichten
-git clone https://github.com/blackholel/buddykite.git
-cd buddykite
-npm install
-npm run dev
-```
-
-Siehe [CONTRIBUTING.md](../CONTRIBUTING.md) für Richtlinien.
-
----
-
-## Community
-
-- [GitHub Discussions](https://github.com/blackholel/buddykite/discussions) — Fragen & Ideen
-- [Issues](https://github.com/blackholel/buddykite/issues) — Bug-Reports & Feature-Anfragen
-
----
-
-## Lizenz
-
-MIT-Lizenz — siehe [LICENSE](../LICENSE) für Details.
-
----
-
-## Die Geschichte Hinter Kite
-
-Vor ein paar Monaten begann es mit einer einfachen Frustration: **Ich wollte Claude Code nutzen, aber ich steckte den ganzen Tag in Meetings.**
-
-Während langweiliger Meetings (wir kennen das alle) dachte ich: *Was wenn ich Claude Code auf meinem Heimcomputer von meinem Handy aus steuern könnte?*
-
-Dann kam ein anderes Problem — meine nicht-technischen Kollegen wollten Claude Code ausprobieren, nachdem sie gesehen hatten, was es kann. Aber sie blieben bei der Installation hängen. *"Was ist npm? Wie installiere ich Node.js?"* Manche verbrachten Tage damit, es herauszufinden.
-
-Also baute ich Kite für mich:
-- **Visuelle Oberfläche** — kein Starren auf Terminal-Ausgaben mehr
-- **Ein-Klick-Installation** — kein Node.js, kein npm, einfach herunterladen und ausführen
-- **Fernzugriff** — steuern vom Handy, Tablet oder jedem Browser
-
-Die erste Version dauerte ein paar Stunden. Alles danach? **100% von Kite selbst gebaut.** Wir nutzen es seit Monaten täglich.
-
-KI baut KI. Jetzt in jedermanns Händen.
+**Geben Sie diesem Projekt einen Stern ⭐**, um mehr Menschen zu helfen, Kite zu entdecken.
 
 ---
 
 <div align="center">
 
-### Von KI gebaut, für Menschen.
-
-Wenn Kite dir hilft, etwas Großartiges zu bauen, würden wir gerne davon hören.
-
-**Gib diesem Repo einen Star** um anderen zu helfen, Kite zu entdecken.
-
-[![Star History Chart](https://api.star-history.com/svg?repos=blackholel/buddykite&type=Date)](https://star-history.com/#blackholel/buddykite&Date)
+### KI für Alle
 
 [⬆ Zurück nach Oben](#kite)
 

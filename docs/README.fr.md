@@ -4,26 +4,17 @@
 
 # Kite
 
-### L'Interface Manquante pour Claude Code
+### Découvrez l'IA de Pointe pour Tous
 
-Mettez Claude Code dans votre poche — le client de bureau open-source qui rend la puissance de Claude Code accessible à tous. Sans terminal, jamais.
+Un assistant IA conçu pour tous — aucun codage requis, aucune configuration nécessaire, ouvrez et utilisez.
 
 [![GitHub Stars](https://img.shields.io/github/stars/blackholel/buddykite?style=social)](https://github.com/blackholel/buddykite/stargazers)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](../LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20Web-lightgrey.svg)](#installation)
-[![Downloads](https://img.shields.io/github/downloads/blackholel/buddykite/total.svg)](https://github.com/blackholel/buddykite/releases)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey.svg)](#installation)
 
-[Télécharger](#installation) · [Documentation](#documentation) · [Contribuer](#contribuer)
+[Télécharger](#installation) · [Démarrage Rapide](#démarrage-rapide) · [Cas d'Usage](#que-pouvez-vous-faire-avec-kite)
 
-**[English](../README.md)** | **[简体中文](./README.zh-CN.md)** | **[繁體中文](./README.zh-TW.md)** | **[Español](./README.es.md)** | **[Deutsch](./README.de.md)** | **[日本語](./README.ja.md)**
-
-</div>
-
----
-
-<div align="center">
-
-![Space Home](./assets/space_home.jpg)
+**[English](../README.md)** | **[中文](./README.zh-CN.md)** | **[Español](./README.es.md)** | **[Deutsch](./README.de.md)** | **[日本語](./README.ja.md)**
 
 </div>
 
@@ -31,272 +22,84 @@ Mettez Claude Code dans votre poche — le client de bureau open-source qui rend
 
 ## Pourquoi Kite ?
 
-**Claude Code est l'agent IA de programmation le plus performant disponible.** Mais il y a un problème :
+Chaque fois que j'essaie de recommander les derniers outils d'IA à mes amis, je rencontre le même problème :
 
-> **Il est piégé dans un terminal.**
+> "Ça a l'air cool, mais je ne sais pas utiliser la ligne de commande..."
+> "Installer Node.js ? C'est quoi ?"
+> "Laisse tomber, c'est trop compliqué."
 
-Pour les développeurs à l'aise avec le CLI, c'est bien. Mais pour les designers, les chefs de produit, les étudiants, et tous ceux qui veulent simplement que l'IA *fasse des choses* — le terminal est un obstacle.
+**La technologie IA progresse rapidement, mais la plupart des gens sont laissés pour compte.**
 
-**Kite brise cet obstacle.**
-
-Nous avons pris 100% des capacités d'Agent de Claude Code et les avons enveloppées dans une interface visuelle que tout le monde peut utiliser. Même puissance, zéro friction.
-
-| | Claude Code CLI | Kite |
-|---|:---:|:---:|
-| Capacités Agent complètes | ✅ | ✅ |
-| Interface visuelle | ❌ | ✅ |
-| Installation en un clic | ❌ | ✅ |
-| Accès distant depuis n'importe quel appareil | ❌ | ✅ |
-| Aperçu et gestion des fichiers | ❌ | ✅ |
-| Navigateur IA intégré | ❌ | ✅ |
-
-> Pensez-y ainsi :
-> **Windows** a transformé DOS en bureaux visuels.
-> **Kite** transforme Claude Code CLI en compagnon IA visuel.
+**Kite a été créé pour briser ces barrières.**
 
 ---
 
-## Fonctionnalités
+## Qu'est-ce que Kite ?
 
-<table>
-<tr>
-<td width="50%">
+Kite est une **application de bureau d'assistant IA prête à l'emploi**.
 
-### Vraie Boucle d'Agent
-Pas seulement du chat. Kite peut **vraiment faire des choses** — écrire du code, créer des fichiers, exécuter des commandes, et itérer jusqu'à ce que la tâche soit terminée.
+Il enveloppe l'assistant de codage IA le plus puissant au monde (Claude Code) dans une interface graphique que tout le monde peut utiliser.
 
-### Système d'Espaces
-Des espaces de travail isolés gardent vos projets organisés. Chaque Espace a ses propres fichiers, conversations et contexte.
-
-### Barre d'Artefacts Élégante
-Voyez chaque fichier créé par l'IA en temps réel. Prévisualisez le code, HTML, images — le tout sans quitter l'application.
-
-</td>
-<td width="50%">
-
-### Accès Distant
-Contrôlez votre Kite de bureau depuis votre téléphone ou n'importe quel navigateur. Travaillez de n'importe où — même depuis un lit d'hôpital (histoire vraie).
-
-### Navigateur IA
-Laissez l'IA contrôler un vrai navigateur intégré. Web scraping, remplissage de formulaires, tests — tout automatisé.
-
-### Support MCP
-Étendez les capacités avec Model Context Protocol. Compatible avec les serveurs MCP de Claude Desktop.
-
-</td>
-</tr>
-</table>
-
-### Et Plus Encore...
-
-- **Support Multi-fournisseurs** — Anthropic, OpenAI, DeepSeek, et toute API compatible OpenAI
-- **Réflexion en Temps Réel** — Observez le processus de réflexion de l'IA pendant qu'elle travaille
-- **Permissions d'Outils** — Approuvez ou autorisez automatiquement les opérations fichiers/commandes
-- **Thèmes Sombre/Clair** — Thématisation adaptée au système
-- **i18n Prêt** — Anglais, Chinois, Espagnol (plus à venir)
-- **Mises à Jour Auto** — Restez à jour en un clic
+**Aussi simple que de parler à un assistant super intelligent.**
 
 ---
 
-## Captures d'Écran
+## Que Pouvez-vous Faire avec Kite ?
 
-![Chat Intro](./assets/chat_intro.jpg)
+### 🎨 Travail Créatif
+"Aide-moi à concevoir un site web personnel minimaliste avec mode sombre"
 
-![Chat Todo](./assets/chat_todo.jpg)
+### 📊 Analyse de Données
+"Analyse ce fichier Excel, trouve les tendances de vente et génère des graphiques"
 
+### 📝 Création de Contenu
+"Traduis cet article en anglais et optimise pour le SEO"
 
-*Accès Distant : Contrôlez Kite de n'importe où*
+### 🚀 Prototypage Rapide
+"Crée une app de tâches avec fonctions d'ajout, suppression et marquage comme terminé"
 
-![Remote Settings](./assets/remote_setting.jpg)
-<p align="center">
-  <img src="./assets/mobile_remote_access.jpg" width="45%" alt="Accès Distant Mobile">
-  &nbsp;&nbsp;
-  <img src="./assets/mobile_chat.jpg" width="45%" alt="Chat Mobile">
-</p>
-
----
-
-## Installation
-
-### Télécharger (Recommandé)
-
-| Plateforme | Télécharger | Prérequis |
-|----------|----------|--------------|
-| **macOS** (Apple Silicon) | [Télécharger .dmg](https://github.com/blackholel/buddykite/releases/latest) | macOS 11+ |
-| **macOS** (Intel) | Bientôt disponible | macOS 11+ |
-| **Windows** | [Télécharger .exe](https://github.com/blackholel/buddykite/releases/latest) | Windows 10+ |
-| **Linux** | [Télécharger .AppImage](https://github.com/blackholel/buddykite/releases/latest) | Ubuntu 20.04+ |
-| **Web** (PC/Mobile) | Activez l'Accès Distant dans l'app de bureau | N'importe quel navigateur moderne |
-
-**C'est tout.** Téléchargez, installez, lancez. Pas de Node.js. Pas de npm. Pas de commandes terminal.
-
-### Compiler depuis les Sources
-
-Pour les développeurs qui veulent contribuer ou personnaliser :
-
-```bash
-git clone https://github.com/blackholel/buddykite.git
-cd buddykite
-npm install
-npm run dev
-```
+### 🔄 Automatiser les Tâches Répétitives
+"Chaque fois que je télécharge une image, compresse-la automatiquement et convertis en WebP"
 
 ---
 
 ## Démarrage Rapide
 
-1. **Lancez Kite** et entrez votre clé API (Anthropic recommandé)
-2. **Commencez à discuter** — essayez "Crée une simple app de tâches avec React"
-3. **Observez la magie** — voyez les fichiers apparaître dans la Barre d'Artefacts
-4. **Prévisualisez et itérez** — cliquez sur n'importe quel fichier pour prévisualiser, demandez des modifications
+### 1. Installation
 
-> **Conseil pro :** Pour de meilleurs résultats, utilisez les modèles Claude Sonnet 4.5 ou Opus 4.5.
+| Plateforme | Télécharger | Exigences |
+|------------|-------------|-----------|
+| **macOS** (Apple Silicon) | [Télécharger .dmg](https://github.com/blackholel/buddykite/releases/latest) | macOS 11+ |
+| **Windows** | [Télécharger .exe](https://github.com/blackholel/buddykite/releases/latest) | Windows 10+ |
+| **Linux** | [Télécharger .AppImage](https://github.com/blackholel/buddykite/releases/latest) | Ubuntu 20.04+ |
 
----
+### 2. Obtenir une Clé API
 
-## Changement Majeur : Politique du Dossier de Configuration
+1. Visitez [Anthropic Console](https://console.anthropic.com/)
+2. Créez une clé API
+3. Collez la clé dans les paramètres de Kite
 
-Kite ne prend désormais en charge que `~/.kite/`.
-Le dossier historique `~/.halo/` n'est plus lu et n'est pas migré automatiquement.
-
-### Guide de Mise à Niveau (manuel)
-
-Si vous devez conserver d'anciennes données, avec Kite fermé, copiez manuellement les fichiers/dossiers nécessaires de `~/.halo/` vers `~/.kite/` :
-
-- `config.json`
-- `spaces/`
-- `temp/`
-- `skills/`, `commands/`, `agents/`, `plugins/` (si utilisés)
-
----
-
-## Comment Ça Marche
+### 3. Commencez à Créer
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Kite Bureau                              │
-│  ┌─────────────┐    ┌─────────────┐    ┌───────────────────┐   │
-│  │   React UI  │◄──►│  Processus  │◄──►│  Claude Code SDK  │   │
-│  │  (Renderer) │IPC │  Principal  │    │  (Boucle Agent)   │   │
-│  └─────────────┘    └─────────────┘    └───────────────────┘   │
-│                            │                                    │
-│                            ▼                                    │
-│                    ┌───────────────┐                           │
-│                    │Fichiers Locaux│                           │
-│                    │   ~/.kite/    │                           │
-│                    └───────────────┘                           │
-└─────────────────────────────────────────────────────────────────┘
+"Bonjour ! Aide-moi à créer une page web de calculatrice simple"
 ```
 
-- **100% Local** — Vos données ne quittent jamais votre machine (sauf appels API)
-- **Pas de Backend Requis** — Client de bureau pur, utilisez vos propres clés API
-- **Vraie Boucle d'Agent** — Exécution d'outils, pas seulement génération de texte
-
 ---
 
-## Ce Que les Gens Construisent
+## Notre Vision
 
-Kite n'est pas que pour les développeurs. Nous avons vu :
+**L'IA ne devrait pas être un privilège pour quelques-uns.**
 
-- **Des équipes finance** construire des apps full-stack de zéro — sans expérience en programmation
-- **Des designers** prototyper des maquettes interactives
-- **Des étudiants** apprendre à coder avec l'IA comme partenaire de pair programming
-- **Des développeurs** livrer des fonctionnalités plus vite que jamais
+Tout le monde a le droit de créer, tout le monde devrait pouvoir utiliser les outils les plus avancés pour réaliser ses idées.
 
-L'obstacle n'est plus la capacité de l'IA. **C'est l'accessibilité.** Kite supprime cet obstacle.
-
----
-
-## Stack Technique
-
-| Couche | Technologie |
-|-------|------------|
-| Framework | Electron + electron-vite |
-| Frontend | React 18 + TypeScript |
-| Styles | Tailwind CSS + patterns shadcn/ui |
-| État | Zustand |
-| Cœur Agent | @anthropic-ai/claude-code SDK |
-| Markdown | react-markdown + highlight.js |
-
----
-
-## Feuille de Route
-
-- [x] Boucle d'Agent centrale avec Claude Code SDK
-- [x] Gestion des Espaces et Conversations
-- [x] Aperçu des artefacts (Code, HTML, Images, Markdown)
-- [x] Accès Distant (contrôle navigateur)
-- [x] Navigateur IA (basé sur CDP)
-- [x] Support serveur MCP
-- [ ] Système de plugins
-- [ ] Entrée vocale
-
----
-
-## Contribuer
-
-Kite est open source parce que l'IA devrait être accessible à tous.
-
-Nous accueillons les contributions de toute nature :
-
-- **Traductions** — Aidez-nous à atteindre plus d'utilisateurs (voir `src/renderer/i18n/`)
-- **Rapports de bugs** — Trouvé quelque chose de cassé ? Faites-le nous savoir
-- **Idées de fonctionnalités** — Qu'est-ce qui rendrait Kite meilleur pour vous ?
-- **Contributions de code** — PRs bienvenues !
-
-```bash
-# Configuration de développement
-git clone https://github.com/blackholel/buddykite.git
-cd buddykite
-npm install
-npm run dev
-```
-
-Voir [CONTRIBUTING.md](../CONTRIBUTING.md) pour les directives.
-
----
-
-## Communauté
-
-- [GitHub Discussions](https://github.com/blackholel/buddykite/discussions) — Questions et idées
-- [Issues](https://github.com/blackholel/buddykite/issues) — Rapports de bugs et demandes de fonctionnalités
-
----
-
-## Licence
-
-Licence MIT — voir [LICENSE](../LICENSE) pour les détails.
-
----
-
-## L'Histoire Derrière Kite
-
-Il y a quelques mois, tout a commencé avec une simple frustration : **Je voulais utiliser Claude Code, mais j'étais coincé en réunions toute la journée.**
-
-Pendant des réunions ennuyeuses (on y est tous passés), j'ai pensé : *Et si je pouvais contrôler Claude Code sur mon ordinateur à la maison depuis mon téléphone ?*
-
-Puis est venu un autre problème — mes collègues non-techniques voulaient essayer Claude Code après avoir vu ce qu'il pouvait faire. Mais ils étaient bloqués à l'installation. *"C'est quoi npm ? Comment j'installe Node.js ?"* Certains ont passé des jours à essayer de comprendre.
-
-Alors j'ai construit Kite pour moi :
-- **Interface visuelle** — plus besoin de fixer la sortie terminal
-- **Installation en un clic** — pas de Node.js, pas de npm, juste télécharger et lancer
-- **Accès distant** — contrôle depuis téléphone, tablette, ou n'importe quel navigateur
-
-La première version a pris quelques heures. Tout après ça ? **100% construit par Kite lui-même.** On l'utilise quotidiennement depuis des mois.
-
-L'IA qui construit l'IA. Maintenant entre les mains de tous.
+**Donnez une étoile à ce projet ⭐** pour aider plus de personnes à découvrir Kite.
 
 ---
 
 <div align="center">
 
-### Construit par l'IA, pour les humains.
-
-Si Kite vous aide à construire quelque chose d'incroyable, on aimerait en entendre parler.
-
-**Donnez une Star à ce repo** pour aider les autres à découvrir Kite.
-
-[![Star History Chart](https://api.star-history.com/svg?repos=blackholel/buddykite&type=Date)](https://star-history.com/#blackholel/buddykite&Date)
+### IA pour Tous
 
 [⬆ Retour en Haut](#kite)
 

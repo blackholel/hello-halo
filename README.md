@@ -4,26 +4,17 @@
 
 # Kite
 
-### The Missing UI for Claude Code
+### Experience Cutting-Edge AI for Everyone
 
-Put Claude Code in your pocket — the open-source desktop client that makes Claude Code's power accessible to everyone. No terminal, ever.
+An AI assistant designed for everyone — no coding required, no setup needed, just open and use.
 
 [![GitHub Stars](https://img.shields.io/github/stars/blackholel/buddykite?style=social)](https://github.com/blackholel/buddykite/stargazers)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20Web-lightgrey.svg)](#installation)
-[![Downloads](https://img.shields.io/github/downloads/blackholel/buddykite/total.svg)](https://github.com/blackholel/buddykite/releases)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey.svg)](#installation)
 
-[Download](#installation) · [Documentation](#documentation) · [Contributing](#contributing)
+[Download](#installation) · [Quick Start](#quick-start) · [Use Cases](#what-can-you-do-with-kite)
 
- **[Español](./docs/README.es.md)** | **[Deutsch](./docs/README.de.md)** |**[中文](./docs/README.zh-CN.md)** |  **[Français](./docs/README.fr.md)** | **[日本語](./docs/README.ja.md)**
-
-</div>
-
----
-
-<div align="center">
-
-![Space Home](./docs/assets/space_home.jpg)
+**[中文](./docs/README.zh-CN.md)** | **[Español](./docs/README.es.md)** | **[Deutsch](./docs/README.de.md)** | **[Français](./docs/README.fr.md)** | **[日本語](./docs/README.ja.md)**
 
 </div>
 
@@ -31,272 +22,316 @@ Put Claude Code in your pocket — the open-source desktop client that makes Cla
 
 ## Why Kite?
 
-**Claude Code is the most capable AI coding agent available.** But there's a problem:
+Every time I try to recommend the latest AI tools to my friends, I face the same problem:
 
-> **It's trapped in a terminal.**
+> "Sounds cool, but I don't know how to use the command line..."
+> "Install Node.js? What's that?"
+> "Never mind, it's too complicated."
 
-For developers comfortable with CLI, that's fine. But for designers, PMs, students, and anyone who just wants AI to *do things* — the terminal is a wall.
+**AI technology is advancing rapidly, but most people are left behind.**
 
-**Kite breaks down that wall.**
+Not because they don't want to try, but because:
+- Installation is too complex
+- Requires programming knowledge
+- Unfriendly interfaces
+- Don't know where to start
 
-We took 100% of Claude Code's Agent capabilities and wrapped them in a visual interface that anyone can use. Same power, zero friction.
+**Kite was created to break down these barriers.**
 
-| | Claude Code CLI | Kite |
-|---|:---:|:---:|
-| Full Agent capabilities | ✅ | ✅ |
-| Visual interface | ❌ | ✅ |
-| One-click install | ❌ | ✅ |
-| Remote access from any device | ❌ | ✅ |
-| File preview & management | ❌ | ✅ |
-| Built-in AI Browser | ❌ | ✅ |
-
-> Think of it like this:
-> **Windows** turned DOS into visual desktops.
-> **Kite** turns Claude Code CLI into a visual AI companion.
+We believe cutting-edge AI shouldn't be exclusive to programmers. Designers, writers, students, entrepreneurs, anyone with ideas should be able to easily use AI to bring their creativity to life.
 
 ---
 
-## Features
+## What is Kite?
 
-<table>
-<tr>
-<td width="50%">
+Kite is a **ready-to-use AI assistant desktop application**.
 
-### Real Agent Loop
-Not just chat. Kite can **actually do things** — write code, create files, run commands, and iterate until the task is done.
+It wraps the world's most powerful AI coding assistant (Claude Code) into a graphical interface anyone can use. You don't need to:
+- ❌ Learn command line
+- ❌ Install development environments
+- ❌ Know programming
+- ❌ Read complex documentation
 
-### Space System
-Isolated workspaces keep your projects organized. Each Space has its own files, conversations, and context.
+You only need to:
+- ✅ Download and open Kite
+- ✅ Type your ideas
+- ✅ Watch AI make it happen
 
-### Beautiful Artifact Rail
-See every file AI creates in real-time. Preview code, HTML, images — all without leaving the app.
-
-</td>
-<td width="50%">
-
-### Remote Access
-Control your desktop Kite from your phone or any browser. Work from anywhere — even from a hospital bed (true story).
-
-### AI Browser
-Let AI control a real embedded browser. Web scraping, form filling, testing — all automated.
-
-### MCP Support
-Extend capabilities with Model Context Protocol. Compatible with Claude Desktop MCP servers.
-
-</td>
-</tr>
-</table>
-
-### And More...
-
-- **Multi-provider Support** — Anthropic, OpenAI, DeepSeek, and any OpenAI-compatible API
-- **Real-time Thinking** — Watch AI's thought process as it works
-- **Tool Permissions** — Approve or auto-allow file/command operations
-- **Dark/Light Themes** — System-aware theming
-- **i18n Ready** — English, Chinese, Spanish (more coming)
-- **Auto Updates** — Stay current with one-click updates
+**As simple as talking to a super-smart assistant.**
 
 ---
 
-## Screenshots
+## What Can You Do with Kite?
 
-![Chat Intro](./docs/assets/chat_intro.jpg)
+### 🎨 Creative Work
+"Help me design a minimalist personal website with dark mode"
+- AI writes code, creates files, and shows live preview
+- You see every step and can request changes anytime
 
-![Chat Todo](./docs/assets/chat_todo.jpg)
+### 📊 Data Analysis
+"Analyze this Excel file, find sales trends and generate charts"
+- Upload files, AI processes automatically
+- Generates visual reports at a glance
 
+### 📝 Content Creation
+"Translate this article to English and optimize for SEO"
+- AI understands context, provides professional suggestions
+- Supports multiple rounds of conversation for refinement
 
-*Remote Access: Control Kite from anywhere*
+### 🚀 Rapid Prototyping
+"Create a todo app with add, delete, and mark complete features"
+- See a working app in minutes
+- Not satisfied? Tell AI to modify, changes apply instantly
 
-![Remote Settings](./docs/assets/remote_setting.jpg)
-<p align="center">
-  <img src="./docs/assets/mobile_remote_access.jpg" width="45%" alt="Mobile Remote Access">
-  &nbsp;&nbsp;
-  <img src="./docs/assets/mobile_chat.jpg" width="45%" alt="Mobile Chat">
-</p>
+### 🔄 Automate Repetitive Tasks
+"Every time I upload an image, automatically compress and convert to WebP"
+- Create custom Skills, execute with one click
+- Save tons of repetitive work time
 
 ---
 
-## Installation
+## Why Choose Kite?
 
-### Download (Recommended)
+### 🌟 True Zero Barrier
+- **One-Click Install**: Download → Open → Start Using
+- **Visual Interface**: All operations in GUI
+- **Real-Time Feedback**: See AI's every thought and action
 
-| Platform | Download | Requirements |
-|----------|----------|--------------|
-| **macOS** (Apple Silicon) | [Download .dmg](https://github.com/blackholel/buddykite/releases/latest) | macOS 11+ |
-| **macOS** (Intel) | Coming soon | macOS 11+ |
-| **Windows** | [Download .exe](https://github.com/blackholel/buddykite/releases/latest) | Windows 10+ |
-| **Linux** | [Download .AppImage](https://github.com/blackholel/buddykite/releases/latest) | Ubuntu 20.04+ |
-| **Web** (PC/Mobile) | Enable Remote Access in desktop app | Any modern browser |
+### 🎯 Designed for Everyone
+- **Natural Conversation**: Describe needs in everyday language
+- **Instant Preview**: Created files display immediately - code, web pages, images
+- **Iterate Freely**: Tell AI what's wrong anytime, it adjusts instantly
 
-**That's it.** Download, install, run. No Node.js. No npm. No terminal commands.
+### 🔧 Rich Built-in Capabilities
+- **Pre-installed Skills**: Dozens of practical Skills out of the box
+- **Extensible**: Create your own Skills, Commands, and Agents
+- **Workspaces**: Manage different projects separately
 
-### Build from Source
-
-For developers who want to contribute or customize:
-
-```bash
-git clone https://github.com/blackholel/buddykite.git
-cd buddykite
-npm install
-npm run dev
-```
+### 🌐 Use Anywhere
+- **Remote Access**: Control desktop Kite from phone or tablet
+- **Multi-language**: Chinese, English, Spanish, and more
+- **Cross-platform**: macOS, Windows, Linux support
 
 ---
 
 ## Quick Start
 
-1. **Launch Kite** and enter your API key (Anthropic recommended)
-2. **Start chatting** — try "Create a simple todo app with React"
-3. **Watch the magic** — see files appear in the Artifact Rail
-4. **Preview & iterate** — click any file to preview, ask for changes
+### 1. Installation
 
-> **Pro tip:** For best results, use Claude Sonnet 4.5.5 or Opus 4.5.5 models.
+| Platform | Download | Requirements |
+|----------|----------|--------------|
+| **macOS** (Apple Silicon) | [Download .dmg](https://github.com/blackholel/buddykite/releases/latest) | macOS 11+ |
+| **Windows** | [Download .exe](https://github.com/blackholel/buddykite/releases/latest) | Windows 10+ |
+| **Linux** | [Download .AppImage](https://github.com/blackholel/buddykite/releases/latest) | Ubuntu 20.04+ |
 
----
+**That simple.** Double-click to install, no other configuration needed.
 
-## Breaking Change: Config Directory Policy
+### 2. Get API Key
 
-Kite now supports `~/.kite/` only.
-Legacy `~/.halo/` is not read and is not migrated automatically.
+Kite uses Claude AI (recommended) or other AI services. You need an API key:
 
-### Upgrade Guide (Manual Migration)
+1. Visit [Anthropic Console](https://console.anthropic.com/)
+2. Sign up (if you haven't)
+3. Create an API key
+4. Paste the key in Kite settings
 
-If you need old data, manually copy required files/directories from `~/.halo/` to `~/.kite/` while Kite is closed:
+> 💡 **Tip**: Anthropic usually offers free credits for new users, enough to experience all features.
 
-- `config.json`
-- `spaces/`
-- `temp/`
-- `skills/`, `commands/`, `agents/`, `plugins/` (if used)
+### 3. Start Creating
 
----
+Open Kite and try these:
 
-## How It Works
-
+**First Try**:
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                          Kite Desktop                           │
-│  ┌─────────────┐    ┌─────────────┐    ┌───────────────────┐   │
-│  │   React UI  │◄──►│    Main     │◄──►│  Claude Code SDK  │   │
-│  │  (Renderer) │IPC │   Process   │    │   (Agent Loop)    │   │
-│  └─────────────┘    └─────────────┘    └───────────────────┘   │
-│                            │                                    │
-│                            ▼                                    │
-│                    ┌───────────────┐                           │
-│                    │  Local Files  │                           │
-│                    │  ~/.kite/     │                           │
-│                    └───────────────┘                           │
-└─────────────────────────────────────────────────────────────────┘
+"Hello! Help me create a simple calculator webpage"
 ```
 
-- **100% Local** — Your data never leaves your machine (except API calls)
-- **No Backend Required** — Pure desktop client, use your own API keys
-- **Real Agent Loop** — Tool execution, not just text generation
+**Go Further**:
+```
+"Analyze the sales.csv file on my desktop, tell me which month had the highest sales"
+```
+
+**Get Creative**:
+```
+"Design a Pomodoro timer app, 25 minutes work, 5 minutes break, with notification sounds"
+```
 
 ---
 
-## What People Are Building
+## Core Features
 
-Kite isn't just for developers. We've seen:
+### 💬 Smart Conversation
+- Describe your needs like chatting with a friend
+- AI asks questions to confirm details
+- Supports uploading images and files as reference
 
-- **Finance teams** building full-stack apps from scratch — with zero coding experience
-- **Designers** prototyping interactive mockups
-- **Students** learning to code with AI as their pair programmer
-- **Developers** shipping features faster than ever
+### 📁 Workspaces (Spaces)
+- Create separate spaces for different projects
+- Each space has its own conversation history and files
+- Switch easily without interference
 
-The barrier isn't AI capability anymore. **It's accessibility.** Kite removes that barrier.
+### 🎨 Live Preview
+- Right panel shows all files AI creates
+- Supports code highlighting, web preview, image viewing
+- Click any file to view or edit
 
----
+### 🔧 Custom Capabilities
+- **Skills**: Create reusable skills (like "compress images", "generate reports")
+- **Commands**: Define quick commands
+- **Agents**: Configure specialized AI assistants (like "frontend expert", "data analyst")
 
-## Tech Stack
+### 📱 Remote Access
+- Enable remote access in settings
+- Access the displayed address from your phone browser
+- Control your Kite from anywhere
 
-| Layer | Technology |
-|-------|------------|
-| Framework | Electron + electron-vite |
-| Frontend | React 18 + TypeScript |
-| Styling | Tailwind CSS + shadcn/ui patterns |
-| State | Zustand |
-| Agent Core | @anthropic-ai/claude-code SDK |
-| Markdown | react-markdown + highlight.js |
-
----
-
-## Roadmap
-
-- [x] Core Agent Loop with Claude Code SDK
-- [x] Space & Conversation management
-- [x] Artifact preview (Code, HTML, Images, Markdown)
-- [x] Remote Access (browser control)
-- [x] AI Browser (CDP-based)
-- [x] MCP Server support
-- [ ] Plugin system
-- [ ] Voice input
+### 🌍 Multi-language
+- Interface supports Chinese, English, and more
+- AI conversation adapts to your language automatically
 
 ---
 
-## Contributing
+## Tips for Success
 
-Kite is open source because AI should be accessible to everyone.
+### 💡 How to Ask Good Questions
 
-We welcome contributions of all kinds:
+**Not Clear Enough**:
+```
+"Make a website"
+```
 
-- **Translations** — Help us reach more users (see `src/renderer/i18n/`)
-- **Bug reports** — Found something broken? Let us know
-- **Feature ideas** — What would make Kite better for you?
-- **Code contributions** — PRs welcome!
+**Better Way**:
+```
+"Create a personal portfolio website with homepage, about me, and projects pages,
+using modern minimalist style with deep blue as the primary color"
+```
 
+### 🔄 Iterate and Improve
+
+Don't expect perfection on the first try. Tell AI what needs adjustment:
+
+```
+"The homepage title is too large, make it smaller"
+"Change button color to green"
+"Add a contact form"
+```
+
+### 📦 Create Your Own Skills
+
+Find yourself doing the same thing often? Create a Skill:
+
+1. Click Skills panel on the left
+2. Click "Create New Skill"
+3. Describe what this Skill should do
+4. Use it with one click later
+
+---
+
+## Real Stories
+
+### Story 1: Non-Technical Founder's Product Prototype
+> "I'm an entrepreneur who doesn't code. Used Kite to create my product's first working prototype
+> in one afternoon to show investors. They were all amazed."
+
+### Story 2: Designer's Code Assistant
+> "I'm a UI designer who often needs interactive prototypes. Used to ask frontend colleagues for help,
+> now I can do it myself with Kite. 10x efficiency boost."
+
+### Story 3: Student's Learning Partner
+> "I'm learning to code, Kite not only helps me write code but explains what each step does.
+> Learning much faster than watching tutorials."
+
+### Story 4: Content Creator's Efficiency Tool
+> "I need to process lots of images and documents. After creating a few custom Skills,
+> work that took a day now takes 10 minutes."
+
+---
+
+## FAQ
+
+### Q: I don't know programming at all, can I use Kite?
+**A:** Absolutely! Kite is designed for you. Describe what you want in natural language, AI handles all technical details.
+
+### Q: Does it cost money?
+**A:** Kite itself is completely free and open source. You only pay for AI service (like Claude) API fees, usually very affordable with free credits for new users.
+
+### Q: Is my data safe?
+**A:** All data is stored on your computer, not uploaded to any server (except conversation content sent to AI). You have complete control over your data.
+
+### Q: Which AI services are supported?
+**A:** Supports Anthropic Claude (recommended), OpenAI, DeepSeek, and any OpenAI API-compatible service.
+
+### Q: Can I use it offline?
+**A:** Requires internet connection to call AI services, but all file management and preview features are local.
+
+---
+
+## Technical Details
+
+<details>
+<summary>Click to expand tech stack info (for developers)</summary>
+
+### Architecture
+- **Framework**: Electron + React 18 + TypeScript
+- **State Management**: Zustand
+- **Styling**: Tailwind CSS
+- **AI Core**: @anthropic-ai/claude-code SDK
+- **Markdown Rendering**: react-markdown + highlight.js
+
+### Core Capabilities
+- Complete Agent Loop (tool execution, file operations, command running)
+- MCP (Model Context Protocol) server support
+- Multi-modal input (text, images, files)
+- Streaming message processing
+- Tool permission management
+
+### Local Development
 ```bash
-# Development setup
 git clone https://github.com/blackholel/buddykite.git
 cd buddykite
 npm install
 npm run dev
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+</details>
 
 ---
 
-## Community
+## Join the Community
 
-- [GitHub Discussions](https://github.com/blackholel/buddykite/discussions) — Questions & ideas
-- [Issues](https://github.com/blackholel/buddykite/issues) — Bug reports & feature requests
+- [GitHub Discussions](https://github.com/blackholel/buddykite/discussions) — Ask questions, share experiences
+- [Issues](https://github.com/blackholel/buddykite/issues) — Report bugs, suggest features
+- [Contributing Guide](CONTRIBUTING.md) — Help improve Kite
 
 ---
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+MIT License — see [LICENSE](LICENSE) for details
 
 ---
 
-## The Story Behind Kite
+## Our Vision
 
-A few months ago, it started with a simple frustration: **I wanted to use Claude Code, but I was stuck in meetings all day.**
+**AI should not be a privilege for the few.**
 
-During boring meetings (we've all been there), I thought: *What if I could control Claude Code on my home computer from my phone?*
+Everyone has the right to create, everyone should be able to use the most advanced tools to realize their ideas.
 
-Then came another problem — my non-technical colleagues wanted to try Claude Code after seeing what it could do. But they got stuck at installation. *"What's npm? How do I install Node.js?"* Some spent days trying to figure it out.
+Kite is just the beginning. We hope to:
+- Let more people discover the magic of AI
+- Inspire curiosity and creativity
+- Lower the barrier to technology
+- Enable everyone to become a creator
 
-So I built Kite for myself:
-- **Visual interface** — no more staring at terminal output
-- **One-click install** — no Node.js, no npm, just download and run
-- **Remote access** — control from phone, tablet, or any browser
+If Kite helped you realize an interesting idea, we'd love to hear your story.
 
-The first version took a few hours. Everything after that? **100% built by Kite itself.** We've been using it daily for months.
-
-AI building AI. Now in everyone's hands.
+**Star this project ⭐** to help more people discover Kite.
 
 ---
 
 <div align="center">
 
-### Built by AI, for humans.
-
-If Kite helps you build something amazing, we'd love to hear about it.
-
-**Star this repo** to help others discover Kite.
-
-[![Star History Chart](https://api.star-history.com/svg?repos=blackholel/buddykite&type=Date)](https://star-history.com/#blackholel/buddykite&Date)
+### AI for Everyone
 
 [⬆ Back to Top](#kite)
 
