@@ -1,30 +1,39 @@
 ====================================
-    Kite - Installation Guide
+    buddykite 安装指南（macOS）
 ====================================
 
-Thank you for downloading Kite!
+欢迎使用 buddykite。
 
------------------------------------
-Installation
------------------------------------
-1. Drag Kite.app to the "Applications" folder
-2. Double-click Kite.app to launch
+------------------------------------
+安装步骤
+------------------------------------
+1. 将左侧的 buddykite.app 拖到右侧 Applications 文件夹
+2. 在 Applications 中打开 buddykite（不要在 DMG 里直接运行）
 
------------------------------------
-"Cannot be opened" warning?
------------------------------------
-This is a normal macOS security prompt. Follow these steps:
+------------------------------------
+首次打开遇到安全提示怎么办
+------------------------------------
+方式 A（推荐）：
+1. 在 Applications 里右键 buddykite.app
+2. 选择“打开”
+3. 在弹窗中再次点“打开”
 
-Option 1 (Recommended):
-1. Right-click on Kite.app
-2. Select "Open"
-3. Click "Open" in the dialog
+方式 B：
+1. 打开“系统设置” > “隐私与安全性”
+2. 滑到页面底部找到 buddykite 的拦截提示
+3. 点击“仍要打开”
 
-Option 2:
-1. Open "System Settings" > "Privacy & Security"
-2. Scroll down to find the Kite message
-3. Click "Open Anyway"
+------------------------------------
+如果出现“已损坏，无法打开”
+------------------------------------
+这通常不是文件真的坏了，而是 Gatekeeper 对签名/来源校验失败。
+建议优先从官方发布页重新下载并覆盖安装，避免使用被二次打包的安装包。
 
-You only need to do this once.
+临时排查（仅在你确认来源可信时使用）：
+xattr -dr com.apple.quarantine /Applications/buddykite.app
+open -a /Applications/buddykite.app
+
+官方发布页：
+https://github.com/openkursar/hello-halo/releases/latest
 
 ====================================
