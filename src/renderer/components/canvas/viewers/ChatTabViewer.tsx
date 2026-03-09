@@ -173,7 +173,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
     activeAskUserQuestionItem?.status === 'failed' ? activeAskUserQuestionItem.toolCall : null
 
   const currentChangeSets = conversationId ? (changeSets.get(conversationId) || []) : []
-  const activeChangeSet = currentChangeSets[0]
+  const activeChangeSet = currentChangeSets.find((changeSet) => changeSet.status !== 'rolled_back')
   // Smart auto-scroll
   const {
     containerRef,

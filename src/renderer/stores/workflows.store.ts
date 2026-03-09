@@ -214,11 +214,25 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
       : useSpaceStore.getState().spaces.find(space => space.id === spaceId)
     if (knownSpace?.path) {
       const locale = getCurrentLanguage()
-      const [skillsResponse, agentsResponse, commandsResponse] = await Promise.all([
+      const [skillsResult, agentsResult, commandsResult] = await Promise.allSettled([
         api.listSkills(knownSpace.path, locale, 'workflow-validation'),
         api.listAgents(knownSpace.path, locale, 'workflow-validation'),
         api.listCommands(knownSpace.path, locale, 'workflow-validation')
       ])
+
+      const skillsResponse = skillsResult.status === 'fulfilled' ? skillsResult.value : { success: false, data: undefined }
+      const agentsResponse = agentsResult.status === 'fulfilled' ? agentsResult.value : { success: false, data: undefined }
+      const commandsResponse = commandsResult.status === 'fulfilled' ? commandsResult.value : { success: false, data: undefined }
+
+      if (skillsResult.status === 'rejected') {
+        console.error('[WorkflowsStore] Failed to list skills:', skillsResult.reason)
+      }
+      if (agentsResult.status === 'rejected') {
+        console.error('[WorkflowsStore] Failed to list agents:', agentsResult.reason)
+      }
+      if (commandsResult.status === 'rejected') {
+        console.error('[WorkflowsStore] Failed to list commands:', commandsResult.reason)
+      }
 
       const availableSkills = (skillsResponse.success ? (skillsResponse.data as Array<{ name: string; namespace?: string }>) : [])
       const availableAgents = (agentsResponse.success ? (agentsResponse.data as Array<{ name: string; namespace?: string }>) : [])
