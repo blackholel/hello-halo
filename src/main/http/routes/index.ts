@@ -42,14 +42,28 @@ function getWorkingDir(spaceId: string): string {
  *   - the validated workDir string (possibly empty) if OK
  *   - null if validation failed (response already sent)
  */
-function validateWorkDir(req: Request, res: Response): string | null {
-  const workDir = (req.body?.workDir || req.query?.workDir) as string | undefined
-  if (!workDir) return ''   // No workDir provided, allowed
-  if (!isWorkDirAllowed(workDir, getAllSpacePaths())) {
+function validateWorkDir(
+  req: Request,
+  res: Response,
+  options?: { required?: boolean }
+): string | null {
+  const workDir = (req.body?.workDir || req.query?.workDir) as unknown
+  const required = options?.required === true
+  if (!workDir) {
+    if (!required) return ''
+    res.status(400).json({ success: false, error: 'workDir is required' })
+    return null
+  }
+  if (typeof workDir !== 'string' || workDir.trim().length === 0) {
+    res.status(400).json({ success: false, error: 'workDir must be a non-empty string' })
+    return null
+  }
+  const normalizedWorkDir = workDir.trim()
+  if (!isWorkDirAllowed(normalizedWorkDir, getAllSpacePaths())) {
     res.status(403).json({ success: false, error: 'workDir is not an allowed workspace path' })
     return null
   }
-  return workDir
+  return normalizedWorkDir
 }
 
 function validateResourceListView(req: Request, res: Response): ResourceListView | null {
@@ -468,7 +482,7 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
   }))
 
   app.post('/api/skills', safeRoute(async (req, res) => {
-    const workDir = validateWorkDir(req, res)
+    const workDir = validateWorkDir(req, res, { required: true })
     if (workDir === null) return
     const { createSkill } = await import('../../services/skills.service')
     const { name, content } = req.body
@@ -495,7 +509,7 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
   }))
 
   app.post('/api/skills/copy', safeRoute(async (req, res) => {
-    const workDir = validateWorkDir(req, res)
+    const workDir = validateWorkDir(req, res, { required: true })
     if (workDir === null) return
     const { copySkillToSpace } = await import('../../services/skills.service')
     const { skillName } = req.body
@@ -508,7 +522,7 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
   }))
 
   app.post('/api/skills/copy-by-ref', safeRoute(async (req, res) => {
-    const workDir = validateWorkDir(req, res)
+    const workDir = validateWorkDir(req, res, { required: true })
     if (workDir === null) return
     const { copySkillToSpaceByRef } = await import('../../services/skills.service')
     const { ref, options } = req.body
@@ -575,7 +589,7 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
   }))
 
   app.post('/api/agents', safeRoute(async (req, res) => {
-    const workDir = validateWorkDir(req, res)
+    const workDir = validateWorkDir(req, res, { required: true })
     if (workDir === null) return
     const { createAgent } = await import('../../services/agents.service')
     const { name, content } = req.body
@@ -602,7 +616,7 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
   }))
 
   app.post('/api/agents/copy', safeRoute(async (req, res) => {
-    const workDir = validateWorkDir(req, res)
+    const workDir = validateWorkDir(req, res, { required: true })
     if (workDir === null) return
     const { copyAgentToSpace } = await import('../../services/agents.service')
     const { agentName } = req.body
@@ -615,7 +629,7 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
   }))
 
   app.post('/api/agents/copy-by-ref', safeRoute(async (req, res) => {
-    const workDir = validateWorkDir(req, res)
+    const workDir = validateWorkDir(req, res, { required: true })
     if (workDir === null) return
     const { copyAgentToSpaceByRef } = await import('../../services/agents.service')
     const { ref, options } = req.body
@@ -655,7 +669,7 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
   }))
 
   app.post('/api/commands', safeRoute(async (req, res) => {
-    const workDir = validateWorkDir(req, res)
+    const workDir = validateWorkDir(req, res, { required: true })
     if (workDir === null) return
     const { createCommand } = await import('../../services/commands.service')
     const { name, content } = req.body
@@ -682,7 +696,7 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
   }))
 
   app.post('/api/commands/copy', safeRoute(async (req, res) => {
-    const workDir = validateWorkDir(req, res)
+    const workDir = validateWorkDir(req, res, { required: true })
     if (workDir === null) return
     const { copyCommandToSpace } = await import('../../services/commands.service')
     const { commandName } = req.body
@@ -695,7 +709,7 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
   }))
 
   app.post('/api/commands/copy-by-ref', safeRoute(async (req, res) => {
-    const workDir = validateWorkDir(req, res)
+    const workDir = validateWorkDir(req, res, { required: true })
     if (workDir === null) return
     const { copyCommandToSpaceByRef } = await import('../../services/commands.service')
     const { ref, options } = req.body

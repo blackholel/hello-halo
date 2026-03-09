@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Preview 3: Paper & Ink</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
+    <style>
+        /* Mandatory Base */
+        html, body { height: 100%; overflow-x: hidden; }
+        html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+        .slide {
+            width: 100vw; height: 100vh; height: 100dvh;
+            overflow: hidden; scroll-snap-align: start;
+            display: flex; flex-direction: column; position: relative;
+        }
+        .slide-content {
+            flex: 1; display: flex; flex-direction: column;
+            justify-content: center; max-height: 100%;
+            overflow: hidden; padding: var(--slide-padding);
+        }
+        :root {
+            --title-size: clamp(1.5rem, 5vw, 4rem);
+            --h2-size: clamp(1.25rem, 3.5vw, 2.5rem);
+            --body-size: clamp(0.75rem, 1.5vw, 1.125rem);
+            --slide-padding: clamp(1rem, 4vw, 4rem);
+        }
+
+        /* Paper & Ink Preset */
+        :root {
+            --bg-cream: #f8f5f0;
+            --text-charcoal: #2d2d2d;
+            --accent-crimson: #9e1b32;
+            --accent-gold: #b8860b;
+            --rule-color: #d4cfc7;
+        }
+
+        body {
+            margin: 0;
+            font-family: 'Source Serif 4', serif;
+            background: var(--bg-cream);
+            color: var(--text-charcoal);
+        }
+
+        .slide {
+            background: var(--bg-cream);
+        }
+
+        /* Warm atmospheric gradient */
+        .slide::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(ellipse at 10% 90%, rgba(158, 27, 50, 0.05) 0%, transparent 40%),
+                radial-gradient(ellipse at 90% 10%, rgba(184, 134, 11, 0.06) 0%, transparent 40%);
+            pointer-events: none;
+        }
+
+        .slide-content {
+            align-items: center;
+            text-align: center;
+        }
+
+        /* Elegant rules */
+        .slide::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 1px;
+            height: 60%;
+            background: var(--rule-color);
+            opacity: 0.5;
+        }
+
+        h1 {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: var(--title-size);
+            font-weight: 400;
+            line-height: 1.15;
+            margin: 0;
+            color: var(--text-charcoal);
+            font-style: italic;
+        }
+
+        .divider {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin: 1.5rem 0;
+        }
+
+        .divider::before,
+        .divider::after {
+            content: '';
+            width: 60px;
+            height: 1px;
+            background: var(--accent-crimson);
+        }
+
+        .divider-icon {
+            color: var(--accent-crimson);
+            font-size: 1rem;
+        }
+
+        .subtitle {
+            font-family: 'Source Serif 4', serif;
+            font-size: var(--body-size);
+            color: #555;
+            max-width: 520px;
+            line-height: 1.7;
+        }
+
+        .intro {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            color: var(--accent-crimson);
+            margin-bottom: 0.5rem;
+        }
+
+        .slide-number {
+            position: absolute;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 0.85rem;
+            letter-spacing: 0.15em;
+            color: var(--accent-gold);
+        }
+    </style>
+</head>
+<body>
+    <section class="slide">
+        <div class="slide-content">
+            <p class="intro">方法论</p>
+            <h1>知识库整理方案</h1>
+            <div class="divider">
+                <span class="divider-icon">❧</span>
+            </div>
+            <p class="subtitle">从混乱到有序，构建个人知识管理系统。解决重复目录、层级过深、缺少收集入口等常见问题，让你的第二大脑更加高效。</p>
+        </div>
+        <div class="slide-number">I</div>
+    </section>
+</body>
+</html>

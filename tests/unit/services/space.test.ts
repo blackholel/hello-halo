@@ -253,7 +253,7 @@ describe('Space Service', () => {
       expect(path.basename(second.path)).toBe('Same Name-2')
     })
 
-    it('should initialize strict resource policy without allowHooks field', async () => {
+    it('should initialize legacy resource policy without allowHooks field', async () => {
       const space = await createSpace({
         name: 'Policy Defaults',
         icon: 'folder'
@@ -262,10 +262,10 @@ describe('Space Service', () => {
       const configPath = path.join(space.path, '.kite', 'space-config.json')
       const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
 
-      expect(config.resourcePolicy.mode).toBe('strict-space-only')
-      expect(config.resourcePolicy.allowMcp).toBe(false)
-      expect(config.resourcePolicy.allowPluginMcpDirective).toBe(false)
-      expect(config.resourcePolicy.allowedSources).toEqual(['space'])
+      expect(config.resourcePolicy.mode).toBe('legacy')
+      expect(config.resourcePolicy.allowMcp).toBe(true)
+      expect(config.resourcePolicy.allowPluginMcpDirective).toBe(true)
+      expect(config.resourcePolicy.allowedSources).toEqual(['app', 'global', 'space', 'installed', 'plugin'])
       expect(config.resourcePolicy).not.toHaveProperty('allowHooks')
     })
   })

@@ -364,7 +364,6 @@ export function createCommand(workDir: string, name: string, content: string): C
   if (!name || name.includes('/') || name.includes('\\') || name.includes('..') || name.startsWith('.')) {
     throw new Error(`Invalid command name: ${name}`)
   }
-
   if (!isWorkDirAllowed(workDir, getAllSpacePaths())) {
     throw new Error(`workDir is not an allowed workspace path: ${workDir}`)
   }

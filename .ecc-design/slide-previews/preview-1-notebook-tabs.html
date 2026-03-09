@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Preview 1: Notebook Tabs</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400;6..96,700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        /* Mandatory Base */
+        html, body { height: 100%; overflow-x: hidden; }
+        html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+        .slide {
+            width: 100vw; height: 100vh; height: 100dvh;
+            overflow: hidden; scroll-snap-align: start;
+            display: flex; flex-direction: column; position: relative;
+        }
+        .slide-content {
+            flex: 1; display: flex; flex-direction: column;
+            justify-content: center; max-height: 100%;
+            overflow: hidden; padding: var(--slide-padding);
+        }
+        :root {
+            --title-size: clamp(1.5rem, 5vw, 4rem);
+            --h2-size: clamp(1.25rem, 3.5vw, 2.5rem);
+            --body-size: clamp(0.75rem, 1.5vw, 1.125rem);
+            --slide-padding: clamp(1rem, 4vw, 4rem);
+        }
+
+        /* Notebook Tabs Preset */
+        :root {
+            --bg-base: #1a1a1a;
+            --bg-card: #252525;
+            --text-primary: #f5f5f0;
+            --text-secondary: #a8a8a0;
+            --accent-pink: #e8b4b8;
+            --accent-mint: #b8e8d4;
+            --accent-lavender: #c4b8e8;
+        }
+
+        body {
+            margin: 0;
+            font-family: 'DM Sans', sans-serif;
+            background: var(--bg-base);
+            color: var(--text-primary);
+        }
+
+        .slide {
+            background: var(--bg-base);
+        }
+
+        /* Paper texture effect */
+        .slide::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(ellipse at 20% 30%, rgba(200,180,220,0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 70%, rgba(180,220,200,0.06) 0%, transparent 50%);
+            pointer-events: none;
+        }
+
+        /* Side tabs */
+        .slide::after {
+            content: '';
+            position: absolute;
+            left: 0; top: 15%;
+            width: 12px; height: 70%;
+            background: linear-gradient(to bottom, var(--accent-pink), var(--accent-mint), var(--accent-lavender));
+            border-radius: 0 6px 6px 0;
+            opacity: 0.9;
+        }
+
+        .slide-content {
+            padding-left: 4rem;
+            align-items: flex-start;
+        }
+
+        .tag {
+            display: inline-block;
+            padding: 0.35rem 1rem;
+            background: var(--bg-card);
+            border-radius: 4px;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--accent-mint);
+            margin-bottom: 1.5rem;
+            border: 1px solid rgba(184, 232, 212, 0.2);
+        }
+
+        h1 {
+            font-family: 'Bodoni Moda', serif;
+            font-size: var(--title-size);
+            font-weight: 700;
+            line-height: 1.1;
+            margin: 0 0 1rem 0;
+            color: var(--text-primary);
+            letter-spacing: -0.02em;
+        }
+
+        .subtitle {
+            font-size: var(--body-size);
+            color: var(--text-secondary);
+            max-width: 500px;
+            line-height: 1.6;
+        }
+
+        .meta {
+            margin-top: 2rem;
+            display: flex;
+            gap: 2rem;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .meta span {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        /* Decorative elements */
+        .deco-line {
+            position: absolute;
+            bottom: 3rem;
+            left: 4rem;
+            width: 60px;
+            height: 3px;
+            background: var(--accent-pink);
+        }
+
+        .slide-number {
+            position: absolute;
+            bottom: 3rem;
+            right: 3rem;
+            font-family: 'Bodoni Moda', serif;
+            font-size: 3rem;
+            color: rgba(255,255,255,0.1);
+        }
+    </style>
+</head>
+<body>
+    <section class="slide">
+        <div class="slide-content">
+            <span class="tag">方法论</span>
+            <h1>知识库<br>整理方案</h1>
+            <p class="subtitle">从混乱到有序：构建个人知识管理系统的完整指南</p>
+            <div class="meta">
+                <span>📁 Obsidian</span>
+                <span>📋 PKM</span>
+            </div>
+        </div>
+        <div class="deco-line"></div>
+        <div class="slide-number">01</div>
+    </section>
+</body>
+</html>

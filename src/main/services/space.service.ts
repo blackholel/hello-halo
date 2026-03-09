@@ -531,17 +531,17 @@ export function createSpace(input: { name: string; icon: string; customPath?: st
 
   writeFileSync(join(spacePath, '.kite', 'meta.json'), JSON.stringify(meta, null, 2))
 
-  // Initialize resource policy for strict isolation defaults.
+  // Initialize resource policy defaults for global resource availability.
   // Uses updateSpaceConfig to merge safely — preserves existing claudeCode config
   // when customPath points to a directory that already has space-config.json.
   const initResult = updateSpaceConfig(spacePath, (config) => ({
     ...config,
     resourcePolicy: {
       version: 1,
-      mode: 'strict-space-only',
-      allowMcp: false,
-      allowPluginMcpDirective: false,
-      allowedSources: ['space']
+      mode: 'legacy',
+      allowMcp: true,
+      allowPluginMcpDirective: true,
+      allowedSources: ['app', 'global', 'space', 'installed', 'plugin']
     }
   }))
 

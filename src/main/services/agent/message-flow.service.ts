@@ -37,9 +37,7 @@ import { parseSDKMessages, formatCanvasContext, buildMessageContent } from './me
 import { broadcastMcpStatus } from './mcp-status.service'
 import { expandLazyDirectives } from './skill-expander'
 import {
-  getAllowedSources,
-  getSpaceResourcePolicy,
-  isStrictSpaceOnlyPolicy
+  getExecutionLayerAllowedSources
 } from './space-resource-policy.service'
 import { getResourceExposureRuntimeFlags } from '../resource-exposure.service'
 import { findEnabledPluginByInput } from '../plugins.service'
@@ -124,21 +122,12 @@ interface TokenUsageInfo {
   contextWindow: number
 }
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message
-  }
-  if (typeof error === 'string') {
-    return error
-  }
-  return ''
-}
+const getErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : typeof error === 'string' ? error : ''
 
-function isAbortLikeError(error: unknown): boolean {
+const isAbortLikeError = (error: unknown): boolean => {
+  if (error instanceof Error && error.name === 'AbortError') return true
   const message = getErrorMessage(error)
-  if (error instanceof Error && error.name === 'AbortError') {
-    return true
-  }
   return /abort/i.test(message)
 }
 
@@ -772,6 +761,45 @@ function finalizeSession(params: FinalizeSessionParams): boolean {
   return true
 }
 
+function processMcpLine(
+  line: string,
+  conversationId: string | null,
+  enablePlugins: boolean
+): { text: string; enabled?: string; missing?: string } {
+  const trimmed = line.trim()
+  const fenceMatch = trimmed.match(/^```/)
+  if (fenceMatch) {
+    return { text: line }
+  }
+
+  const directiveMatch = trimmed.match(/^\/mcp(?:\s+(.+))?$/i)
+  if (!directiveMatch) {
+    return { text: line }
+  }
+
+  const pluginInput = (directiveMatch[1] || '').trim()
+
+  // Strip mode: just remove the directive
+  if (!enablePlugins) {
+    return { text: '<!-- injected: mcp -->' }
+  }
+
+  // Extract mode: process the plugin
+  if (!pluginInput) {
+    return { text: '<!-- injected: mcp -->', missing: '(empty)' }
+  }
+
+  const plugin = findEnabledPluginByInput(pluginInput)
+  if (!plugin || !pluginHasMcp(plugin)) {
+    return { text: '<!-- injected: mcp -->', missing: pluginInput }
+  }
+
+  if (conversationId) {
+    enablePluginMcp(conversationId, plugin.fullName)
+  }
+  return { text: '<!-- injected: mcp -->', enabled: plugin.fullName }
+}
+
 function extractMcpDirectives(input: string, conversationId: string): McpDirectiveResult {
   const lines = input.split(/\r?\n/)
   const enabled: string[] = []
@@ -786,29 +814,10 @@ function extractMcpDirectives(input: string, conversationId: string): McpDirecti
     }
     if (inFence) return line
 
-    const match = trimmed.match(/^\/mcp(?:\s+(.+))?$/i)
-    if (!match) return line
-
-    const pluginInput = (match[1] || '').trim()
-    if (!pluginInput) {
-      missing.push('(empty)')
-      return '<!-- injected: mcp -->'
-    }
-
-    const plugin = findEnabledPluginByInput(pluginInput)
-    if (!plugin) {
-      missing.push(pluginInput)
-      return '<!-- injected: mcp -->'
-    }
-
-    if (!pluginHasMcp(plugin)) {
-      missing.push(pluginInput)
-      return '<!-- injected: mcp -->'
-    }
-
-    enablePluginMcp(conversationId, plugin.fullName)
-    enabled.push(plugin.fullName)
-    return '<!-- injected: mcp -->'
+    const result = processMcpLine(line, conversationId, true)
+    if (result.enabled) enabled.push(result.enabled)
+    if (result.missing) missing.push(result.missing)
+    return result.text
   })
 
   return { text: outLines.join('\n'), enabled, missing }
@@ -825,10 +834,7 @@ function stripMcpDirectives(input: string): McpDirectiveResult {
       return line
     }
     if (inFence) return line
-    if (trimmed.match(/^\/mcp(?:\s+(.+))?$/i)) {
-      return '<!-- injected: mcp -->'
-    }
-    return line
+    return processMcpLine(line, null, false).text
   })
 
   return {
@@ -1008,11 +1014,9 @@ export async function sendMessage(
   const spaceConfig = getSpaceConfig(workDir)
   const { effectiveLazyLoad: skillsLazyLoad, toolkit } = getEffectiveSkillsLazyLoad(workDir, config)
   const exposureFlags = getResourceExposureRuntimeFlags()
-  const policy = getSpaceResourcePolicy(workDir)
-  const strictSpaceOnly = isStrictSpaceOnlyPolicy(policy)
-  const strictBlocksMcpDirective = strictSpaceOnly && policy.allowPluginMcpDirective !== true
+  const allowedDirectiveSources = getExecutionLayerAllowedSources()
 
-  const mcpDirectiveResult = (effectiveMode === 'ask' || strictBlocksMcpDirective)
+  const mcpDirectiveResult = (effectiveMode === 'ask')
     ? stripMcpDirectives(message)
     : (skillsLazyLoad
       ? extractMcpDirectives(message, conversationId)
@@ -1347,9 +1351,9 @@ export async function sendMessage(
     // This provides AI awareness of what user is currently viewing
     const canvasPrefix = formatCanvasContext(canvasContext)
 
-    const expandedMessage = (effectiveMode !== 'ask' && (skillsLazyLoad || strictSpaceOnly))
+    const expandedMessage = (effectiveMode !== 'ask' && skillsLazyLoad)
       ? expandLazyDirectives(messageForSend, workDir, toolkit, {
-        allowSources: getAllowedSources(getSpaceResourcePolicy(workDir)),
+        allowSources: allowedDirectiveSources,
         bypassToolkitAllowlist: true,
         invocationContext: runtimeInvocationContext,
         resourceExposureEnabled: exposureFlags.exposureEnabled,
@@ -1387,7 +1391,7 @@ export async function sendMessage(
           token,
           context: runtimeInvocationContext,
           workDir,
-          sourceCandidates: getAllowedSources(getSpaceResourcePolicy(workDir))
+          sourceCandidates: allowedDirectiveSources
         })
       }
     }
@@ -1401,7 +1405,7 @@ export async function sendMessage(
           token,
           context: runtimeInvocationContext,
           workDir,
-          sourceCandidates: getAllowedSources(getSpaceResourcePolicy(workDir))
+          sourceCandidates: allowedDirectiveSources
         })
       }
     }
@@ -1415,7 +1419,7 @@ export async function sendMessage(
           token,
           context: runtimeInvocationContext,
           workDir,
-          sourceCandidates: getAllowedSources(getSpaceResourcePolicy(workDir))
+          sourceCandidates: allowedDirectiveSources
         })
       }
     }
@@ -2234,107 +2238,82 @@ If the user asks about this project/codebase, inspect files in current workspace
   }
 }
 
+// Stop generation helper functions (extracted to module level)
+function resolvePendingApproval(targetConversationId: string): void {
+  const session = getActiveSession(targetConversationId)
+  if (!session) return
+  if (session.pendingPermissionResolve) {
+    const resolver = session.pendingPermissionResolve
+    session.pendingPermissionResolve = null
+    resolver(false)
+  }
+  clearPendingAskUserQuestions(session, {
+    behavior: 'deny',
+    message: 'AskUserQuestion cancelled because generation stopped.'
+  })
+  finalizeSession({
+    sessionState: session,
+    spaceId: session.spaceId,
+    conversationId: session.conversationId,
+    reason: 'stopped'
+  })
+}
+
+function abortGeneration(targetConversationId: string): void {
+  const session = getActiveSession(targetConversationId)
+  session?.abortController.abort()
+}
+
+async function interruptAndDrain(targetConversationId: string, timeoutMs = 3000): Promise<void> {
+  const v2SessionInfo = getV2SessionInfo(targetConversationId)
+  if (!v2SessionInfo) return
+
+  try {
+    await (v2SessionInfo.session as any).interrupt()
+    console.log(`[Agent] V2 session interrupted, draining stale messages for: ${targetConversationId}`)
+
+    const drainPromise = (async () => {
+      for await (const msg of v2SessionInfo.session.stream()) {
+        touchV2Session(targetConversationId)
+        const drainedType = (msg as { type?: string }).type || 'unknown'
+        console.log(`[Agent] Drained (${targetConversationId}): ${drainedType}`)
+        if (drainedType === 'result') break
+      }
+    })()
+
+    const timeoutPromise = new Promise<void>((resolve) => setTimeout(resolve, timeoutMs))
+    let timedOut = false
+
+    await Promise.race([drainPromise, timeoutPromise.then(() => { timedOut = true })])
+
+    if (timedOut) {
+      console.warn(`[Agent] Drain timeout (${timeoutMs}ms) for conversation: ${targetConversationId}. Continuing cleanup.`)
+    } else {
+      console.log(`[Agent] Drain complete for: ${targetConversationId}`)
+    }
+  } catch (e) {
+    console.error(`[Agent] Failed to interrupt/drain V2 session ${targetConversationId}:`, e)
+  }
+}
+
+function cleanupConversation(targetConversationId: string): void {
+  deleteActiveSession(targetConversationId)
+  clearPendingChangeSet(targetConversationId)
+  console.log(`[Agent] Stopped generation for conversation: ${targetConversationId}`)
+}
+
+async function stopSingleConversation(targetConversationId: string): Promise<void> {
+  try {
+    await interruptAndDrain(targetConversationId)
+  } finally {
+    cleanupConversation(targetConversationId)
+  }
+}
+
 /**
  * Stop generation for a specific conversation
  */
 export async function stopGeneration(conversationId?: string): Promise<void> {
-  function resolvePendingApproval(targetConversationId: string): void {
-    const session = getActiveSession(targetConversationId)
-    if (!session) {
-      return
-    }
-    if (session.pendingPermissionResolve) {
-      const resolver = session.pendingPermissionResolve
-      session.pendingPermissionResolve = null
-      resolver(false)
-    }
-    clearPendingAskUserQuestions(session, {
-      behavior: 'deny',
-      message: 'AskUserQuestion cancelled because generation stopped.'
-    })
-    finalizeSession({
-      sessionState: session,
-      spaceId: session.spaceId,
-      conversationId: session.conversationId,
-      reason: 'stopped'
-    })
-  }
-
-  function abortGeneration(targetConversationId: string): void {
-    const session = getActiveSession(targetConversationId)
-    if (!session) {
-      return
-    }
-    session.abortController.abort()
-  }
-
-  async function interruptAndDrain(
-    targetConversationId: string,
-    timeoutMs: number = 3000
-  ): Promise<void> {
-    const v2SessionInfo = getV2SessionInfo(targetConversationId)
-    if (!v2SessionInfo) {
-      return
-    }
-
-    try {
-      await (v2SessionInfo.session as any).interrupt()
-      console.log(`[Agent] V2 session interrupted, draining stale messages for: ${targetConversationId}`)
-
-      let timedOut = false
-      let timeoutId: NodeJS.Timeout | null = null
-
-      const drainPromise = (async () => {
-        for await (const msg of v2SessionInfo.session.stream()) {
-          touchV2Session(targetConversationId)
-          const drainedMessage = msg as { type?: string }
-          const drainedType = drainedMessage.type || 'unknown'
-          console.log(`[Agent] Drained (${targetConversationId}): ${drainedType}`)
-          if (drainedType === 'result') {
-            break
-          }
-        }
-      })()
-
-      const timeoutPromise = new Promise<void>((resolve) => {
-        timeoutId = setTimeout(() => {
-          timedOut = true
-          resolve()
-        }, timeoutMs)
-      })
-
-      await Promise.race([drainPromise, timeoutPromise])
-
-      if (timeoutId) {
-        clearTimeout(timeoutId)
-      }
-
-      if (timedOut) {
-        console.warn(
-          `[Agent] Drain timeout (${timeoutMs}ms) for conversation: ${targetConversationId}. Continuing cleanup.`
-        )
-      } else {
-        console.log(`[Agent] Drain complete for: ${targetConversationId}`)
-      }
-    } catch (e) {
-      console.error(`[Agent] Failed to interrupt/drain V2 session ${targetConversationId}:`, e)
-    }
-  }
-
-  function cleanupConversation(targetConversationId: string): void {
-    deleteActiveSession(targetConversationId)
-    clearPendingChangeSet(targetConversationId)
-    console.log(`[Agent] Stopped generation for conversation: ${targetConversationId}`)
-  }
-
-  async function stopSingleConversation(targetConversationId: string): Promise<void> {
-    try {
-      await interruptAndDrain(targetConversationId)
-    } finally {
-      cleanupConversation(targetConversationId)
-    }
-  }
-
   if (conversationId) {
     abortGeneration(conversationId)
     resolvePendingApproval(conversationId)
@@ -2355,7 +2334,6 @@ export async function stopGeneration(conversationId?: string): Promise<void> {
 
   // Phase 2: interrupt/drain + cleanup in parallel
   await Promise.allSettled(targetConversations.map(stopSingleConversation))
-
   console.log('[Agent] All generations stopped')
 }
 

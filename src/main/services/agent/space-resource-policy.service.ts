@@ -5,18 +5,31 @@ const EXECUTION_LAYER_ALLOWED_SOURCES: ResourceSource[] = ['app', 'global', 'spa
 
 export const DEFAULT_SPACE_RESOURCE_POLICY: SpaceResourcePolicy = {
   version: 1,
-  mode: 'strict-space-only',
-  allowMcp: false,
-  allowPluginMcpDirective: false,
-  allowedSources: ['space']
+  mode: 'legacy',
+  allowMcp: true,
+  allowPluginMcpDirective: true,
+  allowedSources: [...EXECUTION_LAYER_ALLOWED_SOURCES]
+}
+
+function normalizeAllowedSources(sources?: ResourceSource[]): ResourceSource[] {
+  if (!Array.isArray(sources) || sources.length === 0) {
+    return [...EXECUTION_LAYER_ALLOWED_SOURCES]
+  }
+  const normalized = sources.filter((source): source is ResourceSource => (
+    EXECUTION_LAYER_ALLOWED_SOURCES.includes(source)
+  ))
+  return normalized.length > 0 ? normalized : [...EXECUTION_LAYER_ALLOWED_SOURCES]
 }
 
 export function getSpaceResourcePolicy(workDir: string): SpaceResourcePolicy {
   const config = getSpaceConfig(workDir)
-  return {
+  const merged = {
     ...DEFAULT_SPACE_RESOURCE_POLICY,
-    ...(config?.resourcePolicy || {}),
-    allowedSources: ['space']
+    ...(config?.resourcePolicy || {})
+  }
+  return {
+    ...merged,
+    allowedSources: normalizeAllowedSources(merged.allowedSources as ResourceSource[] | undefined)
   }
 }
 
@@ -32,33 +45,36 @@ export function ensureSpaceResourcePolicy(workDir: string): SpaceResourcePolicy 
       ...DEFAULT_SPACE_RESOURCE_POLICY,
       ...(config.resourcePolicy || {}),
       version: DEFAULT_SPACE_RESOURCE_POLICY.version,
-      mode: config.resourcePolicy?.mode === 'legacy' ? 'legacy' : 'strict-space-only',
-      allowedSources: ['space']
+      mode: config.resourcePolicy?.mode === 'legacy' ? 'legacy' : DEFAULT_SPACE_RESOURCE_POLICY.mode,
+      allowedSources: normalizeAllowedSources(config.resourcePolicy?.allowedSources as ResourceSource[] | undefined)
     }
   }))
 
-  return {
+  const merged = {
     ...DEFAULT_SPACE_RESOURCE_POLICY,
-    ...(updated?.resourcePolicy || {}),
-    allowedSources: ['space']
+    ...(updated?.resourcePolicy || {})
+  }
+  return {
+    ...merged,
+    allowedSources: normalizeAllowedSources(merged.allowedSources as ResourceSource[] | undefined)
   }
 }
 
 export function isStrictSpaceOnlyPolicy(policy: SpaceResourcePolicy): boolean {
-  return policy.mode === 'strict-space-only'
+  void policy
+  return false
 }
 
 export function isSourceAllowed(policy: SpaceResourcePolicy, source?: string): boolean {
   if (!source) return false
-  if (!isStrictSpaceOnlyPolicy(policy)) return true
-  return toExecutionScope(source) === 'space-local'
+  const scope = toExecutionScope(source)
+  if (!scope) return false
+  const allowedSources = normalizeAllowedSources(policy.allowedSources as ResourceSource[] | undefined)
+  return allowedSources.includes(source as ResourceSource)
 }
 
 export function getAllowedSources(policy: SpaceResourcePolicy): ResourceSource[] {
-  if (!isStrictSpaceOnlyPolicy(policy)) {
-    return [...EXECUTION_LAYER_ALLOWED_SOURCES]
-  }
-  return ['space']
+  return normalizeAllowedSources(policy.allowedSources as ResourceSource[] | undefined)
 }
 
 /**

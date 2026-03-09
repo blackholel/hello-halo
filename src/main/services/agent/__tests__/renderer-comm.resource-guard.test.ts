@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../config.service', () => ({
   getConfig: vi.fn(() => ({
@@ -17,14 +17,12 @@ vi.mock('../../../http/websocket', () => ({
   broadcastToWebSocket: vi.fn()
 }))
 
-let policyMode: 'strict-space-only' | 'legacy' = 'strict-space-only'
-
 vi.mock('../space-resource-policy.service', () => ({
   getSpaceResourcePolicy: vi.fn(() => ({
     version: 1,
-    mode: policyMode
+    mode: 'strict-space-only'
   })),
-  isStrictSpaceOnlyPolicy: vi.fn((policy: { mode: string }) => policy.mode === 'strict-space-only')
+  isStrictSpaceOnlyPolicy: vi.fn(() => false)
 }))
 
 import { createCanUseTool } from '../renderer-comm'
@@ -59,11 +57,7 @@ function createDynamicModeHandler(getMode: () => 'code' | 'ask') {
 }
 
 describe('renderer-comm resource-dir guard', () => {
-  beforeEach(() => {
-    policyMode = 'strict-space-only'
-  })
-
-  it('denies Write on protected skill directory', async () => {
+  it('allows Write on protected skill directory', async () => {
     const canUseTool = createHandler()
     const result = await canUseTool(
       'Write',
@@ -71,11 +65,10 @@ describe('renderer-comm resource-dir guard', () => {
       { signal: new AbortController().signal }
     )
 
-    expect(result.behavior).toBe('deny')
-    expect(result.message).toContain('.claude skills/agents/commands')
+    expect(result.behavior).toBe('allow')
   })
 
-  it('denies Edit on protected agent directory', async () => {
+  it('allows Edit on protected agent directory', async () => {
     const canUseTool = createHandler()
     const result = await canUseTool(
       'Edit',
@@ -83,11 +76,10 @@ describe('renderer-comm resource-dir guard', () => {
       { signal: new AbortController().signal }
     )
 
-    expect(result.behavior).toBe('deny')
-    expect(result.message).toContain('.claude skills/agents/commands')
+    expect(result.behavior).toBe('allow')
   })
 
-  it('denies Bash touching protected command directory', async () => {
+  it('allows Bash touching protected command directory', async () => {
     const canUseTool = createHandler()
     const result = await canUseTool(
       'Bash',
@@ -95,8 +87,7 @@ describe('renderer-comm resource-dir guard', () => {
       { signal: new AbortController().signal }
     )
 
-    expect(result.behavior).toBe('deny')
-    expect(result.message).toContain('Bash cannot modify')
+    expect(result.behavior).toBe('allow')
   })
 
   it('allows Bash when command does not touch protected directories', async () => {
@@ -110,16 +101,16 @@ describe('renderer-comm resource-dir guard', () => {
     expect(result.behavior).toBe('allow')
   })
 
-  it('allows Write on protected directory when policy is legacy', async () => {
-    policyMode = 'legacy'
+  it('denies Write outside current workDir', async () => {
     const canUseTool = createHandler()
     const result = await canUseTool(
       'Write',
-      { file_path: '.claude/skills/demo/SKILL.md' },
+      { file_path: '../other-workspace/README.md' },
       { signal: new AbortController().signal }
     )
 
-    expect(result.behavior).toBe('allow')
+    expect(result.behavior).toBe('deny')
+    expect(result.message).toContain('current space')
   })
 
   it('ask mode denies all tools', async () => {

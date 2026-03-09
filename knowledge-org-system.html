@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>知识库整理方案</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
+    <style>
+        /* ===========================================
+           VIEWPORT FITTING: MANDATORY BASE STYLES
+           =========================================== */
+
+        html, body {
+            height: 100%;
+            overflow-x: hidden;
+        }
+
+        html {
+            scroll-snap-type: y mandatory;
+            scroll-behavior: smooth;
+        }
+
+        .slide {
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
+            scroll-snap-align: start;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .slide-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            max-height: 100%;
+            overflow: hidden;
+            padding: var(--slide-padding);
+        }
+
+        :root {
+            --title-size: clamp(1.5rem, 5vw, 4rem);
+            --h2-size: clamp(1.25rem, 3.5vw, 2.5rem);
+            --h3-size: clamp(1rem, 2.5vw, 1.75rem);
+            --body-size: clamp(0.75rem, 1.5vw, 1.125rem);
+            --small-size: clamp(0.65rem, 1vw, 0.875rem);
+
+            --slide-padding: clamp(1rem, 4vw, 4rem);
+            --content-gap: clamp(0.5rem, 2vw, 2rem);
+            --element-gap: clamp(0.25rem, 1vw, 1rem);
+        }
+
+        /* ===========================================
+           PAPER & INK PRESET
+           =========================================== */
+
+        :root {
+            --bg-cream: #f8f5f0;
+            --bg-warm: #f0ebe3;
+            --text-charcoal: #2d2d2d;
+            --text-muted: #5a5a5a;
+            --accent-crimson: #9e1b32;
+            --accent-gold: #b8860b;
+            --rule-color: #d4cfc7;
+        }
+
+        body {
+            margin: 0;
+            font-family: 'Source Serif 4', serif;
+            background: var(--bg-cream);
+            color: var(--text-charcoal);
+        }
+
+        .slide {
+            background: var(--bg-cream);
+        }
+
+        /* Warm atmospheric gradient */
+        .slide::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(ellipse at 10% 90%, rgba(158, 27, 50, 0.04) 0%, transparent 40%),
+                radial-gradient(ellipse at 90% 10%, rgba(184, 134, 11, 0.05) 0%, transparent 40%);
+            pointer-events: none;
+        }
+
+        h1, h2, h3 {
+            font-family: 'Cormorant Garamond', serif;
+            font-weight: 400;
+            line-height: 1.15;
+            margin: 0;
+            color: var(--text-charcoal);
+        }
+
+        h1 { font-size: var(--title-size); font-style: italic; }
+        h2 { font-size: var(--h2-size); }
+        h3 { font-size: var(--h3-size); }
+
+        .subtitle {
+            font-family: 'Source Serif 4', serif;
+            font-size: var(--body-size);
+            color: var(--text-muted);
+            line-height: 1.7;
+        }
+
+        .intro {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            color: var(--accent-crimson);
+            margin-bottom: 0.5rem;
+        }
+
+        /* Divider */
+        .divider {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin: var(--content-gap) 0;
+        }
+
+        .divider::before,
+        .divider::after {
+            content: '';
+            width: 60px;
+            height: 1px;
+            background: var(--accent-crimson);
+        }
+
+        .divider-icon {
+            color: var(--accent-crimson);
+            font-size: 1rem;
+        }
+
+        /* Slide number */
+        .slide-number {
+            position: absolute;
+            bottom: 2rem;
+            right: var(--slide-padding);
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 0.85rem;
+            letter-spacing: 0.15em;
+            color: var(--accent-gold);
+        }
+
+        /* Centered content */
+        .slide-content.center {
+            align-items: center;
+            text-align: center;
+        }
+
+        /* Left aligned */
+        .slide-content.left {
+            align-items: flex-start;
+        }
+
+        /* Bullet list */
+        ul {
+            margin: 0;
+            padding-left: 1.2rem;
+        }
+
+        li {
+            font-size: var(--body-size);
+            line-height: 1.6;
+            margin-bottom: 0.6rem;
+            color: var(--text-muted);
+        }
+
+        li::marker {
+            color: var(--accent-crimson);
+        }
+
+        /* Table styles */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: var(--body-size);
+            margin: var(--content-gap) 0;
+        }
+
+        th, td {
+            padding: 0.8rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--rule-color);
+        }
+
+        th {
+            font-family: 'Cormorant Garamond', serif;
+            font-weight: 600;
+            font-size: var(--h3-size);
+            color: var(--text-charcoal);
+            border-bottom: 2px solid var(--accent-crimson);
+        }
+
+        td {
+            color: var(--text-muted);
+        }
+
+        /* Code/block */
+        pre {
+            background: var(--bg-warm);
+            padding: 1rem;
+            border-radius: 4px;
+            font-size: var(--small-size);
+            overflow-x: auto;
+            border-left: 3px solid var(--accent-crimson);
+        }
+
+        code {
+            font-family: 'Source Serif 4', serif;
+        }
+
+        /* Two column layout */
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            width: 100%;
+        }
+
+        .col h3 {
+            margin-bottom: 0.8rem;
+            color: var(--accent-crimson);
+        }
+
+        /* Card */
+        .card {
+            background: var(--bg-warm);
+            padding: 1.5rem;
+            border-radius: 4px;
+            border: 1px solid var(--rule-color);
+        }
+
+        .card h4 {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: var(--h3-size);
+            margin: 0 0 0.8rem 0;
+            color: var(--text-charcoal);
+        }
+
+        /* Flow diagram */
+        .flow {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin: 1rem 0;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .flow-step {
+            background: var(--bg-warm);
+            padding: 0.8rem 1.2rem;
+            border-radius: 4px;
+            font-size: var(--body-size);
+            border: 1px solid var(--rule-color);
+        }
+
+        .flow-arrow {
+            color: var(--accent-crimson);
+            font-size: 1.2rem;
+        }
+
+        /* Navigation dots */
+        .nav-dots {
+            position: absolute;
+            right: 2rem;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .nav-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--rule-color);
+            transition: background 0.3s;
+        }
+
+        .nav-dot.active {
+            background: var(--accent-crimson);
+        }
+
+        @media (max-width: 600px) {
+            .two-col {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                transition-duration: 0.2s !important;
+            }
+            html {
+                scroll-behavior: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Slide 1: Cover -->
+    <section class="slide">
+        <div class="slide-content center">
+            <p class="intro">方法论</p>
+            <h1>知识库整理方案</h1>
+            <div class="divider">
+                <span class="divider-icon">❧</span>
+            </div>
+            <p class="subtitle">从混乱到有序，构建个人知识管理系统。解决重复目录、层级过深、缺少收集入口等常见问题，让你的第二大脑更加高效。</p>
+        </div>
+        <div class="slide-number">I</div>
+    </section>
+
+    <!-- Slide 2: Current Problems -->
+    <section class="slide">
+        <div class="slide-content left">
+            <p class="intro">当前问题</p>
+            <h2>我们需要解决什么问题？</h2>
+            <div class="divider"><span class="divider-icon">❧</span></div>
+
+            <ul>
+                <li><strong>重复目录严重</strong> — 「AI信息整合」出现在多处，「出海」「提示词」「Agent」等内容分散在 3-5 个地方</li>
+                <li><strong>层级过深</strong> — 有些目录达到 5-6 层，找东西困难</li>
+                <li><strong>缺少统一入口</strong> — 没有 Inbox，收集的内容不知道放哪里</li>
+                <li><strong>缺少归档机制</strong> — 旧内容和新内容混在一起</li>
+            </ul>
+        </div>
+        <div class="slide-number">II</div>
+    </section>
+
+    <!-- Slide 3: New Structure -->
+    <section class="slide">
+        <div class="slide-content left">
+            <p class="intro">解决方案</p>
+            <h2>新目录结构</h2>
+            <div class="divider"><span class="divider-icon">❧</span></div>
+
+            <ul>
+                <li><strong>00-Inbox/</strong> — 所有新收集的内容先放这里</li>
+                <li><strong>01-Projects/</strong> — 当前活跃的项目（工作+个人）</li>
+                <li><strong>02-Areas/</strong> — 持续关注的领域（AI编程、出海、写作...）</li>
+                <li><strong>03-Resources/</strong> — 参考资料（提示词库、工具收集）</li>
+                <li><strong>04-Archive/</strong> — 已完成/不再活跃的内容</li>
+            </ul>
+        </div>
+        <div class="slide-number">III</div>
+    </section>
+
+    <!-- Slide 4: Core Improvements -->
+    <section class="slide">
+        <div class="slide-content left">
+            <p class="intro">核心改进</p>
+            <h2>问题与解决方案对照</h2>
+            <div class="divider"><span class="divider-icon">❧</span></div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>问题</th>
+                        <th>解决方案</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>收集没地方放</td>
+                        <td>00-Inbox 统一入口，定期整理</td>
+                    </tr>
+                    <tr>
+                        <td>找不到常用项目</td>
+                        <td>01-Projects 只放当前活跃的，扁平化</td>
+                    </tr>
+                    <tr>
+                        <td>重复目录</td>
+                        <td>按主题合并到 02-Areas</td>
+                    </tr>
+                    <tr>
+                        <td>层级太深</td>
+                        <td>最多 3 层，用标签补充分类</td>
+                    </tr>
+                    <tr>
+                        <td>旧内容堆积</td>
+                        <td>04-Archive 归档不活跃内容</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="slide-number">IV</div>
+    </section>
+
+    <!-- Slide 5: Projects vs Areas -->
+    <section class="slide">
+        <div class="slide-content left">
+            <p class="intro">概念澄清</p>
+            <h2>Projects vs Areas</h2>
+            <div class="divider"><span class="divider-icon">❧</span></div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>Projects</th>
+                        <th>Areas</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>特点</strong></td>
+                        <td>有明确目标和终点</td>
+                        <td>持续维护，无终点</td>
+                    </tr>
+                    <tr>
+                        <td><strong>例子</strong></td>
+                        <td>「做一个出海网站」</td>
+                        <td>「出海」这个领域的知识</td>
+                    </tr>
+                    <tr>
+                        <td><strong>完成后</strong></td>
+                        <td>归档到 Archive</td>
+                        <td>一直保留</td>
+                    </tr>
+                    <tr>
+                        <td><strong>内容</strong></td>
+                        <td>项目文档、代码笔记、进度</td>
+                        <td>学习笔记、收集的资料</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="slide-number">V</div>
+    </section>
+
+    <!-- Slide 6: Areas Structure -->
+    <section class="slide">
+        <div class="slide-content left">
+            <p class="intro">Areas 内部结构</p>
+            <h2>每个领域的统一组织</h2>
+            <div class="divider"><span class="divider-icon">❧</span></div>
+
+            <div class="two-col">
+                <div class="col">
+                    <h3>目录结构</h3>
+                    <ul>
+                        <li><strong>_Index.md</strong> — 导航页</li>
+                        <li><strong>学习笔记/</strong> — 自己的理解和总结</li>
+                        <li><strong>收集/</strong> — 从外部收集的文章</li>
+                        <li><strong>实践记录/</strong> — 动手做的记录</li>
+                    </ul>
+                </div>
+                <div class="col">
+                    <h3>当前 Areas</h3>
+                    <ul>
+                        <li>AI编程</li>
+                        <li>大模型</li>
+                        <li>出海</li>
+                        <li>写作</li>
+                        <li>工作-智询通</li>
+                        <li>个人成长</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div class="slide-number">VI</div>
+    </section>
+
+    <!-- Slide 7: Workflow -->
+    <section class="slide">
+        <div class="slide-content left">
+            <p class="intro">日常工作流</p>
+            <h2>收集流程</h2>
+            <div class="divider"><span class="divider-icon">❧</span></div>
+
+            <div class="flow">
+                <span class="flow-step">1. 看到好内容</span>
+                <span class="flow-arrow">→</span>
+                <span class="flow-step">2. 放入 Inbox</span>
+                <span class="flow-arrow">→</span>
+                <span class="flow-step">3. 每周整理</span>
+                <span class="flow-arrow">→</span>
+                <span class="flow-step">4. 分类到 Area</span>
+            </div>
+
+            <ul style="margin-top: 2rem;">
+                <li><strong>Inbox</strong>: 每周清理一次，把内容分类到对应位置</li>
+                <li><strong>Projects</strong>: 项目完成后移到 Archive</li>
+                <li><strong>Areas</strong>: 持续积累，定期更新 _Index.md</li>
+                <li><strong>Archive</strong>: 不常动，需要时再翻</li>
+            </ul>
+        </div>
+        <div class="slide-number">VII</div>
+    </section>
+
+    <!-- Slide 8: Index Page -->
+    <section class="slide">
+        <div class="slide-content left">
+            <p class="intro">导航页</p>
+            <h2>_Index.md 使用说明</h2>
+            <div class="divider"><span class="divider-icon">❧</span></div>
+
+            <div class="two-col">
+                <div class="col">
+                    <h3>作用</h3>
+                    <ul>
+                        <li>每个领域的「入口」和「目录」</li>
+                        <li>Ctrl+O 快速跳转</li>
+                        <li>维护重要笔记链接</li>
+                    </ul>
+                </div>
+                <div class="col">
+                    <h3>为什么用 _ 开头</h3>
+                    <ul>
+                        <li>文件名以 _ 开头</li>
+                        <li>会排在文件列表最前面</li>
+                        <li>方便快速找到</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top: 1.5rem;">
+                <h4>快速入口示例</h4>
+                <p class="subtitle">输入「AI编程 Index」即可跳转到对应导航页</p>
+            </div>
+        </div>
+        <div class="slide-number">VIII</div>
+    </section>
+
+    <!-- Slide 9: Migration Plan -->
+    <section class="slide">
+        <div class="slide-content left">
+            <p class="intro">迁移计划</p>
+            <h2>三步走策略</h2>
+            <div class="divider"><span class="divider-icon">❧</span></div>
+
+            <ul>
+                <li><strong>第一步：先用新结构</strong> — 新内容直接放到新目录，熟悉工作流</li>
+                <li><strong>第二步：逐步迁移旧内容</strong> — 按领域把旧目录的内容移到对应的 Area</li>
+                <li><strong>第三步：归档旧目录</strong> — 迁移完成后，把旧的顶级目录整体移到 04-Archive</li>
+            </ul>
+
+            <div class="card" style="margin-top: 1.5rem;">
+                <h4>注意事项</h4>
+                <p class="subtitle">不要一次性迁移所有内容，容易乱。先用起来再调整。</p>
+            </div>
+        </div>
+        <div class="slide-number">IX</div>
+    </section>
+
+    <!-- Slide 10: Thank You -->
+    <section class="slide">
+        <div class="slide-content center">
+            <h1>开始行动</h1>
+            <div class="divider">
+                <span class="divider-icon">❧</span>
+            </div>
+            <p class="subtitle">从今天起，让你的知识库变得有序<br>让知识真正成为你的力量</p>
+        </div>
+        <div class="slide-number">X</div>
+    </section>
+
+    <script>
+        // Simple navigation controller
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === ' ') {
+                e.preventDefault();
+                window.scrollBy({ top: window.innerHeight, behavior: 'smooth' });
+            } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+                e.preventDefault();
+                window.scrollBy({ top: -window.innerHeight, behavior: 'smooth' });
+            }
+        });
+
+        // Mouse wheel navigation
+        let lastScroll = Date.now();
+        document.addEventListener('wheel', (e) => {
+            if (Date.now() - lastScroll < 800) return;
+            lastScroll = Date.now();
+            if (e.deltaY > 0) {
+                window.scrollBy({ top: window.innerHeight, behavior: 'smooth' });
+            } else {
+                window.scrollBy({ top: -window.innerHeight, behavior: 'smooth' });
+            }
+        }, { passive: true });
+    </script>
+</body>
+</html>

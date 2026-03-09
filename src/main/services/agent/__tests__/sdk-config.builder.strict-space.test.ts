@@ -113,20 +113,20 @@ function createBuildSdkOptionsParams(workDir: string = '/workspace/project') {
 }
 
 describe('sdk-config.builder strict space-only', () => {
-  it('forces settingSources to local under strict policy', () => {
+  it('does not force settingSources to local under strict policy', () => {
     const sources = buildSettingSources('/workspace/project')
-    expect(sources).toEqual(['local'])
+    expect(sources).toEqual(['user', 'project'])
   })
 
-  it('loads only space plugin directories under strict policy', () => {
+  it('keeps global plugin directories available under strict policy', () => {
     const plugins = buildPluginsConfig('/workspace/project')
     const paths = plugins.map(plugin => plugin.path)
 
+    expect(paths).toContain('/enabled/plugin-a')
+    expect(paths).toContain('/global/plugins')
+    expect(paths).toContain('/home/test/.kite')
     expect(paths).toContain('/workspace/project/.local-plugins')
     expect(paths).toContain('/workspace/project/.claude')
-    expect(paths).not.toContain('/enabled/plugin-a')
-    expect(paths).not.toContain('/home/test/.kite')
-    expect(paths).not.toContain('/global/plugins')
   })
 
   it('falls back to legacy behavior when policy is explicitly legacy', () => {

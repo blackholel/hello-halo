@@ -21,6 +21,7 @@ vi.mock('../space.service', () => ({
 
 import { clearSkillsCache, deleteSkill } from '../skills.service'
 import { clearAgentsCache, deleteAgent } from '../agents.service'
+import { clearCommandsCache, createCommand } from '../commands.service'
 
 function ensureDir(pathValue: string): void {
   mkdirSync(pathValue, { recursive: true })
@@ -35,6 +36,7 @@ describe('resource delete guard', () => {
     mockSpacePaths = []
     clearSkillsCache()
     clearAgentsCache()
+    clearCommandsCache()
   })
 
   function setupWorkspace(name: string): string {
@@ -101,5 +103,16 @@ describe('resource delete guard', () => {
     const deleted = deleteAgent(spaceAgentPath)
     expect(deleted).toBe(true)
     expect(existsSync(spaceAgentPath)).toBe(false)
+  })
+
+  it('createCommand 拒绝非受信任工作目录', () => {
+    const workDir = setupWorkspace('command-allow')
+    mockSpacePaths = [workDir]
+
+    const outsiderDir = setupWorkspace('command-reject')
+    expect(() => createCommand(outsiderDir, 'lint', '# lint\n')).toThrow(
+      `workDir is not an allowed workspace path: ${outsiderDir}`
+    )
+    expect(existsSync(join(outsiderDir, '.claude', 'commands', 'lint.md'))).toBe(false)
   })
 })

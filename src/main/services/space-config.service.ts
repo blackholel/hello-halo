@@ -10,6 +10,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import type { HooksConfig, ClaudeCodeConfig } from './config.service'
 import { mergeHooksConfigs } from './hooks.service'
 import { FileCache } from '../utils/file-cache'
+import type { ResourceSource } from './resource-ref.service'
 
 // ============================================
 // Space Configuration Types
@@ -50,7 +51,7 @@ export interface SpaceResourcePolicy {
   allowHooks?: boolean
   allowMcp?: boolean
   allowPluginMcpDirective?: boolean
-  allowedSources?: Array<'space'>
+  allowedSources?: ResourceSource[]
 }
 
 export interface SpaceToolkit {

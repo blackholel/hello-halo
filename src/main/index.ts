@@ -44,16 +44,13 @@ if (process.platform === 'win32') {
   app.commandLine.appendSwitch('disable-gpu')
 }
 
-// Single instance lock: Prevent multiple instances of the application
-// Must be called before app.whenReady()
-// Now works correctly because different instances have different userData paths
+// Single instance lock: best-effort only.
+// We no longer enforce single-instance hard-exit because runtime may intentionally
+// share global config/runtime across multiple launches.
 const gotTheLock = app.requestSingleInstanceLock()
 
 if (!gotTheLock) {
-  // Another instance is already running, exit immediately
-  // Use app.exit() instead of app.quit() to terminate synchronously
-  // This prevents any further initialization code from executing
-  app.exit(0)
+  console.warn('[Main] Single-instance lock not acquired; continuing startup.')
 }
 
 // Handle second-instance event (when user tries to launch another instance)

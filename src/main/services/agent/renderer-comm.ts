@@ -7,16 +7,11 @@
 
 import { BrowserWindow } from 'electron'
 import { createHash } from 'crypto'
-import { resolve } from 'path'
+import { resolve, sep } from 'path'
 import { broadcastToWebSocket } from '../../http/websocket'
 import { getConfig } from '../config.service'
 import { isAIBrowserTool } from '../ai-browser'
-import {
-  extractToolPath,
-  isBashCommandTouchingProtectedResourceDir,
-  isPathInProtectedResourceDir
-} from './resource-dir-guard.service'
-import { getSpaceResourcePolicy, isStrictSpaceOnlyPolicy } from './space-resource-policy.service'
+import { extractToolPath } from './resource-dir-guard.service'
 import { ASK_USER_QUESTION_ERROR_CODES } from './types'
 import type {
   ToolCall,
@@ -543,7 +538,6 @@ export function createCanUseTool(
 ) => Promise<CanUseToolDecision> {
   const config = getConfig()
   const absoluteWorkDir = resolve(workDir)
-
   console.log(`[Agent] Creating canUseTool with workDir: ${absoluteWorkDir}`)
 
   return async (
@@ -580,7 +574,6 @@ export function createCanUseTool(
       `[Agent] canUseTool called - Tool: ${toolName}, Input:`,
       JSON.stringify(input).substring(0, 200)
     )
-    const strictSpaceOnly = isStrictSpaceOnlyPolicy(getSpaceResourcePolicy(workDir))
 
     if (toolName === 'AskUserQuestion') {
       // Wait for user response using session-specific resolver.
@@ -648,16 +641,16 @@ export function createCanUseTool(
       })
     }
 
-    // Check file path tools - restrict to working directory
-    const fileTools = ['Read', 'Write', 'Edit', 'Grep', 'Glob']
-    if (fileTools.includes(toolName)) {
+    const fileTools = new Set(['Read', 'Write', 'Edit', 'Grep', 'Glob'])
+    if (fileTools.has(toolName)) {
       const pathParam = extractToolPath(input)
-
       if (pathParam) {
         const absolutePath = resolve(absoluteWorkDir, pathParam)
-        const sep = require('path').sep
+        const normalizedWorkDir = process.platform === 'win32' ? absoluteWorkDir.toLowerCase() : absoluteWorkDir
+        const normalizedPath = process.platform === 'win32' ? absolutePath.toLowerCase() : absolutePath
         const isWithinWorkDir =
-          absolutePath.startsWith(absoluteWorkDir + sep) || absolutePath === absoluteWorkDir
+          normalizedPath === normalizedWorkDir
+          || normalizedPath.startsWith(`${normalizedWorkDir}${sep}`)
 
         if (!isWithinWorkDir) {
           console.log(`[Agent] Security: Blocked access to: ${pathParam}`)
@@ -666,26 +659,11 @@ export function createCanUseTool(
             message: `Can only access files within the current space: ${workDir}`
           }
         }
-
-        if (strictSpaceOnly && (toolName === 'Write' || toolName === 'Edit') && isPathInProtectedResourceDir(pathParam, workDir)) {
-          return {
-            behavior: 'deny' as const,
-            message: 'Modifying .claude skills/agents/commands via tools is not allowed in strict space mode'
-          }
-        }
       }
     }
 
     // Check Bash commands based on permission settings
     if (toolName === 'Bash') {
-      const command = typeof input.command === 'string' ? input.command : ''
-      if (strictSpaceOnly && command && isBashCommandTouchingProtectedResourceDir(command)) {
-        return {
-          behavior: 'deny' as const,
-          message: 'Bash cannot modify .claude skills/agents/commands in strict space mode'
-        }
-      }
-
       const permission = config.permissions.commandExecution
 
       if (permission === 'deny') {
