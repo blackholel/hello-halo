@@ -1609,7 +1609,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         role: 'user',
         content,
         timestamp: new Date().toISOString(),
-        images: images
+        images: images,
+        fileContexts
       }
 
       set((state) => {
@@ -2006,7 +2007,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       role: 'user',
       content,
       timestamp: nowIso,
-      images
+      images,
+      fileContexts
     }
 
     try {

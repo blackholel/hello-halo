@@ -419,7 +419,7 @@ export function ArtifactTree({ spaceId }: ArtifactTreeProps) {
           <div className="flex-1 overflow-hidden">
             <Tree
               data={treeData}
-              openByDefault={true}
+              openByDefault={false}
               width="100%"
               height={treeHeight}
               indent={16}

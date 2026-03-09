@@ -37,6 +37,14 @@ vi.mock('../../utils/thought-utils', () => ({
   getThoughtKey: vi.fn().mockReturnValue('k')
 }))
 
+vi.mock('../../../shared/types/ai-profile', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../shared/types/ai-profile')>()
+  return {
+    ...actual,
+    getAiSetupState: vi.fn(() => ({ configured: true, reason: null }))
+  }
+})
+
 import { api } from '../../api'
 import { useChatStore } from '../chat.store'
 
@@ -91,5 +99,75 @@ describe('chat.store responseLanguage request building', () => {
         responseLanguage: 'ja'
       })
     )
+  })
+
+  it('dispatchTurnInternal optimistic user message 保留 fileContexts 元数据', async () => {
+    const spaceId = 'space-file-context'
+    const conversationId = 'conv-file-context'
+    const now = '2026-03-09T00:00:00.000Z'
+    const fileContexts = [
+      {
+        id: 'ctx-1',
+        type: 'file-context' as const,
+        path: '/tmp/project/README.md',
+        name: 'README.md',
+        extension: 'md'
+      }
+    ]
+
+    useChatStore.setState((state) => {
+      const conversationCache = new Map(state.conversationCache)
+      conversationCache.set(conversationId, {
+        id: conversationId,
+        spaceId,
+        title: 'File Context Conversation',
+        createdAt: now,
+        updatedAt: now,
+        messageCount: 0,
+        messages: []
+      })
+
+      const spaceStates = new Map(state.spaceStates)
+      spaceStates.set(spaceId, {
+        conversations: [
+          {
+            id: conversationId,
+            spaceId,
+            title: 'File Context Conversation',
+            createdAt: now,
+            updatedAt: now,
+            messageCount: 0
+          }
+        ],
+        currentConversationId: conversationId
+      })
+
+      return {
+        conversationCache,
+        spaceStates
+      }
+    })
+
+    const result = await useChatStore.getState().dispatchTurnInternal({
+      id: 'turn-file-context',
+      spaceId,
+      conversationId,
+      content: '请基于附件文件回答',
+      fileContexts,
+      thinkingEnabled: false,
+      mode: 'code',
+      aiBrowserEnabled: false,
+      createdAt: Date.now(),
+      invocationContext: 'interactive'
+    })
+
+    expect(result.accepted).toBe(true)
+    const cachedConversation = useChatStore.getState().getCachedConversation(conversationId)
+    const userMessage = cachedConversation?.messages.find((msg) => msg.role === 'user')
+
+    expect(userMessage).toMatchObject({
+      content: '请基于附件文件回答',
+      fileContexts
+    })
   })
 })

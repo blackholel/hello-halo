@@ -21,6 +21,7 @@ import { MarkdownRenderer } from './MarkdownRenderer'
 import { MessageImages } from './ImageAttachmentPreview'
 import { TokenUsageIndicator } from './TokenUsageIndicator'
 import { PlanCard } from './PlanCard'
+import { FileIcon } from '../icons/ToolIcons'
 import type { Message } from '../../types'
 import { useTranslation } from '../../i18n'
 import {
@@ -62,6 +63,7 @@ export const MessageItem = memo(function MessageItem({
   const isStreaming = (message as any).isStreaming
   const [copied, setCopied] = useState(false)
   const { t } = useTranslation()
+  const userFileContexts = isUser ? (message.fileContexts || []) : []
   const parsedUserMessage = useMemo(() => {
     if (!isUser || !message.content) return null
     return parseComposerMessageForDisplay(
@@ -104,6 +106,22 @@ export const MessageItem = memo(function MessageItem({
       {/* User message images (displayed before text) */}
       {isUser && message.images && message.images.length > 0 && (
         <MessageImages images={message.images} />
+      )}
+
+      {/* User file contexts (read-only chips, shown after send for context awareness) */}
+      {userFileContexts.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {userFileContexts.map((file) => (
+            <div
+              key={file.id}
+              className="flex items-center gap-1.5 pl-2 pr-2 py-1 bg-secondary/50 rounded-lg border border-border/50 text-xs"
+              title={file.path}
+            >
+              <FileIcon extension={file.extension} size={14} />
+              <span className="max-w-[180px] truncate text-foreground/80">{file.name}</span>
+            </div>
+          ))}
+        </div>
       )}
 
       {/* Message content with streaming cursor */}

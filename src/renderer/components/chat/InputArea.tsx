@@ -19,7 +19,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback, useMemo, KeyboardEvent, ClipboardEvent, DragEvent } from 'react'
-import { Plus, ImagePlus, Loader2, AlertCircle, Atom, Globe, ClipboardList, X, Bot, Zap, Terminal, Trash2, Pencil } from 'lucide-react'
+import { Plus, ImagePlus, Loader2, AlertCircle, Atom, Globe, ClipboardList, X, Bot, Zap, Terminal, Trash2, Pencil, FileText } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useOnboardingStore } from '../../stores/onboarding.store'
 import { useAIBrowserStore } from '../../stores/ai-browser.store'
@@ -140,6 +140,7 @@ export function InputArea({
   const [images, setImages] = useState<ImageAttachment[]>([])
   const [fileContexts, setFileContexts] = useState<FileContextAttachment[]>([])
   const [isDragOver, setIsDragOver] = useState(false)
+  const [dragOverlayKind, setDragOverlayKind] = useState<'images' | 'file-context'>('images')
   const [isProcessingImages, setIsProcessingImages] = useState(false)
   const [imageError, setImageError] = useState<ImageError | null>(null)
   const [triggerContext, setTriggerContext] = useState<TriggerContext | null>(null)
@@ -534,6 +535,8 @@ export function InputArea({
     e.preventDefault()
     e.stopPropagation()
     e.dataTransfer.dropEffect = 'copy'
+    const hasKiteFileType = Array.from(e.dataTransfer.types || []).includes('application/x-kite-file')
+    setDragOverlayKind(hasKiteFileType ? 'file-context' : 'images')
     if (!isDragOver) {
       setIsDragOver(true)
     }
@@ -542,11 +545,13 @@ export function InputArea({
   const handleDragLeave = (e: DragEvent) => {
     e.preventDefault()
     setIsDragOver(false)
+    setDragOverlayKind('images')
   }
 
   const handleDrop = async (e: DragEvent) => {
     e.preventDefault()
     setIsDragOver(false)
+    setDragOverlayKind('images')
 
     // Check for file context from file tree drag
     const kiteFileData = e.dataTransfer.getData('application/x-kite-file')
@@ -1074,8 +1079,16 @@ export function InputArea({
               bg-card/95 rounded-2xl border-2 border-dashed border-border
               pointer-events-none z-10">
               <div className="flex flex-col items-center gap-2 text-foreground/70">
-                <ImagePlus size={24} />
-                <span className="text-sm font-medium">{t('Drop to add images')}</span>
+                {dragOverlayKind === 'file-context' ? (
+                  <FileText size={24} />
+                ) : (
+                  <ImagePlus size={24} />
+                )}
+                <span className="text-sm font-medium">
+                  {dragOverlayKind === 'file-context'
+                    ? t('Drop to add file context')
+                    : t('Drop to add images')}
+                </span>
               </div>
             </div>
           )}
