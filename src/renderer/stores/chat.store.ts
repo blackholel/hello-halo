@@ -910,11 +910,28 @@ async function ensureConversationLoadedImpl(
     const sessionStatePromise = api.getSessionState(spaceId, conversationId)
     const changeSetsPromise = api.listChangeSets(spaceId, conversationId)
 
-    const [conversationResponse, sessionResponse, changeSetsResponse] = await Promise.all([
+    const [conversationResult, sessionResult, changeSetsResult] = await Promise.allSettled([
       conversationPromise,
       sessionStatePromise,
       changeSetsPromise
     ])
+
+    const conversationResponse =
+      conversationResult.status === 'fulfilled' ? conversationResult.value : null
+    const sessionResponse =
+      sessionResult.status === 'fulfilled' ? sessionResult.value : null
+    const changeSetsResponse =
+      changeSetsResult.status === 'fulfilled' ? changeSetsResult.value : null
+
+    if (conversationResult.status === 'rejected') {
+      console.error('[ChatStore] Failed to load conversation:', conversationResult.reason)
+    }
+    if (sessionResult.status === 'rejected') {
+      console.error('[ChatStore] Failed to load session state:', sessionResult.reason)
+    }
+    if (changeSetsResult.status === 'rejected') {
+      console.error('[ChatStore] Failed to load change sets:', changeSetsResult.reason)
+    }
 
     if (conversationResponse?.success && conversationResponse.data) {
       const fullConversation = conversationResponse.data as Conversation & { mode?: ChatMode }
@@ -944,7 +961,7 @@ async function ensureConversationLoadedImpl(
       })
     }
 
-    if (sessionResponse.success && sessionResponse.data) {
+    if (sessionResponse?.success && sessionResponse.data) {
       const sessionState = sessionResponse.data as {
         isActive: boolean
         thoughts: Thought[]
@@ -995,7 +1012,7 @@ async function ensureConversationLoadedImpl(
       }
     }
 
-    if (changeSetsResponse.success && changeSetsResponse.data) {
+    if (changeSetsResponse?.success && changeSetsResponse.data) {
       const changeSets = changeSetsResponse.data as ChangeSet[]
       set((state) => {
         const newChangeSets = new Map(state.changeSets)
@@ -1730,7 +1747,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         role: 'user',
         content,
         timestamp: new Date().toISOString(),
-        images: images
+        images: images,
+        fileContexts
       }
 
       set((state) => {
@@ -2151,7 +2169,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       role: 'user',
       content,
       timestamp: nowIso,
-      images
+      images,
+      fileContexts
     }
 
     try {
@@ -3602,11 +3621,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Backend has already saved the complete message with thoughts
     try {
       let conversationReloaded = false
-      const [conversationResponse, changeSetsResponse] = await Promise.all([
+      const [conversationResult, changeSetsResult] = await Promise.allSettled([
         api.getConversation(spaceId, conversationId),
         api.listChangeSets(spaceId, conversationId)
       ])
-      if (conversationResponse.success && conversationResponse.data) {
+      const conversationResponse =
+        conversationResult.status === 'fulfilled' ? conversationResult.value : null
+      const changeSetsResponse =
+        changeSetsResult.status === 'fulfilled' ? changeSetsResult.value : null
+
+      if (conversationResult.status === 'rejected') {
+        console.error('[ChatStore] Failed to reload conversation payload:', conversationResult.reason)
+      }
+      if (changeSetsResult.status === 'rejected') {
+        console.error('[ChatStore] Failed to reload change sets payload:', changeSetsResult.reason)
+      }
+
+      if (conversationResponse?.success && conversationResponse.data) {
         conversationReloaded = true
         const updatedConversation = conversationResponse.data as ConversationWithAi & { mode?: ChatMode }
         const updatedConversationMode = normalizeChatMode(updatedConversation.mode)
@@ -3680,7 +3711,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         applyFinalContentFallback(data.finalContent)
       }
 
-      if (changeSetsResponse.success && changeSetsResponse.data) {
+      if (changeSetsResponse?.success && changeSetsResponse.data) {
         const changeSets = changeSetsResponse.data as ChangeSet[]
         set((state) => {
           const newChangeSets = new Map(state.changeSets)

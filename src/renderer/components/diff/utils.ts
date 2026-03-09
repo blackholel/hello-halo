@@ -5,6 +5,7 @@
 
 import type { Thought } from '../../types'
 import type { FileChange, FileChanges, EditChunk } from './types'
+import { calculateLineDiffStats } from '../../../shared/utils/diff-stats'
 
 // Re-export EditChunk for DiffContent
 export type { EditChunk } from './types'
@@ -19,35 +20,10 @@ export function getFileName(path: string): string {
 
 /**
  * Calculate line diff statistics
+ * Uses a real line-based diff instead of heuristic estimation.
  */
 export function calculateDiffStats(oldStr: string, newStr: string): { added: number; removed: number } {
-  const oldLines = oldStr ? oldStr.split('\n') : []
-  const newLines = newStr ? newStr.split('\n') : []
-
-  // Simple line count difference
-  // For more accurate diff, we'd use a proper diff algorithm
-  const added = Math.max(0, newLines.length - oldLines.length + countChangedLines(oldStr, newStr))
-  const removed = Math.max(0, oldLines.length - newLines.length + countChangedLines(oldStr, newStr))
-
-  return {
-    added: Math.max(1, Math.ceil(added / 2)),
-    removed: Math.max(oldStr ? 1 : 0, Math.ceil(removed / 2))
-  }
-}
-
-/**
- * Count significantly changed lines (rough estimate)
- */
-function countChangedLines(oldStr: string, newStr: string): number {
-  if (!oldStr || !newStr) return 0
-  const oldLines = new Set(oldStr.split('\n').map(l => l.trim()).filter(Boolean))
-  const newLines = new Set(newStr.split('\n').map(l => l.trim()).filter(Boolean))
-
-  let changes = 0
-  for (const line of newLines) {
-    if (!oldLines.has(line)) changes++
-  }
-  return changes
+  return calculateLineDiffStats(oldStr || '', newStr || '')
 }
 
 /**
@@ -93,7 +69,7 @@ export function extractFileChanges(thoughts: Thought[]): FileChanges {
           writes.splice(existingIndex, 1)
         }
 
-        const lineCount = content ? content.split('\n').length : 0
+        const lineCount = calculateLineDiffStats('', content || '').added
         writes.push({
           id: thought.id,
           file: filePath,

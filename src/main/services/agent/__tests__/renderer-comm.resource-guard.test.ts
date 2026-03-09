@@ -56,6 +56,16 @@ function createDynamicModeHandler(getMode: () => 'code' | 'ask') {
   )
 }
 
+function createHandlerWithToolObserver(onToolUse: (toolName: string, input: Record<string, unknown>) => void) {
+  return createCanUseTool(
+    '/workspace/project',
+    'space-1',
+    'conversation-1',
+    () => undefined,
+    { onToolUse }
+  )
+}
+
 describe('renderer-comm resource-dir guard', () => {
   it('allows Write on protected skill directory', async () => {
     const canUseTool = createHandler()
@@ -168,5 +178,22 @@ describe('renderer-comm resource-dir guard', () => {
     )
     expect(afterSwitch.behavior).toBe('deny')
     expect(afterSwitch.message).toContain('ASK mode')
+  })
+
+  it('invokes onToolUse callback for allowed mutation tools', async () => {
+    const onToolUse = vi.fn()
+    const canUseTool = createHandlerWithToolObserver(onToolUse)
+
+    const result = await canUseTool(
+      'Write',
+      { file_path: 'src/main.ts', content: 'hello' },
+      { signal: new AbortController().signal }
+    )
+
+    expect(result.behavior).toBe('allow')
+    expect(onToolUse).toHaveBeenCalledWith('Write', {
+      file_path: 'src/main.ts',
+      content: 'hello'
+    })
   })
 })

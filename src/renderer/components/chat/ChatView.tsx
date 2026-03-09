@@ -529,7 +529,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
   const aiSetupState = getAiSetupState(appConfig, conversationProfileId)
   const currentConversationSpaceId = currentSpaceId
   const currentChangeSets = currentConversationId ? (changeSets.get(currentConversationId) || []) : []
-  const activeChangeSet = currentChangeSets[0]
+  const activeChangeSet = currentChangeSets.find((changeSet) => changeSet.status !== 'rolled_back')
 
   // Track previous compact state for smooth transitions
   const prevCompactRef = useRef(isCompact)

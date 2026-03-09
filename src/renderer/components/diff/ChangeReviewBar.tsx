@@ -199,6 +199,7 @@ export function ChangeReviewBar({
                               newString={file.type === 'delete' ? '' : (file.afterContent || '')}
                               content={file.afterContent}
                               fileName={file.fileName}
+                              stats={file.stats}
                             />
                           </div>
 

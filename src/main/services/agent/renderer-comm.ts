@@ -595,7 +595,10 @@ export function createCanUseTool(
   spaceId: string,
   conversationId: string,
   getActiveSession: (spaceId: string, conversationId: string) => SessionState | undefined,
-  options?: { mode?: ChatMode }
+  options?: {
+    mode?: ChatMode
+    onToolUse?: (toolName: string, input: Record<string, unknown>) => void
+  }
 ): (
   toolName: string,
   input: Record<string, unknown>,
@@ -611,6 +614,10 @@ export function createCanUseTool(
     input: Record<string, unknown>,
     _options: { signal: AbortSignal }
   ) => {
+    const notifyToolUse = () => {
+      if (!options?.onToolUse) return
+      options.onToolUse(toolName, input)
+    }
     const runtimeMode = getActiveSession(spaceId, conversationId)?.mode
     const effectiveMode = runtimeMode || options?.mode
     if (effectiveMode === 'ask') {
@@ -764,6 +771,7 @@ export function createCanUseTool(
         return new Promise((resolve) => {
           session.pendingPermissionResolve = (approved: boolean) => {
             if (approved) {
+              notifyToolUse()
               resolve({ behavior: 'allow' as const })
             } else {
               resolve({
@@ -820,6 +828,7 @@ export function createCanUseTool(
     }
 
     // Default: allow
+    notifyToolUse()
     return { behavior: 'allow' as const }
   }
 }

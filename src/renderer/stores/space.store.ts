@@ -58,10 +58,19 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       set({ isLoading: true, error: null })
 
       // Load both Kite space and user spaces in parallel (async-parallel)
-      const [, response] = await Promise.all([
+      const [kiteResult, listResult] = await Promise.allSettled([
         get().loadKiteSpace(),
         api.listSpaces()
       ])
+
+      const response = listResult.status === 'fulfilled' ? listResult.value : { success: false, error: 'Failed to load spaces' }
+
+      if (kiteResult.status === 'rejected') {
+        console.error('[SpaceStore] Failed to load Kite space:', kiteResult.reason)
+      }
+      if (listResult.status === 'rejected') {
+        console.error('[SpaceStore] Failed to list spaces:', listResult.reason)
+      }
 
       if (response.success && response.data) {
         set({ spaces: response.data as Space[] })

@@ -95,17 +95,7 @@ import {
 import { normalizeLocale, type LocaleCode } from '../../../shared/i18n/locale'
 import { buildSessionKey } from '../../../shared/session-key'
 import { assertAiProfileConfigured } from './ai-setup-guard'
-
-function trackChangeFileFromToolUse(
-  spaceId: string,
-  conversationId: string,
-  toolName: string | undefined,
-  toolInput: { file_path?: string } | undefined
-): void {
-  if (toolName === 'Write' || toolName === 'Edit') {
-    trackChangeFile(spaceId, conversationId, toolInput?.file_path)
-  }
-}
+import { trackChangeFileFromToolUse } from './change-tracking'
 
 interface McpDirectiveResult {
   text: string
@@ -1205,7 +1195,16 @@ export async function sendMessage(
       responseLanguage: effectiveResponseLanguage,
       disableToolsForCompat: effectiveAi.disableToolsForCompat,
       canUseTool: createCanUseTool(workDir, spaceId, conversationId, getActiveSession, {
-        mode: effectiveMode
+        mode: effectiveMode,
+        onToolUse: (toolName, input) => {
+          trackChangeFileFromToolUse(
+            spaceId,
+            conversationId,
+            toolName,
+            input,
+            trackChangeFile
+          )
+        }
       }),
       enabledPluginMcps: getEnabledPluginMcpList(conversationId)
     })
@@ -1714,7 +1713,8 @@ If the user asks about this project/codebase, inspect files in current workspace
                 spaceId,
                 conversationId,
                 block.name,
-                block.input as { file_path?: string } | undefined
+                block.input as Record<string, unknown> | undefined,
+                trackChangeFile
               )
             }
           }
@@ -1793,7 +1793,8 @@ If the user asks about this project/codebase, inspect files in current workspace
               spaceId,
               conversationId,
               normalizedThought.toolName,
-              normalizedThought.toolInput as { file_path?: string } | undefined
+              normalizedThought.toolInput as Record<string, unknown> | undefined,
+              trackChangeFile
             )
             const toolCallId = normalizedThought.id
             const isAskUserQuestion = isAskUserQuestionTool(normalizedThought.toolName)
