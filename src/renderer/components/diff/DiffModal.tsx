@@ -251,6 +251,7 @@ export function DiffModal({
             content={file.content}
             fileName={file.fileName}
             editChunks={file.editChunks}
+            stats={file.stats}
           />
         </div>
 

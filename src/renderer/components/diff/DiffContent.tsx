@@ -11,9 +11,10 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import ReactDiffViewer, { DiffMethod } from 'react-diff-viewer-continued'
-import { ChevronDown, Columns2, AlignJustify } from 'lucide-react'
+import { Columns2, AlignJustify } from 'lucide-react'
 import type { EditChunk } from './utils'
 import { useTranslation } from '../../i18n'
+import { calculateLineDiffStats } from '../../../shared/utils/diff-stats'
 
 interface DiffContentProps {
   type: 'edit' | 'write'
@@ -22,6 +23,7 @@ interface DiffContentProps {
   content?: string  // For write type
   fileName?: string // For syntax detection
   editChunks?: EditChunk[]  // Multiple edit chunks for same file
+  stats?: { added: number; removed: number }
 }
 
 // Custom styles for the diff viewer to match Kite's dark theme
@@ -148,7 +150,8 @@ export function DiffContent({
   newString,
   content,
   fileName,
-  editChunks
+  editChunks,
+  stats: providedStats
 }: DiffContentProps) {
   const [splitView, setSplitView] = useState(false)
   const [isDark, setIsDark] = useState(() =>
@@ -175,20 +178,9 @@ export function DiffContent({
 
   // Calculate stats
   const stats = useMemo(() => {
-    if (type === 'write') {
-      const lines = (content || '').split('\n').length
-      return { added: lines, removed: 0 }
-    }
-
-    const oldLines = (oldString || '').split('\n')
-    const newLines = (newString || '').split('\n')
-
-    // Simple line count (the diff viewer shows actual changes)
-    return {
-      added: Math.max(0, newLines.length - oldLines.length + 1),
-      removed: Math.max(0, oldLines.length - newLines.length + 1)
-    }
-  }, [type, content, oldString, newString])
+    if (providedStats) return providedStats
+    return calculateLineDiffStats(effectiveOldString, effectiveNewString)
+  }, [providedStats, effectiveOldString, effectiveNewString])
 
   return (
     <div className="overflow-hidden">

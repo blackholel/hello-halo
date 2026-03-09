@@ -5,10 +5,11 @@
  * real rollback capabilities using local snapshots.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync, unlinkSync } from 'fs'
 import { dirname, join, resolve, relative } from 'path'
 import { createHash } from 'crypto'
 import { getSpace } from './space.service'
+import { calculateLineDiffStats } from '../../shared/utils/diff-stats'
 
 const CHANGE_SET_LIMIT = 3
 
@@ -64,6 +65,59 @@ interface PendingChangeSet {
 
 const pendingChangeSets = new Map<string, PendingChangeSet>()
 
+function computeStatsFromFileSnapshot(file: Pick<ChangeFile, 'beforeContent' | 'afterContent' | 'afterExists'>): { added: number; removed: number } {
+  return calculateLineDiffStats(
+    file.beforeContent || '',
+    file.afterExists ? file.afterContent || '' : ''
+  )
+}
+
+function normalizeChangeSetStats(changeSet: ChangeSet): ChangeSet {
+  let changed = false
+  const normalizedFiles = changeSet.files.map((file) => {
+    const normalizedStats = computeStatsFromFileSnapshot(file)
+    if (
+      file.stats.added === normalizedStats.added &&
+      file.stats.removed === normalizedStats.removed
+    ) {
+      return file
+    }
+    changed = true
+    return {
+      ...file,
+      stats: normalizedStats
+    }
+  })
+
+  const normalizedSummary = normalizedFiles.reduce(
+    (acc, file) => {
+      acc.totalAdded += file.stats.added
+      acc.totalRemoved += file.stats.removed
+      return acc
+    },
+    {
+      totalFiles: normalizedFiles.length,
+      totalAdded: 0,
+      totalRemoved: 0
+    }
+  )
+
+  if (
+    !changed &&
+    changeSet.summary.totalFiles === normalizedSummary.totalFiles &&
+    changeSet.summary.totalAdded === normalizedSummary.totalAdded &&
+    changeSet.summary.totalRemoved === normalizedSummary.totalRemoved
+  ) {
+    return changeSet
+  }
+
+  return {
+    ...changeSet,
+    files: normalizedFiles,
+    summary: normalizedSummary
+  }
+}
+
 function getChangeSetsDir(spaceId: string): string {
   const space = getSpace(spaceId)
   if (!space) {
@@ -89,32 +143,6 @@ function hashContent(content: string): string {
 function getFileName(path: string): string {
   const parts = path.split(/[/\\]/)
   return parts[parts.length - 1] || path
-}
-
-function calculateDiffStats(oldStr: string, newStr: string): { added: number; removed: number } {
-  const oldLines = oldStr ? oldStr.split('\n') : []
-  const newLines = newStr ? newStr.split('\n') : []
-  const changedLines = countChangedLines(oldStr, newStr)
-
-  const added = Math.max(0, newLines.length - oldLines.length + changedLines)
-  const removed = Math.max(0, oldLines.length - newLines.length + changedLines)
-
-  return {
-    added: Math.max(1, Math.ceil(added / 2)),
-    removed: Math.max(oldStr ? 1 : 0, Math.ceil(removed / 2))
-  }
-}
-
-function countChangedLines(oldStr: string, newStr: string): number {
-  if (!oldStr || !newStr) return 0
-  const oldLines = new Set(oldStr.split('\n').map(l => l.trim()).filter(Boolean))
-  const newLines = new Set(newStr.split('\n').map(l => l.trim()).filter(Boolean))
-
-  let changes = 0
-  for (const line of newLines) {
-    if (!oldLines.has(line)) changes++
-  }
-  return changes
 }
 
 function readTextFile(path: string): string | null {
@@ -165,6 +193,17 @@ export function trackChangeFile(conversationId: string, filePath?: string): void
   if (pending.files.has(resolved)) return
 
   const beforeExists = existsSync(resolved)
+  if (beforeExists) {
+    try {
+      if (statSync(resolved).isDirectory()) {
+        console.warn(`[ChangeSet] Skipping directory path: ${filePath}`)
+        return
+      }
+    } catch (error) {
+      console.warn(`[ChangeSet] Failed to stat path: ${resolved}`, error)
+      return
+    }
+  }
   const beforeContent = beforeExists ? readTextFile(resolved) ?? '' : ''
 
   pending.files.set(resolved, {
@@ -210,11 +249,11 @@ export function finalizeChangeSet(
       type = 'delete'
     }
 
-    const stats = type === 'create'
-      ? { added: (afterContent || '').split('\n').length, removed: 0 }
-      : type === 'delete'
-        ? { added: 0, removed: (pendingFile.beforeContent || '').split('\n').length }
-        : calculateDiffStats(pendingFile.beforeContent || '', afterContent || '')
+    const stats = computeStatsFromFileSnapshot({
+      beforeContent: pendingFile.beforeContent,
+      afterContent: afterExists ? afterContent : undefined,
+      afterExists
+    })
 
     totalAdded += stats.added
     totalRemoved += stats.removed
@@ -271,7 +310,8 @@ export function listChangeSets(spaceId: string, conversationId: string): ChangeS
   try {
     const raw = readFileSync(filePath, 'utf-8')
     const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
+    if (!Array.isArray(parsed)) return []
+    return parsed.map((changeSet) => normalizeChangeSetStats(changeSet as ChangeSet))
   } catch (error) {
     console.error('[ChangeSet] Failed to read change sets:', error)
     return []
