@@ -382,7 +382,7 @@ describe('session.manager cleanup', () => {
   })
 
   afterEach(() => {
-    deleteActiveSession('conv-active')
+    deleteActiveSession('space-1', 'conv-active')
     closeAllV2Sessions()
     vi.useRealTimers()
     vi.clearAllMocks()
@@ -403,7 +403,7 @@ describe('session.manager cleanup', () => {
     vi.mocked(unstable_v2_createSession).mockResolvedValueOnce({ close } as any)
 
     await getOrCreateV2Session('space-1', 'conv-active', {}, undefined, baseConfig)
-    setActiveSession('conv-active', createRunningSessionState('conv-active'))
+    setActiveSession('space-1', 'conv-active', createRunningSessionState('conv-active'))
     await vi.advanceTimersByTimeAsync(DEFAULT_SESSION_IDLE_TIMEOUT_MS + 60 * 1000)
 
     expect(close).not.toHaveBeenCalled()
@@ -430,7 +430,7 @@ describe('session.manager cleanup', () => {
 
     await getOrCreateV2Session('space-1', 'conv-touch', {}, undefined, baseConfig)
     await vi.advanceTimersByTimeAsync(29 * 60 * 1000)
-    touchV2Session('conv-touch')
+    touchV2Session('space-1', 'conv-touch')
 
     await vi.advanceTimersByTimeAsync(2 * 60 * 1000)
     expect(close).not.toHaveBeenCalled()

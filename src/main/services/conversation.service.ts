@@ -372,48 +372,6 @@ function writeConversationFile(
   writeJsonAtomic(join(conversationsDir, `${conversationId}.json`), conversation)
 }
 
-function resolveExpectedSessionScope(spaceId: string): { spaceId: string; workDir: string } | null {
-  if (spaceId === 'kite-temp') {
-    const artifactsDir = join(getTempSpacePath(), 'artifacts')
-    if (!existsSync(artifactsDir)) {
-      mkdirSync(artifactsDir, { recursive: true })
-    }
-    return { spaceId, workDir: artifactsDir }
-  }
-  const space = getSpace(spaceId)
-  if (!space) {
-    return null
-  }
-  return { spaceId, workDir: space.path }
-}
-
-function shouldBackfillSessionScope(
-  conversation: Conversation,
-  expectedScope: { spaceId: string; workDir: string } | null
-): boolean {
-  if (!conversation.sessionId || !expectedScope) {
-    return false
-  }
-  const currentScope = conversation.sessionScope
-  if (!currentScope) return true
-  if (typeof currentScope.spaceId !== 'string' || currentScope.spaceId.trim().length === 0) return true
-  if (typeof currentScope.workDir !== 'string' || currentScope.workDir.trim().length === 0) return true
-  return false
-}
-
-function validateBackfillPayload(
-  conversation: Conversation,
-  spaceId: string,
-  conversationId: string
-): boolean {
-  if (conversation.id !== conversationId) return false
-  if (conversation.spaceId !== spaceId) return false
-  if (!Array.isArray(conversation.messages)) return false
-  if (!conversation.sessionScope) return false
-  if (!conversation.sessionScope.spaceId || !conversation.sessionScope.workDir) return false
-  return true
-}
-
 // ============================================================================
 // Core Functions
 // ============================================================================
@@ -509,48 +467,6 @@ export function getConversation(spaceId: string, conversationId: string): Conver
   if (existsSync(filePath)) {
     try {
       const conversation = normalizeConversation(JSON.parse(readFileSync(filePath, 'utf-8')) as Conversation)
-      const expectedScope = resolveExpectedSessionScope(spaceId)
-      if (shouldBackfillSessionScope(conversation, expectedScope) && expectedScope) {
-        const backfilled: Conversation = {
-          ...conversation,
-          sessionScope: {
-            spaceId: expectedScope.spaceId,
-            workDir: expectedScope.workDir,
-            recordedAt: new Date().toISOString()
-          }
-        }
-        if (validateBackfillPayload(backfilled, spaceId, conversationId)) {
-          try {
-            writeConversationFile(conversationsDir, conversationId, backfilled)
-            console.log('[Agent] resume_bind_backfill', {
-              phase: 'resume_bind_backfill',
-              spaceId,
-              conversationId,
-              hasSessionId: Boolean(backfilled.sessionId),
-              historyMessageCount: Array.isArray(backfilled.messages) ? backfilled.messages.length : 0,
-              outcome: 'session_scope_backfilled',
-              errorCode: null,
-              durationMs: 0,
-              retryCount: 0,
-              bootstrapTokenEstimate: 0
-            })
-            return backfilled
-          } catch (error) {
-            console.warn('[Conversation] Failed to persist sessionScope backfill', {
-              phase: 'resume_bind_backfill',
-              spaceId,
-              conversationId,
-              cause: error instanceof Error ? error.message : String(error)
-            })
-          }
-        } else {
-          console.warn('[Conversation] Skip sessionScope backfill due to schema validation failure', {
-            phase: 'resume_bind_backfill',
-            spaceId,
-            conversationId
-          })
-        }
-      }
       console.log(`[Conversation] Found conversation: ${conversation.title}`)
       return conversation
     } catch (error) {

@@ -136,6 +136,7 @@ export interface KiteAPI {
     }>
   }) => Promise<IpcResponse>
   setAgentMode: (
+    spaceId: string,
     conversationId: string,
     mode: ChatMode,
     runId?: string
@@ -185,14 +186,15 @@ export interface KiteAPI {
     }>
   }) => Promise<IpcResponse>
   guideMessage: (request: GuideMessageRequest) => Promise<IpcResponse<{ delivery: 'session_send' | 'ask_user_question_answer' }>>
-  stopGeneration: (conversationId?: string) => Promise<IpcResponse>
-  approveTool: (conversationId: string) => Promise<IpcResponse>
-  rejectTool: (conversationId: string) => Promise<IpcResponse>
+  stopGeneration: (spaceId: string, conversationId?: string) => Promise<IpcResponse>
+  approveTool: (spaceId: string, conversationId: string) => Promise<IpcResponse>
+  rejectTool: (spaceId: string, conversationId: string) => Promise<IpcResponse>
   answerQuestion: (
+    spaceId: string,
     conversationId: string,
     answer: string | AskUserQuestionAnswerPayload
   ) => Promise<IpcResponse>
-  getSessionState: (conversationId: string) => Promise<IpcResponse>
+  getSessionState: (spaceId: string, conversationId: string) => Promise<IpcResponse>
   ensureSessionWarm: (
     spaceId: string,
     conversationId: string,
@@ -203,8 +205,8 @@ export interface KiteAPI {
     params?: { spaceId?: string; workDir?: string; conversationId?: string }
   ) => Promise<IpcResponse>
   testMcpConnections: () => Promise<{ success: boolean; servers: unknown[]; error?: string }>
-  reconnectMcpServer: (conversationId: string, serverName: string) => Promise<{ success: boolean; error?: string }>
-  toggleMcpServer: (conversationId: string, serverName: string, enabled: boolean) => Promise<{ success: boolean; error?: string }>
+  reconnectMcpServer: (spaceId: string, conversationId: string, serverName: string) => Promise<{ success: boolean; error?: string }>
+  toggleMcpServer: (spaceId: string, conversationId: string, serverName: string, enabled: boolean) => Promise<{ success: boolean; error?: string }>
 
   // Event listeners
   onAgentRunStart: (callback: (data: unknown) => void) => () => void
@@ -513,22 +515,24 @@ const api: KiteAPI = {
 
   // Agent
   sendMessage: (request) => ipcRenderer.invoke('agent:send-message', request),
-  setAgentMode: (conversationId, mode, runId) =>
-    ipcRenderer.invoke('agent:set-mode', { conversationId, mode, runId }),
+  setAgentMode: (spaceId, conversationId, mode, runId) =>
+    ipcRenderer.invoke('agent:set-mode', { spaceId, conversationId, mode, runId }),
   sendWorkflowStepMessage: (request) => ipcRenderer.invoke('workflow:send-step-message', request),
   guideMessage: (request) => ipcRenderer.invoke('agent:guide-message', request),
-  stopGeneration: (conversationId) => ipcRenderer.invoke('agent:stop', conversationId),
-  approveTool: (conversationId) => ipcRenderer.invoke('agent:approve-tool', conversationId),
-  rejectTool: (conversationId) => ipcRenderer.invoke('agent:reject-tool', conversationId),
-  answerQuestion: (conversationId, answer) =>
-    ipcRenderer.invoke('agent:answer-question', conversationId, answer),
-  getSessionState: (conversationId) => ipcRenderer.invoke('agent:get-session-state', conversationId),
+  stopGeneration: (spaceId, conversationId) => ipcRenderer.invoke('agent:stop', { spaceId, conversationId }),
+  approveTool: (spaceId, conversationId) => ipcRenderer.invoke('agent:approve-tool', { spaceId, conversationId }),
+  rejectTool: (spaceId, conversationId) => ipcRenderer.invoke('agent:reject-tool', { spaceId, conversationId }),
+  answerQuestion: (spaceId, conversationId, answer) =>
+    ipcRenderer.invoke('agent:answer-question', { spaceId, conversationId, answer }),
+  getSessionState: (spaceId, conversationId) => ipcRenderer.invoke('agent:get-session-state', { spaceId, conversationId }),
   ensureSessionWarm: (spaceId, conversationId, responseLanguage, options) =>
     ipcRenderer.invoke('agent:ensure-session-warm', spaceId, conversationId, responseLanguage, options),
   getAgentResourceHash: (params) => ipcRenderer.invoke('agent:get-resource-hash', params),
   testMcpConnections: () => ipcRenderer.invoke('agent:test-mcp'),
-  reconnectMcpServer: (conversationId, serverName) => ipcRenderer.invoke('agent:reconnect-mcp', conversationId, serverName),
-  toggleMcpServer: (conversationId, serverName, enabled) => ipcRenderer.invoke('agent:toggle-mcp', conversationId, serverName, enabled),
+  reconnectMcpServer: (spaceId, conversationId, serverName) =>
+    ipcRenderer.invoke('agent:reconnect-mcp', { spaceId, conversationId, serverName }),
+  toggleMcpServer: (spaceId, conversationId, serverName, enabled) =>
+    ipcRenderer.invoke('agent:toggle-mcp', { spaceId, conversationId, serverName, enabled }),
 
   // Event listeners
   onAgentRunStart: (callback) => createEventListener('agent:run-start', callback),

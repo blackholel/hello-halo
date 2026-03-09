@@ -93,15 +93,17 @@ import {
   normalizeChatMode
 } from './types'
 import { normalizeLocale, type LocaleCode } from '../../../shared/i18n/locale'
+import { buildSessionKey } from '../../../shared/session-key'
 import { assertAiProfileConfigured } from './ai-setup-guard'
 
 function trackChangeFileFromToolUse(
+  spaceId: string,
   conversationId: string,
   toolName: string | undefined,
   toolInput: { file_path?: string } | undefined
 ): void {
   if (toolName === 'Write' || toolName === 'Edit') {
-    trackChangeFile(conversationId, toolInput?.file_path)
+    trackChangeFile(spaceId, conversationId, toolInput?.file_path)
   }
 }
 
@@ -292,6 +294,10 @@ export interface GuideLiveInputResult {
 
 const ASK_USER_QUESTION_RECENT_RESOLVED_TTL_MS = 2 * 60 * 1000
 const textClarificationFallbackUsedByConversation = new Map<string, boolean>()
+
+function toSessionKey(spaceId: string, conversationId: string): string {
+  return buildSessionKey(spaceId, conversationId)
+}
 
 function emitAgentUnknownResourceEvent(
   params: {
@@ -1067,8 +1073,9 @@ export async function sendMessage(
   let stderrBuffer = ''
 
   // Register this session in the active sessions map
+  const sessionKey = toSessionKey(spaceId, conversationId)
   const textClarificationFallbackUsedInConversation =
-    textClarificationFallbackUsedByConversation.get(conversationId) === true
+    textClarificationFallbackUsedByConversation.get(sessionKey) === true
   const sessionState: SessionState = {
     abortController,
     spaceId,
@@ -1097,7 +1104,7 @@ export async function sendMessage(
     thoughts: [], // Initialize thoughts array for this session
     processTrace: []
   }
-  setActiveSession(conversationId, sessionState)
+  setActiveSession(spaceId, conversationId, sessionState)
 
   sendToRenderer('agent:run-start', spaceId, conversationId, {
     type: 'run_start',
@@ -1260,7 +1267,7 @@ export async function sendMessage(
       historyMessageCount: historyMessages.length
     })
     const v2Session = sessionAcquireResult.session
-    touchV2Session(conversationId)
+    touchV2Session(spaceId, conversationId)
 
     let historyBootstrapBlock = ''
     if (
@@ -1554,7 +1561,7 @@ If the user asks about this project/codebase, inspect files in current workspace
     resetCompatIdleTimer()
 
     for await (const sdkMessage of v2Session.stream() as AsyncIterable<any>) {
-      touchV2Session(conversationId)
+      touchV2Session(spaceId, conversationId)
       resetCompatIdleTimer()
       // Handle abort - check this session's controller
       if (abortController.signal.aborted) {
@@ -1704,6 +1711,7 @@ If the user asks about this project/codebase, inspect files in current workspace
           for (const block of contentBlocks) {
             if (block.type === 'tool_use') {
               trackChangeFileFromToolUse(
+                spaceId,
                 conversationId,
                 block.name,
                 block.input as { file_path?: string } | undefined
@@ -1782,6 +1790,7 @@ If the user asks about this project/codebase, inspect files in current workspace
             }
           } else if (normalizedThought.type === 'tool_use') {
             trackChangeFileFromToolUse(
+              spaceId,
               conversationId,
               normalizedThought.toolName,
               normalizedThought.toolInput as { file_path?: string } | undefined
@@ -2088,7 +2097,7 @@ If the user asks about this project/codebase, inspect files in current workspace
           sessionState.textClarificationDetectedInRun = false
         } else {
           sessionState.textClarificationFallbackUsedInConversation = true
-          textClarificationFallbackUsedByConversation.set(conversationId, true)
+          textClarificationFallbackUsedByConversation.set(sessionKey, true)
         }
       }
     }
@@ -2136,7 +2145,7 @@ If the user asks about this project/codebase, inspect files in current workspace
           tokenUsage
         })
 
-        closeV2Session(conversationId)
+        closeV2Session(spaceId, conversationId)
         return
       }
       console.log(`[Agent][${conversationId}] Aborted by user`)
@@ -2223,15 +2232,15 @@ If the user asks about this project/codebase, inspect files in current workspace
     })
 
     // Close V2 session on error (it may be in a bad state)
-    closeV2Session(conversationId)
+    closeV2Session(spaceId, conversationId)
   } finally {
     if (idleTimeoutId) {
       clearTimeout(idleTimeoutId)
       idleTimeoutId = null
     }
     // Clean up active session state (but keep V2 session for reuse)
-    deleteActiveSession(conversationId, runId)
-    clearPendingChangeSet(conversationId)
+    deleteActiveSession(spaceId, conversationId, runId)
+    clearPendingChangeSet(spaceId, conversationId)
     console.log(
       `[Agent][${conversationId}] Active session state cleaned up. V2 sessions: ${getV2SessionsCount()}`
     )
@@ -2239,8 +2248,13 @@ If the user asks about this project/codebase, inspect files in current workspace
 }
 
 // Stop generation helper functions (extracted to module level)
-function resolvePendingApproval(targetConversationId: string): void {
-  const session = getActiveSession(targetConversationId)
+interface SessionTarget {
+  spaceId: string
+  conversationId: string
+}
+
+function resolvePendingApproval(target: SessionTarget): void {
+  const session = getActiveSession(target.spaceId, target.conversationId)
   if (!session) return
   if (session.pendingPermissionResolve) {
     const resolver = session.pendingPermissionResolve
@@ -2259,24 +2273,24 @@ function resolvePendingApproval(targetConversationId: string): void {
   })
 }
 
-function abortGeneration(targetConversationId: string): void {
-  const session = getActiveSession(targetConversationId)
+function abortGeneration(target: SessionTarget): void {
+  const session = getActiveSession(target.spaceId, target.conversationId)
   session?.abortController.abort()
 }
 
-async function interruptAndDrain(targetConversationId: string, timeoutMs = 3000): Promise<void> {
-  const v2SessionInfo = getV2SessionInfo(targetConversationId)
+async function interruptAndDrain(target: SessionTarget, timeoutMs = 3000): Promise<void> {
+  const v2SessionInfo = getV2SessionInfo(target.spaceId, target.conversationId)
   if (!v2SessionInfo) return
 
   try {
     await (v2SessionInfo.session as any).interrupt()
-    console.log(`[Agent] V2 session interrupted, draining stale messages for: ${targetConversationId}`)
+    console.log(`[Agent] V2 session interrupted, draining stale messages for: ${target.spaceId}:${target.conversationId}`)
 
     const drainPromise = (async () => {
       for await (const msg of v2SessionInfo.session.stream()) {
-        touchV2Session(targetConversationId)
+        touchV2Session(target.spaceId, target.conversationId)
         const drainedType = (msg as { type?: string }).type || 'unknown'
-        console.log(`[Agent] Drained (${targetConversationId}): ${drainedType}`)
+        console.log(`[Agent] Drained (${target.spaceId}:${target.conversationId}): ${drainedType}`)
         if (drainedType === 'result') break
       }
     })()
@@ -2287,67 +2301,81 @@ async function interruptAndDrain(targetConversationId: string, timeoutMs = 3000)
     await Promise.race([drainPromise, timeoutPromise.then(() => { timedOut = true })])
 
     if (timedOut) {
-      console.warn(`[Agent] Drain timeout (${timeoutMs}ms) for conversation: ${targetConversationId}. Continuing cleanup.`)
+      console.warn(`[Agent] Drain timeout (${timeoutMs}ms) for conversation: ${target.spaceId}:${target.conversationId}. Continuing cleanup.`)
     } else {
-      console.log(`[Agent] Drain complete for: ${targetConversationId}`)
+      console.log(`[Agent] Drain complete for: ${target.spaceId}:${target.conversationId}`)
     }
   } catch (e) {
-    console.error(`[Agent] Failed to interrupt/drain V2 session ${targetConversationId}:`, e)
+    console.error(`[Agent] Failed to interrupt/drain V2 session ${target.spaceId}:${target.conversationId}:`, e)
   }
 }
 
-function cleanupConversation(targetConversationId: string): void {
-  deleteActiveSession(targetConversationId)
-  clearPendingChangeSet(targetConversationId)
-  console.log(`[Agent] Stopped generation for conversation: ${targetConversationId}`)
+function cleanupConversation(target: SessionTarget): void {
+  deleteActiveSession(target.spaceId, target.conversationId)
+  clearPendingChangeSet(target.spaceId, target.conversationId)
+  console.log(`[Agent] Stopped generation for conversation: ${target.spaceId}:${target.conversationId}`)
 }
 
-async function stopSingleConversation(targetConversationId: string): Promise<void> {
+async function stopSingleConversation(target: SessionTarget): Promise<void> {
   try {
-    await interruptAndDrain(targetConversationId)
+    await interruptAndDrain(target)
   } finally {
-    cleanupConversation(targetConversationId)
+    cleanupConversation(target)
   }
 }
 
 /**
  * Stop generation for a specific conversation
  */
-export async function stopGeneration(conversationId?: string): Promise<void> {
+export async function stopGeneration(spaceId: string, conversationId?: string): Promise<void> {
   if (conversationId) {
-    abortGeneration(conversationId)
-    resolvePendingApproval(conversationId)
-    await stopSingleConversation(conversationId)
+    const singleTarget: SessionTarget = { spaceId, conversationId }
+    abortGeneration(singleTarget)
+    resolvePendingApproval(singleTarget)
+    await stopSingleConversation(singleTarget)
     return
   }
 
-  // Stop all sessions (backward compatibility)
-  const targetConversations = Array.from(
-    new Set([...getActiveSessions(), ...getV2SessionConversationIds()])
-  )
+  const targetsBySessionKey = new Map<string, SessionTarget>()
+  for (const target of getActiveSessions()) {
+    if (target.spaceId !== spaceId) continue
+    targetsBySessionKey.set(target.sessionKey, {
+      spaceId: target.spaceId,
+      conversationId: target.conversationId
+    })
+  }
+  for (const target of getV2SessionConversationIds()) {
+    if (target.spaceId !== spaceId) continue
+    targetsBySessionKey.set(target.sessionKey, {
+      spaceId: target.spaceId,
+      conversationId: target.conversationId
+    })
+  }
+  const targets = Array.from(targetsBySessionKey.values())
 
   // Phase 1: send stop signals quickly
-  for (const targetConversationId of targetConversations) {
-    abortGeneration(targetConversationId)
-    resolvePendingApproval(targetConversationId)
+  for (const target of targets) {
+    abortGeneration(target)
+    resolvePendingApproval(target)
   }
 
   // Phase 2: interrupt/drain + cleanup in parallel
-  await Promise.allSettled(targetConversations.map(stopSingleConversation))
-  console.log('[Agent] All generations stopped')
+  await Promise.allSettled(targets.map(stopSingleConversation))
+  console.log(`[Agent] All generations stopped in space: ${spaceId}`)
 }
 
 export async function setAgentMode(
+  spaceId: string,
   conversationId: string,
   mode: ChatMode,
   runId?: string
 ): Promise<AgentSetModeResult> {
-  const result = await setSessionMode(conversationId, mode, runId)
+  const result = await setSessionMode(spaceId, conversationId, mode, runId)
   if (!result.applied) {
     return result
   }
 
-  const session = getActiveSession(conversationId)
+  const session = getActiveSession(spaceId, conversationId)
   if (session) {
     sendToRenderer('agent:mode', session.spaceId, conversationId, {
       type: 'mode',
@@ -2362,7 +2390,7 @@ export async function setAgentMode(
 export async function guideLiveInput(
   request: GuideLiveInputRequest
 ): Promise<GuideLiveInputResult> {
-  const { conversationId } = request
+  const { spaceId, conversationId } = request
   const message = typeof request.message === 'string' ? request.message.trim() : ''
   const requestRunId = typeof request.runId === 'string' ? request.runId.trim() : ''
   const clientMessageId = typeof request.clientMessageId === 'string'
@@ -2372,12 +2400,18 @@ export async function guideLiveInput(
     throw new Error('Guide message cannot be empty')
   }
 
-  const session = getActiveSession(conversationId)
-  const v2SessionInfo = getV2SessionInfo(conversationId)
+  const session = getActiveSession(spaceId, conversationId)
+  const v2SessionInfo = getV2SessionInfo(spaceId, conversationId)
   if (!session || !v2SessionInfo) {
     throw new AskUserQuestionError(
       ASK_USER_QUESTION_ERROR_CODES.NO_ACTIVE_SESSION,
       'No active session found for this conversation'
+    )
+  }
+  if (session.spaceId !== spaceId || session.conversationId !== conversationId) {
+    throw new AskUserQuestionError(
+      ASK_USER_QUESTION_ERROR_CODES.NO_ACTIVE_SESSION,
+      'Session scope mismatch for this conversation'
     )
   }
   if (session.lifecycle !== 'running') {
@@ -2394,7 +2428,7 @@ export async function guideLiveInput(
   }
 
   if (session.pendingPermissionResolve) {
-    handleToolApproval(conversationId, false)
+    handleToolApproval(spaceId, conversationId, false)
   }
 
   let delivery: GuideLiveInputResult['delivery'] = 'session_send'
@@ -2404,7 +2438,7 @@ export async function guideLiveInput(
     const payload = buildGuideAskUserQuestionPayload(askPending, message)
     if (payload) {
       try {
-        await handleAskUserQuestionResponse(conversationId, payload)
+        await handleAskUserQuestionResponse(spaceId, conversationId, payload)
         delivery = 'ask_user_question_answer'
       } catch (error) {
         if (!(error instanceof AskUserQuestionError)) {
@@ -2450,8 +2484,8 @@ export async function guideLiveInput(
 /**
  * Handle tool approval from renderer for a specific conversation
  */
-export function handleToolApproval(conversationId: string, approved: boolean): void {
-  const session = getActiveSession(conversationId)
+export function handleToolApproval(spaceId: string, conversationId: string, approved: boolean): void {
+  const session = getActiveSession(spaceId, conversationId)
   if (session?.pendingPermissionResolve) {
     session.pendingPermissionResolve(approved)
     session.pendingPermissionResolve = null
@@ -2496,6 +2530,7 @@ function assertStructuredAnswerInput(
  * Legacy path (deny+session.send) is retained for backward compatibility only.
  */
 export async function handleAskUserQuestionResponse(
+  spaceId: string,
   conversationId: string,
   answerInput: AskUserQuestionAnswerInput
 ): Promise<void> {
@@ -2506,8 +2541,8 @@ export async function handleAskUserQuestionResponse(
     throw new Error('Invalid AskUserQuestion answer payload')
   }
 
-  const sessionState = getActiveSession(conversationId)
-  const v2SessionInfo = getV2SessionInfo(conversationId)
+  const sessionState = getActiveSession(spaceId, conversationId)
+  const v2SessionInfo = getV2SessionInfo(spaceId, conversationId)
 
   if (!sessionState || !v2SessionInfo) {
     throw new AskUserQuestionError(
@@ -2515,9 +2550,9 @@ export async function handleAskUserQuestionResponse(
       'No active session found for this conversation'
     )
   }
-  touchV2Session(conversationId)
+  touchV2Session(spaceId, conversationId)
 
-  if (sessionState.conversationId !== conversationId) {
+  if (sessionState.spaceId !== spaceId || sessionState.conversationId !== conversationId) {
     throw new Error('Conversation mismatch for AskUserQuestion response')
   }
   pruneRecentlyResolvedAskUserQuestion(sessionState)
@@ -2652,7 +2687,7 @@ export async function handleAskUserQuestionResponse(
     const legacyAnswer = typeof answerInput === 'string' ? answerInput.trim() : ''
     sessionState.textClarificationFallbackUsedInConversation = false
     sessionState.textClarificationDetectedInRun = false
-    textClarificationFallbackUsedByConversation.set(conversationId, false)
+    textClarificationFallbackUsedByConversation.set(toSessionKey(spaceId, conversationId), false)
     resolvePendingQuestion({
       behavior: 'deny',
       message: 'AskUserQuestion handled by Halo UI. Continue with the latest user message answer.'
@@ -2671,7 +2706,7 @@ export async function handleAskUserQuestionResponse(
   sessionState.askUserQuestionUsedInRun = true
   sessionState.textClarificationFallbackUsedInConversation = false
   sessionState.textClarificationDetectedInRun = false
-  textClarificationFallbackUsedByConversation.set(conversationId, false)
+  textClarificationFallbackUsedByConversation.set(toSessionKey(spaceId, conversationId), false)
 
   const answers = updatedInput.answers as Record<string, string> | undefined
   console.log(

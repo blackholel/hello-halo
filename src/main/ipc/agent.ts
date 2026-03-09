@@ -116,10 +116,10 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
     'agent:set-mode',
     async (
       _event,
-      request: { conversationId: string; mode: 'code' | 'plan' | 'ask'; runId?: string }
+      request: { spaceId: string; conversationId: string; mode: 'code' | 'plan' | 'ask'; runId?: string }
     ) => {
       try {
-        const result = await setAgentMode(request.conversationId, request.mode, request.runId)
+        const result = await setAgentMode(request.spaceId, request.conversationId, request.mode, request.runId)
         return { success: true, data: result }
       } catch (error: unknown) {
         const err = error as Error
@@ -167,10 +167,10 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
     }
   )
 
-  // Stop generation for a specific conversation (or all if not specified)
-  ipcMain.handle('agent:stop', async (_event, conversationId?: string) => {
+  // Stop generation for a specific conversation (or all in space if not specified)
+  ipcMain.handle('agent:stop', async (_event, request: { spaceId: string; conversationId?: string }) => {
     try {
-      await stopGeneration(conversationId)
+      await stopGeneration(request.spaceId, request.conversationId)
       return { success: true }
     } catch (error: unknown) {
       return toErrorResponse(error)
@@ -178,9 +178,9 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
   })
 
   // Approve tool execution for a specific conversation
-  ipcMain.handle('agent:approve-tool', async (_event, conversationId: string) => {
+  ipcMain.handle('agent:approve-tool', async (_event, request: { spaceId: string; conversationId: string }) => {
     try {
-      handleToolApproval(conversationId, true)
+      handleToolApproval(request.spaceId, request.conversationId, true)
       return { success: true }
     } catch (error: unknown) {
       return toErrorResponse(error)
@@ -188,9 +188,9 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
   })
 
   // Reject tool execution for a specific conversation
-  ipcMain.handle('agent:reject-tool', async (_event, conversationId: string) => {
+  ipcMain.handle('agent:reject-tool', async (_event, request: { spaceId: string; conversationId: string }) => {
     try {
-      handleToolApproval(conversationId, false)
+      handleToolApproval(request.spaceId, request.conversationId, false)
       return { success: true }
     } catch (error: unknown) {
       return toErrorResponse(error)
@@ -198,9 +198,12 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
   })
 
   // Answer AskUserQuestion for a specific conversation
-  ipcMain.handle('agent:answer-question', async (_event, conversationId: string, answer: AskUserQuestionAnswerInput) => {
+  ipcMain.handle('agent:answer-question', async (
+    _event,
+    request: { spaceId: string; conversationId: string; answer: AskUserQuestionAnswerInput }
+  ) => {
     try {
-      await handleAskUserQuestionResponse(conversationId, answer)
+      await handleAskUserQuestionResponse(request.spaceId, request.conversationId, request.answer)
       return { success: true }
     } catch (error: unknown) {
       return toErrorResponse(error)
@@ -208,9 +211,12 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
   })
 
   // Get current session state for recovery after refresh
-  ipcMain.handle('agent:get-session-state', async (_event, conversationId: string) => {
+  ipcMain.handle('agent:get-session-state', async (
+    _event,
+    request: { spaceId: string; conversationId: string }
+  ) => {
     try {
-      const state = getSessionState(conversationId)
+      const state = getSessionState(request.spaceId, request.conversationId)
       return { success: true, data: state }
     } catch (error: unknown) {
       return toErrorResponse(error)
@@ -250,7 +256,9 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
       try {
         const resolvedWorkDir = params?.workDir
           || (typeof params?.spaceId === 'string' ? getWorkingDir(params.spaceId) : undefined)
-        const sessionInfo = params?.conversationId ? getV2SessionInfo(params.conversationId) : undefined
+        const sessionInfo = params?.conversationId && params?.spaceId
+          ? getV2SessionInfo(params.spaceId, params.conversationId)
+          : undefined
         return {
           success: true,
           data: {
@@ -277,9 +285,12 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
   })
 
   // Reconnect a failed MCP server
-  ipcMain.handle('agent:reconnect-mcp', async (_event, conversationId: string, serverName: string) => {
+  ipcMain.handle('agent:reconnect-mcp', async (
+    _event,
+    request: { spaceId: string; conversationId: string; serverName: string }
+  ) => {
     try {
-      const result = await reconnectMcpServer(conversationId, serverName)
+      const result = await reconnectMcpServer(request.spaceId, request.conversationId, request.serverName)
       return result
     } catch (error: unknown) {
       return toErrorResponse(error)
@@ -287,9 +298,17 @@ export function registerAgentHandlers(window: BrowserWindow | null): void {
   })
 
   // Toggle (enable/disable) an MCP server
-  ipcMain.handle('agent:toggle-mcp', async (_event, conversationId: string, serverName: string, enabled: boolean) => {
+  ipcMain.handle('agent:toggle-mcp', async (
+    _event,
+    request: { spaceId: string; conversationId: string; serverName: string; enabled: boolean }
+  ) => {
     try {
-      const result = await toggleMcpServer(conversationId, serverName, enabled)
+      const result = await toggleMcpServer(
+        request.spaceId,
+        request.conversationId,
+        request.serverName,
+        request.enabled
+      )
       return result
     } catch (error: unknown) {
       return toErrorResponse(error)

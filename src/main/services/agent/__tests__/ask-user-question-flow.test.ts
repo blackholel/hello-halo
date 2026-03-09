@@ -104,6 +104,9 @@ function registerPending(session: SessionState, pending: PendingAskUserQuestionC
 }
 
 describe('AskUserQuestion Flow', () => {
+  const spaceId = 'space-1'
+  const conversationId = 'conv-1'
+
   beforeEach(() => {
     vi.clearAllMocks()
     sessionManagerMocks.getV2SessionInfo.mockReturnValue({
@@ -119,7 +122,7 @@ describe('AskUserQuestion Flow', () => {
     registerPending(session, createPending('aq_run_2', 'tool-2', 'run-1', resolveTwo))
     sessionManagerMocks.getActiveSession.mockReturnValue(session)
 
-    await handleAskUserQuestionResponse('conv-1', {
+    await handleAskUserQuestionResponse(spaceId, conversationId, {
       runId: 'run-1',
       toolCallId: 'tool-2',
       answersByQuestionId: { q_1: ['Yes'] },
@@ -139,7 +142,7 @@ describe('AskUserQuestion Flow', () => {
     sessionManagerMocks.getActiveSession.mockReturnValue(session)
 
     await expect(
-      handleAskUserQuestionResponse('conv-1', {
+      handleAskUserQuestionResponse(spaceId, conversationId, {
         runId: 'run-2',
         toolCallId: '',
         answersByQuestionId: { q_1: ['Yes'] },
@@ -157,7 +160,7 @@ describe('AskUserQuestion Flow', () => {
     sessionManagerMocks.getActiveSession.mockReturnValue(session)
 
     await expect(
-      handleAskUserQuestionResponse('conv-1', 'legacy answer')
+      handleAskUserQuestionResponse(spaceId, conversationId, 'legacy answer')
     ).rejects.toMatchObject({
       errorCode: ASK_USER_QUESTION_ERROR_CODES.LEGACY_NOT_ALLOWED
     })
@@ -169,7 +172,7 @@ describe('AskUserQuestion Flow', () => {
     sessionManagerMocks.getActiveSession.mockReturnValue(session)
 
     await expect(
-      handleAskUserQuestionResponse('conv-1', {
+      handleAskUserQuestionResponse(spaceId, conversationId, {
         runId: 'run-5',
         toolCallId: 'tool-1',
         answersByQuestionId: { q_1: ['Yes'] },
@@ -193,8 +196,8 @@ describe('AskUserQuestion Flow', () => {
       skippedQuestionIds: []
     } as const
 
-    await handleAskUserQuestionResponse('conv-1', payload)
-    await expect(handleAskUserQuestionResponse('conv-1', payload)).resolves.toBeUndefined()
+    await handleAskUserQuestionResponse(spaceId, conversationId, payload)
+    await expect(handleAskUserQuestionResponse(spaceId, conversationId, payload)).resolves.toBeUndefined()
     expect(resolvePending).toHaveBeenCalledTimes(1)
   })
 
@@ -204,7 +207,7 @@ describe('AskUserQuestion Flow', () => {
     sessionManagerMocks.getActiveSession.mockReturnValue(session)
 
     await expect(
-      handleAskUserQuestionResponse('conv-1', {
+      handleAskUserQuestionResponse(spaceId, conversationId, {
         runId: 'run-7',
         toolCallId: 'tool-404',
         answersByQuestionId: { q_1: ['Yes'] },

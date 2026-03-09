@@ -102,7 +102,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
   const clearConversationQueue = useChatStore(state => state.clearConversationQueue)
   const clearQueueError = useChatStore(state => state.clearQueueError)
   const queuedTurns = useChatStore(state =>
-    conversationId ? (state.queuedTurnsByConversation.get(conversationId) || []) : []
+    conversationId ? state.getQueuedTurns(conversationId) : []
   )
   const queueItems = useMemo(
     () => queuedTurns
@@ -117,7 +117,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
     [queuedTurns]
   )
   const queueError = useChatStore(state =>
-    conversationId ? (state.queueErrorByConversation.get(conversationId) || null) : null
+    conversationId ? state.getQueueError(conversationId) : null
   )
 
   // Load conversation if not in cache

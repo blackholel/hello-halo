@@ -74,6 +74,7 @@ describe('Space Service', () => {
     })
 
     it('should ignore legacy .halo meta directories', () => {
+      const baselineSpaces = listSpaces()
       const legacySpacePath = path.join(getSpacesDir(), 'legacy-halo-space')
       const legacyMetaPath = path.join(legacySpacePath, '.halo', 'meta.json')
 
@@ -87,7 +88,9 @@ describe('Space Service', () => {
       }))
 
       const spaces = listSpaces()
-      expect(spaces).toHaveLength(0)
+      expect(spaces.length).toBeGreaterThanOrEqual(baselineSpaces.length)
+      expect(spaces.some(space => space.id === 'legacy-halo-space-id')).toBe(false)
+      expect(spaces.some(space => space.path === legacySpacePath)).toBe(false)
       expect(getSpace('legacy-halo-space-id')).toBeFalsy()
     })
 

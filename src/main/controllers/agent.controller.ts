@@ -60,6 +60,7 @@ export interface SendMessageRequest {
 }
 
 export interface SetModeRequest {
+  spaceId: string
   conversationId: string
   mode: ChatMode
   runId?: string
@@ -147,7 +148,7 @@ export async function guideMessage(
 
 export async function setMode(request: SetModeRequest): Promise<ControllerResponse> {
   try {
-    const result = await agentSetMode(request.conversationId, request.mode, request.runId)
+    const result = await agentSetMode(request.spaceId, request.conversationId, request.mode, request.runId)
     return { success: true, data: result }
   } catch (error: unknown) {
     const err = error as Error
@@ -158,9 +159,9 @@ export async function setMode(request: SetModeRequest): Promise<ControllerRespon
 /**
  * Stop generation for a specific conversation or all
  */
-export async function stopGeneration(conversationId?: string): Promise<ControllerResponse> {
+export async function stopGeneration(spaceId: string, conversationId?: string): Promise<ControllerResponse> {
   try {
-    await agentStopGeneration(conversationId)
+    await agentStopGeneration(spaceId, conversationId)
     return { success: true }
   } catch (error: unknown) {
     return toErrorResponse(error)
@@ -170,9 +171,9 @@ export async function stopGeneration(conversationId?: string): Promise<Controlle
 /**
  * Approve tool execution for a conversation
  */
-export function approveTool(conversationId: string): ControllerResponse {
+export function approveTool(spaceId: string, conversationId: string): ControllerResponse {
   try {
-    agentHandleToolApproval(conversationId, true)
+    agentHandleToolApproval(spaceId, conversationId, true)
     return { success: true }
   } catch (error: unknown) {
     return toErrorResponse(error)
@@ -182,9 +183,9 @@ export function approveTool(conversationId: string): ControllerResponse {
 /**
  * Reject tool execution for a conversation
  */
-export function rejectTool(conversationId: string): ControllerResponse {
+export function rejectTool(spaceId: string, conversationId: string): ControllerResponse {
   try {
-    agentHandleToolApproval(conversationId, false)
+    agentHandleToolApproval(spaceId, conversationId, false)
     return { success: true }
   } catch (error: unknown) {
     return toErrorResponse(error)
@@ -195,11 +196,12 @@ export function rejectTool(conversationId: string): ControllerResponse {
  * Answer AskUserQuestion tool for an active conversation
  */
 export async function answerQuestion(
+  spaceId: string,
   conversationId: string,
   answer: AskUserQuestionAnswerInput
 ): Promise<ControllerResponse> {
   try {
-    await agentHandleAskUserQuestionResponse(conversationId, answer)
+    await agentHandleAskUserQuestionResponse(spaceId, conversationId, answer)
     return { success: true }
   } catch (error: unknown) {
     return toErrorResponse(error)
@@ -209,9 +211,9 @@ export async function answerQuestion(
 /**
  * Check if a conversation is currently generating
  */
-export function checkGenerating(conversationId: string): ControllerResponse<boolean> {
+export function checkGenerating(spaceId: string, conversationId: string): ControllerResponse<boolean> {
   try {
-    return { success: true, data: isGenerating(conversationId) }
+    return { success: true, data: isGenerating(spaceId, conversationId) }
   } catch (error: unknown) {
     return toErrorResponse(error)
   }
@@ -220,7 +222,7 @@ export function checkGenerating(conversationId: string): ControllerResponse<bool
 /**
  * Get all active session conversation IDs
  */
-export function listActiveSessions(): ControllerResponse<string[]> {
+export function listActiveSessions(): ControllerResponse<Array<{ spaceId: string; conversationId: string; sessionKey: string }>> {
   try {
     return { success: true, data: getActiveSessions() }
   } catch (error: unknown) {
@@ -231,9 +233,9 @@ export function listActiveSessions(): ControllerResponse<string[]> {
 /**
  * Get current session state for recovery after refresh
  */
-export function getSessionState(conversationId: string): ControllerResponse {
+export function getSessionState(spaceId: string, conversationId: string): ControllerResponse {
   try {
-    return { success: true, data: agentGetSessionState(conversationId) }
+    return { success: true, data: agentGetSessionState(spaceId, conversationId) }
   } catch (error: unknown) {
     return toErrorResponse(error)
   }

@@ -45,7 +45,7 @@ function createConversationFixture(params: {
   writeFileSync(params.filePath, JSON.stringify(payload, null, 2))
 }
 
-describe('conversation.service sessionScope backfill', () => {
+describe('conversation.service sessionScope strict behavior', () => {
   let tempRoot = ''
 
   beforeEach(() => {
@@ -59,7 +59,7 @@ describe('conversation.service sessionScope backfill', () => {
     }
   })
 
-  it('普通空间: sessionId 存在且 sessionScope 缺失时自动回填为 space.path 并持久化', () => {
+  it('普通空间: sessionId 存在且 sessionScope 缺失时不做回填', () => {
     const spacePath = join(tempRoot, 'space-a')
     const conversationsDir = join(spacePath, '.kite', 'conversations')
     mkdirSync(conversationsDir, { recursive: true })
@@ -80,17 +80,16 @@ describe('conversation.service sessionScope backfill', () => {
     getTempSpacePathMock.mockReturnValue(join(tempRoot, 'temp-unused'))
 
     const conversation = getConversation('space-1', 'conv-1')
-    expect(conversation?.sessionScope?.spaceId).toBe('space-1')
-    expect(conversation?.sessionScope?.workDir).toBe(spacePath)
+    expect(conversation?.sessionId).toBe('session-legacy')
+    expect(conversation?.sessionScope).toBeUndefined()
 
     const persisted = JSON.parse(readFileSync(filePath, 'utf-8')) as {
       sessionScope?: { spaceId?: string; workDir?: string }
     }
-    expect(persisted.sessionScope?.spaceId).toBe('space-1')
-    expect(persisted.sessionScope?.workDir).toBe(spacePath)
+    expect(persisted.sessionScope).toBeUndefined()
   })
 
-  it('kite-temp: 回填 workDir 指向 getTempSpacePath()/artifacts', () => {
+  it('kite-temp: sessionScope 缺失时同样不做回填', () => {
     const tempSpacePath = join(tempRoot, 'kite-temp-space')
     const conversationsDir = join(tempSpacePath, 'conversations')
     mkdirSync(conversationsDir, { recursive: true })
@@ -111,13 +110,12 @@ describe('conversation.service sessionScope backfill', () => {
     getTempSpacePathMock.mockReturnValue(tempSpacePath)
 
     const conversation = getConversation('kite-temp', 'conv-temp')
-    expect(conversation?.sessionScope?.spaceId).toBe('kite-temp')
-    expect(conversation?.sessionScope?.workDir).toBe(join(tempSpacePath, 'artifacts'))
+    expect(conversation?.sessionId).toBe('session-legacy')
+    expect(conversation?.sessionScope).toBeUndefined()
 
     const persisted = JSON.parse(readFileSync(filePath, 'utf-8')) as {
       sessionScope?: { spaceId?: string; workDir?: string }
     }
-    expect(persisted.sessionScope?.spaceId).toBe('kite-temp')
-    expect(persisted.sessionScope?.workDir).toBe(join(tempSpacePath, 'artifacts'))
+    expect(persisted.sessionScope).toBeUndefined()
   })
 })

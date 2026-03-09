@@ -89,17 +89,20 @@ function createSessionState(overrides: Partial<SessionState> = {}): SessionState
 }
 
 describe('session.manager setSessionMode', () => {
+  const spaceId = 'space-1'
+  const conversationId = 'conv-1'
+
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
   afterEach(() => {
-    deleteActiveSession('conv-1')
+    deleteActiveSession(spaceId, conversationId)
     closeAllV2Sessions()
   })
 
   it('returns no_active_session when conversation has no running session', async () => {
-    const result = await setSessionMode('conv-1', 'plan', 'run-1')
+    const result = await setSessionMode(spaceId, conversationId, 'plan', 'run-1')
     expect(result).toEqual({
       applied: false,
       mode: 'plan',
@@ -108,8 +111,8 @@ describe('session.manager setSessionMode', () => {
   })
 
   it('returns run_id_mismatch when runId does not match current run', async () => {
-    setActiveSession('conv-1', createSessionState({ runId: 'run-current' }))
-    const result = await setSessionMode('conv-1', 'plan', 'run-other')
+    setActiveSession(spaceId, conversationId, createSessionState({ runId: 'run-current' }))
+    const result = await setSessionMode(spaceId, conversationId, 'plan', 'run-other')
     expect(result.applied).toBe(false)
     expect(result.reason).toBe('run_id_mismatch')
     expect(result.mode).toBe('code')
@@ -117,10 +120,10 @@ describe('session.manager setSessionMode', () => {
   })
 
   it('returns blocked_pending_interaction when pending approval/question exists', async () => {
-    setActiveSession('conv-1', createSessionState({
+    setActiveSession(spaceId, conversationId, createSessionState({
       pendingPermissionResolve: vi.fn()
     }))
-    const result = await setSessionMode('conv-1', 'plan', 'run-1')
+    const result = await setSessionMode(spaceId, conversationId, 'plan', 'run-1')
     expect(result.applied).toBe(false)
     expect(result.reason).toBe('blocked_pending_interaction')
   })
@@ -139,16 +142,16 @@ describe('session.manager setSessionMode', () => {
       mode: 'sdk_allow_updated_input'
     })
     session.pendingAskUserQuestionOrder.push('aq_1')
-    setActiveSession('conv-1', session)
+    setActiveSession(spaceId, conversationId, session)
 
-    const result = await setSessionMode('conv-1', 'plan', 'run-1')
+    const result = await setSessionMode(spaceId, conversationId, 'plan', 'run-1')
     expect(result.applied).toBe(false)
     expect(result.reason).toBe('blocked_pending_interaction')
   })
 
   it('returns sdk_error when v2 session is unavailable', async () => {
-    setActiveSession('conv-1', createSessionState())
-    const result = await setSessionMode('conv-1', 'plan', 'run-1')
+    setActiveSession(spaceId, conversationId, createSessionState())
+    const result = await setSessionMode(spaceId, conversationId, 'plan', 'run-1')
     expect(result.applied).toBe(false)
     expect(result.reason).toBe('sdk_error')
   })
@@ -162,9 +165,9 @@ describe('session.manager setSessionMode', () => {
 
     await getOrCreateV2Session('space-1', 'conv-1', {})
     const session = createSessionState({ mode: 'code' })
-    setActiveSession('conv-1', session)
+    setActiveSession(spaceId, conversationId, session)
 
-    const result = await setSessionMode('conv-1', 'plan', 'run-1')
+    const result = await setSessionMode(spaceId, conversationId, 'plan', 'run-1')
 
     expect(result).toEqual({
       applied: true,
@@ -176,18 +179,18 @@ describe('session.manager setSessionMode', () => {
   })
 
   it('rejects invalid mode', async () => {
-    const result = await setSessionMode('conv-1', 'invalid-mode' as unknown, 'run-1')
+    const result = await setSessionMode(spaceId, conversationId, 'invalid-mode' as unknown, 'run-1')
     expect(result.applied).toBe(false)
     expect(result.reason).toBe('invalid_mode')
   })
 
   it('deleteActiveSession keeps newer run when expectedRunId mismatches', async () => {
-    setActiveSession('conv-1', createSessionState({ runId: 'run-new' }))
+    setActiveSession(spaceId, conversationId, createSessionState({ runId: 'run-new' }))
 
-    deleteActiveSession('conv-1', 'run-old')
-    expect(getActiveSession('conv-1')?.runId).toBe('run-new')
+    deleteActiveSession(spaceId, conversationId, 'run-old')
+    expect(getActiveSession(spaceId, conversationId)?.runId).toBe('run-new')
 
-    deleteActiveSession('conv-1', 'run-new')
-    expect(getActiveSession('conv-1')).toBeUndefined()
+    deleteActiveSession(spaceId, conversationId, 'run-new')
+    expect(getActiveSession(spaceId, conversationId)).toBeUndefined()
   })
 })

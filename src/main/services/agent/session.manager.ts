@@ -27,11 +27,12 @@ import { getPermissionModeForChatMode, isChatMode } from './types'
 import { getEnabledPluginMcpHash, getEnabledPluginMcpList } from '../plugin-mcp.service'
 import { getResourceIndexHash } from '../resource-index.service'
 import { normalizeLocale, type LocaleCode } from '../../../shared/i18n/locale'
+import { buildSessionKey } from '../../../shared/session-key'
 
-// V2 Session management: Map of conversationId -> persistent V2 session
+// V2 Session management: Map of sessionKey -> persistent V2 session
 const v2Sessions = new Map<string, V2SessionInfo>()
 
-// Active session state: Map of conversationId -> session state
+// Active session state: Map of sessionKey -> session state
 const activeSessions = new Map<string, SessionState>()
 
 // Session cleanup defaults
@@ -41,6 +42,10 @@ const RESOURCE_INDEX_REBUILD_DEBOUNCE_MS = 3000
 let cleanupIntervalId: NodeJS.Timeout | null = null
 const lastResourceIndexRebuildAt = new Map<string, number>()
 const sessionAcquireLockChains = new Map<string, Promise<void>>()
+
+function toSessionKey(spaceId: string, conversationId: string): string {
+  return buildSessionKey(spaceId, conversationId)
+}
 
 function toNonEmptyString(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
@@ -102,16 +107,16 @@ function normalizePathForCompare(pathValue: string): string {
 }
 
 function withSessionAcquireLock<T>(
-  conversationId: string,
+  sessionKey: string,
   operation: () => Promise<T>
 ): Promise<T> {
-  const previous = sessionAcquireLockChains.get(conversationId) || Promise.resolve()
+  const previous = sessionAcquireLockChains.get(sessionKey) || Promise.resolve()
   let release!: () => void
   const gate = new Promise<void>((resolveGate) => {
     release = resolveGate
   })
   const chain = previous.then(() => gate)
-  sessionAcquireLockChains.set(conversationId, chain)
+  sessionAcquireLockChains.set(sessionKey, chain)
 
   const run = async (): Promise<T> => {
     await previous
@@ -119,8 +124,8 @@ function withSessionAcquireLock<T>(
       return await operation()
     } finally {
       release()
-      if (sessionAcquireLockChains.get(conversationId) === chain) {
-        sessionAcquireLockChains.delete(conversationId)
+      if (sessionAcquireLockChains.get(sessionKey) === chain) {
+        sessionAcquireLockChains.delete(sessionKey)
       }
     }
   }
@@ -197,16 +202,16 @@ function startSessionCleanup(): void {
       return
     }
     const now = Date.now()
-    for (const [convId, info] of Array.from(v2Sessions.entries())) {
-      if (activeSessions.has(convId)) {
+    for (const [sessionKey, info] of Array.from(v2Sessions.entries())) {
+      if (activeSessions.has(sessionKey)) {
         continue
       }
       const idleMs = now - info.lastUsedAt
       if (idleMs > idleTimeoutMs) {
-        console.log(`[Agent] Cleaning up idle V2 session: ${convId} (idleMs=${idleMs}, timeoutMs=${idleTimeoutMs})`)
-        closeSessionSafely(info.session, `[Agent][${convId}]`)
-        v2Sessions.delete(convId)
-        lastResourceIndexRebuildAt.delete(convId)
+        console.log(`[Agent] Cleaning up idle V2 session: ${sessionKey} (idleMs=${idleMs}, timeoutMs=${idleTimeoutMs})`)
+        closeSessionSafely(info.session, `[Agent][${sessionKey}]`)
+        v2Sessions.delete(sessionKey)
+        lastResourceIndexRebuildAt.delete(sessionKey)
       }
     }
   }, 60 * 1000)
@@ -244,27 +249,28 @@ function buildSessionConfigSignature(config: SessionConfig): string {
   })
 }
 
-function shouldDebounceResourceIndexRebuild(conversationId: string, reasons: string[]): boolean {
+function shouldDebounceResourceIndexRebuild(sessionKey: string, reasons: string[]): boolean {
   if (reasons.length !== 1 || reasons[0] !== 'resourceIndexHash') {
     return false
   }
   const now = Date.now()
-  const last = lastResourceIndexRebuildAt.get(conversationId) || 0
+  const last = lastResourceIndexRebuildAt.get(sessionKey) || 0
   if (now - last < RESOURCE_INDEX_REBUILD_DEBOUNCE_MS) {
     return true
   }
-  lastResourceIndexRebuildAt.set(conversationId, now)
+  lastResourceIndexRebuildAt.set(sessionKey, now)
   return false
 }
 
 function emitAgentSessionRebuildEvent(
-  conversationId: string,
+  sessionKey: string,
   reasons: string[],
   previous: SessionConfig,
   next: SessionConfig
 ): void {
   console.warn('[telemetry] agent_session_rebuild', {
-    conversationId,
+    sessionKey,
+    spaceId: next.spaceId || previous.spaceId || null,
     reasons,
     previousConfigHash: buildSessionConfigSignature(previous),
     nextConfigHash: buildSessionConfigSignature(next)
@@ -274,17 +280,19 @@ function emitAgentSessionRebuildEvent(
 /**
  * Close and remove an existing V2 session (internal helper for rebuild)
  */
-function closeV2SessionForRebuild(conversationId: string): void {
-  const existing = v2Sessions.get(conversationId)
+function closeV2SessionForRebuild(spaceId: string, conversationId: string): void {
+  const sessionKey = toSessionKey(spaceId, conversationId)
+  const existing = v2Sessions.get(sessionKey)
   if (existing) {
-    console.log(`[Agent][${conversationId}] Closing V2 session for rebuild`)
-    closeSessionSafely(existing.session, `[Agent][${conversationId}]`)
-    v2Sessions.delete(conversationId)
+    console.log(`[Agent][${sessionKey}] Closing V2 session for rebuild`)
+    closeSessionSafely(existing.session, `[Agent][${sessionKey}]`)
+    v2Sessions.delete(sessionKey)
   }
 }
 
-export function touchV2Session(conversationId: string): void {
-  const sessionInfo = v2Sessions.get(conversationId)
+export function touchV2Session(spaceId: string, conversationId: string): void {
+  const sessionKey = toSessionKey(spaceId, conversationId)
+  const sessionInfo = v2Sessions.get(sessionKey)
   if (!sessionInfo) {
     return
   }
@@ -302,28 +310,29 @@ export async function getOrCreateV2Session(
   sessionId?: string,
   config?: SessionConfig
 ): Promise<V2SDKSession> {
-  const existing = v2Sessions.get(conversationId)
+  const sessionKey = toSessionKey(spaceId, conversationId)
+  const existing = v2Sessions.get(sessionKey)
   if (existing) {
     if (existing.spaceId !== spaceId) {
       console.warn(
-        `[Agent][${conversationId}] Session scope mismatch (existing=${existing.spaceId}, incoming=${spaceId}), rebuilding session`
+        `[Agent][${sessionKey}] Session scope mismatch (existing=${existing.spaceId}, incoming=${spaceId}), rebuilding session`
       )
-      closeV2SessionForRebuild(conversationId)
+      closeV2SessionForRebuild(spaceId, conversationId)
     }
   }
-  const rebuiltExisting = v2Sessions.get(conversationId)
+  const rebuiltExisting = v2Sessions.get(sessionKey)
   if (rebuiltExisting) {
     const reasons = config ? getSessionRebuildReasons(rebuiltExisting.config, config) : []
     if (config && reasons.length > 0) {
-      if (shouldDebounceResourceIndexRebuild(conversationId, reasons)) {
+      if (shouldDebounceResourceIndexRebuild(sessionKey, reasons)) {
         console.log(
-          `[Agent][${conversationId}] Skip session rebuild due to resourceIndexHash debounce (${RESOURCE_INDEX_REBUILD_DEBOUNCE_MS}ms)`
+          `[Agent][${sessionKey}] Skip session rebuild due to resourceIndexHash debounce (${RESOURCE_INDEX_REBUILD_DEBOUNCE_MS}ms)`
         )
-        touchV2Session(conversationId)
+        touchV2Session(spaceId, conversationId)
         return rebuiltExisting.session
       }
       console.log(
-        `[Agent][${conversationId}] Session config changed, rebuilding session`,
+        `[Agent][${sessionKey}] Session config changed, rebuilding session`,
         {
           from: {
             aiBrowserEnabled: rebuiltExisting.config.aiBrowserEnabled,
@@ -339,16 +348,16 @@ export async function getOrCreateV2Session(
           }
         }
       )
-      emitAgentSessionRebuildEvent(conversationId, reasons, rebuiltExisting.config, config)
-      closeV2SessionForRebuild(conversationId)
+      emitAgentSessionRebuildEvent(sessionKey, reasons, rebuiltExisting.config, config)
+      closeV2SessionForRebuild(spaceId, conversationId)
     } else {
-      console.log(`[Agent][${conversationId}] Reusing existing V2 session`)
-      touchV2Session(conversationId)
+      console.log(`[Agent][${sessionKey}] Reusing existing V2 session`)
+      touchV2Session(spaceId, conversationId)
       return rebuiltExisting.session
     }
   }
 
-  console.log(`[Agent][${conversationId}] Creating new V2 session${sessionId ? ` with resume: ${sessionId}` : ''}`)
+  console.log(`[Agent][${sessionKey}] Creating new V2 session${sessionId ? ` with resume: ${sessionId}` : ''}`)
   const startTime = Date.now()
 
   if (sessionId) {
@@ -358,9 +367,9 @@ export async function getOrCreateV2Session(
   }
 
   const session = (await unstable_v2_createSession(sdkOptions as any)) as unknown as V2SDKSession
-  console.log(`[Agent][${conversationId}] V2 session created in ${Date.now() - startTime}ms`)
+  console.log(`[Agent][${sessionKey}] V2 session created in ${Date.now() - startTime}ms`)
 
-  v2Sessions.set(conversationId, {
+  v2Sessions.set(sessionKey, {
     session,
     spaceId,
     conversationId,
@@ -399,8 +408,9 @@ export async function acquireSessionWithResumeFallback(params: {
     resolvedWorkDir,
     historyMessageCount
   } = params
+  const sessionKey = toSessionKey(spaceId, conversationId)
 
-  return withSessionAcquireLock(conversationId, async () => {
+  return withSessionAcquireLock(sessionKey, async () => {
     const startedAt = Date.now()
     const scopeSpaceId =
       typeof persistedSessionScope?.spaceId === 'string' ? persistedSessionScope.spaceId.trim() : ''
@@ -413,6 +423,7 @@ export async function acquireSessionWithResumeFallback(params: {
     const hasSessionId = Boolean(persistedSessionId)
 
     const logBase = {
+      sessionKey,
       spaceId,
       conversationId,
       hasSessionId,
@@ -580,6 +591,7 @@ export async function ensureSessionWarm(
   conversationId: string,
   responseLanguage?: LocaleCode | string
 ): Promise<void> {
+  const sessionKey = toSessionKey(spaceId, conversationId)
   const config = getConfig()
   const workDir = getWorkingDir(spaceId)
   const normalizedResponseLanguage = normalizeLocale(responseLanguage)
@@ -636,12 +648,17 @@ export async function ensureSessionWarm(
     responseLanguage: normalizedResponseLanguage,
     disableToolsForCompat: effectiveAi.disableToolsForCompat,
     stderrSuffix: ' (warm)',
-    canUseTool: createCanUseTool(workDir, spaceId, conversationId, getActiveSession),
+    canUseTool: createCanUseTool(
+      workDir,
+      spaceId,
+      conversationId,
+      getActiveSession
+    ),
     enabledPluginMcps: getEnabledPluginMcpList(conversationId)
   })
 
   try {
-    console.log(`[Agent] Warming up V2 session: ${conversationId}`)
+    console.log(`[Agent] Warming up V2 session: ${sessionKey}`)
     await acquireSessionWithResumeFallback({
       spaceId,
       conversationId,
@@ -664,9 +681,9 @@ export async function ensureSessionWarm(
         hasCanUseTool: true // Session has canUseTool callback
       }
     })
-    console.log(`[Agent] V2 session warmed up: ${conversationId}`)
+    console.log(`[Agent] V2 session warmed up: ${sessionKey}`)
   } catch (error) {
-    console.error(`[Agent] Failed to warm up session ${conversationId}:`, error)
+    console.error(`[Agent] Failed to warm up session ${sessionKey}:`, error)
     throw error
   }
 }
@@ -674,14 +691,15 @@ export async function ensureSessionWarm(
 /**
  * Close V2 session for a conversation
  */
-export function closeV2Session(conversationId: string): void {
-  const info = v2Sessions.get(conversationId)
+export function closeV2Session(spaceId: string, conversationId: string): void {
+  const sessionKey = toSessionKey(spaceId, conversationId)
+  const info = v2Sessions.get(sessionKey)
   if (info) {
-    console.log(`[Agent][${conversationId}] Closing V2 session`)
-    closeSessionSafely(info.session, `[Agent][${conversationId}]`)
-    v2Sessions.delete(conversationId)
+    console.log(`[Agent][${sessionKey}] Closing V2 session`)
+    closeSessionSafely(info.session, `[Agent][${sessionKey}]`)
+    v2Sessions.delete(sessionKey)
   }
-  lastResourceIndexRebuildAt.delete(conversationId)
+  lastResourceIndexRebuildAt.delete(sessionKey)
 }
 
 /**
@@ -718,9 +736,9 @@ function invalidateAllSessions(): void {
 
   console.log(`[Agent] Invalidating ${count} sessions due to API config change`)
 
-  for (const [convId, info] of Array.from(v2Sessions.entries())) {
-    console.log(`[Agent] Closing session: ${convId}`)
-    closeSessionSafely(info.session, `[Agent][${convId}]`)
+  for (const [sessionKey, info] of Array.from(v2Sessions.entries())) {
+    console.log(`[Agent] Closing session: ${sessionKey}`)
+    closeSessionSafely(info.session, `[Agent][${sessionKey}]`)
   }
 
   v2Sessions.clear()
@@ -738,10 +756,12 @@ onApiConfigChange(() => {
  * Reconnect a failed MCP server for a specific conversation
  */
 export async function reconnectMcpServer(
+  spaceId: string,
   conversationId: string,
   serverName: string
 ): Promise<{ success: boolean; error?: string }> {
-  const sessionInfo = v2Sessions.get(conversationId)
+  const sessionKey = toSessionKey(spaceId, conversationId)
+  const sessionInfo = v2Sessions.get(sessionKey)
   if (!sessionInfo) {
     return { success: false, error: 'No active session for this conversation' }
   }
@@ -752,13 +772,13 @@ export async function reconnectMcpServer(
   }
 
   try {
-    console.log(`[Agent][${conversationId}] Reconnecting MCP server: ${serverName}`)
+    console.log(`[Agent][${sessionKey}] Reconnecting MCP server: ${serverName}`)
     await session.reconnectMcpServer(serverName)
-    console.log(`[Agent][${conversationId}] MCP server reconnected: ${serverName}`)
+    console.log(`[Agent][${sessionKey}] MCP server reconnected: ${serverName}`)
     return { success: true }
   } catch (error) {
     const err = error as Error
-    console.error(`[Agent][${conversationId}] Failed to reconnect MCP server ${serverName}:`, err)
+    console.error(`[Agent][${sessionKey}] Failed to reconnect MCP server ${serverName}:`, err)
     return { success: false, error: err.message }
   }
 }
@@ -767,11 +787,13 @@ export async function reconnectMcpServer(
  * Toggle (enable/disable) an MCP server for a specific conversation
  */
 export async function toggleMcpServer(
+  spaceId: string,
   conversationId: string,
   serverName: string,
   enabled: boolean
 ): Promise<{ success: boolean; error?: string }> {
-  const sessionInfo = v2Sessions.get(conversationId)
+  const sessionKey = toSessionKey(spaceId, conversationId)
+  const sessionInfo = v2Sessions.get(sessionKey)
   if (!sessionInfo) {
     return { success: false, error: 'No active session for this conversation' }
   }
@@ -783,14 +805,14 @@ export async function toggleMcpServer(
 
   try {
     console.log(
-      `[Agent][${conversationId}] Toggling MCP server ${serverName}: ${enabled ? 'enable' : 'disable'}`
+      `[Agent][${sessionKey}] Toggling MCP server ${serverName}: ${enabled ? 'enable' : 'disable'}`
     )
     await session.toggleMcpServer(serverName, enabled)
-    console.log(`[Agent][${conversationId}] MCP server ${serverName} ${enabled ? 'enabled' : 'disabled'}`)
+    console.log(`[Agent][${sessionKey}] MCP server ${serverName} ${enabled ? 'enabled' : 'disabled'}`)
     return { success: true }
   } catch (error) {
     const err = error as Error
-    console.error(`[Agent][${conversationId}] Failed to toggle MCP server ${serverName}:`, err)
+    console.error(`[Agent][${sessionKey}] Failed to toggle MCP server ${serverName}:`, err)
     return { success: false, error: err.message }
   }
 }
@@ -802,59 +824,64 @@ export async function toggleMcpServer(
 /**
  * Get active session state for a conversation
  */
-export function getActiveSession(conversationId: string): SessionState | undefined {
-  return activeSessions.get(conversationId)
+export function getActiveSession(spaceId: string, conversationId: string): SessionState | undefined {
+  return activeSessions.get(toSessionKey(spaceId, conversationId))
 }
 
 /**
  * Set active session state for a conversation
  */
-export function setActiveSession(conversationId: string, state: SessionState): void {
-  activeSessions.set(conversationId, state)
+export function setActiveSession(spaceId: string, conversationId: string, state: SessionState): void {
+  activeSessions.set(toSessionKey(spaceId, conversationId), state)
 }
 
 /**
  * Delete active session state for a conversation
  */
-export function deleteActiveSession(conversationId: string, expectedRunId?: string): void {
+export function deleteActiveSession(spaceId: string, conversationId: string, expectedRunId?: string): void {
+  const sessionKey = toSessionKey(spaceId, conversationId)
   if (!expectedRunId) {
-    activeSessions.delete(conversationId)
+    activeSessions.delete(sessionKey)
     return
   }
 
-  const current = activeSessions.get(conversationId)
+  const current = activeSessions.get(sessionKey)
   if (!current) {
     return
   }
 
   if (current.runId !== expectedRunId) {
     console.warn(
-      `[Agent][${conversationId}] Skip deleteActiveSession due to run mismatch: expected=${expectedRunId}, actual=${current.runId}`
+      `[Agent][${sessionKey}] Skip deleteActiveSession due to run mismatch: expected=${expectedRunId}, actual=${current.runId}`
     )
     return
   }
 
-  activeSessions.delete(conversationId)
+  activeSessions.delete(sessionKey)
 }
 
 /**
  * Check if a conversation has an active generation
  */
-export function isGenerating(conversationId: string): boolean {
-  return activeSessions.has(conversationId)
+export function isGenerating(spaceId: string, conversationId: string): boolean {
+  return activeSessions.has(toSessionKey(spaceId, conversationId))
 }
 
 /**
- * Get all active session conversation IDs
+ * Get all active sessions
  */
-export function getActiveSessions(): string[] {
-  return Array.from(activeSessions.keys())
+export function getActiveSessions(): Array<{ spaceId: string; conversationId: string; sessionKey: string }> {
+  return Array.from(activeSessions.values()).map((session) => ({
+    spaceId: session.spaceId,
+    conversationId: session.conversationId,
+    sessionKey: toSessionKey(session.spaceId, session.conversationId)
+  }))
 }
 
 /**
  * Get current session state for a conversation (for recovery after refresh)
  */
-export function getSessionState(conversationId: string): {
+export function getSessionState(spaceId: string, conversationId: string): {
   isActive: boolean
   thoughts: import('./types').Thought[]
   processTrace: import('./types').ProcessTraceNode[]
@@ -864,7 +891,7 @@ export function getSessionState(conversationId: string): {
   lifecycle?: import('./types').SessionLifecycle | 'idle'
   terminalReason?: import('./types').SessionTerminalReason
 } {
-  const session = activeSessions.get(conversationId)
+  const session = activeSessions.get(toSessionKey(spaceId, conversationId))
   if (!session) {
     return {
       isActive: false,
@@ -889,6 +916,7 @@ export function getSessionState(conversationId: string): {
 }
 
 export async function setSessionMode(
+  spaceId: string,
   conversationId: string,
   targetMode: unknown,
   runId?: string
@@ -902,7 +930,8 @@ export async function setSessionMode(
     }
   }
 
-  const sessionState = activeSessions.get(conversationId)
+  const sessionKey = toSessionKey(spaceId, conversationId)
+  const sessionState = activeSessions.get(sessionKey)
   if (!sessionState || sessionState.lifecycle !== 'running') {
     return {
       applied: false,
@@ -929,7 +958,7 @@ export async function setSessionMode(
     }
   }
 
-  const v2SessionInfo = v2Sessions.get(conversationId)
+  const v2SessionInfo = v2Sessions.get(sessionKey)
   if (!v2SessionInfo || typeof v2SessionInfo.session.setPermissionMode !== 'function') {
     return {
       applied: false,
@@ -951,7 +980,7 @@ export async function setSessionMode(
   try {
     await v2SessionInfo.session.setPermissionMode(getPermissionModeForChatMode(targetMode))
     sessionState.mode = targetMode
-    touchV2Session(conversationId)
+    touchV2Session(spaceId, conversationId)
     return {
       applied: true,
       mode: targetMode,
@@ -972,8 +1001,8 @@ export async function setSessionMode(
 /**
  * Get V2 session info for a conversation
  */
-export function getV2SessionInfo(conversationId: string): V2SessionInfo | undefined {
-  return v2Sessions.get(conversationId)
+export function getV2SessionInfo(spaceId: string, conversationId: string): V2SessionInfo | undefined {
+  return v2Sessions.get(toSessionKey(spaceId, conversationId))
 }
 
 /**
@@ -986,6 +1015,10 @@ export function getV2SessionsCount(): number {
 /**
  * Get all conversation IDs that currently have V2 sessions.
  */
-export function getV2SessionConversationIds(): string[] {
-  return Array.from(v2Sessions.keys())
+export function getV2SessionConversationIds(): Array<{ spaceId: string; conversationId: string; sessionKey: string }> {
+  return Array.from(v2Sessions.values()).map((sessionInfo) => ({
+    spaceId: sessionInfo.spaceId,
+    conversationId: sessionInfo.conversationId,
+    sessionKey: toSessionKey(sessionInfo.spaceId, sessionInfo.conversationId)
+  }))
 }

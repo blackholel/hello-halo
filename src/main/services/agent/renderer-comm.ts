@@ -12,7 +12,9 @@ import { broadcastToWebSocket } from '../../http/websocket'
 import { getConfig } from '../config.service'
 import { isAIBrowserTool } from '../ai-browser'
 import { extractToolPath } from './resource-dir-guard.service'
+import { buildSessionKey } from '../../../shared/session-key'
 import { ASK_USER_QUESTION_ERROR_CODES } from './types'
+import { getSpaceResourcePolicy, isStrictSpaceOnlyPolicy } from './space-resource-policy.service'
 import type {
   ToolCall,
   SessionState,
@@ -24,6 +26,64 @@ import type {
 
 // Current main window reference for IPC communication
 let currentMainWindow: BrowserWindow | null = null
+
+function normalizePathForCompare(pathValue: string): string {
+  const normalized = resolve(pathValue)
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized
+}
+
+function isPathWithinWorkDir(candidatePath: string, absoluteWorkDir: string): boolean {
+  const normalizedWorkDir = normalizePathForCompare(absoluteWorkDir)
+  const normalizedCandidate = normalizePathForCompare(candidatePath)
+  const normalizedPrefix = `${normalizedWorkDir}${sep}`
+  return normalizedCandidate === normalizedWorkDir || normalizedCandidate.startsWith(normalizedPrefix)
+}
+
+function extractQuotedOrBareToken(command: string, start: number): string {
+  const remain = command.slice(start).trimStart()
+  if (!remain) return ''
+  if (remain.startsWith('"') || remain.startsWith('\'')) {
+    const quote = remain[0]
+    const end = remain.indexOf(quote, 1)
+    return end > 1 ? remain.slice(1, end) : remain.slice(1)
+  }
+  return remain.split(/\s+/)[0] || ''
+}
+
+function getBashCommandPathCandidates(command: string): string[] {
+  const candidates = new Set<string>()
+  const absolutePathRegex = /(^|[\s;|&])((?:\/|~\/)[^\s;|&]+)/g
+  let absoluteMatch: RegExpExecArray | null
+  while ((absoluteMatch = absolutePathRegex.exec(command)) !== null) {
+    const token = absoluteMatch[2]?.trim()
+    if (token) candidates.add(token)
+  }
+
+  const cdRegex = /\bcd\s+/g
+  let cdMatch: RegExpExecArray | null
+  while ((cdMatch = cdRegex.exec(command)) !== null) {
+    const token = extractQuotedOrBareToken(command, cdMatch.index + cdMatch[0].length)
+    if (token) candidates.add(token)
+  }
+
+  const openRegex = /\bopen\s+/g
+  let openMatch: RegExpExecArray | null
+  while ((openMatch = openRegex.exec(command)) !== null) {
+    const token = extractQuotedOrBareToken(command, openMatch.index + openMatch[0].length)
+    if (token) candidates.add(token)
+  }
+
+  return Array.from(candidates)
+}
+
+function resolveShellPathToken(token: string, absoluteWorkDir: string): string {
+  const trimmed = token.trim()
+  if (!trimmed) return ''
+  if (trimmed === '~' || trimmed.startsWith('~/')) {
+    return resolve(process.env.HOME || '', trimmed.slice(2))
+  }
+  return resolve(absoluteWorkDir, trimmed)
+}
 
 function toNonEmptyString(value: unknown): string | null {
   if (typeof value !== 'string') return null
@@ -506,7 +566,12 @@ export function sendToRenderer(
   data: Record<string, unknown>
 ): void {
   // Always include spaceId and conversationId in event data
-  const eventData = { ...data, spaceId, conversationId }
+  const eventData = {
+    ...data,
+    spaceId,
+    conversationId,
+    sessionKey: buildSessionKey(spaceId, conversationId)
+  }
 
   // 1. Send to Electron renderer via IPC
   if (currentMainWindow && !currentMainWindow.isDestroyed()) {
@@ -529,7 +594,7 @@ export function createCanUseTool(
   workDir: string,
   spaceId: string,
   conversationId: string,
-  getActiveSession: (convId: string) => SessionState | undefined,
+  getActiveSession: (spaceId: string, conversationId: string) => SessionState | undefined,
   options?: { mode?: ChatMode }
 ): (
   toolName: string,
@@ -538,6 +603,7 @@ export function createCanUseTool(
 ) => Promise<CanUseToolDecision> {
   const config = getConfig()
   const absoluteWorkDir = resolve(workDir)
+  const strictSpaceOnly = isStrictSpaceOnlyPolicy(getSpaceResourcePolicy(workDir))
   console.log(`[Agent] Creating canUseTool with workDir: ${absoluteWorkDir}`)
 
   return async (
@@ -545,7 +611,7 @@ export function createCanUseTool(
     input: Record<string, unknown>,
     _options: { signal: AbortSignal }
   ) => {
-    const runtimeMode = getActiveSession(conversationId)?.mode
+    const runtimeMode = getActiveSession(spaceId, conversationId)?.mode
     const effectiveMode = runtimeMode || options?.mode
     if (effectiveMode === 'ask') {
       return {
@@ -578,7 +644,7 @@ export function createCanUseTool(
     if (toolName === 'AskUserQuestion') {
       // Wait for user response using session-specific resolver.
       // Tool-call UI is sent from message-flow with the real tool_use.id.
-      const session = getActiveSession(conversationId)
+      const session = getActiveSession(spaceId, conversationId)
       if (!session) {
         return { behavior: 'deny' as const, message: 'Session not found' }
       }
@@ -646,13 +712,7 @@ export function createCanUseTool(
       const pathParam = extractToolPath(input)
       if (pathParam) {
         const absolutePath = resolve(absoluteWorkDir, pathParam)
-        const normalizedWorkDir = process.platform === 'win32' ? absoluteWorkDir.toLowerCase() : absoluteWorkDir
-        const normalizedPath = process.platform === 'win32' ? absolutePath.toLowerCase() : absolutePath
-        const isWithinWorkDir =
-          normalizedPath === normalizedWorkDir
-          || normalizedPath.startsWith(`${normalizedWorkDir}${sep}`)
-
-        if (!isWithinWorkDir) {
+        if (!isPathWithinWorkDir(absolutePath, absoluteWorkDir)) {
           console.log(`[Agent] Security: Blocked access to: ${pathParam}`)
           return {
             behavior: 'deny' as const,
@@ -674,7 +734,7 @@ export function createCanUseTool(
       }
 
       if (permission === 'ask' && !config.permissions.trustMode) {
-        const session = getActiveSession(conversationId)
+        const session = getActiveSession(spaceId, conversationId)
         if (!session) {
           return { behavior: 'deny' as const, message: 'Session not found' }
         }
@@ -713,6 +773,43 @@ export function createCanUseTool(
             }
           }
         })
+      }
+
+      if (strictSpaceOnly) {
+        const command = typeof input.command === 'string' ? input.command : ''
+        if (!command.trim()) {
+          return {
+            behavior: 'deny' as const,
+            message: 'Command is required in strict space mode'
+          }
+        }
+
+        if (/(^|[\s;|&])cd\s+\.\.(?=\/|\\|\s|$)/.test(command)) {
+          return {
+            behavior: 'deny' as const,
+            message: `Strict space mode: directory traversal is blocked outside ${workDir}`
+          }
+        }
+
+        const pathCandidates = getBashCommandPathCandidates(command)
+        for (const token of pathCandidates) {
+          if (token === '.' || token === './') continue
+          const resolvedTokenPath = resolveShellPathToken(token, absoluteWorkDir)
+          if (!resolvedTokenPath) continue
+          if (!isPathWithinWorkDir(resolvedTokenPath, absoluteWorkDir)) {
+            console.warn('[Agent] Security: Blocked Bash command path outside workDir', {
+              spaceId,
+              conversationId,
+              token,
+              resolvedTokenPath,
+              workDir: absoluteWorkDir
+            })
+            return {
+              behavior: 'deny' as const,
+              message: `Strict space mode: Bash cannot access paths outside current space (${workDir})`
+            }
+          }
+        }
       }
     }
 

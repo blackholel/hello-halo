@@ -403,6 +403,69 @@ describe('Chat Store - queued turn flow', () => {
     expect(useChatStore.getState().getQueueCount(conversationId)).toBe(0)
   })
 
+  it('routes stopGeneration to the conversation scope instead of current space', async () => {
+    const now = new Date().toISOString()
+    const targetConversationId = 'conv-cross-space-stop'
+    useChatStore.setState({
+      currentSpaceId: 'space-active',
+      spaceStates: new Map([
+        [
+          'space-active',
+          {
+            conversations: [
+              {
+                id: 'conv-active',
+                spaceId: 'space-active',
+                title: 'Active',
+                createdAt: now,
+                updatedAt: now,
+                messageCount: 0,
+                preview: ''
+              }
+            ],
+            currentConversationId: 'conv-active'
+          }
+        ],
+        [
+          'space-target',
+          {
+            conversations: [
+              {
+                id: targetConversationId,
+                spaceId: 'space-target',
+                title: 'Target',
+                createdAt: now,
+                updatedAt: now,
+                messageCount: 0,
+                preview: ''
+              }
+            ],
+            currentConversationId: targetConversationId
+          }
+        ]
+      ]),
+      conversationCache: new Map([
+        [
+          targetConversationId,
+          {
+            id: targetConversationId,
+            spaceId: 'space-target',
+            title: 'Target',
+            createdAt: now,
+            updatedAt: now,
+            messageCount: 0,
+            messages: []
+          }
+        ]
+      ])
+    } as any)
+
+    await useChatStore.getState().stopGeneration(targetConversationId)
+
+    expect(mockStopGeneration).toHaveBeenCalledWith('space-target', targetConversationId)
+    expect(mockStopGeneration).not.toHaveBeenCalledWith('space-active', targetConversationId)
+  })
+
   it('waits for async reload completion before flushing queue in handleAgentComplete', async () => {
     const spaceId = 'space-1'
     const conversationId = 'conv-queue-reload-order'

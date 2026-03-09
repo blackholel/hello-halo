@@ -5,7 +5,7 @@ const EXECUTION_LAYER_ALLOWED_SOURCES: ResourceSource[] = ['app', 'global', 'spa
 
 export const DEFAULT_SPACE_RESOURCE_POLICY: SpaceResourcePolicy = {
   version: 1,
-  mode: 'legacy',
+  mode: 'strict-space-only',
   allowMcp: true,
   allowPluginMcpDirective: true,
   allowedSources: [...EXECUTION_LAYER_ALLOWED_SOURCES]
@@ -45,7 +45,7 @@ export function ensureSpaceResourcePolicy(workDir: string): SpaceResourcePolicy 
       ...DEFAULT_SPACE_RESOURCE_POLICY,
       ...(config.resourcePolicy || {}),
       version: DEFAULT_SPACE_RESOURCE_POLICY.version,
-      mode: config.resourcePolicy?.mode === 'legacy' ? 'legacy' : DEFAULT_SPACE_RESOURCE_POLICY.mode,
+      mode: config.resourcePolicy?.mode === 'legacy' ? 'legacy' : 'strict-space-only',
       allowedSources: normalizeAllowedSources(config.resourcePolicy?.allowedSources as ResourceSource[] | undefined)
     }
   }))
@@ -61,8 +61,7 @@ export function ensureSpaceResourcePolicy(workDir: string): SpaceResourcePolicy 
 }
 
 export function isStrictSpaceOnlyPolicy(policy: SpaceResourcePolicy): boolean {
-  void policy
-  return false
+  return policy.mode === 'strict-space-only'
 }
 
 export function isSourceAllowed(policy: SpaceResourcePolicy, source?: string): boolean {

@@ -9,6 +9,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from '
 import { dirname, join, resolve, relative } from 'path'
 import { createHash } from 'crypto'
 import { getSpace } from './space.service'
+import { buildSessionKey } from '../../shared/session-key'
 
 const CHANGE_SET_LIMIT = 3
 
@@ -139,7 +140,8 @@ function resolveFilePath(workDir: string, filePath: string): string | null {
 
 export function beginChangeSet(spaceId: string, conversationId: string, workDir: string): string {
   const id = `cs-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-  pendingChangeSets.set(conversationId, {
+  const sessionKey = buildSessionKey(spaceId, conversationId)
+  pendingChangeSets.set(sessionKey, {
     id,
     spaceId,
     conversationId,
@@ -150,13 +152,13 @@ export function beginChangeSet(spaceId: string, conversationId: string, workDir:
   return id
 }
 
-export function clearPendingChangeSet(conversationId: string): void {
-  pendingChangeSets.delete(conversationId)
+export function clearPendingChangeSet(spaceId: string, conversationId: string): void {
+  pendingChangeSets.delete(buildSessionKey(spaceId, conversationId))
 }
 
-export function trackChangeFile(conversationId: string, filePath?: string): void {
+export function trackChangeFile(spaceId: string, conversationId: string, filePath?: string): void {
   if (!filePath) return
-  const pending = pendingChangeSets.get(conversationId)
+  const pending = pendingChangeSets.get(buildSessionKey(spaceId, conversationId))
   if (!pending) return
 
   const resolved = resolveFilePath(pending.workDir, filePath)
@@ -183,7 +185,8 @@ export function finalizeChangeSet(
   conversationId: string,
   messageId?: string
 ): ChangeSet | null {
-  const pending = pendingChangeSets.get(conversationId)
+  const sessionKey = buildSessionKey(spaceId, conversationId)
+  const pending = pendingChangeSets.get(sessionKey)
   if (!pending) return null
 
   const files: ChangeFile[] = []
@@ -236,7 +239,7 @@ export function finalizeChangeSet(
     })
   }
 
-  clearPendingChangeSet(conversationId)
+  clearPendingChangeSet(spaceId, conversationId)
 
   if (files.length === 0) {
     return null

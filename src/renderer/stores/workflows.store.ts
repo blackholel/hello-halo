@@ -284,7 +284,7 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
   stopRun: async () => {
     const run = get().activeRun
     if (!run) return
-    await api.stopGeneration(run.conversationId)
+    await api.stopGeneration(run.spaceId, run.conversationId)
     set({
       activeRun: {
         ...run,

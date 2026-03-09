@@ -642,6 +642,7 @@ export interface CanvasContext {
 export interface AgentEventBase {
   spaceId: string;
   conversationId: string;
+  sessionKey?: string;
   runId?: string;
 }
 

@@ -386,14 +386,15 @@ export const api = {
   },
 
   setAgentMode: async (
+    spaceId: string,
     conversationId: string,
     mode: ChatMode,
     runId?: string
   ): Promise<ApiResponse<{ applied: boolean; mode: ChatMode; runId?: string; reason?: string; error?: string }>> => {
     if (isElectron()) {
-      return window.kite.setAgentMode(conversationId, mode, runId)
+      return window.kite.setAgentMode(spaceId, conversationId, mode, runId)
     }
-    return httpRequest('POST', '/api/agent/mode', { conversationId, mode, runId })
+    return httpRequest('POST', '/api/agent/mode', { spaceId, conversationId, mode, runId })
   },
 
   sendWorkflowStepMessage: async (request: {
@@ -517,53 +518,62 @@ export const api = {
     return httpRequest('POST', '/api/agent/guide-message', request)
   },
 
-  stopGeneration: async (conversationId?: string): Promise<ApiResponse> => {
+  stopGeneration: async (spaceId: string, conversationId?: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.kite.stopGeneration(conversationId)
+      return window.kite.stopGeneration(spaceId, conversationId)
     }
-    return httpRequest('POST', '/api/agent/stop', { conversationId })
+    return httpRequest('POST', '/api/agent/stop', { spaceId, conversationId })
   },
 
-  approveTool: async (conversationId: string): Promise<ApiResponse> => {
+  approveTool: async (spaceId: string, conversationId: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.kite.approveTool(conversationId)
+      return window.kite.approveTool(spaceId, conversationId)
     }
-    return httpRequest('POST', '/api/agent/approve', { conversationId })
+    return httpRequest('POST', '/api/agent/approve', { spaceId, conversationId })
   },
 
-  rejectTool: async (conversationId: string): Promise<ApiResponse> => {
+  rejectTool: async (spaceId: string, conversationId: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.kite.rejectTool(conversationId)
+      return window.kite.rejectTool(spaceId, conversationId)
     }
-    return httpRequest('POST', '/api/agent/reject', { conversationId })
+    return httpRequest('POST', '/api/agent/reject', { spaceId, conversationId })
   },
 
   answerQuestion: async (
+    spaceId: string,
     conversationId: string,
     answer: string | AskUserQuestionAnswerPayload
   ): Promise<ApiResponse> => {
     if (isElectron()) {
-      const bridge = (window as unknown as { kite?: { answerQuestion?: (id: string, payload: string | AskUserQuestionAnswerPayload) => Promise<ApiResponse> } }).kite
+      const bridge = (window as unknown as {
+        kite?: {
+          answerQuestion?: (
+            spaceId: string,
+            id: string,
+            payload: string | AskUserQuestionAnswerPayload
+          ) => Promise<ApiResponse>
+        }
+      }).kite
       if (!bridge || typeof bridge.answerQuestion !== 'function') {
         return {
           success: false,
           error: 'IPC bridge unavailable: answerQuestion'
         }
       }
-      return bridge.answerQuestion(conversationId, answer)
+      return bridge.answerQuestion(spaceId, conversationId, answer)
     }
     if (typeof answer === 'string') {
-      return httpRequest('POST', '/api/agent/answer-question', { conversationId, answer })
+      return httpRequest('POST', '/api/agent/answer-question', { spaceId, conversationId, answer })
     }
-    return httpRequest('POST', '/api/agent/answer-question', { conversationId, payload: answer })
+    return httpRequest('POST', '/api/agent/answer-question', { spaceId, conversationId, payload: answer })
   },
 
   // Get current session state for recovery after refresh
-  getSessionState: async (conversationId: string): Promise<ApiResponse> => {
+  getSessionState: async (spaceId: string, conversationId: string): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.kite.getSessionState(conversationId)
+      return window.kite.getSessionState(spaceId, conversationId)
     }
-    return httpRequest('GET', `/api/agent/session/${conversationId}`)
+    return httpRequest('GET', `/api/agent/session/${conversationId}?spaceId=${encodeURIComponent(spaceId)}`)
   },
 
   // Warm up V2 session - call when switching conversations to prepare for faster message sending

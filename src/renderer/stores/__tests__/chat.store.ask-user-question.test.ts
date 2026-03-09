@@ -28,9 +28,56 @@ vi.mock('../../services/canvas-lifecycle', () => ({
 
 import { useChatStore } from '../chat.store'
 
+const DEFAULT_SPACE_ID = 'space-1'
+
+function seedConversationScope(spaceId: string, conversationId: string): void {
+  const now = new Date().toISOString()
+  const state = useChatStore.getState()
+  const nextSpaceStates = new Map(state.spaceStates)
+  const existingSpaceState = nextSpaceStates.get(spaceId) || { conversations: [], currentConversationId: null }
+  if (!existingSpaceState.conversations.some((conversation) => conversation.id === conversationId)) {
+    existingSpaceState.conversations = [
+      ...existingSpaceState.conversations,
+      {
+        id: conversationId,
+        spaceId,
+        title: conversationId,
+        createdAt: now,
+        updatedAt: now,
+        messageCount: 0,
+        preview: ''
+      }
+    ]
+  }
+  if (!existingSpaceState.currentConversationId) {
+    existingSpaceState.currentConversationId = conversationId
+  }
+  nextSpaceStates.set(spaceId, existingSpaceState)
+
+  const nextConversationCache = new Map(state.conversationCache)
+  if (!nextConversationCache.has(conversationId)) {
+    nextConversationCache.set(conversationId, {
+      id: conversationId,
+      spaceId,
+      title: conversationId,
+      createdAt: now,
+      updatedAt: now,
+      messageCount: 0,
+      messages: []
+    })
+  }
+
+  useChatStore.setState({
+    currentSpaceId: spaceId,
+    spaceStates: nextSpaceStates,
+    conversationCache: nextConversationCache
+  })
+}
+
 function seedPendingAskUserQuestion(conversationId: string, toolCallId = 'tool-ask-1'): void {
+  seedConversationScope(DEFAULT_SPACE_ID, conversationId)
   useChatStore.getState().handleAgentToolCall({
-    spaceId: 'space-1',
+    spaceId: DEFAULT_SPACE_ID,
     conversationId,
     id: toolCallId,
     name: 'AskUserQuestion',
@@ -93,6 +140,7 @@ describe('Chat Store - AskUserQuestion Flow', () => {
     mockAnswerQuestion.mockResolvedValue({ success: true })
     await useChatStore.getState().answerQuestion(conversationId, createAskUserQuestionPayload())
     expect(mockAnswerQuestion).toHaveBeenCalledWith(
+      DEFAULT_SPACE_ID,
       conversationId,
       expect.objectContaining({
         toolCallId: 'tool-ask-1',
@@ -125,6 +173,7 @@ describe('Chat Store - AskUserQuestion Flow', () => {
     })
 
     expect(mockAnswerQuestion).toHaveBeenCalledWith(
+      DEFAULT_SPACE_ID,
       conversationId,
       expect.objectContaining({
         toolCallId: 'tool-run-aware',

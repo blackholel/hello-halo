@@ -22,7 +22,7 @@ vi.mock('../space-resource-policy.service', () => ({
     version: 1,
     mode: 'strict-space-only'
   })),
-  isStrictSpaceOnlyPolicy: vi.fn(() => false)
+  isStrictSpaceOnlyPolicy: vi.fn(() => true)
 }))
 
 import { createCanUseTool } from '../renderer-comm'
@@ -99,6 +99,30 @@ describe('renderer-comm resource-dir guard', () => {
     )
 
     expect(result.behavior).toBe('allow')
+  })
+
+  it('denies Bash absolute path outside current workDir in strict space mode', async () => {
+    const canUseTool = createHandler()
+    const result = await canUseTool(
+      'Bash',
+      { command: 'open /Users/dl/ProjectSpace/ownerAgent/hello-halo/README.md' },
+      { signal: new AbortController().signal }
+    )
+
+    expect(result.behavior).toBe('deny')
+    expect(result.message).toContain('Strict space mode')
+  })
+
+  it('denies Bash directory traversal in strict space mode', async () => {
+    const canUseTool = createHandler()
+    const result = await canUseTool(
+      'Bash',
+      { command: 'cd ../ && ls' },
+      { signal: new AbortController().signal }
+    )
+
+    expect(result.behavior).toBe('deny')
+    expect(result.message).toContain('Strict space mode')
   })
 
   it('denies Write outside current workDir', async () => {

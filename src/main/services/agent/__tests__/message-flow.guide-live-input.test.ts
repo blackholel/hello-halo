@@ -274,14 +274,14 @@ describe('message-flow guideLiveInput', () => {
     expect(send).toHaveBeenCalledTimes(0)
   })
 
-  it('persists guided message using session.spaceId with guided meta', async () => {
+  it('persists guided message with guided meta when request/session scope matches', async () => {
     const send = vi.fn()
-    const session = createSessionState({ spaceId: 'space-from-session', runId: 'run-keep' })
+    const session = createSessionState({ spaceId: 'space-1', runId: 'run-keep' })
     sessionManagerMocks.getActiveSession.mockReturnValue(session)
     sessionManagerMocks.getV2SessionInfo.mockReturnValue({ session: { send } })
 
     await guideLiveInput({
-      spaceId: 'space-from-request',
+      spaceId: 'space-1',
       conversationId: 'conv-1',
       message: 'persist with session scope',
       runId: 'run-keep',
@@ -289,7 +289,7 @@ describe('message-flow guideLiveInput', () => {
     } as any)
 
     expect(conversationServiceMocks.insertUserMessageBeforeTrailingAssistant).toHaveBeenCalledWith(
-      'space-from-session',
+      'space-1',
       'conv-1',
       expect.objectContaining({
         role: 'user',

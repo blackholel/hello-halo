@@ -38,15 +38,67 @@ vi.mock('../../utils/thought-utils', () => ({
 }))
 
 import { api } from '../../api'
+import { useAppStore } from '../app.store'
 import { useChatStore } from '../chat.store'
+
+function seedConversation(spaceId: string, conversationId: string): void {
+  const now = new Date().toISOString()
+  useChatStore.setState({
+    currentSpaceId: spaceId,
+    spaceStates: new Map([
+      [
+        spaceId,
+        {
+          conversations: [
+            {
+              id: conversationId,
+              spaceId,
+              title: 'Response Language',
+              createdAt: now,
+              updatedAt: now,
+              messageCount: 0,
+              preview: ''
+            }
+          ],
+          currentConversationId: conversationId
+        }
+      ]
+    ]),
+    conversationCache: new Map([
+      [
+        conversationId,
+        {
+          id: conversationId,
+          spaceId,
+          title: 'Response Language',
+          createdAt: now,
+          updatedAt: now,
+          messageCount: 0,
+          messages: []
+        }
+      ]
+    ])
+  })
+}
 
 describe('chat.store responseLanguage request building', () => {
   beforeEach(() => {
     useChatStore.getState().reset()
     vi.clearAllMocks()
+    useAppStore.setState({
+      config: {
+        api: {
+          provider: 'anthropic',
+          apiKey: 'test-key',
+          apiUrl: 'https://api.anthropic.com',
+          model: 'claude-sonnet-4-5-20250929'
+        }
+      }
+    } as any)
   })
 
   it('sendMessageToConversation interactive 请求包含 responseLanguage', async () => {
+    seedConversation('space-1', 'conv-1')
     await useChatStore.getState().sendMessageToConversation(
       'space-1',
       'conv-1',
@@ -71,6 +123,7 @@ describe('chat.store responseLanguage request building', () => {
   })
 
   it('sendMessageToConversation workflow-step 请求包含 responseLanguage', async () => {
+    seedConversation('space-1', 'conv-2')
     await useChatStore.getState().sendMessageToConversation(
       'space-1',
       'conv-2',

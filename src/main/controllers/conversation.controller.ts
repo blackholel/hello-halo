@@ -79,7 +79,7 @@ export function updateConversation(
       }
     }
 
-    if (updates.ai && isGenerating(conversationId)) {
+    if (updates.ai && isGenerating(spaceId, conversationId)) {
       return {
         success: false,
         error: 'Cannot update conversation AI config while generation is in progress'
@@ -106,8 +106,8 @@ export async function deleteConversation(spaceId: string, conversationId: string
       return { success: false, error: 'Conversation not found' }
     }
 
-    await stopGeneration(conversationId)
-    closeV2Session(conversationId)
+    await stopGeneration(spaceId, conversationId)
+    closeV2Session(spaceId, conversationId)
 
     if (!serviceDeleteConversation(spaceId, conversationId)) {
       return { success: false, error: 'Conversation not found' }

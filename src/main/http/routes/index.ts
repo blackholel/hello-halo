@@ -315,8 +315,12 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
   })
 
   app.post('/api/agent/mode', async (req: Request, res: Response) => {
-    const { conversationId, mode, runId } = req.body
-    const result = await agentController.setMode({ conversationId, mode, runId })
+    const { spaceId, conversationId, mode, runId } = req.body
+    if (typeof spaceId !== 'string' || typeof conversationId !== 'string') {
+      res.status(400).json({ success: false, error: 'spaceId and conversationId are required' })
+      return
+    }
+    const result = await agentController.setMode({ spaceId, conversationId, mode, runId })
     res.json(result)
   })
 
@@ -328,8 +332,12 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
   })
 
   app.post('/api/agent/stop', async (req: Request, res: Response) => {
-    const { conversationId } = req.body
-    const result = await agentController.stopGeneration(conversationId)
+    const { spaceId, conversationId } = req.body
+    if (typeof spaceId !== 'string') {
+      res.status(400).json({ success: false, error: 'spaceId is required' })
+      return
+    }
+    const result = await agentController.stopGeneration(spaceId, conversationId)
     res.json(result)
   })
 
@@ -361,7 +369,7 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
 
     const { getResourceIndexHash } = await import('../../services/resource-index.service')
     const { getV2SessionInfo } = await import('../../services/agent')
-    const sessionInfo = conversationId ? getV2SessionInfo(conversationId) : undefined
+    const sessionInfo = conversationId && spaceId ? getV2SessionInfo(spaceId, conversationId) : undefined
     res.json({
       success: true,
       data: {
@@ -373,20 +381,32 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
   }))
 
   app.post('/api/agent/approve', async (req: Request, res: Response) => {
-    const { conversationId } = req.body
-    const result = agentController.approveTool(conversationId)
+    const { spaceId, conversationId } = req.body
+    if (typeof spaceId !== 'string' || typeof conversationId !== 'string') {
+      res.status(400).json({ success: false, error: 'spaceId and conversationId are required' })
+      return
+    }
+    const result = agentController.approveTool(spaceId, conversationId)
     res.json(result)
   })
 
   app.post('/api/agent/reject', async (req: Request, res: Response) => {
-    const { conversationId } = req.body
-    const result = agentController.rejectTool(conversationId)
+    const { spaceId, conversationId } = req.body
+    if (typeof spaceId !== 'string' || typeof conversationId !== 'string') {
+      res.status(400).json({ success: false, error: 'spaceId and conversationId are required' })
+      return
+    }
+    const result = agentController.rejectTool(spaceId, conversationId)
     res.json(result)
   })
 
   app.post('/api/agent/answer-question', async (req: Request, res: Response) => {
-    const { conversationId, answer, payload } = req.body
-    const result = await agentController.answerQuestion(conversationId, payload ?? answer)
+    const { spaceId, conversationId, answer, payload } = req.body
+    if (typeof spaceId !== 'string' || typeof conversationId !== 'string') {
+      res.status(400).json({ success: false, error: 'spaceId and conversationId are required' })
+      return
+    }
+    const result = await agentController.answerQuestion(spaceId, conversationId, payload ?? answer)
     res.json(result)
   })
 
@@ -396,13 +416,23 @@ export function registerApiRoutes(app: Express, mainWindow: BrowserWindow | null
   })
 
   app.get('/api/agent/generating/:conversationId', async (req: Request, res: Response) => {
-    const result = agentController.checkGenerating(req.params.conversationId)
+    const spaceId = typeof req.query.spaceId === 'string' ? req.query.spaceId : ''
+    if (!spaceId) {
+      res.status(400).json({ success: false, error: 'spaceId query is required' })
+      return
+    }
+    const result = agentController.checkGenerating(spaceId, req.params.conversationId)
     res.json(result)
   })
 
   // Get session state for recovery after refresh
   app.get('/api/agent/session/:conversationId', async (req: Request, res: Response) => {
-    const result = agentController.getSessionState(req.params.conversationId)
+    const spaceId = typeof req.query.spaceId === 'string' ? req.query.spaceId : ''
+    if (!spaceId) {
+      res.status(400).json({ success: false, error: 'spaceId query is required' })
+      return
+    }
+    const result = agentController.getSessionState(spaceId, req.params.conversationId)
     res.json(result)
   })
 
