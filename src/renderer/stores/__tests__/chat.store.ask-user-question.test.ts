@@ -261,6 +261,51 @@ describe('Chat Store - AskUserQuestion Flow', () => {
     expect(session.askUserQuestionOrder).toEqual([])
   })
 
+  it('prefers a newer pending AskUserQuestion over previously failed active question', () => {
+    const conversationId = 'conv-failed-then-pending'
+    const runId = 'run-failed-then-pending'
+
+    useChatStore.getState().handleAgentRunStart({
+      spaceId: 'space-1',
+      conversationId,
+      runId,
+      startedAt: new Date().toISOString()
+    })
+
+    useChatStore.getState().handleAgentToolCall({
+      spaceId: 'space-1',
+      conversationId,
+      runId,
+      id: 'tool-failed',
+      name: 'AskUserQuestion',
+      status: 'waiting_approval',
+      input: { question: 'invalid options' }
+    } as unknown as AgentEventBase & ToolCall)
+
+    useChatStore.getState().handleAgentToolResult({
+      spaceId: 'space-1',
+      conversationId,
+      runId,
+      toolCallId: 'tool-failed',
+      result: 'InputValidationError: options too big',
+      isError: true
+    })
+
+    useChatStore.getState().handleAgentToolCall({
+      spaceId: 'space-1',
+      conversationId,
+      runId,
+      id: 'tool-pending',
+      name: 'AskUserQuestion',
+      status: 'waiting_approval',
+      input: { question: 'fallback prompt' }
+    } as unknown as AgentEventBase & ToolCall)
+
+    const session = useChatStore.getState().getSession(conversationId)
+    expect(session.activeAskUserQuestionId).toBe('tool-pending')
+    expect(getAskUserQuestionByStatus(conversationId, 'pending')?.id).toBe('tool-pending')
+  })
+
   it('handles out-of-order tool_result before tool_call and converges status', () => {
     const conversationId = 'conv-out-of-order'
     const runId = 'run-ooo'

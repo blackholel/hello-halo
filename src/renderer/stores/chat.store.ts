@@ -402,13 +402,17 @@ function resolveActiveAskUserQuestionId(
   order: string[],
   byId: Record<string, AskUserQuestionItem>
 ): string | null {
-  if (currentActiveId && byId[currentActiveId]) {
+  const currentActiveItem = currentActiveId ? byId[currentActiveId] : null
+  if (currentActiveId && currentActiveItem?.status === 'pending') {
     return currentActiveId
   }
   for (const id of order) {
     const item = byId[id]
     if (!item) continue
     if (item.status === 'pending') return id
+  }
+  if (currentActiveId && currentActiveItem?.status === 'failed') {
+    return currentActiveId
   }
   for (const id of order) {
     const item = byId[id]
