@@ -209,6 +209,10 @@ export interface KiteConfig {
   appearance: AppearanceConfig;
   system: SystemConfig;
   remoteAccess: RemoteAccessConfig;
+  onboarding: {
+    completed: boolean;
+    homeGuideHidden: boolean;
+  };
   mcpServers: McpServersConfig;  // MCP servers configuration
   isFirstLaunch: boolean;
   configSourceMode: ConfigSourceMode;

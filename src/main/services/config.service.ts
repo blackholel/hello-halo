@@ -130,6 +130,7 @@ interface KiteConfig {
   }
   onboarding: {
     completed: boolean
+    homeGuideHidden: boolean
   }
   // MCP servers configuration (compatible with Cursor / Claude Desktop format)
   mcpServers: Record<string, McpServerConfig>
@@ -293,7 +294,8 @@ const DEFAULT_CONFIG: KiteConfig = {
     port: 3456
   },
   onboarding: {
-    completed: false
+    completed: false,
+    homeGuideHidden: false
   },
   mcpServers: {},  // Empty by default
   isFirstLaunch: true,

@@ -39,7 +39,8 @@ import { getAiSetupState } from '../../shared/types/ai-profile'
 
 // Check if running in web mode
 const isWebMode = api.isRemoteMode()
-const HOME_ONBOARDING_VISIBILITY_KEY = 'kite-home-onboarding-visibility'
+// Legacy key kept for one-time migration from old versions.
+const LEGACY_HOME_ONBOARDING_VISIBILITY_KEY = 'kite-home-onboarding-visibility'
 const MODEL_SETUP_HINT_DISMISSED_KEY = 'kite-model-setup-hint-dismissed'
 
 function getLocalizedResourceName(item: { name: string; displayName?: string; namespace?: string }): string {
@@ -58,7 +59,7 @@ function directiveLookupKeys(ref: DirectiveRef): string[] {
 
 export function HomePage(): JSX.Element {
   const { t } = useTranslation()
-  const { setView, config } = useAppStore()
+  const { setView, config, setConfig } = useAppStore()
   const {
     kiteSpace,
     spaces,
@@ -162,12 +163,36 @@ export function HomePage(): JSX.Element {
   }, [loadDefaultPath])
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
-    const visibility = localStorage.getItem(HOME_ONBOARDING_VISIBILITY_KEY)
-    if (visibility === 'hide-forever') {
+    const hiddenByConfig = config?.onboarding?.homeGuideHidden === true
+    if (hiddenByConfig) {
       setShowHomeOnboarding(false)
+      return
     }
-  }, [])
+
+    // Migration path: old versions stored this preference in localStorage only.
+    if (typeof window === 'undefined') return
+    const visibility = localStorage.getItem(LEGACY_HOME_ONBOARDING_VISIBILITY_KEY)
+    if (visibility !== 'hide-forever') return
+
+    setShowHomeOnboarding(false)
+    localStorage.removeItem(LEGACY_HOME_ONBOARDING_VISIBILITY_KEY)
+
+    void api.setConfig({ onboarding: { homeGuideHidden: true } })
+      .then((response) => {
+        if (response.success && config) {
+          setConfig({
+            ...config,
+            onboarding: {
+              ...config.onboarding,
+              homeGuideHidden: true
+            }
+          })
+        }
+      })
+      .catch((error) => {
+        console.error('[HomePage] Failed to migrate home onboarding visibility:', error)
+      })
+  }, [config, setConfig])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -338,8 +363,24 @@ export function HomePage(): JSX.Element {
     setShowHomeOnboarding(false)
     setShowHomeOnboardingDialog(false)
     if (typeof window !== 'undefined') {
-      localStorage.setItem(HOME_ONBOARDING_VISIBILITY_KEY, 'hide-forever')
+      localStorage.setItem(LEGACY_HOME_ONBOARDING_VISIBILITY_KEY, 'hide-forever')
     }
+
+    void api.setConfig({ onboarding: { homeGuideHidden: true } })
+      .then((response) => {
+        if (response.success && config) {
+          setConfig({
+            ...config,
+            onboarding: {
+              ...config.onboarding,
+              homeGuideHidden: true
+            }
+          })
+        }
+      })
+      .catch((error) => {
+        console.error('[HomePage] Failed to persist home onboarding visibility:', error)
+      })
   }
 
   const handleDismissModelSetupHint = (): void => {
