@@ -57,6 +57,12 @@ export interface AgentsConfig {
   paths?: string[]  // Additional agent paths
 }
 
+/**
+ * Runtime resource policy.
+ * - app-single-source: load current space + app/global resources
+ * - legacy: preserved for compatibility
+ * - full-mesh: deprecated, ignored at runtime and treated as app-single-source
+ */
 export type ClaudeCodeResourceRuntimePolicy = 'app-single-source' | 'legacy' | 'full-mesh'
 export type ClaudeCodeSkillMissingPolicy = 'skip' | 'deny'
 

@@ -131,15 +131,15 @@ describe('sdk-config.builder strict space-only', () => {
     expect(paths).toContain('/workspace/project/.claude')
   })
 
-  it('full-mesh 会聚合所有 space 的 .claude 目录', () => {
+  it('full-mesh 运行时降级后不再聚合其他 space 的 .claude 目录', () => {
     const plugins = buildPluginsConfig('/workspace/project', {
       resourceRuntimePolicy: 'full-mesh'
     })
     const paths = plugins.map(plugin => plugin.path)
 
     expect(paths).toContain('/workspace/project/.claude')
-    expect(paths).toContain('/workspace/space-a/.claude')
-    expect(paths).toContain('/workspace/space-b/.claude')
+    expect(paths).not.toContain('/workspace/space-a/.claude')
+    expect(paths).not.toContain('/workspace/space-b/.claude')
   })
 
   it('falls back to legacy behavior when policy is explicitly legacy', () => {
@@ -250,7 +250,7 @@ describe('sdk-config.builder strict space-only', () => {
     expect(sdkOptions.env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe('kimi-k2-0905-preview')
   })
 
-  it('仅 full-mesh 不注入 disable-slash-commands', () => {
+  it('full-mesh 降级后仍注入 disable-slash-commands', () => {
     const sdkOptionsDefault = buildSdkOptions({
       ...createBuildSdkOptionsParams(),
       resourceRuntimePolicy: 'app-single-source'
@@ -261,10 +261,10 @@ describe('sdk-config.builder strict space-only', () => {
     })
 
     expect(sdkOptionsDefault.extraArgs['disable-slash-commands']).toBeNull()
-    expect(sdkOptionsFullMesh.extraArgs['disable-slash-commands']).toBeUndefined()
+    expect(sdkOptionsFullMesh.extraArgs['disable-slash-commands']).toBeNull()
   })
 
-  it('仅 full-mesh 在 allowedTools 中包含 Skill', () => {
+  it('full-mesh 降级后 allowedTools 不再包含 Skill', () => {
     const sdkOptionsDefault = buildSdkOptions({
       ...createBuildSdkOptionsParams(),
       resourceRuntimePolicy: 'app-single-source'
@@ -275,7 +275,7 @@ describe('sdk-config.builder strict space-only', () => {
     })
 
     expect(sdkOptionsDefault.allowedTools).not.toContain('Skill')
-    expect(sdkOptionsFullMesh.allowedTools).toContain('Skill')
+    expect(sdkOptionsFullMesh.allowedTools).not.toContain('Skill')
   })
 
   it('会过滤不符合 schema 的 MCP 配置，仅保留有效项', () => {

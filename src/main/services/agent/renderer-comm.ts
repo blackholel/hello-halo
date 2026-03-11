@@ -18,7 +18,7 @@ import { buildSessionKey } from '../../../shared/session-key'
 import { ASK_USER_QUESTION_ERROR_CODES } from './types'
 import { getLockedUserConfigRootDir } from '../config-source-mode.service'
 import { listEnabledPlugins } from '../plugins.service'
-import { getAllSpacePaths } from '../space.service'
+import { resolveResourceRuntimePolicy as resolveNormalizedRuntimePolicy } from '../resource-runtime-policy.service'
 import {
   getExecutionLayerAllowedSources,
   getSpaceResourcePolicy,
@@ -163,6 +163,10 @@ function buildExecutionBoundaryRoots(
   policySources?: ResourceSource[],
   resourceRuntimePolicy: ClaudeCodeResourceRuntimePolicy = 'app-single-source'
 ): string[] {
+  resolveNormalizedRuntimePolicy(
+    { explicit: resourceRuntimePolicy },
+    'agent.renderer-comm.boundary'
+  )
   const roots = new Set<string>([resolve(absoluteWorkDir)])
   const allowedSources = new Set<ResourceSource>(normalizeAllowedSourcesForBoundary(policySources))
 
@@ -209,17 +213,7 @@ function buildExecutionBoundaryRoots(
     roots.add(join(absoluteWorkDir, '.claude', 'skills'))
     roots.add(join(absoluteWorkDir, '.claude', 'agents'))
     roots.add(join(absoluteWorkDir, '.claude', 'commands'))
-
-    if (resourceRuntimePolicy === 'full-mesh') {
-      for (const spacePath of getAllSpacePaths()) {
-        const absoluteSpacePath = resolve(spacePath)
-        roots.add(join(absoluteSpacePath, '.claude', 'skills'))
-        roots.add(join(absoluteSpacePath, '.claude', 'agents'))
-        roots.add(join(absoluteSpacePath, '.claude', 'commands'))
-      }
-    }
   }
-
   return Array.from(roots)
 }
 
@@ -797,11 +791,14 @@ export function createCanUseTool(
     spaceConfig?.claudeCode?.skillMissingPolicy ||
     config.claudeCode?.skillMissingPolicy ||
     'skip'
-  const resourceRuntimePolicy: ClaudeCodeResourceRuntimePolicy =
-    options?.resourceRuntimePolicy ||
-    spaceConfig?.claudeCode?.resourceRuntimePolicy ||
-    config.claudeCode?.resourceRuntimePolicy ||
-    'app-single-source'
+  const resourceRuntimePolicy = resolveNormalizedRuntimePolicy(
+    {
+      explicit: options?.resourceRuntimePolicy,
+      spacePolicy: spaceConfig?.claudeCode?.resourceRuntimePolicy,
+      globalPolicy: config.claudeCode?.resourceRuntimePolicy,
+    },
+    'agent.renderer-comm'
+  )
   const resourcePolicy = getSpaceResourcePolicy(workDir)
   const strictSpaceOnly = isStrictSpaceOnlyPolicy(resourcePolicy)
   const executionBoundaryRoots = buildExecutionBoundaryRoots(
@@ -886,7 +883,7 @@ export function createCanUseTool(
       })
     }
 
-    if (toolName === 'Skill' && resourceRuntimePolicy !== 'full-mesh') {
+    if (toolName === 'Skill') {
       return deny(
         'ModePolicy',
         `Skill tool is disabled by runtime policy (skillMissingPolicy=${skillMissingPolicy}). Use injected directives instead.`,

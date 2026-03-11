@@ -14,6 +14,7 @@ import { resolve } from 'path'
 import { cpus } from 'os'
 import { getConfig, onApiConfigChange } from '../config.service'
 import { getSpaceConfig } from '../space-config.service'
+import { resolveResourceRuntimePolicy as resolveNormalizedRuntimePolicy } from '../resource-runtime-policy.service'
 import { clearSessionId, getConversation } from '../conversation.service'
 import { getHeadlessElectronPath } from './electron-path'
 import { resolveProvider } from './provider-resolver'
@@ -36,7 +37,7 @@ import { getResourceIndexHash } from '../resource-index.service'
 import { normalizeLocale, type LocaleCode } from '../../../shared/i18n/locale'
 import { buildSessionKey } from '../../../shared/session-key'
 import { flushRuntimeJournalSnapshot } from './runtime-journal.service'
-import type { ClaudeCodeResourceRuntimePolicy, ClaudeCodeSkillMissingPolicy } from '../../../shared/types/claude-code'
+import type { ClaudeCodeSkillMissingPolicy } from '../../../shared/types/claude-code'
 
 // V2 Session management: Map of sessionKey -> persistent V2 session
 const v2Sessions = new Map<string, V2SessionInfo>()
@@ -893,10 +894,13 @@ export async function ensureSessionWarm(
   const electronPath = getHeadlessElectronPath()
   const { effectiveLazyLoad: skillsLazyLoad } = getEffectiveSkillsLazyLoad(workDir, config)
   const spaceConfig = getSpaceConfig(workDir)
-  const resourceRuntimePolicy: ClaudeCodeResourceRuntimePolicy =
-    spaceConfig?.claudeCode?.resourceRuntimePolicy ||
-    config.claudeCode?.resourceRuntimePolicy ||
-    'app-single-source'
+  const resourceRuntimePolicy = resolveNormalizedRuntimePolicy(
+    {
+      spacePolicy: spaceConfig?.claudeCode?.resourceRuntimePolicy,
+      globalPolicy: config.claudeCode?.resourceRuntimePolicy,
+    },
+    'agent.session-manager'
+  )
   const skillMissingPolicy: ClaudeCodeSkillMissingPolicy =
     spaceConfig?.claudeCode?.skillMissingPolicy ||
     config.claudeCode?.skillMissingPolicy ||

@@ -14,6 +14,7 @@ import { getConfig } from './config.service'
 import { getLockedUserConfigRootDir } from './config-source-mode.service'
 import { getSpaceConfig } from './space-config.service'
 import { getAllSpacePaths } from './space.service'
+import { resolveResourceRuntimePolicy } from './resource-runtime-policy.service'
 import { isPathWithinBasePaths, isValidDirectoryPath, isFileNotFoundError, isWorkDirAllowed } from '../utils/path-validation'
 import { listEnabledPlugins } from './plugins.service'
 import { FileCache } from '../utils/file-cache'
@@ -50,10 +51,8 @@ export interface CommandDefinition {
 const DEFAULT_LOCALE_CACHE_KEY = '__default__'
 const globalCommandsCacheByLocale = new Map<string, CommandDefinition[]>()
 const spaceCommandsCacheByLocale = new Map<string, Map<string, CommandDefinition[]>>()
-const fullMeshMergedCommandsCacheByLocale = new Map<string, Map<string, CommandDefinition[]>>()
 const contentCache = new FileCache<string>({ maxSize: 200 })
 const listLogSignatureCache = new Map<string, string>()
-const fullMeshAggregationLogSignatureCache = new Map<string, string>()
 
 function getAllowedCommandBaseDirs(): string[] {
   return getAllSpacePaths().map((spacePath) => join(spacePath, '.claude', 'commands'))
@@ -65,13 +64,6 @@ function normalizePath(path: string): string {
 
 function normalizeResolvedPath(path: string): string {
   return normalizePath(resolve(path))
-}
-
-function isPathWithinDirectory(targetPath: string, directoryPath: string): boolean {
-  const normalizedTarget = normalizeResolvedPath(targetPath)
-  const normalizedDirectory = normalizeResolvedPath(directoryPath)
-  if (normalizedTarget === normalizedDirectory) return true
-  return normalizedTarget.startsWith(`${normalizedDirectory}/`)
 }
 
 function toLocaleCacheKey(locale?: string): string {
@@ -91,33 +83,17 @@ function shouldVerboseResourceListLog(): boolean {
   return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on'
 }
 
-function getSortedSpacePaths(): string[] {
-  return [...getAllSpacePaths()].sort((a, b) => a.localeCompare(b))
-}
-
-function getFullMeshLookupSpacePaths(currentWorkDir: string): string[] {
-  const deduped: string[] = []
-  const seen = new Set<string>()
-  for (const spacePath of [currentWorkDir, ...getSortedSpacePaths()]) {
-    const normalizedPath = normalizeResolvedPath(spacePath)
-    if (seen.has(normalizedPath)) {
-      continue
-    }
-    seen.add(normalizedPath)
-    deduped.push(spacePath)
-  }
-  return deduped
-}
-
-function isFullMeshRuntimePolicy(workDir?: string): boolean {
-  if (!workDir) return false
+function resolveEffectiveRuntimePolicy(workDir?: string): void {
+  if (!workDir) return
   const config = getConfig()
   const spaceConfig = getSpaceConfig(workDir)
-  const runtimePolicy =
-    spaceConfig?.claudeCode?.resourceRuntimePolicy ||
-    config.claudeCode?.resourceRuntimePolicy ||
-    'app-single-source'
-  return runtimePolicy === 'full-mesh'
+  resolveResourceRuntimePolicy(
+    {
+      spacePolicy: spaceConfig?.claudeCode?.resourceRuntimePolicy,
+      globalPolicy: config.claudeCode?.resourceRuntimePolicy,
+    },
+    'commands.service'
+  )
 }
 
 function getSpaceCommandsFromCache(workDir: string, localeKey: string, locale?: string): CommandDefinition[] {
@@ -134,126 +110,6 @@ function getSpaceCommandsFromCache(workDir: string, localeKey: string, locale?: 
   }
 
   return spaceCommands
-}
-
-function getFullMeshCommandsFromCache(workDir: string, localeKey: string): CommandDefinition[] | null {
-  const workDirKey = getNormalizedWorkDirKey(workDir)
-  const localeCache = fullMeshMergedCommandsCacheByLocale.get(workDirKey)
-  if (!localeCache) return null
-  return localeCache.get(localeKey) || null
-}
-
-function setFullMeshCommandsCache(
-  workDir: string,
-  localeKey: string,
-  commands: CommandDefinition[]
-): void {
-  const workDirKey = getNormalizedWorkDirKey(workDir)
-  let localeCache = fullMeshMergedCommandsCacheByLocale.get(workDirKey)
-  if (!localeCache) {
-    localeCache = new Map<string, CommandDefinition[]>()
-    fullMeshMergedCommandsCacheByLocale.set(workDirKey, localeCache)
-  }
-  localeCache.set(localeKey, commands)
-}
-
-function resolveCommandOwnerSpacePath(command: CommandDefinition): string | null {
-  if (command.source !== 'space') return null
-  for (const spacePath of getSortedSpacePaths()) {
-    const commandRoot = join(spacePath, '.claude', 'commands')
-    if (isPathWithinDirectory(command.path, commandRoot)) {
-      return normalizeResolvedPath(spacePath)
-    }
-  }
-  return null
-}
-
-function getCommandPrecedence(
-  command: CommandDefinition,
-  currentWorkDir: string
-): { level: number; ownerSpacePath: string | null } {
-  const ownerSpacePath = resolveCommandOwnerSpacePath(command)
-  if (!ownerSpacePath) return { level: 0, ownerSpacePath: null }
-  if (ownerSpacePath === normalizeResolvedPath(currentWorkDir)) {
-    return { level: 2, ownerSpacePath }
-  }
-  return { level: 1, ownerSpacePath }
-}
-
-function shouldReplaceCommand(
-  existing: CommandDefinition,
-  candidate: CommandDefinition,
-  currentWorkDir: string
-): boolean {
-  const existingPrecedence = getCommandPrecedence(existing, currentWorkDir)
-  const candidatePrecedence = getCommandPrecedence(candidate, currentWorkDir)
-  if (candidatePrecedence.level > existingPrecedence.level) return true
-  if (candidatePrecedence.level < existingPrecedence.level) return false
-
-  if (
-    candidatePrecedence.level === 1 &&
-    existingPrecedence.ownerSpacePath &&
-    candidatePrecedence.ownerSpacePath
-  ) {
-    const ownerCompare = candidatePrecedence.ownerSpacePath.localeCompare(existingPrecedence.ownerSpacePath)
-    if (ownerCompare < 0) return true
-    if (ownerCompare > 0) return false
-    return candidate.path.localeCompare(existing.path) < 0
-  }
-
-  return false
-}
-
-function mergeCommandsFullMesh(
-  globalCommands: CommandDefinition[],
-  allSpaceCommands: CommandDefinition[],
-  currentWorkDir: string
-): CommandDefinition[] {
-  const merged = new Map<string, CommandDefinition>()
-  const conflicts: string[] = []
-
-  for (const command of globalCommands) {
-    merged.set(commandKey(command), command)
-  }
-
-  for (const command of allSpaceCommands) {
-    const key = commandKey(command)
-    const existing = merged.get(key)
-    if (!existing) {
-      merged.set(key, command)
-      continue
-    }
-    if (shouldReplaceCommand(existing, command, currentWorkDir)) {
-      conflicts.push(`${key}: ${existing.path} -> ${command.path}`)
-      merged.set(key, command)
-    }
-  }
-
-  if (conflicts.length > 0) {
-    console.log(
-      `[Commands][full-mesh] Resolved ${conflicts.length} conflicts by precedence (current space > lexicographic space > global)`
-    )
-  }
-
-  return Array.from(merged.values())
-}
-
-function logFullMeshAggregation(
-  workDir: string,
-  localeKey: string,
-  globalCount: number,
-  spaceCount: number,
-  mergedCount: number
-): void {
-  const cacheKey = `${getNormalizedWorkDirKey(workDir)}:${localeKey}`
-  const signature = `${globalCount}:${spaceCount}:${mergedCount}`
-  if (fullMeshAggregationLogSignatureCache.get(cacheKey) === signature) {
-    return
-  }
-  fullMeshAggregationLogSignatureCache.set(cacheKey, signature)
-  console.log(
-    `[Commands][full-mesh] Aggregated resources: global=${globalCount}, spaces=${spaceCount}, merged=${mergedCount}`
-  )
 }
 
 function resolveWorkDirForCommandPath(commandPath: string): string | null {
@@ -458,27 +314,7 @@ function listCommandsUnfiltered(workDir?: string, locale?: string): CommandDefin
   if (!workDir) {
     return globalCommands
   }
-
-  if (isFullMeshRuntimePolicy(workDir)) {
-    const cached = getFullMeshCommandsFromCache(workDir, localeKey)
-    if (cached) {
-      return cached
-    }
-    const allSpaceCommands: CommandDefinition[] = []
-    for (const spacePath of getSortedSpacePaths()) {
-      allSpaceCommands.push(...getSpaceCommandsFromCache(spacePath, localeKey, locale))
-    }
-    const mergedCommands = mergeCommandsFullMesh(globalCommands, allSpaceCommands, workDir)
-    setFullMeshCommandsCache(workDir, localeKey, mergedCommands)
-    logFullMeshAggregation(
-      workDir,
-      localeKey,
-      globalCommands.length,
-      allSpaceCommands.length,
-      mergedCommands.length
-    )
-    return mergedCommands
-  }
+  resolveEffectiveRuntimePolicy(workDir)
 
   const spaceCommands = getSpaceCommandsFromCache(workDir, localeKey, locale)
 
@@ -497,18 +333,11 @@ export function listSpaceCommands(workDir: string): CommandDefinition[] {
 }
 
 function listCommandsForRefLookup(workDir: string): CommandDefinition[] {
+  resolveEffectiveRuntimePolicy(workDir)
   let globalCommands = globalCommandsCacheByLocale.get(DEFAULT_LOCALE_CACHE_KEY)
   if (!globalCommands) {
     globalCommands = buildGlobalCommands()
     globalCommandsCacheByLocale.set(DEFAULT_LOCALE_CACHE_KEY, globalCommands)
-  }
-
-  if (isFullMeshRuntimePolicy(workDir)) {
-    const allSpaceCommands: CommandDefinition[] = []
-    for (const spacePath of getFullMeshLookupSpacePaths(workDir)) {
-      allSpaceCommands.push(...getSpaceCommandsFromCache(spacePath, DEFAULT_LOCALE_CACHE_KEY))
-    }
-    return [...allSpaceCommands, ...globalCommands]
   }
 
   const spaceCommands = getSpaceCommandsFromCache(workDir, DEFAULT_LOCALE_CACHE_KEY)
@@ -518,13 +347,7 @@ function listCommandsForRefLookup(workDir: string): CommandDefinition[] {
 }
 
 export function getCommand(name: string, workDir?: string): CommandDefinition | null {
-  const command = findCommand(listCommandsUnfiltered(workDir), name) ?? null
-  if (command && isFullMeshRuntimePolicy(workDir)) {
-    console.log(
-      `[Commands][full-mesh] Resolved "${name}" -> source=${command.source}, path=${command.path}`
-    )
-  }
-  return command
+  return findCommand(listCommandsUnfiltered(workDir), name) ?? null
 }
 
 export function getCommandContent(
@@ -691,26 +514,20 @@ export function copyCommandToSpaceByRef(
 export function clearCommandsCache(): void {
   globalCommandsCacheByLocale.clear()
   spaceCommandsCacheByLocale.clear()
-  fullMeshMergedCommandsCacheByLocale.clear()
   contentCache.clear()
   listLogSignatureCache.clear()
-  fullMeshAggregationLogSignatureCache.clear()
 }
 
 export function invalidateCommandsCache(workDir?: string | null): void {
   if (!workDir) {
     globalCommandsCacheByLocale.clear()
-    fullMeshMergedCommandsCacheByLocale.clear()
     contentCache.clear()
     listLogSignatureCache.clear()
-    fullMeshAggregationLogSignatureCache.clear()
     return
   }
   spaceCommandsCacheByLocale.delete(workDir)
-  fullMeshMergedCommandsCacheByLocale.clear()
   contentCache.clearForDir(workDir)
   listLogSignatureCache.clear()
-  fullMeshAggregationLogSignatureCache.clear()
 }
 
 export function isCommandPathAllowed(commandPath: string): boolean {

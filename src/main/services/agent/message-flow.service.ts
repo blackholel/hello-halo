@@ -9,6 +9,7 @@ import { BrowserWindow } from 'electron'
 import { promises as fsPromises } from 'fs'
 import { getConfig } from '../config.service'
 import { getSpaceConfig } from '../space-config.service'
+import { resolveResourceRuntimePolicy as resolveNormalizedRuntimePolicy } from '../resource-runtime-policy.service'
 import { getSkillContent, getSkillDefinition } from '../skills.service'
 import {
   getConversation,
@@ -87,7 +88,7 @@ import type {
   ChatMode,
   SessionAcquireResult
 } from './types'
-import type { ClaudeCodeResourceRuntimePolicy, ClaudeCodeSkillMissingPolicy } from '../../../shared/types/claude-code'
+import type { ClaudeCodeSkillMissingPolicy } from '../../../shared/types/claude-code'
 import {
   ASK_USER_QUESTION_ERROR_CODES,
   AskUserQuestionError,
@@ -1103,10 +1104,13 @@ export async function sendMessage(
   const sessionKey = toSessionKey(spaceId, conversationId)
   beginChangeSet(spaceId, conversationId, workDir)
   const spaceConfig = getSpaceConfig(workDir)
-  const resourceRuntimePolicy: ClaudeCodeResourceRuntimePolicy =
-    spaceConfig?.claudeCode?.resourceRuntimePolicy ||
-    config.claudeCode?.resourceRuntimePolicy ||
-    'app-single-source'
+  const resourceRuntimePolicy = resolveNormalizedRuntimePolicy(
+    {
+      spacePolicy: spaceConfig?.claudeCode?.resourceRuntimePolicy,
+      globalPolicy: config.claudeCode?.resourceRuntimePolicy,
+    },
+    'agent.message-flow'
+  )
   const skillMissingPolicy: ClaudeCodeSkillMissingPolicy =
     spaceConfig?.claudeCode?.skillMissingPolicy ||
     config.claudeCode?.skillMissingPolicy ||
@@ -2181,9 +2185,7 @@ If the user asks about this project/codebase, inspect files in current workspace
               appResourceCounts: resourceIndexSnapshot.counts,
               sdkSkillsCount,
               sdkPluginsCount,
-              note: resourceRuntimePolicy === 'full-mesh'
-                ? 'Non-blocking: execution continues with full-mesh aggregated resources.'
-                : 'Non-blocking: execution continues with app-side injected resources.'
+              note: 'Non-blocking: execution continues with app-side injected resources.'
             })
           }
         }

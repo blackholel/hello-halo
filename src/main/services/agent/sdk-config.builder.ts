@@ -13,12 +13,13 @@ import { getSpaceConfig, type SpaceToolkit } from '../space-config.service'
 import { buildHooksConfig } from '../hooks.service'
 import { listEnabledPlugins } from '../plugins.service'
 import { isValidDirectoryPath } from '../../utils/path-validation'
-import { getAllSpacePaths, getSpace } from '../space.service'
+import { getSpace } from '../space.service'
 import { getSpaceToolkit } from '../toolkit.service'
 import { createAIBrowserMcpServer, AI_BROWSER_SYSTEM_PROMPT } from '../ai-browser'
 import { SKILLS_LAZY_SYSTEM_PROMPT } from '../skills-mcp-server'
 import { buildPluginMcpServers } from '../plugin-mcp.service'
 import { getLockedUserConfigRootDir } from '../config-source-mode.service'
+import { resolveResourceRuntimePolicy as resolveNormalizedRuntimePolicy } from '../resource-runtime-policy.service'
 import { resolveEffectiveConversationAi } from './ai-config-resolver'
 import {
   buildAnthropicCompatEnvDefaults,
@@ -118,15 +119,15 @@ export function resolveResourceRuntimePolicy(
   config?: ReturnType<typeof getConfig>,
   explicit?: ClaudeCodeResourceRuntimePolicy
 ): ClaudeCodeResourceRuntimePolicy {
-  if (explicit) {
-    return explicit
-  }
   const resolvedConfig = config ?? getConfig()
   const spaceConfig = getSpaceConfig(workDir)
-  return (
-    spaceConfig?.claudeCode?.resourceRuntimePolicy ||
-    resolvedConfig.claudeCode?.resourceRuntimePolicy ||
-    'app-single-source'
+  return resolveNormalizedRuntimePolicy(
+    {
+      explicit,
+      spacePolicy: spaceConfig?.claudeCode?.resourceRuntimePolicy,
+      globalPolicy: resolvedConfig.claudeCode?.resourceRuntimePolicy,
+    },
+    'agent.sdk-config.builder'
   )
 }
 
@@ -219,16 +220,6 @@ export function buildPluginsConfig(
     if (workDir) {
       addIfValid(join(workDir, '.claude'))
     }
-  }
-
-  if (effectiveResourceRuntimePolicy === 'full-mesh') {
-    const allSpacePaths = getAllSpacePaths()
-    for (const spacePath of allSpacePaths) {
-      addIfValid(join(spacePath, '.claude'))
-    }
-    console.log(
-      `[Agent] full-mesh plugin aggregation enabled: loaded ${plugins.length} plugin roots`
-    )
   }
 
   // Single summary log
@@ -577,9 +568,7 @@ export function buildSdkOptions(params: BuildSdkOptionsParams): Record<string, a
     },
     extraArgs: {
       'dangerously-skip-permissions': null,
-      ...(effectiveResourceRuntimePolicy !== 'full-mesh'
-        ? { 'disable-slash-commands': null }
-        : {})
+      'disable-slash-commands': null
     },
     stderr: (data: string) => {
       console.error(`[Agent][${conversationId}] CLI stderr${stderrSuffix}:`, data)
@@ -601,7 +590,6 @@ export function buildSdkOptions(params: BuildSdkOptionsParams): Record<string, a
       'Grep',
       'Glob',
       'Bash',
-      ...(effectiveResourceRuntimePolicy === 'full-mesh' ? ['Skill'] : [])
     ],
     permissionMode: 'acceptEdits' as const,
     includePartialMessages: true,

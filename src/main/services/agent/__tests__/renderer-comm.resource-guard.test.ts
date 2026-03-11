@@ -256,7 +256,7 @@ describe('renderer-comm resource-dir guard', () => {
     expect(legacyResult.behavior).toBe('deny')
   })
 
-  it('full-mesh 策略下允许 Skill 工具并放宽到其他 space 资源根', async () => {
+  it('full-mesh 策略在运行时降级后仍禁用 Skill 且不放宽跨 space 资源根', async () => {
     const canUseTool = createHandlerWithRuntimePolicy('full-mesh')
     const skillResult = await canUseTool(
       'Skill',
@@ -269,8 +269,8 @@ describe('renderer-comm resource-dir guard', () => {
       { signal: new AbortController().signal }
     )
 
-    expect(skillResult.behavior).toBe('allow')
-    expect(crossSpaceReadResult.behavior).toBe('allow')
+    expect(skillResult.behavior).toBe('deny')
+    expect(crossSpaceReadResult.behavior).toBe('deny')
   })
 
   it('冲突矩阵满足 deny 优先与分层优先级', () => {

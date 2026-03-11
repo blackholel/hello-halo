@@ -62,6 +62,7 @@ import {
   getAgent,
   listAgents
 } from '../../../src/main/services/agents.service'
+import { _testResetResourceRuntimePolicyWarnings } from '../../../src/main/services/resource-runtime-policy.service'
 
 function writeSkill(rootDir: string, name: string, content?: string): void {
   const skillDir = join(rootDir, 'skills', name)
@@ -95,8 +96,8 @@ function writeSpaceAgent(spaceDir: string, name: string, content?: string): void
   writeFileSync(join(spaceDir, '.claude', 'agents', `${name}.md`), content || `# ${name}\n`, 'utf-8')
 }
 
-describe('full-mesh 资源聚合优先级', () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), 'full-mesh-res-'))
+describe('full-mesh runtime fallback to app-single-source', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'full-mesh-runtime-fallback-'))
   const appRoot = join(tempRoot, 'app-root')
   const spaceA = join(tempRoot, 'space-a')
   const spaceB = join(tempRoot, 'space-b')
@@ -133,65 +134,66 @@ describe('full-mesh 资源聚合优先级', () => {
     clearSkillsCache()
     clearCommandsCache()
     clearAgentsCache()
+    _testResetResourceRuntimePolicyWarnings()
   })
 
   afterAll(() => {
     rmSync(tempRoot, { recursive: true, force: true })
   })
 
-  it('skills 按 current > 其他空间字典序 > global 命中', () => {
+  it('skills 仅命中 current space 与 global，不再跨 space 聚合', () => {
     const shared = getSkillDefinition('shared', spaceB)
     const lex = getSkillDefinition('lex', spaceB)
     const all = listSkills(spaceB, 'taxonomy-admin')
 
     expect(shared?.path).toContain(join('space-b', '.claude', 'skills', 'shared'))
-    expect(lex?.path).toContain(join('space-a', '.claude', 'skills', 'lex'))
-    expect(all.some((skill) => skill.path.includes(join('space-a', '.claude', 'skills', 'lex')))).toBe(true)
+    expect(lex?.path).toContain(join('app-root', 'skills', 'lex'))
+    expect(all.some((skill) => skill.path.includes(join('space-a', '.claude', 'skills', 'lex')))).toBe(false)
   })
 
-  it('commands 按 current > 其他空间字典序 > global 命中', () => {
+  it('commands 仅命中 current space 与 global，不再跨 space 聚合', () => {
     const shared = getCommand('shared', spaceB)
     const lex = getCommand('lex', spaceB)
     const all = listCommands(spaceB, 'taxonomy-admin')
 
     expect(shared?.path).toContain(join('space-b', '.claude', 'commands', 'shared.md'))
-    expect(lex?.path).toContain(join('space-a', '.claude', 'commands', 'lex.md'))
-    expect(all.some((command) => command.path.includes(join('space-a', '.claude', 'commands', 'lex.md')))).toBe(true)
+    expect(lex?.path).toContain(join('app-root', 'commands', 'lex.md'))
+    expect(all.some((command) => command.path.includes(join('space-a', '.claude', 'commands', 'lex.md')))).toBe(false)
   })
 
-  it('agents 按 current > 其他空间字典序 > global 命中', () => {
+  it('agents 仅命中 current space 与 global，不再跨 space 聚合', () => {
     const shared = getAgent('shared', spaceB)
     const lex = getAgent('lex', spaceB)
     const all = listAgents(spaceB, 'taxonomy-admin')
 
     expect(shared?.path).toContain(join('space-b', '.claude', 'agents', 'shared.md'))
-    expect(lex?.path).toContain(join('space-a', '.claude', 'agents', 'lex.md'))
-    expect(all.some((agent) => agent.path.includes(join('space-a', '.claude', 'agents', 'lex.md')))).toBe(true)
+    expect(lex?.path).toContain(join('app-root', 'agents', 'lex.md'))
+    expect(all.some((agent) => agent.path.includes(join('space-a', '.claude', 'agents', 'lex.md')))).toBe(false)
   })
 
-  it('copySkillToSpaceByRef 在 full-mesh 下优先命中当前空间同名 skill', () => {
+  it('copySkillToSpaceByRef 在 fallback 后优先命中当前空间同名 skill', () => {
     const result = copySkillToSpaceByRef({ type: 'skill', name: 'shared' }, spaceB)
 
     expect(result.status).toBe('copied')
     expect(result.data?.path).toContain(join('space-b', '.claude', 'skills', 'shared'))
   })
 
-  it('copyCommandToSpaceByRef 在 full-mesh 下优先命中当前空间同名 command', () => {
+  it('copyCommandToSpaceByRef 在 fallback 后优先命中当前空间同名 command', () => {
     const result = copyCommandToSpaceByRef({ type: 'command', name: 'shared' }, spaceB)
 
     expect(result.status).toBe('copied')
     expect(result.data?.path).toContain(join('space-b', '.claude', 'commands', 'shared.md'))
   })
 
-  it('copyAgentToSpaceByRef 在 full-mesh 下优先命中当前空间同名 agent', () => {
+  it('copyAgentToSpaceByRef 在 fallback 后优先命中当前空间同名 agent', () => {
     const result = copyAgentToSpaceByRef({ type: 'agent', name: 'shared' }, spaceB)
 
     expect(result.status).toBe('copied')
     expect(result.data?.path).toContain(join('space-b', '.claude', 'agents', 'shared.md'))
   })
 
-  it('同一空间重复读取时，full-mesh 聚合日志仅输出一次（命中合并缓存）', () => {
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+  it('同一进程里 full-mesh 降级 warning 每个服务只打印一次', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     try {
       listSkills(spaceB, 'taxonomy-admin')
       listSkills(spaceB, 'taxonomy-admin')
@@ -200,49 +202,13 @@ describe('full-mesh 资源聚合优先级', () => {
       listCommands(spaceB, 'taxonomy-admin')
       listCommands(spaceB, 'taxonomy-admin')
 
-      const skillsAggregatedLogCount = logSpy.mock.calls.filter((call) =>
-        typeof call[0] === 'string' && call[0].includes('[Skills][full-mesh] Aggregated resources')
-      ).length
-      const agentsAggregatedLogCount = logSpy.mock.calls.filter((call) =>
-        typeof call[0] === 'string' && call[0].includes('[Agents][full-mesh] Aggregated resources')
-      ).length
-      const commandsAggregatedLogCount = logSpy.mock.calls.filter((call) =>
-        typeof call[0] === 'string' && call[0].includes('[Commands][full-mesh] Aggregated resources')
-      ).length
+      const fallbackWarns = warnSpy.mock.calls.filter((call) =>
+        typeof call[0] === 'string' && call[0].includes('"full-mesh" is deprecated and ignored')
+      )
 
-      expect(skillsAggregatedLogCount).toBe(1)
-      expect(agentsAggregatedLogCount).toBe(1)
-      expect(commandsAggregatedLogCount).toBe(1)
+      expect(fallbackWarns.length).toBe(3)
     } finally {
-      logSpy.mockRestore()
-    }
-  })
-
-  it('locale 别名 (zh-CN/zh_CN) 命中同一份 full-mesh 缓存', () => {
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
-    try {
-      listSkills(spaceB, 'taxonomy-admin', 'zh-CN')
-      listSkills(spaceB, 'taxonomy-admin', 'zh_CN')
-      listAgents(spaceB, 'taxonomy-admin', 'zh-CN')
-      listAgents(spaceB, 'taxonomy-admin', 'zh_CN')
-      listCommands(spaceB, 'taxonomy-admin', 'zh-CN')
-      listCommands(spaceB, 'taxonomy-admin', 'zh_CN')
-
-      const skillsAggregatedLogCount = logSpy.mock.calls.filter((call) =>
-        typeof call[0] === 'string' && call[0].includes('[Skills][full-mesh] Aggregated resources')
-      ).length
-      const agentsAggregatedLogCount = logSpy.mock.calls.filter((call) =>
-        typeof call[0] === 'string' && call[0].includes('[Agents][full-mesh] Aggregated resources')
-      ).length
-      const commandsAggregatedLogCount = logSpy.mock.calls.filter((call) =>
-        typeof call[0] === 'string' && call[0].includes('[Commands][full-mesh] Aggregated resources')
-      ).length
-
-      expect(skillsAggregatedLogCount).toBe(1)
-      expect(agentsAggregatedLogCount).toBe(1)
-      expect(commandsAggregatedLogCount).toBe(1)
-    } finally {
-      logSpy.mockRestore()
+      warnSpy.mockRestore()
     }
   })
 })

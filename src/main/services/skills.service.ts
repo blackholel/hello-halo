@@ -17,6 +17,7 @@ import { getLockedConfigSourceMode, getLockedUserConfigRootDir } from './config-
 import { getSpaceConfig } from './space-config.service'
 import { listEnabledPlugins } from './plugins.service'
 import { getAllSpacePaths } from './space.service'
+import { resolveResourceRuntimePolicy } from './resource-runtime-policy.service'
 import type { ResourceRef, CopyToSpaceOptions, CopyToSpaceResult } from './resource-ref.service'
 import { isPathWithinBasePaths, isValidDirectoryPath, isFileNotFoundError } from '../utils/path-validation'
 import { FileCache } from '../utils/file-cache'
@@ -104,10 +105,8 @@ export interface SaveSopSkillResult {
 const DEFAULT_LOCALE_CACHE_KEY = '__default__'
 const globalSkillsCacheByLocale = new Map<string, SkillDefinition[]>()
 const spaceSkillsCacheByLocale = new Map<string, Map<string, SkillDefinition[]>>()
-const fullMeshMergedSkillsCacheByLocale = new Map<string, Map<string, SkillDefinition[]>>()
 const contentCache = new FileCache<string>({ maxSize: 200 })
 const listLogSignatureCache = new Map<string, string>()
-const fullMeshAggregationLogSignatureCache = new Map<string, string>()
 const SOP_SPEC_BEGIN_MARKER = '## SOP_SPEC_JSON_BEGIN'
 const SOP_SPEC_END_MARKER = '## SOP_SPEC_JSON_END'
 
@@ -131,13 +130,6 @@ function normalizeResolvedPath(path: string): string {
   return normalizePath(resolve(path))
 }
 
-function isPathWithinDirectory(targetPath: string, directoryPath: string): boolean {
-  const normalizedTarget = normalizeResolvedPath(targetPath)
-  const normalizedDirectory = normalizeResolvedPath(directoryPath)
-  if (normalizedTarget === normalizedDirectory) return true
-  return normalizedTarget.startsWith(`${normalizedDirectory}/`)
-}
-
 function toLocaleCacheKey(locale?: string): string {
   const trimmed = locale?.trim()
   if (!trimmed) return DEFAULT_LOCALE_CACHE_KEY
@@ -155,15 +147,17 @@ function shouldVerboseResourceListLog(): boolean {
   return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on'
 }
 
-function isFullMeshRuntimePolicy(workDir?: string): boolean {
-  if (!workDir) return false
+function resolveEffectiveRuntimePolicy(workDir?: string): void {
+  if (!workDir) return
   const config = getConfig()
   const spaceConfig = getSpaceConfig(workDir)
-  const runtimePolicy =
-    spaceConfig?.claudeCode?.resourceRuntimePolicy ||
-    config.claudeCode?.resourceRuntimePolicy ||
-    'app-single-source'
-  return runtimePolicy === 'full-mesh'
+  resolveResourceRuntimePolicy(
+    {
+      spacePolicy: spaceConfig?.claudeCode?.resourceRuntimePolicy,
+      globalPolicy: config.claudeCode?.resourceRuntimePolicy,
+    },
+    'skills.service'
+  )
 }
 
 function getSpaceSkillsFromCache(workDir: string, localeKey: string, locale?: string): SkillDefinition[] {
@@ -180,136 +174,6 @@ function getSpaceSkillsFromCache(workDir: string, localeKey: string, locale?: st
   }
 
   return spaceSkills
-}
-
-function getFullMeshSkillsFromCache(workDir: string, localeKey: string): SkillDefinition[] | null {
-  const workDirKey = getNormalizedWorkDirKey(workDir)
-  const localeCache = fullMeshMergedSkillsCacheByLocale.get(workDirKey)
-  if (!localeCache) return null
-  return localeCache.get(localeKey) || null
-}
-
-function setFullMeshSkillsCache(workDir: string, localeKey: string, skills: SkillDefinition[]): void {
-  const workDirKey = getNormalizedWorkDirKey(workDir)
-  let localeCache = fullMeshMergedSkillsCacheByLocale.get(workDirKey)
-  if (!localeCache) {
-    localeCache = new Map<string, SkillDefinition[]>()
-    fullMeshMergedSkillsCacheByLocale.set(workDirKey, localeCache)
-  }
-  localeCache.set(localeKey, skills)
-}
-
-function getSortedSpacePaths(): string[] {
-  return [...getAllSpacePaths()].sort((a, b) => a.localeCompare(b))
-}
-
-function getFullMeshLookupSpacePaths(currentWorkDir: string): string[] {
-  const deduped: string[] = []
-  const seen = new Set<string>()
-  for (const spacePath of [currentWorkDir, ...getSortedSpacePaths()]) {
-    const normalizedPath = normalizeResolvedPath(spacePath)
-    if (seen.has(normalizedPath)) {
-      continue
-    }
-    seen.add(normalizedPath)
-    deduped.push(spacePath)
-  }
-  return deduped
-}
-
-function resolveSkillOwnerSpacePath(skill: SkillDefinition): string | null {
-  if (skill.source !== 'space') return null
-  for (const spacePath of getSortedSpacePaths()) {
-    const skillRoot = join(spacePath, '.claude', 'skills')
-    if (isPathWithinDirectory(skill.path, skillRoot)) {
-      return normalizeResolvedPath(spacePath)
-    }
-  }
-  return null
-}
-
-function getSkillPrecedence(
-  skill: SkillDefinition,
-  currentWorkDir: string
-): { level: number; ownerSpacePath: string | null } {
-  const ownerSpacePath = resolveSkillOwnerSpacePath(skill)
-  if (!ownerSpacePath) return { level: 0, ownerSpacePath: null }
-  if (ownerSpacePath === normalizeResolvedPath(currentWorkDir)) {
-    return { level: 2, ownerSpacePath }
-  }
-  return { level: 1, ownerSpacePath }
-}
-
-function shouldReplaceSkill(existing: SkillDefinition, candidate: SkillDefinition, currentWorkDir: string): boolean {
-  const existingPrecedence = getSkillPrecedence(existing, currentWorkDir)
-  const candidatePrecedence = getSkillPrecedence(candidate, currentWorkDir)
-  if (candidatePrecedence.level > existingPrecedence.level) return true
-  if (candidatePrecedence.level < existingPrecedence.level) return false
-
-  if (
-    candidatePrecedence.level === 1 &&
-    existingPrecedence.ownerSpacePath &&
-    candidatePrecedence.ownerSpacePath
-  ) {
-    const ownerCompare = candidatePrecedence.ownerSpacePath.localeCompare(existingPrecedence.ownerSpacePath)
-    if (ownerCompare < 0) return true
-    if (ownerCompare > 0) return false
-    return candidate.path.localeCompare(existing.path) < 0
-  }
-
-  return false
-}
-
-function mergeSkillsFullMesh(
-  globalSkills: SkillDefinition[],
-  allSpaceSkills: SkillDefinition[],
-  currentWorkDir: string
-): SkillDefinition[] {
-  const merged = new Map<string, SkillDefinition>()
-  const conflicts: string[] = []
-
-  for (const skill of globalSkills) {
-    merged.set(skillKey(skill), skill)
-  }
-
-  for (const skill of allSpaceSkills) {
-    const key = skillKey(skill)
-    const existing = merged.get(key)
-    if (!existing) {
-      merged.set(key, skill)
-      continue
-    }
-    if (shouldReplaceSkill(existing, skill, currentWorkDir)) {
-      conflicts.push(`${key}: ${existing.path} -> ${skill.path}`)
-      merged.set(key, skill)
-    }
-  }
-
-  if (conflicts.length > 0) {
-    console.log(
-      `[Skills][full-mesh] Resolved ${conflicts.length} conflicts by precedence (current space > lexicographic space > global)`
-    )
-  }
-
-  return Array.from(merged.values())
-}
-
-function logFullMeshAggregation(
-  workDir: string,
-  localeKey: string,
-  globalCount: number,
-  spaceCount: number,
-  mergedCount: number
-): void {
-  const cacheKey = `${getNormalizedWorkDirKey(workDir)}:${localeKey}`
-  const signature = `${globalCount}:${spaceCount}:${mergedCount}`
-  if (fullMeshAggregationLogSignatureCache.get(cacheKey) === signature) {
-    return
-  }
-  fullMeshAggregationLogSignatureCache.set(cacheKey, signature)
-  console.log(
-    `[Skills][full-mesh] Aggregated resources: global=${globalCount}, spaces=${spaceCount}, merged=${mergedCount}`
-  )
 }
 
 function resolveWorkDirForSkillPath(skillMdPath: string): string | null {
@@ -414,6 +278,26 @@ function normalizeSopSpec(spec: SopSpec, name: string, revision: number): SopSpe
   }
 }
 
+function normalizeFrontmatterString(value: string | undefined): string {
+  const trimmed = value?.trim() || ''
+  if (!trimmed) return ''
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim()
+  }
+  return trimmed
+}
+
+function resolveSopExposure(frontmatter: Record<string, unknown> | null | undefined): ResourceExposure {
+  const rawValue = frontmatter?.exposure
+  if (rawValue === 'public' || rawValue === 'internal-only') {
+    return rawValue
+  }
+  return 'public'
+}
+
 function extractSopRevision(frontmatter: Record<string, unknown> | null | undefined): number {
   if (!frontmatter) return 0
   const rawValue = frontmatter.sop_revision
@@ -426,13 +310,15 @@ function buildSopSkillContent(
   skillName: string,
   description: string | undefined,
   normalizedSpec: SopSpec,
-  revision: number
+  revision: number,
+  exposure: ResourceExposure
 ): string {
   const block = buildSopSpecJsonBlock(normalizedSpec)
   const frontmatterLines = [
     '---',
     `name: ${toYamlScalar(skillName)}`,
     `description: ${toYamlScalar(description || `Recorded browser SOP for ${skillName}`)}`,
+    `exposure: ${toYamlScalar(exposure)}`,
     'sop_mode: manual_browser',
     `sop_revision: ${revision}`,
     '---',
@@ -446,8 +332,9 @@ function buildSopSkillContent(
     '## Execution Rules',
     '1. Always run snapshot before each action.',
     '2. Resolve targets using role/name/text/label/placeholder/urlPattern in this priority.',
-    '3. Maximum retries per step: 3.',
-    '4. If semantic match confidence is low, stop and report the failed step.',
+    '3. Prefer existing authenticated pages (do not create a new page unless necessary).',
+    '4. Maximum retries per step: 3.',
+    '5. If semantic match confidence is low, stop and report the failed step.',
     '',
     block,
     '',
@@ -728,21 +615,7 @@ function listSkillsUnfiltered(workDir?: string, locale?: string): SkillDefinitio
   if (!workDir) {
     return globalSkills
   }
-
-  if (isFullMeshRuntimePolicy(workDir)) {
-    const cached = getFullMeshSkillsFromCache(workDir, localeKey)
-    if (cached) {
-      return cached
-    }
-    const allSpaceSkills: SkillDefinition[] = []
-    for (const spacePath of getSortedSpacePaths()) {
-      allSpaceSkills.push(...getSpaceSkillsFromCache(spacePath, localeKey, locale))
-    }
-    const mergedSkills = mergeSkillsFullMesh(globalSkills, allSpaceSkills, workDir)
-    setFullMeshSkillsCache(workDir, localeKey, mergedSkills)
-    logFullMeshAggregation(workDir, localeKey, globalSkills.length, allSpaceSkills.length, mergedSkills.length)
-    return mergedSkills
-  }
+  resolveEffectiveRuntimePolicy(workDir)
 
   const spaceSkills = getSpaceSkillsFromCache(workDir, localeKey, locale)
 
@@ -761,18 +634,11 @@ export function listSpaceSkills(workDir: string): SkillDefinition[] {
 }
 
 function listSkillsForRefLookup(workDir: string): SkillDefinition[] {
+  resolveEffectiveRuntimePolicy(workDir)
   let globalSkills = globalSkillsCacheByLocale.get(DEFAULT_LOCALE_CACHE_KEY)
   if (!globalSkills) {
     globalSkills = buildGlobalSkills()
     globalSkillsCacheByLocale.set(DEFAULT_LOCALE_CACHE_KEY, globalSkills)
-  }
-
-  if (isFullMeshRuntimePolicy(workDir)) {
-    const allSpaceSkills: SkillDefinition[] = []
-    for (const spacePath of getFullMeshLookupSpacePaths(workDir)) {
-      allSpaceSkills.push(...getSpaceSkillsFromCache(spacePath, DEFAULT_LOCALE_CACHE_KEY))
-    }
-    return [...allSpaceSkills, ...globalSkills]
   }
 
   const spaceSkills = getSpaceSkillsFromCache(workDir, DEFAULT_LOCALE_CACHE_KEY)
@@ -794,11 +660,6 @@ export function getSkillDefinition(
       : allSkills
     const skill = findSkill(lookupSkills, name)
     if (skill) {
-      if (isFullMeshRuntimePolicy(workDir)) {
-        console.log(
-          `[Skills][full-mesh] Resolved "${name}" -> source=${skill.source}, path=${skill.path}`
-        )
-      }
       return skill
     }
   }
@@ -894,13 +755,15 @@ export function saveSopSkill(input: SaveSopSkillInput): SaveSopSkillResult {
   let existingFrontmatter: Record<string, unknown> | null = null
   let description = input.description?.trim() || ''
   let nextRevision = 1
+  let exposure: ResourceExposure = 'public'
 
   if (exists) {
     existingContent = readFileSync(skillMdPath, 'utf-8')
     existingFrontmatter = parseFrontmatter(existingContent)
     if (!description) {
-      description = getFrontmatterString(existingFrontmatter, ['description']) || ''
+      description = normalizeFrontmatterString(getFrontmatterString(existingFrontmatter, ['description']) || '')
     }
+    exposure = resolveSopExposure(existingFrontmatter)
     nextRevision = extractSopRevision(existingFrontmatter) + 1
   }
 
@@ -918,6 +781,7 @@ export function saveSopSkill(input: SaveSopSkillInput): SaveSopSkillResult {
         'description',
         description || `Recorded browser SOP for ${skillName}`
       )
+      nextContent = upsertFrontmatterField(nextContent, 'exposure', exposure)
       nextContent = upsertFrontmatterField(nextContent, 'sop_mode', 'manual_browser')
       nextContent = upsertFrontmatterField(nextContent, 'sop_revision', nextRevision)
     }
@@ -926,7 +790,7 @@ export function saveSopSkill(input: SaveSopSkillInput): SaveSopSkillResult {
   if (!nextContent) {
     const revision = exists ? nextRevision : 1
     const rebuiltSpec = normalizeSopSpec(sopSpec, skillName, revision)
-    nextContent = buildSopSkillContent(skillName, description, rebuiltSpec, revision)
+    nextContent = buildSopSkillContent(skillName, description, rebuiltSpec, revision, exposure)
     nextRevision = revision
   }
 
@@ -1063,10 +927,8 @@ export function copySkillToSpaceByRef(
 export function clearSkillsCache(): void {
   globalSkillsCacheByLocale.clear()
   spaceSkillsCacheByLocale.clear()
-  fullMeshMergedSkillsCacheByLocale.clear()
   contentCache.clear()
   listLogSignatureCache.clear()
-  fullMeshAggregationLogSignatureCache.clear()
 }
 
 /**
@@ -1075,15 +937,11 @@ export function clearSkillsCache(): void {
 export function invalidateSkillsCache(workDir?: string | null): void {
   if (!workDir) {
     globalSkillsCacheByLocale.clear()
-    fullMeshMergedSkillsCacheByLocale.clear()
     contentCache.clear()
     listLogSignatureCache.clear()
-    fullMeshAggregationLogSignatureCache.clear()
     return
   }
   spaceSkillsCacheByLocale.delete(workDir)
-  fullMeshMergedSkillsCacheByLocale.clear()
   contentCache.clearForDir(workDir)
   listLogSignatureCache.clear()
-  fullMeshAggregationLogSignatureCache.clear()
 }
