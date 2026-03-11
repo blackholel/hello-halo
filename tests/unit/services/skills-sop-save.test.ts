@@ -76,8 +76,10 @@ describe('saveSopSkill', () => {
     expect(result.revision).toBe(1)
     expect(content).toContain('sop_mode: manual_browser')
     expect(content).toContain('sop_revision: 1')
+    expect(content).toContain('exposure: public')
     expect(content).toContain('## SOP_SPEC_JSON_BEGIN')
     expect(content).toContain('## SOP_SPEC_JSON_END')
+    expect(content).toContain('Prefer existing authenticated pages')
   })
 
   it('updates existing marker block and increments sop_revision', () => {
@@ -125,6 +127,7 @@ describe('saveSopSkill', () => {
     expect(result.created).toBe(false)
     expect(result.revision).toBe(2)
     expect(content).toContain('sop_revision: 2')
+    expect(content).toContain('exposure: public')
     expect(content).toContain('https://new.example.com')
     expect((content.match(/## SOP_SPEC_JSON_BEGIN/g) || []).length).toBe(1)
   })
@@ -170,6 +173,7 @@ describe('saveSopSkill', () => {
     expect(result.created).toBe(false)
     expect(result.revision).toBe(10)
     expect(content).toContain('sop_revision: 10')
+    expect(content).toContain('exposure: public')
     expect(content).toContain('## SOP_SPEC_JSON_BEGIN')
   })
 })

@@ -177,6 +177,8 @@ export function BrowserViewer({ tab }: BrowserViewerProps) {
   const [sopSkillName, setSopSkillName] = useState(suggestSkillName(tab.title))
   const [sopSkillDescription, setSopSkillDescription] = useState('')
   const [isSavingSopSkill, setIsSavingSopSkill] = useState(false)
+  const [lastSavedSopSkillPath, setLastSavedSopSkillPath] = useState('')
+  const [lastSavedSopSkillName, setLastSavedSopSkillName] = useState('')
   const { currentSpace, spaces } = useSpaceStore((state) => ({
     currentSpace: state.currentSpace,
     spaces: state.spaces
@@ -190,6 +192,7 @@ export function BrowserViewer({ tab }: BrowserViewerProps) {
       }
       const matchedSpace = spaces.find((space) => space.id === tab.spaceId)
       if (matchedSpace?.path) return matchedSpace.path
+      return undefined
     }
     return currentSpace?.path
   }, [currentSpace?.id, currentSpace?.path, spaces, tab.spaceId, tab.workDir])
@@ -554,10 +557,13 @@ export function BrowserViewer({ tab }: BrowserViewerProps) {
       await api.refreshSkillsIndex(workDir)
       await loadSkills(workDir)
       const savedPath = (result.data as { skillPath?: string } | undefined)?.skillPath || ''
+      const finalSavedPath = savedPath || `${workDir}/.claude/skills/${skillName}/SKILL.md`
+      setLastSavedSopSkillPath(finalSavedPath)
+      setLastSavedSopSkillName(skillName)
       alert(
         t('SOP skill saved. Use /{{name}} in chat.\nPath: {{path}}', {
           name: skillName,
-          path: savedPath || `${workDir}/.claude/skills/${skillName}/SKILL.md`,
+          path: finalSavedPath,
         })
       )
     } finally {
@@ -788,6 +794,9 @@ export function BrowserViewer({ tab }: BrowserViewerProps) {
               {t('Clear')}
             </button>
           </div>
+          <div className="text-xs text-muted-foreground">
+            {t('Workspace')}: {resolvedWorkDir || t('Not resolved')}
+          </div>
 
           <div className="max-h-44 overflow-auto space-y-2 pr-1">
             {editableSteps.length === 0 ? (
@@ -860,6 +869,13 @@ export function BrowserViewer({ tab }: BrowserViewerProps) {
               {t('Saved skill can be invoked with /<skill-name>.')}
             </span>
           </div>
+
+          {lastSavedSopSkillPath && (
+            <div className="rounded border border-border/60 bg-card/50 px-2 py-1.5 text-xs text-muted-foreground">
+              <div>{t('Last saved skill')}: /{lastSavedSopSkillName || sopSkillName}</div>
+              <div className="mt-1 break-all font-mono text-[11px]">{lastSavedSopSkillPath}</div>
+            </div>
+          )}
         </div>
       )}
 
