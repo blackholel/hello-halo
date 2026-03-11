@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "latestVersion": "1.2.2",
+  "latestVersion": "1.2.3",
   "releases": {
     "1.2.2": {
       "notes": "让每个人都能体验前沿 AI：重写 README 与多语言文档，强化零门槛上手体验。",
@@ -65,6 +65,40 @@
           "github": "https://github.com/blackholel/buddykite/releases/tag/v1.2.1",
           "baidu": {
             "url": "https://pan.baidu.com/s/replace-with-real-link-default",
+            "extractCode": "0000"
+          }
+        }
+      }
+    },
+    "1.2.3": {
+      "notes": "稳定性改进与体验优化：优化 SOP 保存流程、资源策略与交互稳定性。",
+      "publishedAt": "2026-03-11T11:37:18.941Z",
+      "platforms": {
+        "darwin-arm64": {
+          "github": "https://github.com/blackholel/buddykite/releases/tag/v1.2.3",
+          "baidu": {
+            "url": "https://pan.baidu.com/s/replace-with-real-link-macos-v1.2.3",
+            "extractCode": "0000"
+          }
+        },
+        "win32-x64": {
+          "github": "https://github.com/blackholel/buddykite/releases/tag/v1.2.3",
+          "baidu": {
+            "url": "https://pan.baidu.com/s/replace-with-real-link-windows-v1.2.3",
+            "extractCode": "0000"
+          }
+        },
+        "linux-x64": {
+          "github": "https://github.com/blackholel/buddykite/releases/tag/v1.2.3",
+          "baidu": {
+            "url": "https://pan.baidu.com/s/replace-with-real-link-linux-v1.2.3",
+            "extractCode": "0000"
+          }
+        },
+        "default": {
+          "github": "https://github.com/blackholel/buddykite/releases/tag/v1.2.3",
+          "baidu": {
+            "url": "https://pan.baidu.com/s/replace-with-real-link-default-v1.2.3",
             "extractCode": "0000"
           }
         }
