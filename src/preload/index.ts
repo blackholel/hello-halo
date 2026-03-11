@@ -252,6 +252,31 @@ export interface KiteAPI {
   listSkills: (workDir: string | undefined, locale: string | undefined, view: ResourceListView) => Promise<IpcResponse>
   getSkillContent: (name: string, workDir?: string) => Promise<IpcResponse>
   createSkill: (workDir: string, name: string, content: string) => Promise<IpcResponse>
+  saveSopSkill: (payload: {
+    workDir: string
+    skillName: string
+    description?: string
+    sopSpec: {
+      version: string
+      name: string
+      steps: Array<{
+        id: string
+        action: 'navigate' | 'click' | 'fill' | 'select' | 'press_key' | 'wait_for'
+        target?: {
+          role?: string
+          name?: string
+          text?: string
+          label?: string
+          placeholder?: string
+          urlPattern?: string
+        }
+        value?: string
+        assertion?: string
+        retries: number
+      }>
+      meta?: Record<string, unknown>
+    }
+  }) => Promise<IpcResponse>
   updateSkill: (skillPath: string, content: string) => Promise<IpcResponse>
   deleteSkill: (skillPath: string) => Promise<IpcResponse>
   copySkillToSpace: (skillName: string, workDir: string) => Promise<IpcResponse>
@@ -365,10 +390,15 @@ export interface KiteAPI {
   getBrowserState: (viewId: string) => Promise<IpcResponse>
   captureBrowserView: (viewId: string) => Promise<IpcResponse>
   executeBrowserJS: (viewId: string, code: string) => Promise<IpcResponse>
+  startBrowserSopRecording: (viewId: string) => Promise<IpcResponse>
+  stopBrowserSopRecording: (viewId: string) => Promise<IpcResponse>
+  getBrowserSopRecordingState: (viewId: string) => Promise<IpcResponse>
+  clearBrowserSopRecording: (viewId: string) => Promise<IpcResponse>
   setBrowserZoom: (viewId: string, level: number) => Promise<IpcResponse>
   toggleBrowserDevTools: (viewId: string) => Promise<IpcResponse>
   showBrowserContextMenu: (options: { viewId: string; url?: string; zoomLevel: number }) => Promise<IpcResponse>
   onBrowserStateChange: (callback: (data: unknown) => void) => () => void
+  onBrowserSopRecordingEvent: (callback: (data: unknown) => void) => () => void
   onBrowserZoomChanged: (callback: (data: { viewId: string; zoomLevel: number }) => void) => () => void
 
   // Canvas Tab Menu
@@ -580,6 +610,7 @@ const api: KiteAPI = {
   listSkills: (workDir, locale, view) => ipcRenderer.invoke('skills:list', workDir, locale, view),
   getSkillContent: (name, workDir) => ipcRenderer.invoke('skills:get-content', name, workDir),
   createSkill: (workDir, name, content) => ipcRenderer.invoke('skills:create', workDir, name, content),
+  saveSopSkill: (payload) => ipcRenderer.invoke('skills:save-sop-recording', payload),
   updateSkill: (skillPath, content) => ipcRenderer.invoke('skills:update', skillPath, content),
   deleteSkill: (skillPath) => ipcRenderer.invoke('skills:delete', skillPath),
   copySkillToSpace: (skillName, workDir) => ipcRenderer.invoke('skills:copy-to-space', skillName, workDir),
@@ -677,10 +708,15 @@ const api: KiteAPI = {
   getBrowserState: (viewId) => ipcRenderer.invoke('browser:get-state', { viewId }),
   captureBrowserView: (viewId) => ipcRenderer.invoke('browser:capture', { viewId }),
   executeBrowserJS: (viewId, code) => ipcRenderer.invoke('browser:execute-js', { viewId, code }),
+  startBrowserSopRecording: (viewId) => ipcRenderer.invoke('browser:sop-recording:start', { viewId }),
+  stopBrowserSopRecording: (viewId) => ipcRenderer.invoke('browser:sop-recording:stop', { viewId }),
+  getBrowserSopRecordingState: (viewId) => ipcRenderer.invoke('browser:sop-recording:get-state', { viewId }),
+  clearBrowserSopRecording: (viewId) => ipcRenderer.invoke('browser:sop-recording:clear', { viewId }),
   setBrowserZoom: (viewId, level) => ipcRenderer.invoke('browser:zoom', { viewId, level }),
   toggleBrowserDevTools: (viewId) => ipcRenderer.invoke('browser:dev-tools', { viewId }),
   showBrowserContextMenu: (options) => ipcRenderer.invoke('browser:show-context-menu', options),
   onBrowserStateChange: (callback) => createEventListener('browser:state-change', callback),
+  onBrowserSopRecordingEvent: (callback) => createEventListener('browser:sop-recording:event', callback),
   onBrowserZoomChanged: (callback) => createEventListener('browser:zoom-changed', callback as (data: unknown) => void),
 
   // Canvas Tab Menu (native Electron menu)

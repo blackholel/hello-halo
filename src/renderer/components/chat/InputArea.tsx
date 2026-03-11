@@ -221,6 +221,10 @@ export function InputArea({
     if (haloSpace?.id === spaceId) return haloSpace
     return spaces.find(space => space.id === spaceId) || null
   }, [spaceId, currentSpace, haloSpace, spaces])
+  const resolvedWorkDir = useMemo(() => {
+    if (workDir && workDir.trim()) return workDir
+    return resolvedSpace?.path || currentSpace?.path
+  }, [currentSpace?.path, resolvedSpace?.path, workDir])
 
   const spacePreferences = useMemo(() => {
     if (!spaceId) return undefined
@@ -234,7 +238,7 @@ export function InputArea({
   const triggerQuery = triggerContext?.query.trim().toLowerCase() || ''
 
   useEffect(() => {
-    const targetWorkDir = workDir ?? null
+    const targetWorkDir = resolvedWorkDir ?? null
     const shouldLoad = loadedSkillsWorkDir !== targetWorkDir || skills.length === 0
     if (!shouldLoad) return
     if (skillsLoadInFlightWorkDirRef.current === targetWorkDir) return
@@ -242,7 +246,7 @@ export function InputArea({
 
     lastRequestedSkillsWorkDirRef.current = targetWorkDir
     skillsLoadInFlightWorkDirRef.current = targetWorkDir
-    void loadSkills(workDir).finally(() => {
+    void loadSkills(resolvedWorkDir).finally(() => {
       const loadedWorkDir = useSkillsStore.getState().loadedWorkDir
       if (skillsLoadInFlightWorkDirRef.current === targetWorkDir) {
         skillsLoadInFlightWorkDirRef.current = null
@@ -251,10 +255,10 @@ export function InputArea({
         lastRequestedSkillsWorkDirRef.current = null
       }
     })
-  }, [loadedSkillsWorkDir, loadSkills, skills.length, workDir])
+  }, [loadedSkillsWorkDir, loadSkills, resolvedWorkDir, skills.length])
 
   useEffect(() => {
-    const targetWorkDir = workDir ?? null
+    const targetWorkDir = resolvedWorkDir ?? null
     const shouldLoad = loadedCommandsWorkDir !== targetWorkDir || commands.length === 0
     if (!shouldLoad) return
     if (commandsLoadInFlightWorkDirRef.current === targetWorkDir) return
@@ -262,7 +266,7 @@ export function InputArea({
 
     lastRequestedCommandsWorkDirRef.current = targetWorkDir
     commandsLoadInFlightWorkDirRef.current = targetWorkDir
-    void loadCommands(workDir).finally(() => {
+    void loadCommands(resolvedWorkDir).finally(() => {
       const loadedWorkDir = useCommandsStore.getState().loadedWorkDir
       if (commandsLoadInFlightWorkDirRef.current === targetWorkDir) {
         commandsLoadInFlightWorkDirRef.current = null
@@ -271,10 +275,10 @@ export function InputArea({
         lastRequestedCommandsWorkDirRef.current = null
       }
     })
-  }, [commands.length, loadCommands, loadedCommandsWorkDir, workDir])
+  }, [commands.length, loadCommands, loadedCommandsWorkDir, resolvedWorkDir])
 
   useEffect(() => {
-    const targetWorkDir = workDir ?? null
+    const targetWorkDir = resolvedWorkDir ?? null
     const shouldLoad = loadedAgentsWorkDir !== targetWorkDir || agents.length === 0
     if (!shouldLoad) return
     if (agentsLoadInFlightWorkDirRef.current === targetWorkDir) return
@@ -282,7 +286,7 @@ export function InputArea({
 
     lastRequestedAgentsWorkDirRef.current = targetWorkDir
     agentsLoadInFlightWorkDirRef.current = targetWorkDir
-    void loadAgents(workDir).finally(() => {
+    void loadAgents(resolvedWorkDir).finally(() => {
       const loadedWorkDir = useAgentsStore.getState().loadedWorkDir
       if (agentsLoadInFlightWorkDirRef.current === targetWorkDir) {
         agentsLoadInFlightWorkDirRef.current = null
@@ -291,7 +295,7 @@ export function InputArea({
         lastRequestedAgentsWorkDirRef.current = null
       }
     })
-  }, [agents.length, loadAgents, loadedAgentsWorkDir, workDir])
+  }, [agents.length, loadAgents, loadedAgentsWorkDir, resolvedWorkDir])
 
   // Auto-clear error after 3 seconds
   useEffect(() => {

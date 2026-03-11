@@ -197,12 +197,18 @@ export interface AskUserQuestionAnswerPayload {
 
 export type AskUserQuestionAnswerInput = AskUserQuestionAnswerPayload | string
 
-export interface CanUseToolDecision {
-  behavior: 'allow' | 'deny'
-  updatedInput?: Record<string, unknown>
-  message?: string
-  errorCode?: string
-}
+export type CanUseToolDecision =
+  | {
+      behavior: 'allow'
+      updatedInput: Record<string, unknown>
+      message?: string
+      errorCode?: string
+    }
+  | {
+      behavior: 'deny'
+      message?: string
+      errorCode?: string
+    }
 
 export type AskUserQuestionPendingStatus =
   | 'awaiting_bind'

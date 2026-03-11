@@ -99,14 +99,25 @@ describe('renderer-comm AskUserQuestion priority + plan whitelist', () => {
     const canUseTool = createPlanHandler(session)
     const signal = { signal: new AbortController().signal }
 
-    await expect(canUseTool('Read', { file_path: 'README.md' }, signal)).resolves.toMatchObject({
-      behavior: 'allow'
+    const readInput = { file_path: 'README.md' }
+    const readResult = await canUseTool('Read', readInput, signal)
+    expect(readResult).toMatchObject({
+      behavior: 'allow',
+      updatedInput: readInput
     })
-    await expect(canUseTool('Grep', { pattern: 'TODO', path: '.' }, signal)).resolves.toMatchObject({
-      behavior: 'allow'
+
+    const grepInput = { pattern: 'TODO', path: '.' }
+    const grepResult = await canUseTool('Grep', grepInput, signal)
+    expect(grepResult).toMatchObject({
+      behavior: 'allow',
+      updatedInput: grepInput
     })
-    await expect(canUseTool('Glob', { pattern: '**/*.ts' }, signal)).resolves.toMatchObject({
-      behavior: 'allow'
+
+    const globInput = { pattern: '**/*.ts' }
+    const globResult = await canUseTool('Glob', globInput, signal)
+    expect(globResult).toMatchObject({
+      behavior: 'allow',
+      updatedInput: globInput
     })
 
     const deniedWrite = await canUseTool('Write', { file_path: 'README.md', content: 'x' }, signal)
@@ -120,6 +131,20 @@ describe('renderer-comm AskUserQuestion priority + plan whitelist', () => {
     const deniedBrowser = await canUseTool('browser_navigate', { url: 'https://example.com' }, signal)
     expect(deniedBrowser.behavior).toBe('deny')
     expect(deniedBrowser.message).toContain('PLAN mode only allows')
+  })
+
+  it('code mode allows browser tools and keeps passthrough updatedInput', async () => {
+    const session = createSession('code')
+    const canUseTool = createCodeHandler(session)
+    const input = { url: 'https://example.com' }
+    const decision = await canUseTool('browser_navigate', input, {
+      signal: new AbortController().signal
+    })
+
+    expect(decision).toMatchObject({
+      behavior: 'allow',
+      updatedInput: input
+    })
   })
 
   it('plan mode task is allowed with exploration-only prompt guard', async () => {
@@ -174,6 +199,37 @@ describe('renderer-comm AskUserQuestion priority + plan whitelist', () => {
     expect(decision.updatedInput).toEqual({ answers: { q_1: 'Plan' } })
   })
 
+  it('plan mode AskUserQuestion normalizes legacy allow decision without updatedInput', async () => {
+    const session = createSession('plan')
+    const canUseTool = createPlanHandler(session)
+
+    const pendingDecisionPromise = canUseTool(
+      'AskUserQuestion',
+      {
+        questions: [
+          {
+            id: 'q_1',
+            question: 'Keep going?',
+            options: [{ label: 'Yes', description: 'Continue' }]
+          }
+        ]
+      },
+      { signal: new AbortController().signal }
+    )
+
+    await Promise.resolve()
+    const pendingId = session.pendingAskUserQuestionOrder[0]
+    const pendingContext = session.pendingAskUserQuestionsById.get(pendingId)
+    expect(pendingContext).toBeTruthy()
+    const snapshot = pendingContext?.inputSnapshot
+
+    pendingContext?.resolve({ behavior: 'allow' } as any)
+
+    const decision = await pendingDecisionPromise
+    expect(decision).toMatchObject({ behavior: 'allow' })
+    expect(decision.updatedInput).toEqual(snapshot)
+  })
+
   it('code mode AskUserQuestion remains callable and creates pending context', async () => {
     const session = createSession('code')
     const canUseTool = createCodeHandler(session)
@@ -203,7 +259,8 @@ describe('renderer-comm AskUserQuestion priority + plan whitelist', () => {
     pendingContext?.resolve({ behavior: 'allow', updatedInput: { answers: { q_1: 'Yes' } } })
 
     await expect(pendingDecisionPromise).resolves.toMatchObject({
-      behavior: 'allow'
+      behavior: 'allow',
+      updatedInput: { answers: { q_1: 'Yes' } }
     })
   })
 
@@ -255,7 +312,10 @@ describe('renderer-comm AskUserQuestion priority + plan whitelist', () => {
     expect(String(warnSpy.mock.calls[0][0])).toContain('AskUserQuestion input normalized')
 
     pendingContext?.resolve({ behavior: 'allow', updatedInput: { answers: { q_1: 'A' } } })
-    await expect(pendingDecisionPromise).resolves.toMatchObject({ behavior: 'allow' })
+    await expect(pendingDecisionPromise).resolves.toMatchObject({
+      behavior: 'allow',
+      updatedInput: { answers: { q_1: 'A' } }
+    })
 
     warnSpy.mockRestore()
   })

@@ -11,6 +11,7 @@ import {
   createSkill,
   updateSkill,
   deleteSkill,
+  saveSopSkill,
   copySkillToSpace,
   copySkillToSpaceByRef,
   clearSkillsCache,
@@ -80,6 +81,33 @@ export function registerSkillsHandlers(): void {
       return { success: false, error: err.message }
     }
   })
+
+  // Save SOP recording into a skill (create or update)
+  ipcMain.handle(
+    'skills:save-sop-recording',
+    async (
+      _event,
+      payload: {
+        workDir: string
+        skillName: string
+        description?: string
+        sopSpec: {
+          version: string
+          name: string
+          steps: Array<Record<string, unknown>>
+          meta?: Record<string, unknown>
+        }
+      }
+    ) => {
+      try {
+        const result = saveSopSkill(payload as Parameters<typeof saveSopSkill>[0])
+        return { success: true, data: result }
+      } catch (error: unknown) {
+        const err = error as Error
+        return { success: false, error: err.message }
+      }
+    }
+  )
 
   // Delete a skill
   ipcMain.handle('skills:delete', async (_event, skillPath: string) => {

@@ -30,6 +30,10 @@ export function SkillsDropdown({ workDir, onInsertSkill, onOpenPanel }: SkillsDr
 
   // Space store for favorites
   const { currentSpace } = useSpaceStore()
+  const resolvedWorkDir = useMemo(() => {
+    if (workDir && workDir.trim()) return workDir
+    return currentSpace?.path
+  }, [currentSpace?.path, workDir])
   const favorites = currentSpace?.preferences?.skills?.favorites || []
   const enabled = currentSpace?.preferences?.skills?.enabled || []
   const showOnlyEnabled = currentSpace?.preferences?.skills?.showOnlyEnabled ?? false
@@ -38,10 +42,10 @@ export function SkillsDropdown({ workDir, onInsertSkill, onOpenPanel }: SkillsDr
 
   // Load skills when dropdown opens
   useEffect(() => {
-    if (isOpen && (skills.length === 0 || loadedWorkDir !== (workDir ?? null))) {
-      loadSkills(workDir)
+    if (isOpen && (skills.length === 0 || loadedWorkDir !== (resolvedWorkDir ?? null))) {
+      loadSkills(resolvedWorkDir)
     }
-  }, [isOpen, workDir, skills.length, loadedWorkDir, loadSkills])
+  }, [isOpen, resolvedWorkDir, skills.length, loadedWorkDir, loadSkills])
 
   // Get favorited skills
   const favoritedSkills = useMemo(() => {

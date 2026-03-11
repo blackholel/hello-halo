@@ -459,11 +459,17 @@ export type CanUseToolHandler = (
   toolName: string,
   input: Record<string, unknown>,
   options: { signal: AbortSignal }
-) => Promise<{
-  behavior: 'allow' | 'deny'
-  updatedInput?: Record<string, unknown>
-  message?: string
-}>
+) => Promise<
+  | {
+      behavior: 'allow'
+      updatedInput: Record<string, unknown>
+      message?: string
+    }
+  | {
+      behavior: 'deny'
+      message?: string
+    }
+>
 
 /**
  * Parameters for building SDK options

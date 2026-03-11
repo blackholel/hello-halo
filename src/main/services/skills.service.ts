@@ -53,6 +53,53 @@ export interface SkillContent {
   frontmatter?: Record<string, unknown>
 }
 
+export type SopAction =
+  | 'navigate'
+  | 'click'
+  | 'fill'
+  | 'select'
+  | 'press_key'
+  | 'wait_for'
+
+export interface SemanticTarget {
+  role?: string
+  name?: string
+  text?: string
+  label?: string
+  placeholder?: string
+  urlPattern?: string
+}
+
+export interface SopRecordedStep {
+  id: string
+  action: SopAction
+  target?: SemanticTarget
+  value?: string
+  assertion?: string
+  retries: number
+}
+
+export interface SopSpec {
+  version: string
+  name: string
+  steps: SopRecordedStep[]
+  meta?: Record<string, unknown>
+}
+
+export interface SaveSopSkillInput {
+  workDir: string
+  skillName: string
+  description?: string
+  sopSpec: SopSpec
+}
+
+export interface SaveSopSkillResult {
+  skillName: string
+  skillPath: string
+  created: boolean
+  revision: number
+}
+
 // Cache
 const DEFAULT_LOCALE_CACHE_KEY = '__default__'
 const globalSkillsCacheByLocale = new Map<string, SkillDefinition[]>()
@@ -61,6 +108,8 @@ const fullMeshMergedSkillsCacheByLocale = new Map<string, Map<string, SkillDefin
 const contentCache = new FileCache<string>({ maxSize: 200 })
 const listLogSignatureCache = new Map<string, string>()
 const fullMeshAggregationLogSignatureCache = new Map<string, string>()
+const SOP_SPEC_BEGIN_MARKER = '## SOP_SPEC_JSON_BEGIN'
+const SOP_SPEC_END_MARKER = '## SOP_SPEC_JSON_END'
 
 // ============================================
 // Helpers
@@ -271,6 +320,140 @@ function resolveWorkDirForSkillPath(skillMdPath: string): string | null {
     }
   }
   return null
+}
+
+function toYamlScalar(value: string | number | boolean): string {
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value)
+  }
+
+  if (/^[a-zA-Z0-9._-]+$/.test(value)) {
+    return value
+  }
+
+  return JSON.stringify(value)
+}
+
+function extractFrontmatterRange(content: string): { start: number; end: number; body: string } | null {
+  if (!content.startsWith('---\n')) return null
+  const endIndex = content.indexOf('\n---\n', 4)
+  if (endIndex < 0) return null
+  return {
+    start: 0,
+    end: endIndex + '\n---\n'.length,
+    body: content.slice(4, endIndex),
+  }
+}
+
+function upsertFrontmatterField(content: string, key: string, value: string | number | boolean): string {
+  const yamlLine = `${key}: ${toYamlScalar(value)}`
+  const range = extractFrontmatterRange(content)
+  if (!range) {
+    return `---\n${yamlLine}\n---\n\n${content.trimStart()}`
+  }
+
+  const lines = range.body.length > 0 ? range.body.split('\n') : []
+  const keyPattern = new RegExp(`^${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:\\s*`)
+  let replaced = false
+  const nextLines = lines.map((line) => {
+    if (keyPattern.test(line)) {
+      replaced = true
+      return yamlLine
+    }
+    return line
+  })
+  if (!replaced) {
+    nextLines.push(yamlLine)
+  }
+
+  const nextFrontmatter = `---\n${nextLines.join('\n')}\n---\n`
+  return `${nextFrontmatter}${content.slice(range.end)}`
+}
+
+function buildSopSpecJsonBlock(spec: SopSpec): string {
+  return [
+    SOP_SPEC_BEGIN_MARKER,
+    '```json',
+    JSON.stringify(spec, null, 2),
+    '```',
+    SOP_SPEC_END_MARKER,
+  ].join('\n')
+}
+
+function replaceSopSpecJsonBlock(content: string, block: string): string {
+  const blockRegex = new RegExp(
+    `${SOP_SPEC_BEGIN_MARKER}[\\s\\S]*?${SOP_SPEC_END_MARKER}`,
+    'm'
+  )
+  if (!blockRegex.test(content)) {
+    return ''
+  }
+  return content.replace(blockRegex, block)
+}
+
+function normalizeSopSpec(spec: SopSpec, name: string, revision: number): SopSpec {
+  return {
+    ...spec,
+    name: spec.name || name,
+    steps: Array.isArray(spec.steps)
+      ? spec.steps.map((step, idx) => ({
+        id: typeof step.id === 'string' && step.id.trim().length > 0 ? step.id : `step-${idx + 1}`,
+        action: step.action,
+        target: step.target,
+        value: step.value,
+        assertion: step.assertion,
+        retries: Number.isFinite(step.retries) && step.retries > 0 ? step.retries : 3,
+      }))
+      : [],
+    meta: {
+      ...(spec.meta || {}),
+      sop_mode: 'manual_browser',
+      sop_revision: revision,
+      updated_at: new Date().toISOString(),
+    },
+  }
+}
+
+function extractSopRevision(frontmatter: Record<string, unknown> | null | undefined): number {
+  if (!frontmatter) return 0
+  const rawValue = frontmatter.sop_revision
+  const parsed = typeof rawValue === 'number' ? rawValue : Number(rawValue)
+  if (!Number.isFinite(parsed) || parsed <= 0) return 0
+  return Math.floor(parsed)
+}
+
+function buildSopSkillContent(
+  skillName: string,
+  description: string | undefined,
+  normalizedSpec: SopSpec,
+  revision: number
+): string {
+  const block = buildSopSpecJsonBlock(normalizedSpec)
+  const frontmatterLines = [
+    '---',
+    `name: ${toYamlScalar(skillName)}`,
+    `description: ${toYamlScalar(description || `Recorded browser SOP for ${skillName}`)}`,
+    'sop_mode: manual_browser',
+    `sop_revision: ${revision}`,
+    '---',
+  ]
+
+  const body = [
+    `# ${skillName}`,
+    '',
+    'This skill replays a manually recorded browser SOP. Follow the steps exactly and stop on uncertainty.',
+    '',
+    '## Execution Rules',
+    '1. Always run snapshot before each action.',
+    '2. Resolve targets using role/name/text/label/placeholder/urlPattern in this priority.',
+    '3. Maximum retries per step: 3.',
+    '4. If semantic match confidence is low, stop and report the failed step.',
+    '',
+    block,
+    '',
+  ]
+
+  return `${frontmatterLines.join('\n')}\n${body.join('\n')}`
 }
 
 function findSkill(skills: SkillDefinition[], name: string): SkillDefinition | undefined {
@@ -693,6 +876,69 @@ export function createSkill(workDir: string, name: string, content: string): Ski
     triggers,
     category,
     ...(displayName && { displayName })
+  }
+}
+
+export function saveSopSkill(input: SaveSopSkillInput): SaveSopSkillResult {
+  const { workDir, sopSpec } = input
+  const skillName = input.skillName.trim()
+  if (!skillName || skillName.includes('/') || skillName.includes('\\') || skillName.includes('..') || skillName.startsWith('.')) {
+    throw new Error(`Invalid skill name: ${input.skillName}`)
+  }
+
+  const skillDir = join(workDir, '.claude', 'skills', skillName)
+  const skillMdPath = join(skillDir, 'SKILL.md')
+  const exists = existsSync(skillMdPath)
+
+  let existingContent: string | null = null
+  let existingFrontmatter: Record<string, unknown> | null = null
+  let description = input.description?.trim() || ''
+  let nextRevision = 1
+
+  if (exists) {
+    existingContent = readFileSync(skillMdPath, 'utf-8')
+    existingFrontmatter = parseFrontmatter(existingContent)
+    if (!description) {
+      description = getFrontmatterString(existingFrontmatter, ['description']) || ''
+    }
+    nextRevision = extractSopRevision(existingFrontmatter) + 1
+  }
+
+  const normalizedSpec = normalizeSopSpec(sopSpec, skillName, nextRevision)
+  const nextBlock = buildSopSpecJsonBlock(normalizedSpec)
+
+  let nextContent = ''
+  if (existingContent) {
+    const replaced = replaceSopSpecJsonBlock(existingContent, nextBlock)
+    if (replaced) {
+      nextContent = replaced
+      nextContent = upsertFrontmatterField(nextContent, 'name', skillName)
+      nextContent = upsertFrontmatterField(
+        nextContent,
+        'description',
+        description || `Recorded browser SOP for ${skillName}`
+      )
+      nextContent = upsertFrontmatterField(nextContent, 'sop_mode', 'manual_browser')
+      nextContent = upsertFrontmatterField(nextContent, 'sop_revision', nextRevision)
+    }
+  }
+
+  if (!nextContent) {
+    const revision = exists ? nextRevision : 1
+    const rebuiltSpec = normalizeSopSpec(sopSpec, skillName, revision)
+    nextContent = buildSopSkillContent(skillName, description, rebuiltSpec, revision)
+    nextRevision = revision
+  }
+
+  mkdirSync(skillDir, { recursive: true })
+  writeFileSync(skillMdPath, nextContent, 'utf-8')
+  invalidateSkillsCache(workDir)
+
+  return {
+    skillName,
+    skillPath: skillMdPath,
+    created: !exists,
+    revision: nextRevision,
   }
 }
 

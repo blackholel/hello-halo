@@ -85,13 +85,15 @@ function createHandlerWithToolObserver(onToolUse: (toolName: string, input: Reco
 describe('renderer-comm resource-dir guard', () => {
   it('allows Write on protected skill directory', async () => {
     const canUseTool = createHandler()
+    const input = { file_path: '.claude/skills/demo/SKILL.md' }
     const result = await canUseTool(
       'Write',
-      { file_path: '.claude/skills/demo/SKILL.md' },
+      input,
       { signal: new AbortController().signal }
     )
 
     expect(result.behavior).toBe('allow')
+    expect(result.updatedInput).toEqual(input)
   })
 
   it('allows Edit on protected agent directory', async () => {
@@ -107,13 +109,15 @@ describe('renderer-comm resource-dir guard', () => {
 
   it('allows Bash touching protected command directory', async () => {
     const canUseTool = createHandler()
+    const input = { command: 'echo "# cmd" > .claude/commands/release.md' }
     const result = await canUseTool(
       'Bash',
-      { command: 'echo "# cmd" > .claude/commands/release.md' },
+      input,
       { signal: new AbortController().signal }
     )
 
     expect(result.behavior).toBe('allow')
+    expect(result.updatedInput).toEqual(input)
   })
 
   it('allows Bash when command does not touch protected directories', async () => {
@@ -167,13 +171,15 @@ describe('renderer-comm resource-dir guard', () => {
 
   it('allows Read in app global resource root', async () => {
     const canUseTool = createHandler()
+    const input = { file_path: '/home/test/.kite/skills/brainstorming/SKILL.md' }
     const result = await canUseTool(
       'Read',
-      { file_path: '/home/test/.kite/skills/brainstorming/SKILL.md' },
+      input,
       { signal: new AbortController().signal }
     )
 
     expect(result.behavior).toBe('allow')
+    expect(result.updatedInput).toEqual(input)
   })
 
   it('allows Bash access to configured global path', async () => {

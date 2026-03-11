@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, MoreHorizontal, Plus, Search, SquarePen, Trash2 } from 'lucide-react'
 import { useTranslation } from '../../i18n'
 import { useSkillsStore, type SkillDefinition } from '../../stores/skills.store'
+import { useSpaceStore } from '../../stores/space.store'
 
 interface SkillsPanelProps {
   workDir?: string
@@ -31,13 +32,18 @@ export function SkillsPanel({
   const [menuPath, setMenuPath] = useState<string | null>(null)
 
   const { skills, loadedWorkDir, isLoading, loadSkills, deleteSkill } = useSkillsStore()
+  const currentSpace = useSpaceStore((state) => state.currentSpace)
+  const resolvedWorkDir = useMemo(() => {
+    if (workDir && workDir.trim()) return workDir
+    return currentSpace?.path
+  }, [currentSpace?.path, workDir])
 
   useEffect(() => {
     if (!expanded) return
-    if (skills.length === 0 || loadedWorkDir !== (workDir ?? null)) {
-      void loadSkills(workDir)
+    if (skills.length === 0 || loadedWorkDir !== (resolvedWorkDir ?? null)) {
+      void loadSkills(resolvedWorkDir)
     }
-  }, [expanded, loadSkills, loadedWorkDir, skills.length, workDir])
+  }, [expanded, loadSkills, loadedWorkDir, resolvedWorkDir, skills.length])
 
   const visibleSkills = useMemo(() => {
     const spaceSkills = skills.filter(skill => skill.source === 'space')

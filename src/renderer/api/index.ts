@@ -845,6 +845,37 @@ export const api = {
     return httpRequest('POST', '/api/skills', { workDir, name, content })
   },
 
+  saveSopSkill: async (payload: {
+    workDir: string
+    skillName: string
+    description?: string
+    sopSpec: {
+      version: string
+      name: string
+      steps: Array<{
+        id: string
+        action: 'navigate' | 'click' | 'fill' | 'select' | 'press_key' | 'wait_for'
+        target?: {
+          role?: string
+          name?: string
+          text?: string
+          label?: string
+          placeholder?: string
+          urlPattern?: string
+        }
+        value?: string
+        assertion?: string
+        retries: number
+      }>
+      meta?: Record<string, unknown>
+    }
+  }): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.kite.saveSopSkill(payload)
+    }
+    return { success: false, error: 'SOP recording skill save only available in desktop app' }
+  },
+
   updateSkill: async (skillPath: string, content: string): Promise<ApiResponse> => {
     if (isElectron()) {
       return window.kite.updateSkill(skillPath, content)
@@ -1387,6 +1418,34 @@ export const api = {
     return { success: false, error: 'Browser views only available in desktop app' }
   },
 
+  startBrowserSopRecording: async (viewId: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.kite.startBrowserSopRecording(viewId)
+    }
+    return { success: false, error: 'Browser SOP recording only available in desktop app' }
+  },
+
+  stopBrowserSopRecording: async (viewId: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.kite.stopBrowserSopRecording(viewId)
+    }
+    return { success: false, error: 'Browser SOP recording only available in desktop app' }
+  },
+
+  getBrowserSopRecordingState: async (viewId: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.kite.getBrowserSopRecordingState(viewId)
+    }
+    return { success: false, error: 'Browser SOP recording only available in desktop app' }
+  },
+
+  clearBrowserSopRecording: async (viewId: string): Promise<ApiResponse> => {
+    if (isElectron()) {
+      return window.kite.clearBrowserSopRecording(viewId)
+    }
+    return { success: false, error: 'Browser SOP recording only available in desktop app' }
+  },
+
   setBrowserZoom: async (viewId: string, level: number): Promise<ApiResponse> => {
     if (isElectron()) {
       return window.kite.setBrowserZoom(viewId, level)
@@ -1410,6 +1469,9 @@ export const api = {
 
   onBrowserStateChange: (callback: (data: unknown) => void) =>
     onEvent('browser:state-change', callback),
+
+  onBrowserSopRecordingEvent: (callback: (data: unknown) => void) =>
+    onEvent('browser:sop-recording:event', callback),
 
   onBrowserZoomChanged: (callback: (data: { viewId: string; zoomLevel: number }) => void) =>
     onEvent('browser:zoom-changed', callback as (data: unknown) => void),

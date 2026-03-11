@@ -20,7 +20,7 @@
  * by CanvasLifecycle, NOT by this component's useEffects.
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
   ArrowLeft,
   ArrowRight,
@@ -35,11 +35,15 @@ import {
   Bot,
   MoreVertical,
   Search,
+  Save,
+  Trash2,
 } from 'lucide-react'
 import { api } from '../../../api'
 import { canvasLifecycle, type TabState, type BrowserState } from '../../../services/canvas-lifecycle'
 import { useBrowserState } from '../../../hooks/useCanvasLifecycle'
 import { useAIBrowserStore } from '../../../stores/ai-browser.store'
+import { useSpaceStore } from '../../../stores/space.store'
+import { useSkillsStore } from '../../../stores/skills.store'
 import { useTranslation } from '../../../i18n'
 
 interface BrowserViewerProps {
@@ -49,6 +53,65 @@ interface BrowserViewerProps {
 // Default home page and search engine
 const DEFAULT_HOME_URL = 'https://www.bing.com'
 const SEARCH_ENGINE_URL = 'https://www.bing.com/search?q='
+
+interface SemanticTarget {
+  role?: string
+  name?: string
+  text?: string
+  label?: string
+  placeholder?: string
+  urlPattern?: string
+}
+
+interface SopRecordedStep {
+  id: string
+  action: 'navigate' | 'click' | 'fill' | 'select' | 'press_key' | 'wait_for'
+  target?: SemanticTarget
+  value?: string
+  assertion?: string
+  retries: number
+}
+
+interface SopRecordingState {
+  viewId: string
+  isRecording: boolean
+  startedAt: number | null
+  steps: SopRecordedStep[]
+}
+
+interface SopRecordingEventPayload {
+  type: 'state' | 'step'
+  viewId: string
+  state?: SopRecordingState
+  step?: SopRecordedStep
+}
+
+function normalizeSkillName(input: string): string {
+  return input
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[\\/]/g, '-')
+    .replace(/\.+/g, '.')
+    .replace(/^-+|-+$/g, '')
+}
+
+function suggestSkillName(title: string | undefined): string {
+  const normalized = normalizeSkillName(title || '')
+  return normalized || 'browser-sop'
+}
+
+function formatSemanticTarget(target?: SemanticTarget): string {
+  if (!target) return 'N/A'
+  return (
+    target.name ||
+    target.text ||
+    target.label ||
+    target.placeholder ||
+    target.urlPattern ||
+    target.role ||
+    'N/A'
+  )
+}
 
 /**
  * Check if input is a valid URL or should be treated as search query
@@ -99,10 +162,37 @@ export function BrowserViewer({ tab }: BrowserViewerProps) {
   const { t } = useTranslation()
   const containerRef = useRef<HTMLDivElement>(null)
   const resizeRafRef = useRef<number | null>(null)
-  const lastSizeRef = useRef<{ width: number; height: number } | null>(null)
+  const lastBoundsRef = useRef<{ left: number; top: number; width: number; height: number } | null>(null)
   const [addressBarValue, setAddressBarValue] = useState(tab.url || '')
   const [isAddressBarFocused, setIsAddressBarFocused] = useState(false)
   const [zoomLevel, setZoomLevel] = useState(100)
+  const [sopState, setSopState] = useState<SopRecordingState>({
+    viewId: tab.browserViewId || '',
+    isRecording: false,
+    startedAt: null,
+    steps: [],
+  })
+  const [showSopPanel, setShowSopPanel] = useState(false)
+  const [editableSteps, setEditableSteps] = useState<SopRecordedStep[]>([])
+  const [sopSkillName, setSopSkillName] = useState(suggestSkillName(tab.title))
+  const [sopSkillDescription, setSopSkillDescription] = useState('')
+  const [isSavingSopSkill, setIsSavingSopSkill] = useState(false)
+  const { currentSpace, spaces } = useSpaceStore((state) => ({
+    currentSpace: state.currentSpace,
+    spaces: state.spaces
+  }))
+  const loadSkills = useSkillsStore((state) => state.loadSkills)
+  const resolvedWorkDir = useMemo(() => {
+    if (tab.workDir && tab.workDir.trim()) return tab.workDir
+    if (tab.spaceId) {
+      if (currentSpace?.id === tab.spaceId && currentSpace.path) {
+        return currentSpace.path
+      }
+      const matchedSpace = spaces.find((space) => space.id === tab.spaceId)
+      if (matchedSpace?.path) return matchedSpace.path
+    }
+    return currentSpace?.path
+  }, [currentSpace?.id, currentSpace?.path, spaces, tab.spaceId, tab.workDir])
 
   // PDF mode: simplified UI without navigation controls
   const isPdf = tab.type === 'pdf'
@@ -150,21 +240,33 @@ export function BrowserViewer({ tab }: BrowserViewerProps) {
   // Resize Observer
   // ============================================
 
-  // Monitor container size changes and update BrowserView bounds
+  // Monitor container geometry changes and update BrowserView bounds
   useEffect(() => {
     if (!containerRef.current) return
 
-    const resizeObserver = new ResizeObserver((entries) => {
+    const syncBounds = () => {
       if (!tab.browserViewId) return
-      const target = entries[0]
-      if (!target) return
-      const width = Math.round(target.contentRect.width)
-      const height = Math.round(target.contentRect.height)
-      const previous = lastSizeRef.current
-      if (previous && previous.width === width && previous.height === height) {
+      if (!containerRef.current) return
+
+      const rect = containerRef.current.getBoundingClientRect()
+      const nextBounds = {
+        left: Math.round(rect.left),
+        top: Math.round(rect.top),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      }
+      const previous = lastBoundsRef.current
+      if (
+        previous &&
+        previous.left === nextBounds.left &&
+        previous.top === nextBounds.top &&
+        previous.width === nextBounds.width &&
+        previous.height === nextBounds.height
+      ) {
         return
       }
-      lastSizeRef.current = { width, height }
+      lastBoundsRef.current = nextBounds
+
       if (resizeRafRef.current != null) {
         cancelAnimationFrame(resizeRafRef.current)
       }
@@ -172,10 +274,21 @@ export function BrowserViewer({ tab }: BrowserViewerProps) {
         canvasLifecycle.updateActiveBounds()
         resizeRafRef.current = null
       })
+    }
+
+    lastBoundsRef.current = null
+    const resizeObserver = new ResizeObserver(() => {
+      syncBounds()
     })
 
     resizeObserver.observe(containerRef.current)
+    window.addEventListener('resize', syncBounds)
+    window.addEventListener('scroll', syncBounds, true)
+    syncBounds()
+
     return () => {
+      window.removeEventListener('resize', syncBounds)
+      window.removeEventListener('scroll', syncBounds, true)
       if (resizeRafRef.current != null) {
         cancelAnimationFrame(resizeRafRef.current)
         resizeRafRef.current = null
@@ -301,6 +414,166 @@ export function BrowserViewer({ tab }: BrowserViewerProps) {
     })
     return unsubscribe
   }, [tab.browserViewId])
+
+  useEffect(() => {
+    if (!tab.browserViewId) return
+
+    let active = true
+    const syncState = async () => {
+      const result = await api.getBrowserSopRecordingState(tab.browserViewId!)
+      if (!active || !result.success || !result.data) return
+      const nextState = result.data as SopRecordingState
+      setSopState(nextState)
+      setEditableSteps(nextState.steps || [])
+    }
+
+    void syncState()
+
+    const unsubscribe = api.onBrowserSopRecordingEvent((data) => {
+      const payload = data as SopRecordingEventPayload
+      if (payload.viewId !== tab.browserViewId) return
+      if (payload.type === 'state' && payload.state) {
+        setSopState(payload.state)
+        setEditableSteps(payload.state.steps || [])
+      }
+    })
+
+    return () => {
+      active = false
+      unsubscribe()
+    }
+  }, [tab.browserViewId])
+
+  useEffect(() => {
+    if (!sopSkillName || sopSkillName === 'browser-sop') {
+      setSopSkillName(suggestSkillName(tab.title))
+    }
+  }, [tab.title, sopSkillName])
+
+  const handleStartSopRecording = useCallback(async () => {
+    if (!tab.browserViewId) return
+    const result = await api.startBrowserSopRecording(tab.browserViewId)
+    if (!result.success) {
+      alert(result.error || t('Failed to start recording'))
+      return
+    }
+    const state = result.data as SopRecordingState
+    setSopState(state)
+    setEditableSteps(state.steps || [])
+    setShowSopPanel(true)
+  }, [tab.browserViewId, t])
+
+  const handleStopSopRecording = useCallback(async () => {
+    if (!tab.browserViewId) return
+    const result = await api.stopBrowserSopRecording(tab.browserViewId)
+    if (!result.success) {
+      alert(result.error || t('Failed to stop recording'))
+      return
+    }
+    const state = result.data as SopRecordingState
+    setSopState(state)
+    setEditableSteps(state.steps || [])
+    setShowSopPanel(true)
+  }, [tab.browserViewId, t])
+
+  const handleClearSopRecording = useCallback(async () => {
+    if (!tab.browserViewId) return
+    const result = await api.clearBrowserSopRecording(tab.browserViewId)
+    if (!result.success) {
+      alert(result.error || t('Failed to clear recording'))
+      return
+    }
+    const state = result.data as SopRecordingState
+    setSopState(state)
+    setEditableSteps(state.steps || [])
+  }, [tab.browserViewId, t])
+
+  const handleDeleteRecordedStep = useCallback((stepId: string) => {
+    setEditableSteps((prev) => prev.filter((step) => step.id !== stepId))
+  }, [])
+
+  const handleStepValueChange = useCallback((stepId: string, value: string) => {
+    setEditableSteps((prev) =>
+      prev.map((step) =>
+        step.id === stepId
+          ? {
+            ...step,
+            value,
+          }
+          : step
+      )
+    )
+  }, [])
+
+  const handleSaveSopSkill = useCallback(async () => {
+    const workDir = resolvedWorkDir
+    if (!workDir) {
+      alert(t('No active workspace path found'))
+      return
+    }
+
+    const skillName = normalizeSkillName(sopSkillName || suggestSkillName(tab.title))
+    if (!skillName) {
+      alert(t('Skill name is required'))
+      return
+    }
+
+    if (editableSteps.length === 0) {
+      alert(t('No recorded steps to save'))
+      return
+    }
+
+    const steps = editableSteps.map((step, index) => ({
+      ...step,
+      id: step.id || `step-${index + 1}`,
+      retries: Number.isFinite(step.retries) && step.retries > 0 ? step.retries : 3,
+    }))
+
+    setIsSavingSopSkill(true)
+    try {
+      const result = await api.saveSopSkill({
+        workDir,
+        skillName,
+        description: sopSkillDescription.trim() || undefined,
+        sopSpec: {
+          version: '1.0',
+          name: skillName,
+          steps,
+          meta: {
+            source: 'browser_view_recording',
+            browserViewId: tab.browserViewId,
+            recordedUrl: tab.url || '',
+            updatedAt: new Date().toISOString(),
+          },
+        },
+      })
+      if (!result.success) {
+        alert(result.error || t('Failed to save SOP skill'))
+        return
+      }
+      await api.refreshSkillsIndex(workDir)
+      await loadSkills(workDir)
+      const savedPath = (result.data as { skillPath?: string } | undefined)?.skillPath || ''
+      alert(
+        t('SOP skill saved. Use /{{name}} in chat.\nPath: {{path}}', {
+          name: skillName,
+          path: savedPath || `${workDir}/.claude/skills/${skillName}/SKILL.md`,
+        })
+      )
+    } finally {
+      setIsSavingSopSkill(false)
+    }
+  }, [
+    tab.title,
+    tab.browserViewId,
+    tab.url,
+    resolvedWorkDir,
+    sopSkillName,
+    sopSkillDescription,
+    editableSteps,
+    loadSkills,
+    t,
+  ])
 
   // Check if URL is HTTPS
   const isSecure = tab.url?.startsWith('https://')
@@ -469,6 +742,123 @@ export function BrowserViewer({ tab }: BrowserViewerProps) {
             >
               <MoreVertical className="w-4 h-4 text-muted-foreground" />
             </button>
+
+            <div className="mx-1 h-4 w-px bg-border" />
+
+            <button
+              onClick={sopState.isRecording ? handleStopSopRecording : handleStartSopRecording}
+              className={`px-2 py-1.5 rounded text-xs transition-colors ${
+                sopState.isRecording
+                  ? 'bg-red-500/15 text-red-500 hover:bg-red-500/20'
+                  : 'bg-primary/10 text-primary hover:bg-primary/20'
+              }`}
+              title={sopState.isRecording ? t('Stop SOP recording') : t('Start SOP recording')}
+            >
+              {sopState.isRecording ? t('Stop') : t('Record SOP')}
+            </button>
+
+            <button
+              onClick={() => setShowSopPanel((prev) => !prev)}
+              className="px-2 py-1.5 rounded text-xs text-muted-foreground hover:bg-secondary transition-colors"
+              title={t('Toggle SOP panel')}
+            >
+              {showSopPanel ? t('Hide SOP') : t('Show SOP')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!isPdf && showSopPanel && (
+        <div className="border-b border-border bg-background/70 px-3 py-2 space-y-2">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span>
+              {sopState.isRecording ? t('Recording...') : t('Recording stopped')}
+            </span>
+            <span>{t('Steps')}: {editableSteps.length}</span>
+            {sopState.startedAt && (
+              <span>{new Date(sopState.startedAt).toLocaleTimeString()}</span>
+            )}
+            <div className="flex-1" />
+            <button
+              onClick={handleClearSopRecording}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded hover:bg-secondary transition-colors"
+              title={t('Clear recording')}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              {t('Clear')}
+            </button>
+          </div>
+
+          <div className="max-h-44 overflow-auto space-y-2 pr-1">
+            {editableSteps.length === 0 ? (
+              <div className="text-xs text-muted-foreground">
+                {t('No recorded steps yet. Start recording and operate the page.')}
+              </div>
+            ) : (
+              editableSteps.map((step, index) => (
+                <div
+                  key={step.id}
+                  className="rounded border border-border/60 bg-card/50 p-2 space-y-1"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] px-1.5 py-0.5 rounded bg-secondary font-medium">
+                      {index + 1}
+                    </span>
+                    <span className="text-[11px] uppercase tracking-wide text-primary font-medium">
+                      {step.action}
+                    </span>
+                    <span className="text-xs text-muted-foreground truncate flex-1">
+                      {formatSemanticTarget(step.target)}
+                    </span>
+                    <button
+                      onClick={() => handleDeleteRecordedStep(step.id)}
+                      className="p-1 rounded hover:bg-secondary transition-colors"
+                      title={t('Delete step')}
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-muted-foreground" />
+                    </button>
+                  </div>
+
+                  {(step.action === 'fill' || step.action === 'select' || step.action === 'press_key' || step.action === 'navigate') && (
+                    <input
+                      value={step.value || ''}
+                      onChange={(event) => handleStepValueChange(step.id, event.target.value)}
+                      placeholder={t('Step value')}
+                      className="w-full h-7 px-2 rounded border border-border bg-background text-xs outline-none focus:border-primary/40"
+                    />
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <input
+              value={sopSkillName}
+              onChange={(event) => setSopSkillName(event.target.value)}
+              placeholder={t('Skill name')}
+              className="h-8 px-2 rounded border border-border bg-background text-sm outline-none focus:border-primary/40"
+            />
+            <input
+              value={sopSkillDescription}
+              onChange={(event) => setSopSkillDescription(event.target.value)}
+              placeholder={t('Description (optional)')}
+              className="h-8 px-2 rounded border border-border bg-background text-sm outline-none focus:border-primary/40"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleSaveSopSkill}
+              disabled={isSavingSopSkill || editableSteps.length === 0}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded bg-primary text-primary-foreground text-xs hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <Save className="w-3.5 h-3.5" />
+              {isSavingSopSkill ? t('Saving...') : t('Save as Skill')}
+            </button>
+            <span className="text-xs text-muted-foreground">
+              {t('Saved skill can be invoked with /<skill-name>.')}
+            </span>
           </div>
         </div>
       )}
@@ -501,6 +891,7 @@ export function BrowserViewer({ tab }: BrowserViewerProps) {
  * Shows a message when browser features are not available
  */
 export function BrowserViewerFallback({ tab }: BrowserViewerProps) {
+  const { t } = useTranslation()
   const openExternal = () => {
     if (tab.url) {
       window.open(tab.url, '_blank')

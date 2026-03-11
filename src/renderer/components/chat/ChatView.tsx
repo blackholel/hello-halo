@@ -136,8 +136,9 @@ function highlightQueryInContent(contentElement: Element, query: string): boolea
 
 export function ChatView({ isCompact = false }: ChatViewProps) {
   const { t } = useTranslation()
-  const { currentSpace } = useSpaceStore((state) => ({
-    currentSpace: state.currentSpace
+  const { currentSpace, spaces } = useSpaceStore((state) => ({
+    currentSpace: state.currentSpace,
+    spaces: state.spaces
   }), shallow)
   const {
     currentSpaceId,
@@ -195,6 +196,16 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
     appConfig: state.config,
     setView: state.setView
   }), shallow)
+  const resolvedConversationWorkDir = useMemo(() => {
+    if (currentSpace?.id === currentSpaceId && currentSpace.path) {
+      return currentSpace.path
+    }
+    if (!currentSpaceId) {
+      return currentSpace?.path
+    }
+    const matchedSpace = spaces.find((space) => space.id === currentSpaceId)
+    return matchedSpace?.path
+  }, [currentSpace?.id, currentSpace?.path, currentSpaceId, spaces])
 
   // Onboarding state
   const {
@@ -493,7 +504,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
       return
     }
 
-    await openPlan(planContent, t('Plan'), currentSpaceId, currentConversationId, currentSpace?.path)
+    await openPlan(planContent, t('Plan'), currentSpaceId, currentConversationId, resolvedConversationWorkDir)
   }
 
   const handleExecutePlan = useCallback(async (planContent: string) => {
@@ -591,7 +602,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
                 textBlockVersion={textBlockVersion}
                 toolStatusById={toolStatusById}
                 availableToolsSnapshot={availableToolsSnapshot}
-                workDir={currentSpace?.path}
+                workDir={resolvedConversationWorkDir}
                 onOpenPlanInCanvas={handleOpenPlanInCanvas}
                 onExecutePlan={handleExecutePlan}
               />
@@ -704,7 +715,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
         placeholder={t('Ask Kite anything, / for commands')}
         isCompact={isCompact}
         spaceId={currentSpaceId}
-        workDir={currentSpace?.path}
+        workDir={resolvedConversationWorkDir}
         mode={mode}
         onModeChange={handleModeChange}
         conversation={modelSwitcherConversation}

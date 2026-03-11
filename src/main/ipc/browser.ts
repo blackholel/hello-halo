@@ -6,7 +6,10 @@
  */
 
 import { ipcMain, BrowserWindow, Menu, shell, MenuItemConstructorOptions } from 'electron'
-import { browserViewManager, type BrowserViewBounds } from '../services/browser-view.service'
+import {
+  browserViewManager,
+  type BrowserViewBounds,
+} from '../services/browser-view.service'
 
 /**
  * Browser context menu options from renderer
@@ -186,6 +189,58 @@ export function registerBrowserHandlers(mainWindow: BrowserWindow | null) {
   // ============================================
   // State & Tools
   // ============================================
+
+  /**
+   * Start SOP recording for a BrowserView
+   */
+  ipcMain.handle('browser:sop-recording:start', async (_event, { viewId }: { viewId: string }) => {
+    try {
+      const state = await browserViewManager.startSopRecording(viewId)
+      return { success: true, data: state }
+    } catch (error) {
+      console.error('[Browser IPC] SOP start failed:', error)
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  /**
+   * Stop SOP recording for a BrowserView
+   */
+  ipcMain.handle('browser:sop-recording:stop', async (_event, { viewId }: { viewId: string }) => {
+    try {
+      const state = await browserViewManager.stopSopRecording(viewId)
+      return { success: true, data: state }
+    } catch (error) {
+      console.error('[Browser IPC] SOP stop failed:', error)
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  /**
+   * Get SOP recording state for a BrowserView
+   */
+  ipcMain.handle('browser:sop-recording:get-state', async (_event, { viewId }: { viewId: string }) => {
+    try {
+      const state = browserViewManager.getSopRecordingState(viewId)
+      return { success: true, data: state }
+    } catch (error) {
+      console.error('[Browser IPC] SOP get-state failed:', error)
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  /**
+   * Clear SOP recording steps for a BrowserView
+   */
+  ipcMain.handle('browser:sop-recording:clear', async (_event, { viewId }: { viewId: string }) => {
+    try {
+      const state = browserViewManager.clearSopRecording(viewId)
+      return { success: true, data: state }
+    } catch (error) {
+      console.error('[Browser IPC] SOP clear failed:', error)
+      return { success: false, error: (error as Error).message }
+    }
+  })
 
   /**
    * Get current state

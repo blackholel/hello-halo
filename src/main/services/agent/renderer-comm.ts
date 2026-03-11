@@ -820,6 +820,13 @@ export function createCanUseTool(
     _options: { signal: AbortSignal }
   ) => {
     const trace: ToolPolicyTrace[] = []
+    const buildAllowDecision = (
+      originalInput: Record<string, unknown>,
+      updatedInput?: Record<string, unknown>
+    ): CanUseToolDecision => ({
+      behavior: 'allow',
+      updatedInput: updatedInput ?? originalInput
+    })
     const finish = (decision: CanUseToolDecision & { errorCode?: string }): CanUseToolDecision => {
       emitCanUseToolAudit({
         spaceId,
@@ -847,10 +854,7 @@ export function createCanUseTool(
       updatedInput?: Record<string, unknown>
     ): CanUseToolDecision => {
       trace.push({ layer, outcome: 'allow', rule })
-      return finish({
-        behavior: 'allow',
-        ...(updatedInput ? { updatedInput } : {})
-      })
+      return finish(buildAllowDecision(input, updatedInput))
     }
 
     const notifyToolUse = () => {
@@ -937,7 +941,14 @@ export function createCanUseTool(
         const context = {
           pendingId,
           resolve: (decision: CanUseToolDecision) => {
-            resolveDecision(finish(decision))
+            const normalizedDecision =
+              decision.behavior === 'allow'
+                ? buildAllowDecision(
+                    normalizedInput,
+                    decision.updatedInput || context.inputSnapshot
+                  )
+                : decision
+            resolveDecision(finish(normalizedDecision))
           },
           inputSnapshot: normalizedInput,
           inputFingerprint: fingerprint,
@@ -1039,7 +1050,7 @@ export function createCanUseTool(
           session.pendingPermissionResolve = (approved: boolean) => {
             if (approved) {
               notifyToolUse()
-              resolve(finish({ behavior: 'allow' as const }))
+              resolve(finish(buildAllowDecision(input)))
             } else {
               resolve(finish({
                 behavior: 'deny' as const,
@@ -1099,12 +1110,12 @@ export function createCanUseTool(
     if (isAIBrowserTool(toolName)) {
       console.log(`[Agent] AI Browser tool allowed: ${toolName}`)
       trace.push({ layer: 'GlobalPolicy', outcome: 'allow', rule: 'ai_browser_tool_allowlist' })
-      return finish({ behavior: 'allow' as const })
+      return finish(buildAllowDecision(input))
     }
 
     // Default: allow
     notifyToolUse()
     trace.push({ layer: 'GlobalPolicy', outcome: 'allow', rule: 'default_allow' })
-    return finish({ behavior: 'allow' as const })
+    return finish(buildAllowDecision(input))
   }
 }

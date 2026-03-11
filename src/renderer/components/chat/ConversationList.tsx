@@ -25,6 +25,7 @@ import type { AgentDefinition } from '../../stores/agents.store'
 import { useSkillsStore } from '../../stores/skills.store'
 import { useAgentsStore } from '../../stores/agents.store'
 import { useCommandsStore } from '../../stores/commands.store'
+import { useSpaceStore } from '../../stores/space.store'
 import { toResourceKey } from '../../utils/resource-key'
 import { commandKey } from '../../../shared/command-utils'
 
@@ -91,6 +92,11 @@ export function ConversationList({
   const latestWidthRef = useRef(DEFAULT_WIDTH)
   const containerRef = useRef<HTMLDivElement>(null)
   const editInputRef = useRef<HTMLInputElement>(null)
+  const currentSpace = useSpaceStore((state) => state.currentSpace)
+  const resolvedWorkDir = useMemo(() => {
+    if (workDir && workDir.trim()) return workDir
+    return currentSpace?.path
+  }, [currentSpace?.path, workDir])
   const { skills, loadedWorkDir: loadedSkillsWorkDir, loadSkills } = useSkillsStore((state) => ({
     skills: state.skills,
     loadedWorkDir: state.loadedWorkDir,
@@ -108,22 +114,22 @@ export function ConversationList({
   }), shallow)
 
   useEffect(() => {
-    if (skills.length === 0 || loadedSkillsWorkDir !== (workDir ?? null)) {
-      void loadSkills(workDir)
+    if (skills.length === 0 || loadedSkillsWorkDir !== (resolvedWorkDir ?? null)) {
+      void loadSkills(resolvedWorkDir)
     }
-  }, [loadSkills, loadedSkillsWorkDir, skills.length, workDir])
+  }, [loadSkills, loadedSkillsWorkDir, resolvedWorkDir, skills.length])
 
   useEffect(() => {
-    if (agents.length === 0 || loadedAgentsWorkDir !== (workDir ?? null)) {
-      void loadAgents(workDir)
+    if (agents.length === 0 || loadedAgentsWorkDir !== (resolvedWorkDir ?? null)) {
+      void loadAgents(resolvedWorkDir)
     }
-  }, [agents.length, loadAgents, loadedAgentsWorkDir, workDir])
+  }, [agents.length, loadAgents, loadedAgentsWorkDir, resolvedWorkDir])
 
   useEffect(() => {
-    if (commands.length === 0 || loadedCommandsWorkDir !== (workDir ?? null)) {
-      void loadCommands(workDir)
+    if (commands.length === 0 || loadedCommandsWorkDir !== (resolvedWorkDir ?? null)) {
+      void loadCommands(resolvedWorkDir)
     }
-  }, [commands.length, loadCommands, loadedCommandsWorkDir, workDir])
+  }, [commands.length, loadCommands, loadedCommandsWorkDir, resolvedWorkDir])
 
   const skillDisplayMap = useMemo(() => {
     const map = new Map<string, string>()
@@ -410,7 +416,7 @@ export function ConversationList({
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
-                              openChat(spaceId, conversation.id, conversation.title, workDir)
+                              openChat(spaceId, conversation.id, conversation.title, resolvedWorkDir)
                             }}
                             className="p-1.5 hover:bg-background/90 rounded-lg transition-colors"
                             title={t('Open in tab')}
@@ -452,7 +458,7 @@ export function ConversationList({
       {/* Skills & Agents panels */}
       <div className="space-studio-sidebar-tools p-3.5 space-y-2">
         <SkillsPanel
-          workDir={workDir}
+          workDir={resolvedWorkDir}
           onSelectSkill={onSelectSkill}
           onInsertSkill={onInsertSkill}
           onCreateSkill={onCreateSkill}
@@ -460,7 +466,7 @@ export function ConversationList({
           preferInsertOnClick
         />
         <AgentsPanel
-          workDir={workDir}
+          workDir={resolvedWorkDir}
           onSelectAgent={onSelectAgent}
           onInsertAgent={onInsertAgent}
           onCreateAgent={onCreateAgent}
@@ -468,7 +474,7 @@ export function ConversationList({
           preferInsertOnClick
         />
         <CommandsPanel
-          workDir={workDir}
+          workDir={resolvedWorkDir}
           onInsertCommand={onInsertCommand}
           onCreateCommand={onCreateCommand}
           onInsertCreateCommand={() => onInsertCommand?.(CREATE_COMMANDS_TRIGGER)}

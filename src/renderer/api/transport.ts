@@ -216,6 +216,7 @@ export function onEvent(channel: string, callback: (data: unknown) => void): () 
       'agents:changed': 'onAgentsChanged',
       'remote:status-change': 'onRemoteStatusChange',
       'browser:state-change': 'onBrowserStateChange',
+      'browser:sop-recording:event': 'onBrowserSopRecordingEvent',
       'browser:zoom-changed': 'onBrowserZoomChanged',
       'canvas:tab-action': 'onCanvasTabAction',
       'ai-browser:active-view-changed': 'onAIBrowserActiveViewChanged',

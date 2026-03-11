@@ -9,6 +9,7 @@ import { BrowserWindow } from 'electron'
 import { promises as fsPromises } from 'fs'
 import { getConfig } from '../config.service'
 import { getSpaceConfig } from '../space-config.service'
+import { getSkillContent, getSkillDefinition } from '../skills.service'
 import {
   getConversation,
   saveSessionId,
@@ -135,6 +136,10 @@ function createAgentRoutingError(errorCode: string, message: string): Error & { 
 const DEFAULT_HISTORY_BOOTSTRAP_MAX_TURNS = 20
 const DEFAULT_HISTORY_BOOTSTRAP_MAX_TOKENS = 6000
 const DEFAULT_HISTORY_BOOTSTRAP_MAX_MESSAGE_CHARS = 4000
+const LINE_SKILL_DIRECTIVE_RE = /^\/([\p{L}\p{N}._:-]+)(?:\s+.+)?$/gmu
+const INLINE_SKILL_DIRECTIVE_RE = /(^|[\s([{])\/([\p{L}\p{N}._:-]+)(?=$|[\s)\]}.,!?;:])/gu
+
+type SkillSource = 'app' | 'global' | 'space' | 'installed'
 
 type BootstrapMessageLike = {
   role?: unknown
@@ -145,6 +150,66 @@ function truncateText(text: string, maxChars: number): string {
   if (text.length <= maxChars) return text
   const omittedChars = text.length - maxChars
   return `${text.slice(0, maxChars)}\n...[truncated ${omittedChars} chars]`
+}
+
+function extractSkillDirectiveTokens(message: string): string[] {
+  if (!message || !message.includes('/')) return []
+
+  const found = new Set<string>()
+  for (const match of message.matchAll(LINE_SKILL_DIRECTIVE_RE)) {
+    const token = match[1]?.trim()
+    if (token?.toLowerCase() === 'mcp') continue
+    if (token) found.add(token)
+  }
+
+  for (const match of message.matchAll(INLINE_SKILL_DIRECTIVE_RE)) {
+    const token = match[2]?.trim()
+    if (!token) continue
+    if (token.toLowerCase() === 'mcp') continue
+    found.add(token)
+  }
+
+  return [...found]
+}
+
+export function shouldAutoEnableAiBrowserForSopSkill(params: {
+  message: string
+  workDir: string
+  allowedSources?: SkillSource[]
+  locale?: string
+}): { enabled: boolean; matchedSkills: string[]; checkedSkills: string[] } {
+  const tokens = extractSkillDirectiveTokens(params.message)
+  if (tokens.length === 0) {
+    return { enabled: false, matchedSkills: [], checkedSkills: [] }
+  }
+
+  const matched = new Set<string>()
+  for (const token of tokens) {
+    const definition = getSkillDefinition(token, params.workDir, {
+      allowedSources: params.allowedSources,
+      locale: params.locale,
+    })
+    if (!definition) continue
+
+    const canonicalName = definition.namespace
+      ? `${definition.namespace}:${definition.name}`
+      : definition.name
+    const content = getSkillContent(canonicalName, params.workDir, {
+      allowedSources: params.allowedSources,
+      locale: params.locale,
+    })
+    if (!content?.frontmatter) continue
+    const sopMode = content.frontmatter.sop_mode
+    if (typeof sopMode === 'string' && sopMode.trim().toLowerCase() === 'manual_browser') {
+      matched.add(token)
+    }
+  }
+
+  return {
+    enabled: matched.size > 0,
+    matchedSkills: [...matched],
+    checkedSkills: tokens,
+  }
 }
 
 function sanitizeBootstrapMessage(message: BootstrapMessageLike): BootstrapMessageLike {
@@ -998,7 +1063,7 @@ export async function sendMessage(
   const isStrictCompatProvider = effectiveAi.disableToolsForCompat
   const compatProviderName = effectiveAi.compatProviderName || 'Compatibility provider'
   // Some Anthropic-compatible backends can be strict; keep text-only for stability.
-  const effectiveAiBrowserEnabled = effectiveAi.disableAiBrowserForCompat ? false : aiBrowserEnabled
+  let effectiveAiBrowserEnabled = effectiveAi.disableAiBrowserForCompat ? false : aiBrowserEnabled
   const effectiveThinkingEnabled = effectiveAi.disableThinkingForCompat ? false : thinkingEnabled
   const effectiveImages = effectiveAi.disableImageForCompat ? undefined : images
   if (isStrictCompatProvider) {
@@ -1014,9 +1079,6 @@ export async function sendMessage(
       )
     }
   }
-  console.log(
-    `[Agent] sendMessage: conv=${conversationId}, responseLanguage=${effectiveResponseLanguage}${effectiveImages && effectiveImages.length > 0 ? `, images=${effectiveImages.length}` : ''}${effectiveAiBrowserEnabled ? ', AI Browser enabled' : ''}${effectiveThinkingEnabled ? ', thinking=ON' : ''}${canvasContext?.isOpen ? `, canvas tabs=${canvasContext.tabCount}` : ''}${fileContexts && fileContexts.length > 0 ? `, fileContexts=${fileContexts.length}` : ''}`
-  )
   let workDir: string
   try {
     workDir = getWorkingDir(spaceId)
@@ -1062,6 +1124,29 @@ export async function sendMessage(
     ? extractMcpDirectives(message, sessionKey)
     : { text: message, enabled: [], missing: [] }
   const messageForSend = mcpDirectiveResult.text
+
+  const sopAutoEnable = shouldAutoEnableAiBrowserForSopSkill({
+    message: messageForSend,
+    workDir,
+    allowedSources: allowedDirectiveSources as SkillSource[],
+    locale: effectiveResponseLanguage,
+  })
+  if (sopAutoEnable.enabled) {
+    if (effectiveAi.disableAiBrowserForCompat) {
+      console.warn(
+        `[Agent][${conversationId}] ${compatProviderName}: SOP skill requested AI Browser but compat mode blocks it (${sopAutoEnable.matchedSkills.join(', ')})`
+      )
+    } else if (!effectiveAiBrowserEnabled) {
+      effectiveAiBrowserEnabled = true
+      console.log(
+        `[Agent][${conversationId}] AI Browser auto-enabled by SOP skill: ${sopAutoEnable.matchedSkills.join(', ')}`
+      )
+    }
+  }
+
+  console.log(
+    `[Agent] sendMessage: conv=${conversationId}, responseLanguage=${effectiveResponseLanguage}${effectiveImages && effectiveImages.length > 0 ? `, images=${effectiveImages.length}` : ''}${effectiveAiBrowserEnabled ? ', AI Browser enabled' : ''}${effectiveThinkingEnabled ? ', thinking=ON' : ''}${canvasContext?.isOpen ? `, canvas tabs=${canvasContext.tabCount}` : ''}${fileContexts && fileContexts.length > 0 ? `, fileContexts=${fileContexts.length}` : ''}`
+  )
 
   if (mcpDirectiveResult.enabled.length > 0) {
     console.log(
