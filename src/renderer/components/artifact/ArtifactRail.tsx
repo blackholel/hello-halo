@@ -39,6 +39,8 @@ const MOBILE_BREAKPOINT = 640
 interface ArtifactRailProps {
   spaceId: string
   isTemp: boolean
+  displayMode?: 'inline' | 'overlay'
+  onClose?: () => void
   // External control props for Canvas integration
   externalExpanded?: boolean        // Controlled expanded state from parent
   onExpandedChange?: (expanded: boolean) => void  // Callback when user toggles
@@ -77,15 +79,18 @@ const DEFAULT_BROWSER_URL = 'https://www.bing.com'
 export function ArtifactRail({
   spaceId,
   isTemp,
+  displayMode = 'inline',
+  onClose,
   externalExpanded,
   onExpandedChange
 }: ArtifactRailProps) {
   const { t } = useTranslation()
   const [artifacts, setArtifacts] = useState<Artifact[]>([])
+  const isOverlayMode = displayMode === 'overlay'
   // Use external control if provided, otherwise internal state
-  const isControlled = externalExpanded !== undefined
+  const isControlled = !isOverlayMode && externalExpanded !== undefined
   const [internalExpanded, setInternalExpanded] = useState(true)
-  const isExpanded = isControlled ? externalExpanded : internalExpanded
+  const isExpanded = isOverlayMode ? true : (isControlled ? externalExpanded : internalExpanded)
 
   const [isLoading, setIsLoading] = useState(false)
   const [railHint, setRailHint] = useState<string | null>(null)
@@ -118,6 +123,7 @@ export function ArtifactRail({
 
   // Handle expand/collapse toggle
   const handleToggleExpanded = useCallback(() => {
+    if (isOverlayMode) return
     console.log('[ArtifactRail] 🔴 Click! isExpanded:', isExpanded, 'time:', Date.now())
     const newExpanded = !isExpanded
 
@@ -135,7 +141,7 @@ export function ArtifactRail({
     } else {
       setInternalExpanded(newExpanded)
     }
-  }, [isExpanded, isControlled, onExpandedChange, hasBrowserTab, width])
+  }, [isExpanded, isControlled, isOverlayMode, onExpandedChange, hasBrowserTab, width])
 
   // Debug: log when isExpanded changes
   useEffect(() => {
@@ -236,7 +242,7 @@ export function ArtifactRail({
         const previousCount = previousArtifactCountRef.current
         const hasNewArtifacts = previousCount != null && nextCount > previousCount
 
-        if (hasNewArtifacts && isExpanded) {
+        if (hasNewArtifacts && isExpanded && !isOverlayMode) {
           if (isControlled) {
             onExpandedChange?.(false)
           } else {
@@ -253,7 +259,7 @@ export function ArtifactRail({
     } finally {
       setIsLoading(false)
     }
-  }, [isControlled, isExpanded, onExpandedChange, spaceId, t])
+  }, [isControlled, isExpanded, isOverlayMode, onExpandedChange, spaceId, t])
 
   // Load artifacts on mount and when space changes
   useEffect(() => {
@@ -281,18 +287,26 @@ export function ArtifactRail({
   const handleOpenBrowser = useCallback(() => {
     openUrl(DEFAULT_BROWSER_URL, 'Bing')
     setRailHint(null)
+    if (isOverlayMode) {
+      onClose?.()
+      return
+    }
     // Auto-collapse rail when opening browser to maximize viewing area
     if (isControlled) {
       onExpandedChange?.(false)
     } else {
       setInternalExpanded(false)
     }
-  }, [openUrl, isControlled, onExpandedChange])
+  }, [openUrl, isControlled, isOverlayMode, onClose, onExpandedChange])
 
   const handleShowCurrentSpaceFiles = useCallback(() => {
     setRailHint(null)
     setViewMode('tree')
     localStorage.setItem(VIEW_MODE_STORAGE_KEY, 'tree')
+
+    if (isOverlayMode) {
+      return
+    }
 
     if (isControlled) {
       onExpandedChange?.(true)
@@ -303,7 +317,7 @@ export function ArtifactRail({
     if (isMobile) {
       setMobileOverlayOpen(true)
     }
-  }, [isControlled, isMobile, onExpandedChange])
+  }, [isControlled, isMobile, isOverlayMode, onExpandedChange])
 
   // Shared content renderer
   const renderContent = () => (
@@ -461,6 +475,7 @@ export function ArtifactRail({
                       ${viewMode === 'tree' ? 'bg-secondary text-primary' : 'text-muted-foreground/50 hover:text-muted-foreground'}
                     `}
                     title={viewMode === 'card' ? t('Switch to tree view') : t('Switch to card view')}
+                    aria-label={viewMode === 'card' ? t('Switch to tree view') : t('Switch to card view')}
                   >
                     {viewMode === 'card' ? (
                       <FolderTree className="w-3.5 h-3.5" />
@@ -490,6 +505,44 @@ export function ArtifactRail({
     )
   }
 
+  if (isOverlayMode) {
+    return (
+      <div className="space-studio-rail space-studio-rail-overlay h-full w-full flex flex-col relative">
+        <div className="flex-shrink-0 px-3 h-10 border-b border-border flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className="text-sm font-medium text-muted-foreground">{t('Artifacts')}</span>
+            <button
+              onClick={toggleViewMode}
+              className={`
+                p-1 rounded transition-all duration-200
+                hover:bg-secondary/80
+                ${viewMode === 'tree' ? 'bg-secondary text-primary' : 'text-muted-foreground/50 hover:text-muted-foreground'}
+              `}
+              title={viewMode === 'card' ? t('Switch to tree view (developer)') : t('Switch to card view')}
+              aria-label={viewMode === 'card' ? t('Switch to tree view (developer)') : t('Switch to card view')}
+            >
+              {viewMode === 'card' ? (
+                <FolderTree className="w-3.5 h-3.5" />
+              ) : (
+                <LayoutGrid className="w-3.5 h-3.5" />
+              )}
+            </button>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1 hover:bg-secondary rounded transition-colors"
+            aria-label={t('Close')}
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {renderContent()}
+        {renderFooter()}
+      </div>
+    )
+  }
+
   // ==================== Desktop Inline Mode ====================
   const displayWidth = isExpanded ? width : COLLAPSED_WIDTH
 
@@ -511,6 +564,8 @@ export function ArtifactRail({
           }`}
           onMouseDown={handleMouseDown}
           title={t('Drag to resize')}
+          role="separator"
+          aria-orientation="vertical"
         />
       )}
 
@@ -527,6 +582,7 @@ export function ArtifactRail({
                 ${viewMode === 'tree' ? 'bg-secondary text-primary' : 'text-muted-foreground/50 hover:text-muted-foreground'}
               `}
               title={viewMode === 'card' ? t('Switch to tree view (developer)') : t('Switch to card view')}
+              aria-label={viewMode === 'card' ? t('Switch to tree view (developer)') : t('Switch to card view')}
             >
               {viewMode === 'card' ? (
                 <FolderTree className="w-3.5 h-3.5" />
@@ -539,6 +595,7 @@ export function ArtifactRail({
         <button
           onClick={handleToggleExpanded}
           className="p-1 hover:bg-secondary rounded transition-colors"
+          aria-label={isExpanded ? t('Collapse artifacts panel') : t('Expand artifacts panel')}
         >
           <ChevronRight className={`w-4 h-4 transition-transform ${isExpanded ? '' : 'rotate-180'}`} />
         </button>
@@ -566,6 +623,7 @@ export function ArtifactRail({
                 onClick={handleShowCurrentSpaceFiles}
                 className="p-2 hover:bg-secondary rounded-lg transition-colors"
                 title={t('Show current space files')}
+                aria-label={t('Show current space files')}
               >
                 <FolderOpen className="w-5 h-5 text-amber-500" />
               </button>
@@ -573,6 +631,7 @@ export function ArtifactRail({
                 onClick={handleOpenBrowser}
                 className="p-2 hover:bg-secondary rounded-lg transition-colors"
                 title={t('Open browser')}
+                aria-label={t('Open browser')}
               >
                 <Globe className="w-5 h-5 text-blue-500" />
               </button>

@@ -86,8 +86,9 @@ export const MessageItem = memo(function MessageItem({
 
   // Message bubble content
   const bubbleClasses = [
-    'rounded-2xl px-4 py-3.5 overflow-hidden transition-all duration-300',
+    'space-studio-message-bubble rounded-2xl px-4 py-3.5 overflow-hidden transition-all duration-300',
     isUser ? 'message-user' : 'message-assistant',
+    isUser ? 'space-studio-message-user' : 'space-studio-message-assistant',
     isStreaming && 'streaming-message',
     isWorking && 'message-working',
     isInContainer ? 'w-full' : 'max-w-[85%]',

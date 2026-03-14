@@ -559,7 +559,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
   return (
     <div
       className={`
-        space-studio-chatview flex-1 flex flex-col h-full
+        space-studio-chatview space-studio-chat-column flex-1 flex flex-col h-full
         transition-[padding] duration-300 ease-out
       `}
     >
@@ -570,7 +570,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
           ref={containerRef}
           onScroll={handleScroll}
           className={`
-            h-full overflow-auto py-7
+            space-studio-message-scroll h-full overflow-auto py-7
             transition-[padding] duration-300 ease-out
             ${isCompact ? 'px-3' : 'px-4'}
           `}

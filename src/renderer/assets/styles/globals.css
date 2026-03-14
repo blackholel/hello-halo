@@ -1007,20 +1007,27 @@ body {
    ============================================ */
 
 :root {
-  /* 清爽极简：低饱和中性色 + 单一蓝色强调 */
-  --space-paper: 210 24% 97%;
-  --space-panel: 0 0% 100%;
-  --space-stroke: 214 18% 84%;
+  /* Space 语义色：同色阶分区，主色仅用于激活态 */
+  --workspace-bg: 215 19% 95.8%;
+  --sidebar-bg: 215 17% 93.7%;
+  --canvas-bg: 0 0% 97.8%;
+  --chrome-bg: 215 16% 94.4%;
+  --line-soft: 214 14% 84%;
+  --line-strong: 214 12% 76%;
+
+  --space-paper: var(--workspace-bg);
+  --space-panel: var(--chrome-bg);
+  --space-stroke: var(--line-soft);
   --space-ink: 220 20% 15%;
   --space-accent: 213 72% 48%;
-  --space-left-panel: 210 20% 95%;
-  --space-left-panel-alt: 210 18% 93%;
-  --space-middle-panel: 0 0% 100%;
-  --space-right-panel: 210 20% 98%;
-  --space-right-panel-alt: 210 20% 96%;
-  --space-chat-bg: 0 0% 100%;
-  --space-panel-gap: 8px;
-  --space-panel-radius: 12px;
+  --space-left-panel: var(--sidebar-bg);
+  --space-left-panel-alt: 210 17% 92%;
+  --space-middle-panel: var(--workspace-bg);
+  --space-right-panel: var(--canvas-bg);
+  --space-right-panel-alt: 210 20% 97%;
+  --space-chat-bg: var(--workspace-bg);
+  --space-panel-gap: 4px;
+  --space-panel-radius: 10px;
 
   --shadow-subtle: 0 1px 2px rgba(25, 32, 46, 0.03);
   --shadow-soft: 0 2px 6px rgba(25, 32, 46, 0.05);
@@ -1032,17 +1039,24 @@ body {
 }
 
 .dark {
-  --space-paper: 223 24% 10%;
-  --space-panel: 223 18% 12%;
-  --space-stroke: 223 12% 26%;
+  --workspace-bg: 223 17% 12.2%;
+  --sidebar-bg: 223 15% 13.8%;
+  --canvas-bg: 223 16% 14.6%;
+  --chrome-bg: 223 16% 13.2%;
+  --line-soft: 223 10% 24%;
+  --line-strong: 223 9% 31%;
+
+  --space-paper: var(--workspace-bg);
+  --space-panel: var(--chrome-bg);
+  --space-stroke: var(--line-soft);
   --space-ink: 210 20% 95%;
   --space-accent: 212 90% 70%;
-  --space-left-panel: 223 16% 14%;
-  --space-left-panel-alt: 223 16% 16%;
-  --space-middle-panel: 223 18% 12%;
-  --space-right-panel: 223 16% 13%;
-  --space-right-panel-alt: 223 16% 15%;
-  --space-chat-bg: 223 18% 12%;
+  --space-left-panel: var(--sidebar-bg);
+  --space-left-panel-alt: 223 17% 15%;
+  --space-middle-panel: var(--workspace-bg);
+  --space-right-panel: var(--canvas-bg);
+  --space-right-panel-alt: 223 18% 15%;
+  --space-chat-bg: var(--workspace-bg);
 
   --shadow-subtle: 0 1px 2px rgba(0,0,0,0.18);
   --shadow-soft: 0 2px 6px rgba(0,0,0,0.3);
@@ -1074,8 +1088,8 @@ body {
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(circle at 12% 12%, hsl(var(--space-ink) / 0.035), transparent 40%),
-    radial-gradient(circle at 88% 88%, hsl(var(--space-ink) / 0.03), transparent 42%);
+    radial-gradient(circle at 12% 12%, hsl(var(--space-ink) / 0.028), transparent 42%),
+    radial-gradient(circle at 88% 88%, hsl(var(--space-ink) / 0.02), transparent 44%);
   animation: none;
 }
 
@@ -1088,13 +1102,13 @@ body {
   background:
     linear-gradient(
       180deg,
-      hsl(var(--space-panel) / 0.95) 0%,
-      hsl(var(--space-panel) / 0.88) 100%
+      hsl(var(--chrome-bg) / 0.94) 0%,
+      hsl(var(--chrome-bg) / 0.88) 100%
     );
-  border-bottom-color: hsl(var(--space-stroke) / 0.5) !important;
+  border-bottom-color: hsl(var(--line-soft) / 0.6) !important;
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+  box-shadow: none;
 }
 
 /* 优化按钮设计 - 更柔和 */
@@ -1106,51 +1120,58 @@ body {
   border-radius: 10px;
 }
 
+.space-studio-header-btn:focus-visible {
+  outline: none;
+  border-color: hsl(var(--space-accent) / 0.45);
+  box-shadow: 0 0 0 2px hsl(var(--space-accent) / 0.16);
+}
+
 .space-studio-header-btn:hover {
-  background: hsl(var(--space-panel) / 0.9);
-  border-color: hsl(var(--space-stroke) / 0.6);
+  background: hsl(var(--chrome-bg) / 0.95);
+  border-color: hsl(var(--line-soft) / 0.9);
   color: hsl(var(--space-ink) / 0.85);
 }
 
 .space-studio-header-btn-active {
-  background: hsl(var(--space-panel));
-  border-color: hsl(var(--space-stroke) / 0.75);
+  background: hsl(var(--chrome-bg));
+  border-color: hsl(var(--line-strong) / 0.95);
   color: hsl(var(--space-ink));
 }
 
 .space-studio-main {
-  padding: 12px;
+  padding: 6px 8px 8px;
+  background: hsl(var(--workspace-bg));
 }
 
 .space-studio-shell {
-  border: 1px solid hsl(var(--space-stroke) / 0.6);
+  border: none;
   border-radius: 12px;
-  background: hsl(var(--space-panel) / 0.98);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-  padding: var(--space-panel-gap);
+  background: hsl(var(--workspace-bg));
+  box-shadow: none;
+  padding: 0;
   gap: var(--space-panel-gap);
   overflow: hidden;
 }
 
 .space-studio-pane {
-  background: hsl(var(--space-middle-panel));
-  border: 1px solid hsl(var(--space-stroke) / 0.5);
+  background: hsl(var(--canvas-bg));
+  border: none;
   border-radius: var(--space-panel-radius);
-  box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.5);
+  box-shadow: none;
 }
 
 .space-studio-sidebar {
-  background: hsl(var(--space-left-panel));
-  border: 1px solid hsl(var(--space-stroke) / 0.6);
+  background: hsl(var(--sidebar-bg));
+  border: none;
   border-radius: var(--space-panel-radius);
   box-shadow: none;
 }
 
 .space-studio-shell .space-studio-sidebar {
-  border: 1px solid hsl(var(--space-stroke) / 0.78);
+  border: none;
   border-radius: var(--space-panel-radius);
   box-shadow: none;
-  background: hsl(var(--space-left-panel));
+  background: hsl(var(--sidebar-bg));
 }
 
 .space-studio-shell .space-studio-reveal {
@@ -1160,59 +1181,143 @@ body {
 }
 
 .space-studio-shell .space-studio-pane {
-  border: 1px solid hsl(var(--space-stroke) / 0.7);
+  border: none;
   border-radius: var(--space-panel-radius) !important;
-  box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.3);
-  background: hsl(var(--space-middle-panel));
+  box-shadow: none;
+  background: hsl(var(--canvas-bg));
 }
 
 .space-studio-shell .space-studio-chat-pane {
-  background: hsl(var(--space-middle-panel));
+  background: hsl(var(--workspace-bg) / 0.98);
 }
 
 .space-studio-shell .space-studio-canvas-pane {
-  background: hsl(var(--space-right-panel));
+  background: hsl(var(--canvas-bg) / 0.96);
 }
 
 .space-studio-shell .space-studio-pane + .space-studio-pane {
-  border-left: 1px solid hsl(var(--space-stroke) / 0.7);
+  border-left: none;
 }
 
 .space-studio-shell .space-studio-rail {
-  border: 1px solid hsl(var(--space-stroke) / 0.7) !important;
+  border: none !important;
   border-radius: var(--space-panel-radius) !important;
-  background: hsl(var(--space-right-panel)) !important;
-  box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.3);
+  background: hsl(var(--canvas-bg) / 0.98) !important;
+  box-shadow: none;
+}
+
+.space-studio-rail-overlay {
+  border: none !important;
+  border-radius: 0 !important;
+}
+
+.space-studio-artifact-overlay-backdrop {
+  background: hsl(var(--space-ink) / 0.1);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+.space-studio-artifact-overlay-panel {
+  width: min(360px, 42vw);
+  min-width: 296px;
+  border-left: none;
+  background: hsl(var(--canvas-bg) / 0.98);
+  box-shadow: -10px 0 28px hsl(var(--space-ink) / 0.12);
 }
 
 .space-studio-sidebar-item {
-  border: 1px solid transparent;
+  border: 1px solid hsl(var(--line-soft) / 0);
   background: transparent;
   box-shadow: none;
   transition: all 150ms cubic-bezier(0.4, 0.0, 0.2, 1);
-  padding: 8px 12px !important;
+  padding: 8px 10px !important;
   border-radius: 8px !important;
 }
 
 .space-studio-sidebar-item:hover {
-  background: hsl(var(--space-panel) / 0.4) !important;
-  border-color: transparent;
+  background: hsl(var(--canvas-bg) / 0.38) !important;
+  border-color: hsl(var(--line-soft) / 0.45);
   box-shadow: none;
 }
 
 .space-studio-sidebar-item.active {
-  background: hsl(var(--space-panel) / 0.6) !important;
-  border-color: transparent;
+  background: hsl(var(--canvas-bg) / 0.52) !important;
+  border-color: hsl(var(--line-soft) / 0.62);
   box-shadow: none;
 }
 
-/* 只显示标题，隐藏预览 */
+/* 左侧会话条目基础信息 */
 .space-studio-sidebar-item p.text-xs {
-  display: none;
+  display: block;
+}
+
+.space-studio-history-item {
+  border: 1px solid transparent;
+  border-radius: 10px;
+  transition: all 160ms cubic-bezier(0.4, 0.0, 0.2, 1);
+  cursor: pointer;
+}
+
+.space-studio-history-item:hover {
+  background: hsl(var(--canvas-bg) / 0.42);
+}
+
+.space-studio-history-item.is-active {
+  background: hsl(var(--canvas-bg) / 0.58);
+  border-color: hsl(var(--line-strong) / 0.68);
+}
+
+.space-studio-history-item:focus-visible {
+  outline: none;
+  border-color: hsl(var(--space-accent) / 0.4);
+  box-shadow: 0 0 0 2px hsl(var(--space-accent) / 0.14);
+}
+
+.space-studio-history-title {
+  color: hsl(var(--space-ink) / 0.86);
+}
+
+.space-studio-history-time {
+  font-size: 11px;
+  color: hsl(var(--space-ink) / 0.54);
+}
+
+.space-studio-history-meta {
+  font-size: 11px;
+  color: hsl(var(--space-ink) / 0.66);
 }
 
 .space-studio-chatview {
-  background: hsl(var(--space-chat-bg));
+  background: hsl(var(--workspace-bg));
+}
+
+.space-studio-chat-column {
+  border-radius: 10px;
+}
+
+.space-studio-message-scroll {
+  scrollbar-gutter: stable both-edges;
+}
+
+.space-studio-message-stream > * + * {
+  margin-top: 2px;
+}
+
+.space-studio-message-lane {
+  width: 100%;
+}
+
+.space-studio-message-stack > * + * {
+  margin-top: 6px;
+}
+
+.space-studio-thought-summary {
+  border-color: hsl(var(--line-soft) / 0.7) !important;
+  background: hsl(var(--chrome-bg) / 0.72) !important;
+}
+
+.space-studio-thought-block {
+  border-radius: 12px;
 }
 
 .space-studio-empty-badge {
@@ -1224,29 +1329,42 @@ body {
 .space-studio-input-wrap {
   border-top: none !important;
   background: transparent;
-  padding: 0 20px 20px 20px;
+  padding: 0 14px 14px 14px;
   position: relative;
 }
 
+.space-studio-input-dock {
+  position: sticky;
+  bottom: 0;
+  background: linear-gradient(180deg, hsl(var(--workspace-bg) / 0.1) 0%, hsl(var(--workspace-bg) / 0.95) 28%);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+}
+
 .space-studio-input-shell {
-  background: hsl(var(--card));
-  border: 1px solid hsl(var(--border) / 0.7);
-  border-radius: 12px;
-  box-shadow: 0 2px 8px hsl(0 0% 0% / 0.04);
+  background: hsl(var(--canvas-bg) / 0.98);
+  border: 1px solid hsl(var(--line-soft) / 0.72);
+  border-radius: 14px;
+  box-shadow: none;
   transition: all 180ms cubic-bezier(0.4, 0.0, 0.2, 1);
 }
 
 .space-studio-input-shell.focused {
-  border-color: hsl(var(--space-stroke) / 0.9);
+  border-color: hsl(var(--line-strong) / 0.88);
   box-shadow:
-    0 3px 10px hsl(0 0% 0% / 0.06),
-    0 0 0 2px hsl(var(--primary) / 0.12);
+    0 0 0 2px hsl(var(--space-accent) / 0.12);
   transform: none;
 }
 
 .space-studio-toolbar {
-  border-top: 1px solid hsl(var(--border) / 0.3);
-  background: hsl(var(--card));
+  border-top: 1px solid hsl(var(--line-soft) / 0.56);
+  background: hsl(var(--canvas-bg) / 0.96);
+}
+
+.space-studio-input-field {
+  font-size: 14px;
+  line-height: 1.62;
+  letter-spacing: 0.002em;
 }
 
 .space-studio-send-btn {
@@ -1277,27 +1395,27 @@ body {
 }
 
 .space-studio-chip {
-  border: 1px solid hsl(var(--space-stroke) / 0.5);
-  background: hsl(var(--space-panel) / 0.7);
+  border: 1px solid hsl(var(--space-stroke) / 0.56);
+  background: hsl(var(--space-panel) / 0.78);
   transition: all 150ms cubic-bezier(0.4, 0.0, 0.2, 1);
   font-weight: 500;
 }
 
 .space-studio-chip:hover {
-  border-color: hsl(var(--space-stroke) / 0.8);
-  background: hsl(var(--space-panel) / 0.95);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+  border-color: hsl(var(--space-stroke) / 0.72);
+  background: hsl(var(--space-panel) / 0.9);
+  transform: translateY(0);
+  box-shadow: none;
 }
 
 .space-studio-chip:active {
   transform: translateY(0);
-  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  box-shadow: none;
 }
 
 .space-studio-sidebar-tools {
-  border-top: 1px solid hsl(var(--space-stroke) / 0.74);
-  background: hsl(var(--space-left-panel));
+  border-top: 1px solid hsl(var(--line-soft) / 0.48);
+  background: hsl(var(--sidebar-bg) / 0.96);
 }
 
 .space-studio-reveal {
@@ -1823,21 +1941,34 @@ body {
 }
 
 /* 优化消息样式 - 更舒适的阅读体验 */
+.space-studio-message-bubble {
+  border-radius: 16px;
+}
+
 .message-user {
-  background: linear-gradient(135deg, hsl(var(--primary) / 0.06), hsl(var(--primary) / 0.03));
-  border: 1px solid hsl(var(--primary) / 0.12);
-  border-radius: 20px;
+  background: hsl(var(--chrome-bg) / 0.84);
+  border: 1px solid hsl(var(--line-soft) / 0.76);
+  border-radius: 16px;
   transition: all 180ms ease;
 }
 
 .message-user:hover {
-  border-color: hsl(var(--primary) / 0.18);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+  border-color: hsl(var(--line-strong) / 0.64);
+  box-shadow: none;
 }
 
 .message-assistant {
-  background: hsl(var(--space-left-panel));
-  border: 1px solid hsl(var(--space-stroke) / 0.12);
-  border-radius: 20px;
+  background: hsl(var(--canvas-bg) / 0.98);
+  border: 1px solid hsl(var(--line-soft) / 0.72);
+  border-radius: 16px;
   transition: all 180ms ease;
+}
+
+.space-studio-message-assistant {
+  box-shadow: none;
+}
+
+.space-studio-thought-block .rounded-2xl.border {
+  border-color: hsl(var(--line-soft) / 0.7) !important;
+  background: hsl(var(--chrome-bg) / 0.68) !important;
 }

@@ -6,8 +6,8 @@
 /* Tab bar container */
 .canvas-tab-bar {
   height: 38px;
-  background: hsl(var(--muted) / 0.5);
-  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--chrome-bg) / 0.8);
+  border-bottom: 1px solid hsl(var(--line-soft) / 0.6);
   display: flex;
   align-items: stretch;
   padding: 0;
@@ -62,7 +62,7 @@
   top: 8px;
   bottom: 8px;
   width: 1px;
-  background: hsl(var(--border) / 0.6);
+  background: hsl(var(--line-soft) / 0.28);
   transition: opacity 0.15s ease;
 }
 
@@ -80,7 +80,7 @@
 
 /* Active tab style */
 .canvas-tab.active {
-  background: hsl(var(--card));
+  background: hsl(var(--canvas-bg) / 0.92);
   color: hsl(var(--foreground));
 }
 
@@ -91,7 +91,7 @@
   top: 0;
   left: 0;
   right: 0;
-  height: 2px;
+  height: 1.5px;
   background: hsl(var(--primary));
   z-index: 2;
 }
@@ -103,13 +103,13 @@
   left: 0;
   right: 0;
   height: 1px;
-  background: hsl(var(--card));
+  background: hsl(var(--canvas-bg));
   z-index: 1;
 }
 
 /* Tab hover state */
 .canvas-tab:not(.active):hover {
-  background: hsl(var(--secondary) / 0.8);
+  background: hsl(var(--canvas-bg) / 0.54);
   color: hsl(var(--foreground) / 0.9);
 }
 
@@ -235,9 +235,9 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 0 8px;
+  padding: 0 8px 0 4px;
   flex-shrink: 0;
-  border-left: 1px solid hsl(var(--border) / 0.5);
+  border-left: none;
 }
 
 .canvas-tab-bar-action {
@@ -252,7 +252,7 @@
 }
 
 .canvas-tab-bar-action:hover {
-  background: hsl(var(--secondary));
+  background: hsl(var(--canvas-bg) / 0.62);
   color: hsl(var(--foreground));
 }
 
@@ -276,7 +276,7 @@
 }
 
 .canvas-tab-new:hover {
-  background: hsl(var(--secondary));
+  background: hsl(var(--canvas-bg) / 0.62);
   color: hsl(var(--foreground));
 }
 

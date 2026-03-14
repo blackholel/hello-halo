@@ -30,9 +30,9 @@ import { toResourceKey } from '../../utils/resource-key'
 import { commandKey } from '../../../shared/command-utils'
 
 // Width constraints (in pixels)
-const MIN_WIDTH = 184
-const MAX_WIDTH = 320
-const DEFAULT_WIDTH = 216
+const MIN_WIDTH = 220
+const MAX_WIDTH = 360
+const DEFAULT_WIDTH = 248
 const CREATE_SKILLS_TRIGGER = '创建技能'
 const CREATE_AGENTS_TRIGGER = '创建代理'
 const CREATE_COMMANDS_TRIGGER = '创建命令'
@@ -274,21 +274,6 @@ export function ConversationList({
     }
   }, [editingId])
 
-  // Format date
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffMins = Math.floor(diffMs / 60000)
-    const diffHours = Math.floor(diffMs / 3600000)
-    const isToday = date.toDateString() === now.toDateString()
-
-    if (diffMins < 1) return t('Just now')
-    if (diffMins < 60) return `${diffMins}m`
-    if (isToday) return `${diffHours}h`
-    return `${date.getMonth() + 1}/${date.getDate()}`
-  }
-
   // Start editing
   const handleStartEdit = (e: React.MouseEvent, conv: ConversationMeta) => {
     e.stopPropagation()
@@ -322,6 +307,19 @@ export function ConversationList({
     }
   }
 
+  const handleConversationActivate = (conversationId: string) => {
+    if (editingId !== conversationId) {
+      onSelect(conversationId)
+    }
+  }
+
+  const handleConversationKeyDown = (e: React.KeyboardEvent, conversationId: string) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      handleConversationActivate(conversationId)
+    }
+  }
+
   return (
     <div
       ref={containerRef}
@@ -329,21 +327,27 @@ export function ConversationList({
       style={{ width, transition: isDragging ? 'none' : 'width 0.2s ease' }}
     >
       {/* Header */}
-      <div className="px-4 pt-4 pb-3 flex items-center justify-between border-b border-border/20">
-        <span className="text-[11px] font-semibold text-foreground/50 uppercase tracking-[0.2em]">
-          {t('Conversations')}
-        </span>
+      <div className="px-4 pt-4 pb-2.5 flex items-center justify-between">
+        <div className="min-w-0">
+          <span className="text-[11px] font-semibold text-foreground/55 uppercase tracking-[0.2em]">
+            {t('Conversations')}
+          </span>
+          <p className="text-[11px] text-muted-foreground/70 mt-1 truncate">
+            {t('{{count}} conversations', { count: conversations.length })}
+          </p>
+        </div>
         <button
           onClick={onNew}
           className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-border/40 bg-background/50 hover:bg-background hover:border-border/60 transition-all duration-200 group"
           title={t('New conversation')}
+          aria-label={t('New conversation')}
         >
           <Plus className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
         </button>
       </div>
 
       {/* Conversation list */}
-      <div className="flex-1 overflow-auto px-3 py-4">
+      <div className="flex-1 overflow-auto px-3 py-3">
         {conversations.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
             <div className="w-12 h-12 rounded-2xl bg-background/60 border border-border/40 flex items-center justify-center mb-4">
@@ -352,28 +356,16 @@ export function ConversationList({
             <p className="text-xs text-muted-foreground/50">{t('No conversations yet')}</p>
           </div>
         ) : (
-          <div className="space-y-2.5">
+          <div className="space-y-1.5">
             {conversations.map((conversation) => {
               const displayTitle = localizeTriggerText(conversation.title)
-              const displayPreview = conversation.preview ? localizeTriggerText(conversation.preview) : undefined
+              const isActive = conversation.id === currentConversationId
 
               return (
                 <div
                   key={conversation.id}
-                  onClick={() => editingId !== conversation.id && onSelect(conversation.id)}
-                  className={`
-                    space-studio-sidebar-item w-full px-3.5 py-3.5 pr-14 rounded-2xl text-left transition-all duration-200 cursor-pointer group relative
-                    ${conversation.id === currentConversationId
-                      ? 'active'
-                      : 'hover:bg-secondary/30'
-                    }
-                  `}
+                  className="group relative"
                 >
-                  {/* Selection indicator */}
-                  {conversation.id === currentConversationId && (
-                    <div className="absolute left-1.5 top-1/2 -translate-y-1/2 w-[3px] h-7 bg-[hsl(var(--space-accent))] rounded-full" />
-                  )}
-
                   {/* Edit mode */}
                   {editingId === conversation.id ? (
                     <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
@@ -386,42 +378,43 @@ export function ConversationList({
                         onBlur={handleSaveEdit}
                         className="flex-1 text-sm bg-input border border-border/50 rounded-lg px-3 py-2 focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 min-w-0 transition-all"
                         placeholder={t('Conversation title...')}
+                        aria-label={t('Conversation title')}
                       />
                     </div>
                   ) : (
                     <>
-                      <div className="flex items-start justify-between gap-2">
-                        <span className={`text-sm truncate flex-1 leading-5 ${
-                          conversation.id === currentConversationId ? 'font-medium text-foreground' : 'text-foreground/75'
-                        }`}>
-                          {displayTitle.slice(0, 24)}
-                          {displayTitle.length > 24 && '...'}
-                        </span>
-                        <span className="text-[11px] text-muted-foreground/40 flex-shrink-0 tabular-nums">
-                          {formatDate(conversation.updatedAt)}
-                        </span>
+                      <div
+                        onClick={() => handleConversationActivate(conversation.id)}
+                        onKeyDown={(e) => handleConversationKeyDown(e, conversation.id)}
+                        role="button"
+                        tabIndex={0}
+                        aria-current={isActive ? 'true' : undefined}
+                        aria-label={displayTitle}
+                        className={`space-studio-sidebar-item space-studio-history-item w-full pr-14 ${isActive ? 'active is-active' : ''}`}
+                      >
+                        <div className="flex items-center gap-2 min-h-[26px]">
+                          <span className={`space-studio-history-title truncate flex-1 leading-5 ${
+                            isActive ? 'font-medium text-foreground' : 'text-foreground/85'
+                          }`}>
+                            {displayTitle}
+                          </span>
+                        </div>
                       </div>
 
-                      {displayPreview && (
-                        <div className="mt-1.5 flex items-center gap-1.5">
-                          <p className="text-xs text-muted-foreground/45 truncate flex-1">
-                            {displayPreview.slice(0, 40)}
-                          </p>
-                        </div>
-                      )}
-
                       {/* Action buttons (on hover) */}
-                      <div className="absolute right-2 top-2 flex items-center gap-1 px-1 py-0.5 rounded-lg border border-border/40 bg-background/80 shadow-sm opacity-0 group-hover:opacity-100 transition-all duration-150">
+                      <div className="absolute right-1.5 top-1.5 flex items-center gap-1 px-1 py-0.5 rounded-lg border border-border/35 bg-background/75 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-all duration-150">
                         {spaceId && layoutMode !== 'tabs-only' && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
+                              e.preventDefault()
                               openChat(spaceId, conversation.id, conversation.title, resolvedWorkDir)
                             }}
                             className="p-1.5 hover:bg-background/90 rounded-lg transition-colors"
                             title={t('Open in tab')}
+                            aria-label={t('Open in tab')}
                           >
-                            <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
+                          <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
                           </button>
                         )}
                         {onRename && (
@@ -429,6 +422,7 @@ export function ConversationList({
                             onClick={(e) => handleStartEdit(e, conversation)}
                             className="p-1.5 hover:bg-background/90 rounded-lg transition-colors"
                             title={t('Edit title')}
+                            aria-label={t('Edit title')}
                           >
                             <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
                           </button>
@@ -437,10 +431,12 @@ export function ConversationList({
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
+                              e.preventDefault()
                               onDelete(conversation.id)
                             }}
                             className="p-1.5 hover:bg-destructive/10 rounded-lg transition-colors"
                             title={t('Delete conversation')}
+                            aria-label={t('Delete conversation')}
                           >
                             <Trash2 className="w-3.5 h-3.5 text-destructive/70" />
                           </button>
@@ -488,13 +484,15 @@ export function ConversationList({
       {/* Drag handle */}
       <div
         className={`
-          absolute right-0 top-0 bottom-0 w-1 cursor-col-resize z-20
+          absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize z-20
           transition-colors duration-200
           hover:bg-[hsl(var(--space-accent)/0.3)]
           ${isDragging ? 'bg-[hsl(var(--space-accent)/0.4)]' : ''}
         `}
         onMouseDown={handleMouseDown}
         title={t('Drag to resize width')}
+        role="separator"
+        aria-orientation="vertical"
       />
     </div>
   )

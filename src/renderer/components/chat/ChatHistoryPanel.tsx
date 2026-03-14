@@ -140,6 +140,13 @@ export function ChatHistoryPanel({
     handleClose()
   }
 
+  const handleConversationKeyDown = (e: React.KeyboardEvent, conversationId: string) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      handleSelectConversation(conversationId)
+    }
+  }
+
   // Start editing a conversation title
   const handleStartEdit = (e: React.MouseEvent, conv: ConversationMeta) => {
     e.stopPropagation()
@@ -186,6 +193,7 @@ export function ChatHistoryPanel({
           }
         `}
         title={t('Conversation history')}
+        aria-label={t('Conversation history')}
       >
         <svg
           className={`w-4 h-4 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
@@ -218,7 +226,7 @@ export function ChatHistoryPanel({
               absolute top-full left-0 right-0 mt-2 z-50
               bg-card/95 backdrop-blur-xl rounded-xl border border-border/50
               shadow-2xl shadow-black/20 overflow-hidden
-              min-w-[320px] max-w-[400px]
+              min-w-[340px] max-w-[460px]
               ${isAnimatingOut ? 'animate-slide-out-top' : 'animate-slide-in-top'}
             `}
             style={{ animationDuration: '0.25s' }}
@@ -235,6 +243,7 @@ export function ChatHistoryPanel({
                 onClick={onNew}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium
                   bg-primary/10 hover:bg-primary/20 text-primary rounded-lg transition-colors"
+                aria-label={t('New conversation')}
               >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -261,12 +270,7 @@ export function ChatHistoryPanel({
                     return (
                       <div
                         key={conv.id}
-                        onClick={() => handleSelectConversation(conv.id)}
-                        className={`
-                          w-full px-4 py-3 text-left transition-all duration-150
-                          hover:bg-white/5 group relative cursor-pointer
-                          ${conv.id === currentConversationId ? 'bg-primary/10' : ''}
-                        `}
+                        className="w-full px-2 py-1 text-left transition-all duration-150 group relative"
                         style={{
                           animation: !isAnimatingOut
                             ? `fade-in 0.2s ease-out ${index * 30}ms forwards`
@@ -275,9 +279,18 @@ export function ChatHistoryPanel({
                       >
                       {/* Selection indicator */}
                       {conv.id === currentConversationId && (
-                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-primary rounded-r" />
+                        <div className="absolute left-2 top-1/2 -translate-y-1/2 w-[3px] h-7 bg-[hsl(var(--space-accent))] rounded-full" />
                       )}
 
+                      <div
+                        onClick={() => handleSelectConversation(conv.id)}
+                        onKeyDown={(e) => handleConversationKeyDown(e, conv.id)}
+                        role="button"
+                        tabIndex={0}
+                        aria-current={conv.id === currentConversationId ? 'true' : undefined}
+                        aria-label={conv.title || getConversationPreview(conv, t)}
+                        className={`space-studio-history-item w-full px-3 py-2.5 pr-14 ${conv.id === currentConversationId ? 'is-active' : ''}`}
+                      >
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
                           {/* Title / Preview - with edit mode */}
@@ -292,11 +305,13 @@ export function ChatHistoryPanel({
                                 onBlur={handleSaveEdit}
                                 className="flex-1 text-sm font-medium bg-input border border-border rounded px-2 py-1 focus:outline-none focus:border-primary"
                                 placeholder={t('Enter conversation title...')}
+                                aria-label={t('Conversation title')}
                               />
                               <button
                                 onClick={handleSaveEdit}
                                 className="p-1 hover:bg-primary/20 text-primary rounded transition-colors"
                                 title={t('Save')}
+                                aria-label={t('Save')}
                               >
                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -306,6 +321,7 @@ export function ChatHistoryPanel({
                                 onClick={handleCancelEdit}
                                 className="p-1 hover:bg-destructive/20 text-muted-foreground hover:text-destructive rounded transition-colors"
                                 title={t('Cancel')}
+                                aria-label={t('Cancel')}
                               >
                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -313,7 +329,7 @@ export function ChatHistoryPanel({
                               </button>
                             </div>
                           ) : (
-                            <p className={`text-sm font-medium truncate ${
+                            <p className={`space-studio-history-title text-sm font-medium truncate ${
                               conv.id === currentConversationId ? 'text-primary' : 'text-foreground'
                             }`}>
                               {conv.title || getConversationPreview(conv, t)}
@@ -323,13 +339,13 @@ export function ChatHistoryPanel({
                             {/* Meta info */}
                             {editingId !== conv.id && (
                               <div className="flex items-center gap-2 mt-1">
-                                <span className="text-xs text-muted-foreground">
+                                <span className="space-studio-history-meta text-xs">
                                   {formatRelativeTime(conv.updatedAt, t)}
                                 </span>
                                 {conv.messageCount > 0 && (
                                   <>
                                     <span className="text-muted-foreground/30">·</span>
-                                    <span className="text-xs text-muted-foreground">
+                                    <span className="space-studio-history-meta text-xs">
                                       {t('{{count}} messages', { count: conv.messageCount })}
                                     </span>
                                   </>
@@ -340,17 +356,19 @@ export function ChatHistoryPanel({
 
                         {/* Action buttons (on hover) */}
                         {editingId !== conv.id && (
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                          <div className="absolute right-4 top-1.5 flex items-center gap-1 px-1 py-0.5 rounded-lg border border-border/40 bg-background/85 shadow-sm opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-all">
                             {/* Open in tab button - hidden in tabs-only mode since clicking opens in tab */}
                             {spaceId && layoutMode !== 'tabs-only' && (
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation()
+                                  e.preventDefault()
                                   openChat(spaceId, conv.id, conv.title, workDir)
                                   handleClose()
                                 }}
                                 className="p-1.5 hover:bg-primary/10 text-muted-foreground hover:text-primary rounded transition-colors"
                                 title={t('Open in tab')}
+                                aria-label={t('Open in tab')}
                               >
                                 <ExternalLink className="w-4 h-4" />
                               </button>
@@ -362,6 +380,7 @@ export function ChatHistoryPanel({
                                 onClick={(e) => handleStartEdit(e, conv)}
                                 className="p-1.5 hover:bg-primary/10 text-muted-foreground hover:text-primary rounded transition-colors"
                                 title={t('Edit title')}
+                                aria-label={t('Edit title')}
                               >
                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -374,10 +393,12 @@ export function ChatHistoryPanel({
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation()
+                                  e.preventDefault()
                                   onDelete(conv.id)
                                 }}
                                 className="p-1.5 hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded transition-colors"
                                 title={t('Delete conversation')}
+                                aria-label={t('Delete conversation')}
                               >
                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -386,6 +407,7 @@ export function ChatHistoryPanel({
                             )}
                           </div>
                         )}
+                      </div>
                       </div>
                       </div>
                     )

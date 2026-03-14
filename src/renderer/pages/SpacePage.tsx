@@ -29,10 +29,10 @@ import { Header } from '../components/layout/Header'
 import { ContentCanvas, CanvasToggleButton } from '../components/canvas'
 import { GitBashWarningBanner } from '../components/setup/GitBashWarningBanner'
 import { api } from '../api'
-import { useLayoutPreferences, LAYOUT_DEFAULTS } from '../hooks/useLayoutPreferences'
+import { useLayoutPreferences } from '../hooks/useLayoutPreferences'
 import { useWindowMaximize } from '../components/canvas/viewers/useWindowMaximize'
 import { useCanvasLifecycle } from '../hooks/useCanvasLifecycle'
-import { PanelLeftClose, PanelLeft, X, MessageSquare, Columns2, LayoutGrid } from 'lucide-react'
+import { PanelLeftClose, PanelLeft, X, MessageSquare, Columns2, LayoutGrid, FolderOpen } from 'lucide-react'
 import { shallow } from 'zustand/shallow'
 import { SearchIcon } from '../components/search/SearchIcon'
 import { useSearchShortcuts } from '../hooks/useSearchShortcuts'
@@ -173,6 +173,7 @@ type PreloadResourceKind = 'skills' | 'agents' | 'commands'
 
 // Mobile breakpoint (matches Tailwind sm: 640px)
 const MOBILE_BREAKPOINT = 640
+const RAIL_VISIBLE_STORAGE_KEY = 'kite-right-rail-visible'
 
 // Hook to detect mobile viewport
 function useIsMobile() {
@@ -232,6 +233,9 @@ export function SpacePage() {
 
   // Show conversation list sidebar - default to true for better UX
   const [showConversationList, setShowConversationList] = useState(true)
+  const [showArtifactRail, setShowArtifactRail] = useState(() => {
+    return localStorage.getItem(RAIL_VISIBLE_STORAGE_KEY) === '1'
+  })
 
   // Skills panel state
   const [selectedSkill, setSelectedSkill] = useState<SkillDefinition | null>(null)
@@ -535,9 +539,7 @@ export function SpacePage() {
 
   // Layout preferences (persisted per space)
   const {
-    effectiveRailExpanded,
     effectiveChatWidth,
-    setRailExpanded,
     setChatWidth,
     chatWidthMin,
     chatWidthMax,
@@ -674,6 +676,16 @@ export function SpacePage() {
       // Keep canvas open on mobile but we'll show it as overlay
     }
   }, [isMobile, isCanvasOpen])
+
+  useEffect(() => {
+    if (isMobile && showArtifactRail) {
+      setShowArtifactRail(false)
+    }
+  }, [showArtifactRail, isMobile])
+
+  useEffect(() => {
+    localStorage.setItem(RAIL_VISIBLE_STORAGE_KEY, showArtifactRail ? '1' : '0')
+  }, [showArtifactRail])
 
   // BrowserView visibility: hide when leaving SpacePage, show when returning
   useEffect(() => {
@@ -817,33 +829,22 @@ export function SpacePage() {
     }
   }, [isCanvasOpen, isCanvasMaximized, setCanvasMaximized])
 
-  // Auto-collapse rail when entering maximized mode, restore when exiting
   const prevMaximizedRef = useRef(isCanvasMaximized)
-  const railExpandedBeforeMaximize = useRef(effectiveRailExpanded)
 
   useEffect(() => {
     if (isCanvasMaximized && !prevMaximizedRef.current) {
-      // Entering maximized mode - save current state and collapse
-      railExpandedBeforeMaximize.current = effectiveRailExpanded
-      if (effectiveRailExpanded) {
-        setRailExpanded(false)
-      }
       // Show overlay chat capsule (renders above BrowserView)
       if (!isMobile) {
         api.showChatCapsuleOverlay()
       }
     } else if (!isCanvasMaximized && prevMaximizedRef.current) {
-      // Exiting maximized mode - restore previous state
-      if (railExpandedBeforeMaximize.current) {
-        setRailExpanded(true)
-      }
       // Hide overlay chat capsule
       if (!isMobile) {
         api.hideChatCapsuleOverlay()
       }
     }
     prevMaximizedRef.current = isCanvasMaximized
-  }, [isCanvasMaximized, effectiveRailExpanded, setRailExpanded, isMobile])
+  }, [isCanvasMaximized, isMobile])
 
   // Listen for exit-maximized event from overlay
   useEffect(() => {
@@ -881,6 +882,7 @@ export function SpacePage() {
             <button
               onClick={handleBack}
               className="space-studio-header-btn p-2 rounded-lg transition-all duration-200 group"
+              aria-label={t('Back to home')}
             >
               <svg className="w-[18px] h-[18px] text-muted-foreground group-hover:text-foreground transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -920,6 +922,7 @@ export function SpacePage() {
               onClick={handleNewConversation}
               className="space-studio-header-btn p-2 rounded-lg transition-all duration-200 group"
               title={t('New conversation')}
+              aria-label={t('New conversation')}
             >
               <svg className="w-[18px] h-[18px] text-muted-foreground group-hover:text-foreground transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -935,6 +938,7 @@ export function SpacePage() {
                   : 'space-studio-header-btn text-muted-foreground hover:text-foreground'
               }`}
               title={t('Sidebar')}
+              aria-label={t('Toggle sidebar')}
             >
               {showConversationList ? (
                 <PanelLeftClose className="w-[18px] h-[18px]" />
@@ -946,6 +950,25 @@ export function SpacePage() {
             {/* Search */}
             <SearchIcon onClick={openSearch} isInSpace={true} />
 
+            {/* Files panel toggle (desktop) */}
+            {!isMobile && (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setShowArtifactRail((prev) => !prev)}
+                  className={`p-2 rounded-lg transition-all duration-200 ${
+                    showArtifactRail
+                      ? 'space-studio-header-btn space-studio-header-btn-active'
+                      : 'space-studio-header-btn text-muted-foreground hover:text-foreground'
+                  }`}
+                  title={showArtifactRail ? t('Hide files panel') : t('Show files panel')}
+                  aria-label={showArtifactRail ? t('Hide files panel') : t('Show files panel')}
+                  aria-expanded={showArtifactRail}
+                >
+                  <FolderOpen className="w-[18px] h-[18px]" />
+                </button>
+              </div>
+            )}
+
             {/* Layout mode toggle */}
             <button
               onClick={() => setLayoutMode(layoutMode === 'split' ? 'tabs-only' : 'split')}
@@ -955,6 +978,7 @@ export function SpacePage() {
                   : 'space-studio-header-btn text-muted-foreground hover:text-foreground'
               }`}
               title={layoutMode === 'split' ? t('Switch to tabs-only mode') : t('Switch to split mode')}
+              aria-label={layoutMode === 'split' ? t('Switch to tabs-only mode') : t('Switch to split mode')}
             >
               {layoutMode === 'split' ? (
                 <LayoutGrid className="w-[18px] h-[18px]" />
@@ -968,6 +992,7 @@ export function SpacePage() {
               onClick={() => setView('settings')}
               className="space-studio-header-btn p-2 rounded-lg transition-all duration-200 group"
               title={t('Settings')}
+              aria-label={t('Settings')}
             >
               <svg className="w-[18px] h-[18px] text-muted-foreground group-hover:text-foreground transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -988,7 +1013,7 @@ export function SpacePage() {
       )}
 
       {/* Main content */}
-      <div className="space-studio-main flex-1 flex overflow-hidden">
+      <div className="space-studio-main flex-1 flex overflow-hidden relative">
         <div className={`${isMobile ? 'flex-1 flex overflow-hidden' : 'space-studio-shell flex-1 flex overflow-hidden'}`}>
           {/* Conversation list sidebar - hidden when maximized */}
           {showConversationList && !isCanvasMaximized && (
@@ -1050,6 +1075,8 @@ export function SpacePage() {
                       `}
                       onMouseDown={handleChatDragStart}
                       title={t('Drag to resize')}
+                      role="separator"
+                      aria-orientation="vertical"
                     />
                   )}
                 </div>
@@ -1084,16 +1111,15 @@ export function SpacePage() {
             </div>
           )}
 
-          {/* Artifact rail - auto-collapses when maximized via useEffect above */}
-          {/* Smart collapse: collapses when canvas is open, respects user preference */}
-          {!isMobile && (
+          {/* Desktop right file tree panel (inline for drag-and-drop context) */}
+          {!isMobile && showArtifactRail && !isCanvasMaximized && (
             <ArtifactRail
               spaceId={currentSpace.id}
               isTemp={currentSpace.isTemp}
-              externalExpanded={effectiveRailExpanded}
-              onExpandedChange={setRailExpanded}
+              displayMode="inline"
             />
           )}
+
         </div>
       </div>
 

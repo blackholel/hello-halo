@@ -466,7 +466,7 @@ export function ThoughtProcess({
     if (!hasContent) return null
 
     return (
-      <div className="mb-2">
+      <div className="space-studio-thought-block mb-2">
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           className={`
@@ -540,7 +540,7 @@ export function ThoughtProcess({
   // Realtime mode: full card style with streaming support
 
   return (
-    <div className="animate-fade-in mb-4">
+    <div className="space-studio-thought-block animate-fade-in mb-4">
       <div
         className={`
           relative rounded-2xl border overflow-hidden transition-all duration-300
