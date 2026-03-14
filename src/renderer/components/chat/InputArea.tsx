@@ -96,6 +96,7 @@ interface InputAreaProps {
   onModeChange: (mode: ChatMode) => void
   conversation: { id: string; ai?: ConversationAiConfig } | null
   config: KiteConfig | null
+  hasConversationStarted?: boolean
 }
 
 // Image constraints
@@ -112,6 +113,65 @@ function toSuggestionTypeFromTab(tab: ComposerSuggestionTab): ComposerSuggestion
   if (tab === 'commands') return 'command'
   if (tab === 'agents') return 'agent'
   return 'skill'
+}
+
+const STARTER_ACTIONS = [
+  {
+    id: 'starter-build-web',
+    labelKey: 'Build a web page',
+    promptKey: 'Create a clean one-page company website with hero, features, and contact section.'
+  },
+  {
+    id: 'starter-analyze-table',
+    labelKey: 'Analyze a table',
+    promptKey: 'Analyze the uploaded CSV and summarize key trends with a short chart report.'
+  },
+  {
+    id: 'starter-polish-copy',
+    labelKey: 'Polish copy',
+    promptKey: 'Rewrite this draft into concise, clear copy with a professional but friendly tone.'
+  },
+  {
+    id: 'starter-build-prototype',
+    labelKey: 'Build a prototype',
+    promptKey: 'Create a clickable product prototype page with key user flow and realistic dummy content.'
+  },
+  {
+    id: 'starter-process-files',
+    labelKey: 'Process files',
+    promptKey: 'Batch process files in this folder: rename consistently and generate a summary index.'
+  },
+  {
+    id: 'starter-automate-task',
+    labelKey: 'Automate a task',
+    promptKey: 'Design an automation workflow for this repeated task and output executable steps.'
+  }
+] as const
+
+export function shouldShowStarterActions({
+  isGenerating,
+  isOnboardingSendStep,
+  hasConversationStarted,
+  content,
+  selectedResourceChipCount,
+  imageCount,
+  fileContextCount
+}: {
+  isGenerating: boolean
+  isOnboardingSendStep: boolean
+  hasConversationStarted: boolean
+  content: string
+  selectedResourceChipCount: number
+  imageCount: number
+  fileContextCount: number
+}): boolean {
+  if (isGenerating || isOnboardingSendStep) return false
+  if (hasConversationStarted) return false
+  if (content.trim().length > 0) return false
+  if (selectedResourceChipCount > 0) return false
+  if (imageCount > 0) return false
+  if (fileContextCount > 0) return false
+  return true
 }
 
 export function InputArea({
@@ -134,6 +194,7 @@ export function InputArea({
   onModeChange,
   conversation,
   config,
+  hasConversationStarted = false,
 }: InputAreaProps) {
   const { t } = useTranslation()
   const [content, setContent] = useState('')
@@ -979,6 +1040,23 @@ export function InputArea({
   }, [canSend, isOnboardingSendStep, isAiConfigured, aiSetupState, content, selectedResourceChips.length, images.length, fileContexts.length, isProcessingImages])
   const hasImages = images.length > 0
   const hasFileContexts = fileContexts.length > 0
+  const showStarterActions = shouldShowStarterActions({
+    isGenerating,
+    isOnboardingSendStep,
+    hasConversationStarted,
+    content,
+    selectedResourceChipCount: selectedResourceChips.length,
+    imageCount: images.length,
+    fileContextCount: fileContexts.length
+  })
+  const handleStarterAction = useCallback((prompt: string) => {
+    setContent(prompt)
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus()
+      syncTriggerWithCursor()
+    })
+  }, [syncTriggerWithCursor])
+
   const resolveQueueContent = useCallback((item: {
     content: string
     images?: ImageAttachment[]
@@ -1035,6 +1113,24 @@ export function InputArea({
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
+          {showStarterActions && (
+            <div className="px-3 pt-3 pb-1">
+              <p className="text-xs text-muted-foreground mb-2">{t('Start fast with one click')}</p>
+              <div className="flex flex-wrap gap-1.5">
+                {STARTER_ACTIONS.map((action) => (
+                  <button
+                    key={action.id}
+                    type="button"
+                    onClick={() => handleStarterAction(t(action.promptKey))}
+                    className="rounded-full border border-border/75 bg-card px-2.5 py-1 text-xs text-foreground/80 hover:bg-secondary/65 transition-colors"
+                  >
+                    {t(action.labelKey)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Image preview area */}
           {hasImages && (
             <ImageAttachmentPreview
@@ -1242,7 +1338,7 @@ export function InputArea({
                 setIsComposing(false)
                 requestAnimationFrame(syncTriggerWithCursor)
               }}
-              placeholder={placeholder || t('Type a message, let Kite help you...')}
+              placeholder={placeholder || t('Describe what you want to get done, Kite will start immediately')}
               readOnly={isOnboardingSendStep}
               rows={1}
               className={`w-full bg-transparent resize-none

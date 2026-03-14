@@ -17,7 +17,7 @@ import { useIsGenerating } from '../../stores/chat.store'
 import { useOnboardingStore } from '../../stores/onboarding.store'
 import { useCanvasLifecycle } from '../../hooks/useCanvasLifecycle'
 import { useCanvasStore } from '../../stores/canvas.store'
-import { ChevronRight, FolderOpen, Monitor, LayoutGrid, FolderTree, X, Globe } from 'lucide-react'
+import { ChevronRight, FolderOpen, Monitor, LayoutGrid, FolderTree, X, Globe, Bell } from 'lucide-react'
 import { ONBOARDING_ARTIFACT_NAME } from '../onboarding/onboardingData'
 import { useTranslation } from '../../i18n'
 
@@ -88,11 +88,14 @@ export function ArtifactRail({
   const isExpanded = isControlled ? externalExpanded : internalExpanded
 
   const [isLoading, setIsLoading] = useState(false)
+  const [railHint, setRailHint] = useState<string | null>(null)
   const [width, setWidth] = useState(DEFAULT_WIDTH)
   const [isDragging, setIsDragging] = useState(false)
   const [viewMode, setViewMode] = useState<ArtifactViewMode>(getInitialViewMode)
   const [mobileOverlayOpen, setMobileOverlayOpen] = useState(false)
   const railRef = useRef<HTMLDivElement>(null)
+  const previousArtifactCountRef = useRef<number | null>(null)
+  const previousActiveArtifactPathRef = useRef<string | null>(null)
   const isGenerating = useIsGenerating()
   const { isActive: isOnboarding, currentStep, completeOnboarding } = useOnboardingStore()
   const isMobile = useIsMobile()
@@ -104,6 +107,14 @@ export function ArtifactRail({
   // When browser tabs exist, disable CSS transition to sync with native view resize
   // Use precise selector to avoid subscribing to full tabs array
   const hasBrowserTab = useCanvasStore(state => state.tabs.some(tab => tab.type === 'browser'))
+  const activeArtifactPath = useCanvasStore((state) => {
+    const activeTab = state.tabs.find(tab => tab.id === state.activeTabId)
+    if (!activeTab?.path) return null
+    if (activeTab.type === 'chat' || activeTab.type === 'browser' || activeTab.type === 'template-library') {
+      return null
+    }
+    return activeTab.path
+  })
 
   // Handle expand/collapse toggle
   const handleToggleExpanded = useCallback(() => {
@@ -192,6 +203,26 @@ export function ArtifactRail({
     }
   }, [isMobile, mobileOverlayOpen])
 
+  useEffect(() => {
+    if (!railHint) return
+    const timer = window.setTimeout(() => {
+      setRailHint(null)
+    }, 3500)
+    return () => window.clearTimeout(timer)
+  }, [railHint])
+
+  useEffect(() => {
+    if (!activeArtifactPath) {
+      previousActiveArtifactPathRef.current = null
+      return
+    }
+    if (previousActiveArtifactPathRef.current === activeArtifactPath) return
+    previousActiveArtifactPathRef.current = activeArtifactPath
+    if (!isExpanded) {
+      setRailHint(t('Preview opened. Click Current space files to locate this file.'))
+    }
+  }, [activeArtifactPath, isExpanded, t])
+
   // Load artifacts from the main process
   const loadArtifacts = useCallback(async () => {
     if (!spaceId) return
@@ -200,14 +231,29 @@ export function ArtifactRail({
       setIsLoading(true)
       const response = await api.listArtifacts(spaceId)
       if (response.success && response.data) {
-        setArtifacts(response.data as Artifact[])
+        const nextArtifacts = response.data as Artifact[]
+        const nextCount = nextArtifacts.length
+        const previousCount = previousArtifactCountRef.current
+        const hasNewArtifacts = previousCount != null && nextCount > previousCount
+
+        if (hasNewArtifacts && isExpanded) {
+          if (isControlled) {
+            onExpandedChange?.(false)
+          } else {
+            setInternalExpanded(false)
+          }
+          setRailHint(t('New files are ready. Click Current space files to review.'))
+        }
+
+        previousArtifactCountRef.current = nextCount
+        setArtifacts(nextArtifacts)
       }
     } catch (error) {
       console.error('[ArtifactRail] Failed to load artifacts:', error)
     } finally {
       setIsLoading(false)
     }
-  }, [spaceId])
+  }, [isControlled, isExpanded, onExpandedChange, spaceId, t])
 
   // Load artifacts on mount and when space changes
   useEffect(() => {
@@ -234,6 +280,7 @@ export function ArtifactRail({
   // Handle opening browser - also collapse the rail to maximize browser area
   const handleOpenBrowser = useCallback(() => {
     openUrl(DEFAULT_BROWSER_URL, 'Bing')
+    setRailHint(null)
     // Auto-collapse rail when opening browser to maximize viewing area
     if (isControlled) {
       onExpandedChange?.(false)
@@ -243,6 +290,7 @@ export function ArtifactRail({
   }, [openUrl, isControlled, onExpandedChange])
 
   const handleShowCurrentSpaceFiles = useCallback(() => {
+    setRailHint(null)
     setViewMode('tree')
     localStorage.setItem(VIEW_MODE_STORAGE_KEY, 'tree')
 
@@ -312,6 +360,12 @@ export function ArtifactRail({
   // flex-shrink-0 ensures footer doesn't compress, allowing content to take remaining space
   const renderFooter = () => (
     <div className="flex-shrink-0 p-2 border-t border-border">
+      {railHint && (
+        <div className="mb-2 flex items-start gap-1.5 rounded-lg border border-border bg-secondary/50 px-2 py-1.5 text-[11px] text-muted-foreground">
+          <Bell className="w-3.5 h-3.5 mt-0.5 text-foreground/60 flex-shrink-0" />
+          <span className="leading-relaxed">{railHint}</span>
+        </div>
+      )}
       {viewMode === 'card' && artifacts.length > 0 && (
         <p className="text-xs text-muted-foreground text-center mb-2">
           {artifacts.length} {t('artifacts')}

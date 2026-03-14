@@ -30,9 +30,9 @@ import { toResourceKey } from '../../utils/resource-key'
 import { commandKey } from '../../../shared/command-utils'
 
 // Width constraints (in pixels)
-const MIN_WIDTH = 200
-const MAX_WIDTH = 340
-const DEFAULT_WIDTH = 240
+const MIN_WIDTH = 184
+const MAX_WIDTH = 320
+const DEFAULT_WIDTH = 216
 const CREATE_SKILLS_TRIGGER = '创建技能'
 const CREATE_AGENTS_TRIGGER = '创建代理'
 const CREATE_COMMANDS_TRIGGER = '创建命令'

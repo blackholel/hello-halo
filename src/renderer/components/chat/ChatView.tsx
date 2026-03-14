@@ -682,6 +682,7 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
         onSend={handleSend}
         onStop={handleStop}
         isGenerating={isGenerating}
+        hasConversationStarted={hasMessages}
         queueItems={queueItems}
         queueError={queueError}
         onSendQueueItem={(turnId) => {

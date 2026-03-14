@@ -13,7 +13,7 @@ import type {
   ProviderProtocol
 } from '../types'
 import type { LucideIcon } from 'lucide-react'
-import { AlertCircle, ArrowLeft, Bot, CheckCircle2, Download, Eye, EyeOff, Info, Network, Palette, RefreshCw, ServerCog, Shield, SlidersHorizontal, X } from 'lucide-react'
+import { AlertCircle, ArrowLeft, Bot, CheckCircle2, ChevronDown, Download, Eye, EyeOff, Info, Network, Palette, RefreshCw, ServerCog, Shield, SlidersHorizontal, X } from 'lucide-react'
 import { McpServerList } from '../components/settings/McpServerList'
 import { useTranslation, setLanguage, getCurrentLanguage, SUPPORTED_LOCALES, type LocaleCode } from '../i18n'
 import { ensureAiConfig } from '../../shared/types/ai-profile'
@@ -97,8 +97,11 @@ type SettingsSectionId =
   | 'network'
   | 'about'
 
+type SettingsSectionGroup = 'required' | 'optional' | 'advanced'
+
 interface SettingsSectionDef {
   id: SettingsSectionId
+  group: SettingsSectionGroup
   labelKey: string
   hintKey: string
   icon: LucideIcon
@@ -107,46 +110,59 @@ interface SettingsSectionDef {
 const SETTINGS_SECTIONS: SettingsSectionDef[] = [
   {
     id: 'model',
+    group: 'required',
     labelKey: 'Model',
-    hintKey: 'Provider and model setup',
+    hintKey: 'Connect provider and model',
     icon: Bot
   },
   {
     id: 'appearance',
+    group: 'optional',
     labelKey: 'Appearance',
-    hintKey: 'Theme and language',
+    hintKey: 'Adjust theme and language',
     icon: Palette
   },
   {
     id: 'general',
+    group: 'optional',
     labelKey: 'General',
-    hintKey: 'System behavior',
+    hintKey: 'Tune app behavior',
     icon: SlidersHorizontal
   },
   {
     id: 'permissions',
+    group: 'advanced',
     labelKey: 'Permissions',
-    hintKey: 'Execution and trust',
+    hintKey: 'Review execution trust',
     icon: Shield
   },
   {
     id: 'mcp',
+    group: 'advanced',
     labelKey: 'MCP',
-    hintKey: 'Tool server config',
+    hintKey: 'Manage tool servers',
     icon: ServerCog
   },
   {
     id: 'network',
+    group: 'optional',
     labelKey: 'Network',
-    hintKey: 'Remote access',
+    hintKey: 'Enable remote access',
     icon: Network
   },
   {
     id: 'about',
+    group: 'advanced',
     labelKey: 'About',
-    hintKey: 'Version information',
+    hintKey: 'Check version and updates',
     icon: Info
   }
+]
+
+const SETTINGS_SECTION_GROUPS: Array<{ id: SettingsSectionGroup; labelKey: string }> = [
+  { id: 'required', labelKey: 'Must configure' },
+  { id: 'optional', labelKey: 'Optional enhancements' },
+  { id: 'advanced', labelKey: 'Advanced tools' }
 ]
 
 // Apple-style toggle component (extracted to top-level to avoid re-creation on every render)
@@ -207,6 +223,7 @@ export function SettingsPage() {
   const [showApiKey, setShowApiKey] = useState(false)
   const [modelInput, setModelInput] = useState('')
   const [showAdvancedModelFields, setShowAdvancedModelFields] = useState(false)
+  const [expandedModelStep, setExpandedModelStep] = useState<'protocol' | 'api' | 'model'>('api')
 
   // Connection status
   const [isValidating, setIsValidating] = useState(false)
@@ -278,6 +295,7 @@ export function SettingsPage() {
     setShowApiKey(false)
     setModelInput('')
     setShowAdvancedModelFields(false)
+    setExpandedModelStep('api')
   }, [selectedProfileId])
 
   useEffect(() => {
@@ -712,6 +730,10 @@ export function SettingsPage() {
   const currentLanguage = getCurrentLanguage()
   const localeEntries = Object.entries(SUPPORTED_LOCALES) as [LocaleCode, string][]
   const activeSectionMeta = SETTINGS_SECTIONS.find(section => section.id === activeSection) || SETTINGS_SECTIONS[0]
+  const groupedSections = SETTINGS_SECTION_GROUPS.map((group) => ({
+    ...group,
+    sections: SETTINGS_SECTIONS.filter((section) => section.group === group.id)
+  }))
   const formatCheckTime = (value?: string | null): string => {
     if (!value) return '-'
     const date = new Date(value)
@@ -728,370 +750,447 @@ export function SettingsPage() {
     return updaterState.message || '-'
   }
 
-  const renderModelSection = () => (
-    <section className="settings-modal-card settings-model-card">
-      <div className="settings-model-grid">
-        <aside className="settings-model-vendors">
-          <div className="mb-2 flex items-center justify-between border-b border-border/70 pb-2">
-            <label className="text-xs font-medium text-muted-foreground">{t('Vendor')}</label>
-            <button
-              type="button"
-              onClick={handleAddProfileFromTemplate}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-2xl leading-none text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
-              title={t('Add Profile')}
-            >
-              +
-            </button>
-          </div>
-          <div className="space-y-1 pr-1">
-            {profiles.map((profile) => (
-              <button
-                key={profile.id}
-                type="button"
-                onClick={() => {
-                  setSelectedProfileId(profile.id)
-                  setValidationResult(null)
-                }}
-                className={`flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition ${
-                  profile.id === selectedProfileId
-                    ? 'bg-secondary/85 text-foreground'
-                    : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
-                }`}
-              >
-                <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-lg font-medium">
-                  {getProfileMonogram(profile.name)}
-                </div>
-                <span className="flex-1 truncate text-sm md:text-[15px]">
-                  {profile.name}
-                </span>
-                {profile.enabled !== false && (
-                  <span className="h-2.5 w-2.5 rounded-full bg-[#2f5c45]" />
-                )}
-              </button>
-            ))}
-          </div>
-        </aside>
+  const renderModelSection = () => {
+    const hasProfile = Boolean(selectedProfile)
+    const hasApiKey = Boolean(selectedProfile?.apiKey.trim())
+    const requiresApiUrl = selectedProfile?.protocol !== 'anthropic_official'
+    const hasApiUrl = !requiresApiUrl || Boolean(selectedProfile?.apiUrl.trim())
+    const hasDefaultModel = Boolean(selectedProfile?.defaultModel.trim())
+    const protocolReady = hasProfile
+    const apiReady = hasApiKey && hasApiUrl
+    const modelReady = hasDefaultModel
+    const completedSteps = [hasProfile, hasApiKey && hasApiUrl, hasDefaultModel].filter(Boolean).length
+    const canTestConnection = Boolean(
+      selectedProfile &&
+      selectedProfile.enabled !== false &&
+      hasApiKey &&
+      hasApiUrl &&
+      !selectedProfileUrlInvalid
+    )
+    const canSaveModel = Boolean(
+      selectedProfile &&
+      !selectedProfileUrlInvalid &&
+      (selectedProfile.enabled === false || hasApiKey)
+    )
 
-        <section className="settings-model-detail">
-          {!selectedProfile ? (
-            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-              {t('Please create or select a profile')}
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between border-b border-border/70 pb-4">
-                <div>
-                  <h3 className="text-3xl font-semibold tracking-tight">{selectedProfile.name}</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {selectedProfile.enabled ? t('Enabled') : t('Disabled')}
-                  </p>
-                </div>
-                <AppleToggle
-                  checked={selectedProfile.enabled !== false}
-                  onChange={handleSelectedProfileEnabledChange}
-                />
+    return (
+      <section className="settings-modal-card settings-model-shell">
+        <div className="settings-model-layout">
+          <aside className="settings-model-sidebar">
+            <section className="settings-quick-card">
+              <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">{t('Quick setup for beginners')}</p>
+              <h4 className="mt-2 text-base font-semibold">{t('Model setup')}</h4>
+              <div className="mt-3 flex items-center justify-between rounded-xl border border-border/70 bg-card px-3 py-2">
+                <span className="text-xs text-muted-foreground">{t('Start in 3 simple steps')}</span>
+                <span className="text-sm font-semibold">{completedSteps}/3</span>
               </div>
-
-              <div className="rounded-2xl border border-border/70 bg-secondary/25 p-4">
-                <p className="text-sm font-medium">{t('Model config help title')}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {t('Model config help desc')}
-                </p>
-                <ol className="mt-3 space-y-1.5 text-xs text-muted-foreground">
-                  <li>{t('Step 1: Choose protocol')}</li>
-                  <li>{t('Step 2: Enter API Key')}</li>
-                  <li>{t('Step 3: Set model')}</li>
-                </ol>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                <span className="rounded-full border border-border/70 bg-card px-2.5 py-1 text-xs text-muted-foreground">1 · {t('Protocol')}</span>
+                <span className="rounded-full border border-border/70 bg-card px-2.5 py-1 text-xs text-muted-foreground">2 · API</span>
+                <span className="rounded-full border border-border/70 bg-card px-2.5 py-1 text-xs text-muted-foreground">3 · {t('Default Model')}</span>
               </div>
+            </section>
 
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <p className="text-sm font-medium">{t('Protocol')}</p>
-                  <span className="text-xs text-muted-foreground">① {t('Step 1: Choose protocol')}</span>
-                </div>
-                <p className="mb-3 text-xs text-muted-foreground">{t('Protocol help')}</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleProtocolChange('anthropic_compat')}
-                    className={`rounded-xl border px-4 py-2.5 text-sm font-medium transition ${
-                      selectedProfile.protocol !== 'openai_compat'
-                        ? 'border-[#305a45] bg-[#f1f6f3] text-[#2e5642]'
-                        : 'border-border bg-background text-muted-foreground hover:bg-secondary/50'
-                    }`}
-                  >
-                    {t('Anthropic Compatible')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleProtocolChange('openai_compat')}
-                    className={`rounded-xl border px-4 py-2.5 text-sm font-medium transition ${
-                      selectedProfile.protocol === 'openai_compat'
-                        ? 'border-[#305a45] bg-[#f1f6f3] text-[#2e5642]'
-                        : 'border-border bg-background text-muted-foreground hover:bg-secondary/50'
-                    }`}
-                  >
-                    {t('OpenAI Compatible')}
-                  </button>
-                </div>
+            <section className="settings-profile-card">
+              <div className="mb-2 flex items-center justify-between">
+                <label className="text-xs font-medium text-muted-foreground">{t('Vendor')}</label>
+                <button
+                  type="button"
+                  onClick={handleAddProfileFromTemplate}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-xl leading-none text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+                  title={t('Add Profile')}
+                >
+                  +
+                </button>
               </div>
+              <div className="space-y-1.5">
+                {profiles.map((profile) => {
+                  const selected = profile.id === selectedProfileId
+                  const enabled = profile.enabled !== false
+                  return (
+                    <button
+                      key={profile.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedProfileId(profile.id)
+                        setValidationResult(null)
+                      }}
+                      className={`settings-profile-item ${selected ? 'settings-profile-item-active' : ''}`}
+                    >
+                      <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-sm font-semibold">
+                        {getProfileMonogram(profile.name)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{profile.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {enabled ? t('Enabled') : t('Disabled')}
+                        </p>
+                      </div>
+                      <div className={`h-2 w-2 rounded-full ${enabled ? 'bg-kite-success' : 'bg-muted-foreground/40'}`} />
+                    </button>
+                  )
+                })}
+              </div>
+            </section>
+          </aside>
 
-              {selectedProfile.enabled === false ? (
-                <div className="rounded-2xl border border-dashed border-border bg-secondary/35 py-10 text-center">
-                  <p className="text-base font-medium">{t('Disabled')}</p>
-                  <p className="mt-2 text-sm text-muted-foreground">{t('Please enable the AI provider in Settings')}</p>
-                  <button
-                    type="button"
-                    onClick={() => handleSelectedProfileEnabledChange(true)}
-                    className="mt-4 rounded-xl btn-apple px-4 py-2 text-sm"
-                  >
-                    {t('Enable')} {selectedProfile.name}
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <div>
-                    <div className="mb-1 flex items-center justify-between">
-                      <label className="text-xs font-medium text-muted-foreground">API Key</label>
-                      <span className="text-xs text-muted-foreground">② {t('Step 2: Enter API Key')}</span>
+          <section className="settings-model-content">
+            {!selectedProfile ? (
+              <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-border text-sm text-muted-foreground">
+                {t('Please create or select a profile')}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <section className="settings-step-card">
+                  <div className="settings-step-head">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">{t('Current profile')}</p>
+                      <h3 className="mt-1 text-xl font-semibold">{selectedProfile.name}</h3>
                     </div>
-                    <p className="mb-2 text-xs text-muted-foreground">{t('API Key help')}</p>
-                    <div className="relative">
-                      <input
-                        type={showApiKey ? 'text' : 'password'}
-                        value={selectedProfile.apiKey}
-                        onChange={(event) => {
-                          updateSelectedProfile({ apiKey: event.target.value })
-                          setValidationResult(null)
-                        }}
-                        className="w-full input-apple px-4 py-2.5 pr-11 text-sm"
-                        placeholder={t('Please enter API Key')}
+                    <div className="flex items-center gap-2">
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${selectedProfile.enabled !== false ? 'bg-kite-success/15 text-kite-success' : 'bg-secondary text-muted-foreground'}`}>
+                        {selectedProfile.enabled !== false ? t('Enabled') : t('Disabled')}
+                      </span>
+                      <AppleToggle
+                        checked={selectedProfile.enabled !== false}
+                        onChange={handleSelectedProfileEnabledChange}
                       />
+                    </div>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">{t('Complete model setup before chatting')}</p>
+                </section>
+
+                <section className={`settings-step-card ${expandedModelStep !== 'protocol' ? 'settings-step-card-collapsed' : ''}`}>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedModelStep('protocol')}
+                    className="settings-step-toggle"
+                  >
+                    <div className="settings-step-toggle-left">
+                      <h4 className="text-sm font-semibold">1. {t('Protocol')}</h4>
+                      <span className="settings-step-status">{t('Step 1: Choose protocol')}</span>
+                    </div>
+                    <div className="settings-step-toggle-right">
+                      {protocolReady && <CheckCircle2 className="h-4 w-4 text-kite-success" />}
+                      <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${expandedModelStep === 'protocol' ? 'rotate-180' : ''}`} />
+                    </div>
+                  </button>
+                  {expandedModelStep === 'protocol' && (
+                    <div className="settings-step-panel">
+                      <p className="mb-3 text-xs text-muted-foreground">{t('Protocol help')}</p>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <button
+                          type="button"
+                          onClick={() => handleProtocolChange('anthropic_compat')}
+                          className={`settings-choice-btn ${selectedProfile.protocol !== 'openai_compat' ? 'settings-choice-btn-active' : ''}`}
+                        >
+                          {t('Anthropic Compatible')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleProtocolChange('openai_compat')}
+                          className={`settings-choice-btn ${selectedProfile.protocol === 'openai_compat' ? 'settings-choice-btn-active' : ''}`}
+                        >
+                          {t('OpenAI Compatible')}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </section>
+
+                {selectedProfile.enabled === false ? (
+                  <section className="settings-step-card text-center">
+                    <p className="text-base font-medium">{t('Disabled')}</p>
+                    <p className="mt-2 text-sm text-muted-foreground">{t('Please enable the AI provider in Settings')}</p>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectedProfileEnabledChange(true)}
+                      className="mt-4 rounded-xl btn-apple px-4 py-2 text-sm"
+                    >
+                      {t('Enable')} {selectedProfile.name}
+                    </button>
+                  </section>
+                ) : (
+                  <>
+                    <section className={`settings-step-card ${expandedModelStep !== 'api' ? 'settings-step-card-collapsed' : ''}`}>
                       <button
                         type="button"
-                        onClick={() => setShowApiKey(prev => !prev)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        aria-label={showApiKey ? t('Hide API Key') : t('Show API Key')}
+                        onClick={() => setExpandedModelStep('api')}
+                        className="settings-step-toggle"
                       >
-                        {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        <div className="settings-step-toggle-left">
+                          <h4 className="text-sm font-semibold">2. API</h4>
+                          <span className="settings-step-status">{t('Step 2: Enter API Key')}</span>
+                        </div>
+                        <div className="settings-step-toggle-right">
+                          {apiReady && <CheckCircle2 className="h-4 w-4 text-kite-success" />}
+                          <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${expandedModelStep === 'api' ? 'rotate-180' : ''}`} />
+                        </div>
                       </button>
-                    </div>
-                    <details className="mt-2">
-                      <summary className="cursor-pointer text-xs text-blue-600 hover:text-blue-700">{t('Where to get API Key')}</summary>
-                      <p className="mt-2 whitespace-pre-line text-xs text-muted-foreground">{t('API Key guide')}</p>
-                    </details>
-                  </div>
-
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-muted-foreground">API URL</label>
-                    <p className="mb-2 text-xs text-muted-foreground">{t('API URL help')}</p>
-                    <input
-                      type="text"
-                      value={selectedProfile.apiUrl}
-                      onChange={(event) => {
-                        updateSelectedProfile({ apiUrl: event.target.value })
-                        setValidationResult(null)
-                      }}
-                      className="w-full input-apple px-4 py-2.5 text-sm"
-                    />
-                    {selectedProfileUrlInvalid && (
-                      <p className="mt-1 text-xs text-destructive">{selectedProfileUrlError}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <div className="mb-1 flex items-center justify-between">
-                      <label className="text-xs font-medium text-muted-foreground">{t('Default Model')}</label>
-                      <span className="text-xs text-muted-foreground">③ {t('Step 3: Set model')}</span>
-                    </div>
-                    <p className="mb-2 text-xs text-muted-foreground">{t('Default model help')}</p>
-                    <input
-                      type="text"
-                      value={selectedProfile.defaultModel}
-                      onChange={(event) => {
-                        const previousDefaultModel = selectedProfile.defaultModel
-                        const nextDefaultModel = event.target.value
-                        updateSelectedProfile({
-                          defaultModel: nextDefaultModel,
-                          modelCatalog: normalizeModelCatalogForDefaultModelChange(
-                            nextDefaultModel,
-                            previousDefaultModel,
-                            selectedCatalog
-                          )
-                        })
-                        setValidationResult(null)
-                      }}
-                      className="w-full input-apple px-4 py-2.5 text-sm"
-                    />
-                    <details className="mt-2">
-                      <summary className="cursor-pointer text-xs text-blue-600 hover:text-blue-700">{t('Common models')}</summary>
-                      <p className="mt-2 whitespace-pre-line text-xs text-muted-foreground">{t('Model examples')}</p>
-                    </details>
-                  </div>
-
-                  <div className="rounded-2xl border border-dashed border-border/70 bg-secondary/20 p-3">
-                    <button
-                      type="button"
-                      onClick={() => setShowAdvancedModelFields((prev) => !prev)}
-                      className="flex w-full items-center justify-between text-left"
-                    >
-                      <span className="text-sm font-medium">{t('Advanced options')}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {showAdvancedModelFields ? t('Hide') : t('Show')}
-                      </span>
-                    </button>
-
-                    {showAdvancedModelFields && (
-                      <div className="mt-3 space-y-3">
-                        <div>
-                          <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('Model Catalog')}</label>
-                          <div className="mb-2 flex flex-wrap gap-1.5">
-                            {selectedCatalog.map((modelId) => (
+                      {expandedModelStep === 'api' && (
+                        <div className="settings-step-panel space-y-3">
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-muted-foreground">API Key</label>
+                            <p className="mb-2 text-xs text-muted-foreground">{t('API Key help')}</p>
+                            <div className="relative">
+                              <input
+                                type={showApiKey ? 'text' : 'password'}
+                                value={selectedProfile.apiKey}
+                                onChange={(event) => {
+                                  updateSelectedProfile({ apiKey: event.target.value })
+                                  setValidationResult(null)
+                                }}
+                                className="w-full input-apple px-4 py-2.5 pr-11 text-sm"
+                                placeholder={t('Please enter API Key')}
+                              />
                               <button
                                 type="button"
-                                key={modelId}
-                                onClick={() => {
-                                  if (modelId === selectedProfile.defaultModel) return
-                                  updateSelectedProfile({
-                                    modelCatalog: selectedCatalog.filter(item => item !== modelId)
-                                  })
-                                }}
-                                className={`rounded-full border px-2.5 py-1 text-xs ${
-                                  modelId === selectedProfile.defaultModel
-                                    ? 'cursor-default border-[#305a45] bg-[#f1f6f3] text-[#2e5642]'
-                                    : 'border-border bg-background text-muted-foreground hover:bg-secondary/50'
-                                }`}
+                                onClick={() => setShowApiKey(prev => !prev)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                aria-label={showApiKey ? t('Hide API Key') : t('Show API Key')}
                               >
-                                {modelId}
+                                {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                               </button>
-                            ))}
+                            </div>
+                            <details className="mt-2">
+                              <summary className="cursor-pointer text-xs text-blue-600 hover:text-blue-700">{t('Where to get API Key')}</summary>
+                              <p className="mt-2 whitespace-pre-line text-xs text-muted-foreground">{t('API Key guide')}</p>
+                            </details>
                           </div>
-                          <div className="flex gap-2">
+
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-muted-foreground">API URL</label>
+                            <p className="mb-2 text-xs text-muted-foreground">{t('API URL help')}</p>
                             <input
                               type="text"
-                              value={modelInput}
-                              onChange={(event) => setModelInput(event.target.value)}
-                              onKeyDown={(event) => {
-                                if (event.key === 'Enter') {
-                                  event.preventDefault()
-                                  handleAddModelId()
-                                }
+                              value={selectedProfile.apiUrl}
+                              onChange={(event) => {
+                                updateSelectedProfile({ apiUrl: event.target.value })
+                                setValidationResult(null)
                               }}
-                              className="w-full input-apple px-4 py-2 text-sm"
-                              placeholder={t('Add model id')}
+                              className="w-full input-apple px-4 py-2.5 text-sm"
                             />
-                            <button
-                              type="button"
-                              onClick={handleAddModelId}
-                              className="rounded-xl border border-border/70 px-3 text-sm hover:bg-secondary/50"
-                            >
-                              {t('Add')}
-                            </button>
+                            {selectedProfileUrlInvalid && (
+                              <p className="mt-1 text-xs text-destructive">{selectedProfileUrlError}</p>
+                            )}
                           </div>
                         </div>
+                      )}
+                    </section>
 
-                        <div>
-                          <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('Doc URL')}</label>
-                          <input
-                            type="text"
-                            value={selectedProfile.docUrl || ''}
-                            onChange={(event) => {
-                              updateSelectedProfile({ docUrl: event.target.value })
-                              setValidationResult(null)
-                            }}
-                            className="w-full input-apple px-4 py-2.5 text-sm"
-                          />
+                    <section className={`settings-step-card ${expandedModelStep !== 'model' ? 'settings-step-card-collapsed' : ''}`}>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedModelStep('model')}
+                        className="settings-step-toggle"
+                      >
+                        <div className="settings-step-toggle-left">
+                          <h4 className="text-sm font-semibold">3. {t('Default Model')}</h4>
+                          <span className="settings-step-status">{t('Step 3: Set model')}</span>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
+                        <div className="settings-step-toggle-right">
+                          {modelReady && <CheckCircle2 className="h-4 w-4 text-kite-success" />}
+                          <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${expandedModelStep === 'model' ? 'rotate-180' : ''}`} />
+                        </div>
+                      </button>
+                      {expandedModelStep === 'model' && (
+                        <div className="settings-step-panel space-y-3">
+                          <div>
+                            <p className="mb-2 text-xs text-muted-foreground">{t('Default model help')}</p>
+                            <input
+                              type="text"
+                              value={selectedProfile.defaultModel}
+                              onChange={(event) => {
+                                const previousDefaultModel = selectedProfile.defaultModel
+                                const nextDefaultModel = event.target.value
+                                updateSelectedProfile({
+                                  defaultModel: nextDefaultModel,
+                                  modelCatalog: normalizeModelCatalogForDefaultModelChange(
+                                    nextDefaultModel,
+                                    previousDefaultModel,
+                                    selectedCatalog
+                                  )
+                                })
+                                setValidationResult(null)
+                              }}
+                              className="w-full input-apple px-4 py-2.5 text-sm"
+                            />
+                            <details className="mt-2">
+                              <summary className="cursor-pointer text-xs text-blue-600 hover:text-blue-700">{t('Common models')}</summary>
+                              <p className="mt-2 whitespace-pre-line text-xs text-muted-foreground">{t('Model examples')}</p>
+                            </details>
+                          </div>
 
-              <div className="space-y-3 border-t border-border/60 pt-4">
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  <button
-                    type="button"
-                    onClick={() => selectedProfile.enabled !== false && setDefaultProfileId(selectedProfile.id)}
-                    className={`rounded-xl px-4 py-2.5 text-sm font-medium transition ${
-                      selectedProfile.id === defaultProfileId
-                        ? 'bg-secondary text-foreground ring-1 ring-border/80'
-                        : 'bg-secondary/55 text-foreground hover:bg-secondary'
-                    } disabled:cursor-not-allowed disabled:opacity-50`}
-                    disabled={selectedProfile.enabled === false}
-                  >
-                    {selectedProfile.id === defaultProfileId ? t('Default') : t('Set as Default')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleValidateConnection()}
-                    className="rounded-xl bg-secondary/85 px-4 py-2.5 text-sm font-medium text-foreground transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={isValidating || selectedProfile.enabled === false || selectedProfileUrlInvalid || !selectedProfile.apiKey.trim()}
-                  >
-                    {isValidating ? t('Testing...') : t('Test Connection')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleSave()}
-                    className="rounded-xl bg-foreground px-4 py-2.5 text-sm font-medium text-background transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={isValidating || selectedProfileUrlInvalid || (selectedProfile.enabled !== false && !selectedProfile.apiKey.trim())}
-                  >
-                    {isValidating ? t('Saving...') : t('Save')}
-                  </button>
-                </div>
+                          <div className="rounded-xl border border-dashed border-border/75 bg-secondary/20 p-3">
+                            <button
+                              type="button"
+                              onClick={() => setShowAdvancedModelFields((prev) => !prev)}
+                              className="flex w-full items-center justify-between text-left"
+                            >
+                              <span className="text-sm font-medium">{t('Advanced options')}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {showAdvancedModelFields ? t('Hide') : t('Show')}
+                              </span>
+                            </button>
 
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <button
-                    type="button"
-                    onClick={handleRemoveSelectedProfile}
-                    className="rounded-xl bg-red-500/12 px-4 py-2 text-sm font-medium text-red-500 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={profiles.length <= 1}
-                  >
-                    {t('Delete')}
-                  </button>
+                            {showAdvancedModelFields && (
+                              <div className="mt-3 space-y-3">
+                                <div>
+                                  <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('Model Catalog')}</label>
+                                  <div className="mb-2 flex flex-wrap gap-1.5">
+                                    {selectedCatalog.map((modelId) => (
+                                      <button
+                                        type="button"
+                                        key={modelId}
+                                        onClick={() => {
+                                          if (modelId === selectedProfile.defaultModel) return
+                                          updateSelectedProfile({
+                                            modelCatalog: selectedCatalog.filter(item => item !== modelId)
+                                          })
+                                        }}
+                                        className={`rounded-full border px-2.5 py-1 text-xs ${
+                                          modelId === selectedProfile.defaultModel
+                                            ? 'cursor-default border-primary/45 bg-primary/10 text-primary'
+                                            : 'border-border bg-background text-muted-foreground hover:bg-secondary/50'
+                                        }`}
+                                      >
+                                        {modelId}
+                                      </button>
+                                    ))}
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <input
+                                      type="text"
+                                      value={modelInput}
+                                      onChange={(event) => setModelInput(event.target.value)}
+                                      onKeyDown={(event) => {
+                                        if (event.key === 'Enter') {
+                                          event.preventDefault()
+                                          handleAddModelId()
+                                        }
+                                      }}
+                                      className="w-full input-apple px-4 py-2 text-sm"
+                                      placeholder={t('Add model id')}
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={handleAddModelId}
+                                      className="rounded-xl border border-border/70 px-3 text-sm hover:bg-secondary/50"
+                                    >
+                                      {t('Add')}
+                                    </button>
+                                  </div>
+                                </div>
 
-                  {validationResult?.valid && (
+                                <div>
+                                  <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('Doc URL')}</label>
+                                  <input
+                                    type="text"
+                                    value={selectedProfile.docUrl || ''}
+                                    onChange={(event) => {
+                                      updateSelectedProfile({ docUrl: event.target.value })
+                                      setValidationResult(null)
+                                    }}
+                                    className="w-full input-apple px-4 py-2.5 text-sm"
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </section>
+                  </>
+                )}
+
+                <section className="settings-action-row">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                     <button
                       type="button"
-                      onClick={goBack}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-border/70 px-4 py-2 text-sm font-medium text-foreground transition hover:bg-secondary/50"
+                      onClick={() => selectedProfile.enabled !== false && setDefaultProfileId(selectedProfile.id)}
+                      className={`rounded-xl px-4 py-2.5 text-sm font-medium transition ${
+                        selectedProfile.id === defaultProfileId
+                          ? 'bg-secondary text-foreground ring-1 ring-border/80'
+                          : 'bg-secondary/55 text-foreground hover:bg-secondary'
+                      } disabled:cursor-not-allowed disabled:opacity-50`}
+                      disabled={selectedProfile.enabled === false}
                     >
-                      <ArrowLeft className="h-4 w-4" />
-                      {t('Return to conversation')}
+                      {selectedProfile.id === defaultProfileId ? t('Default') : t('Set as Default')}
                     </button>
-                  )}
-                </div>
-
-                {validationResult?.message && (
-                  <div
-                    className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm ${
-                      validationResult.valid
-                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                        : 'border-red-200 bg-red-50 text-red-600'
-                    }`}
-                    role="status"
-                    aria-live="polite"
-                  >
-                    {validationResult.valid ? (
-                      <CheckCircle2 className="h-4 w-4 shrink-0" />
-                    ) : (
-                      <AlertCircle className="h-4 w-4 shrink-0" />
-                    )}
-                    <span>{validationResult.message}</span>
+                    <button
+                      type="button"
+                      onClick={() => void handleValidateConnection()}
+                      className="rounded-xl bg-secondary/85 px-4 py-2.5 text-sm font-medium text-foreground transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={isValidating || !canTestConnection}
+                    >
+                      {isValidating ? t('Testing...') : t('Test Connection')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleSave()}
+                      className="rounded-xl bg-foreground px-4 py-2.5 text-sm font-medium text-background transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={isValidating || !canSaveModel}
+                    >
+                      {isValidating ? t('Saving...') : t('Save')}
+                    </button>
                   </div>
-                )}
+
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={handleRemoveSelectedProfile}
+                      className="rounded-xl bg-red-500/12 px-4 py-2 text-sm font-medium text-red-500 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={profiles.length <= 1}
+                    >
+                      {t('Delete')}
+                    </button>
+
+                    {validationResult?.valid && (
+                      <button
+                        type="button"
+                        onClick={goBack}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-border/70 px-4 py-2 text-sm font-medium text-foreground transition hover:bg-secondary/50"
+                      >
+                        <ArrowLeft className="h-4 w-4" />
+                        {t('Return to conversation')}
+                      </button>
+                    )}
+                  </div>
+
+                  {validationResult?.message && (
+                    <div
+                      className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm ${
+                        validationResult.valid
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                          : 'border-red-200 bg-red-50 text-red-600'
+                      }`}
+                      role="status"
+                      aria-live="polite"
+                    >
+                      {validationResult.valid ? (
+                        <CheckCircle2 className="h-4 w-4 shrink-0" />
+                      ) : (
+                        <AlertCircle className="h-4 w-4 shrink-0" />
+                      )}
+                      <span>{validationResult.message}</span>
+                    </div>
+                  )}
+                </section>
               </div>
-            </div>
-          )}
-        </section>
-      </div>
-    </section>
-  )
+            )}
+          </section>
+        </div>
+      </section>
+    )
+  }
 
   const renderAppearanceSection = () => (
-    <div className="space-y-4">
-      <section className="settings-modal-card">
-        <h3 className="mb-4 text-base font-semibold tracking-tight">{t('Theme')}</h3>
+    <div className="settings-section-stack">
+      <section className="settings-modal-card settings-block-card">
+        <div className="settings-block-head">
+          <h3 className="text-base font-semibold tracking-tight">{t('Theme')}</h3>
+          <p className="text-xs text-muted-foreground">{t('Adjust theme and language')}</p>
+        </div>
         <div className="grid grid-cols-2 gap-2 sm:max-w-[360px]">
           {THEME_OPTIONS.map((themeOption) => (
             <button
@@ -1109,8 +1208,11 @@ export function SettingsPage() {
         </div>
       </section>
 
-      <section className="settings-modal-card">
-        <h3 className="mb-4 text-base font-semibold tracking-tight">{t('Language')}</h3>
+      <section className="settings-modal-card settings-block-card">
+        <div className="settings-block-head">
+          <h3 className="text-base font-semibold tracking-tight">{t('Language')}</h3>
+          <p className="text-xs text-muted-foreground">{t('Pick required setup first, then optional improvements')}</p>
+        </div>
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {localeEntries.map(([code, name]) => (
@@ -1145,20 +1247,23 @@ export function SettingsPage() {
   )
 
   const renderGeneralSection = () => (
-    <section className="settings-modal-card">
-      <h3 className="mb-4 text-base font-semibold tracking-tight">{t('System')}</h3>
+    <section className="settings-modal-card settings-block-card">
+      <div className="settings-block-head">
+        <h3 className="text-base font-semibold tracking-tight">{t('System')}</h3>
+        <p className="text-xs text-muted-foreground">{t('Tune app behavior')}</p>
+      </div>
       {api.isRemoteMode() ? (
         <p className="text-sm text-muted-foreground">{t('System settings are unavailable in remote mode')}</p>
       ) : (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
+        <div className="space-y-3">
+          <div className="settings-setting-row">
             <div className="flex-1 pr-4">
               <p className="font-medium">{t('Auto Launch on Startup')}</p>
               <p className="text-sm text-muted-foreground">{t('Automatically run Kite when system starts')}</p>
             </div>
             <AppleToggle checked={autoLaunch} onChange={handleAutoLaunchChange} />
           </div>
-          <div className="flex items-center justify-between border-t border-border/50 pt-4">
+          <div className="settings-setting-row">
             <div className="flex-1 pr-4">
               <p className="font-medium">{t('Background Daemon')}</p>
               <p className="text-sm text-muted-foreground">
@@ -1175,8 +1280,8 @@ export function SettingsPage() {
   )
 
   const renderPermissionSection = () => (
-    <section className="settings-modal-card">
-      <div className="mb-4 flex items-center justify-between">
+    <section className="settings-modal-card settings-block-card">
+      <div className="settings-block-head-row">
         <h3 className="text-base font-semibold tracking-tight">{t('Permissions')}</h3>
         <span className="rounded-lg bg-kite-success/15 px-2.5 py-1 text-xs font-medium text-kite-success">
           {t('Full Permission Mode')}
@@ -1188,7 +1293,7 @@ export function SettingsPage() {
       </div>
 
       <div className="space-y-4 opacity-60">
-        <div className="flex items-center justify-between">
+        <div className="settings-setting-row">
           <div>
             <p className="font-medium">{t('File Read/Write')}</p>
             <p className="text-sm text-muted-foreground">{t('Allow AI to read and create files')}</p>
@@ -1197,7 +1302,7 @@ export function SettingsPage() {
             {t('Allow')}
           </span>
         </div>
-        <div className="flex items-center justify-between">
+        <div className="settings-setting-row">
           <div>
             <p className="font-medium">{t('Execute Commands')}</p>
             <p className="text-sm text-muted-foreground">{t('Allow AI to execute terminal commands')}</p>
@@ -1206,7 +1311,7 @@ export function SettingsPage() {
             {t('Allow')}
           </span>
         </div>
-        <div className="flex items-center justify-between border-t border-border/50 pt-4">
+        <div className="settings-setting-row">
           <div>
             <p className="font-medium">{t('Trust Mode')}</p>
             <p className="text-sm text-muted-foreground">{t('Automatically execute all operations')}</p>
@@ -1218,7 +1323,7 @@ export function SettingsPage() {
   )
 
   const renderMcpSection = () => (
-    <section className="settings-modal-card">
+    <section className="settings-modal-card settings-block-card">
       <McpServerList
         servers={config?.mcpServers || {}}
         onSave={handleMcpServersSave}
@@ -1243,8 +1348,11 @@ export function SettingsPage() {
   )
 
   const renderNetworkSection = () => (
-    <section className="settings-modal-card">
-      <h3 className="mb-5 text-base font-semibold tracking-tight">{t('Remote Access')}</h3>
+    <section className="settings-modal-card settings-block-card">
+      <div className="settings-block-head">
+        <h3 className="text-base font-semibold tracking-tight">{t('Remote Access')}</h3>
+        <p className="text-xs text-muted-foreground">{t('Enable remote access')}</p>
+      </div>
 
       <div className="settings-warning mb-5">
         <div className="flex items-start gap-3">
@@ -1259,7 +1367,7 @@ export function SettingsPage() {
       </div>
 
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="settings-setting-row">
           <div>
             <p className="font-medium">{t('Enable Remote Access')}</p>
             <p className="text-sm text-muted-foreground">{t('Allow access to Kite from other devices')}</p>
@@ -1405,8 +1513,11 @@ export function SettingsPage() {
   )
 
   const renderAboutSection = () => (
-    <section className="settings-modal-card">
-      <h3 className="mb-5 text-base font-semibold tracking-tight">{t('About')}</h3>
+    <section className="settings-modal-card settings-block-card">
+      <div className="settings-block-head">
+        <h3 className="text-base font-semibold tracking-tight">{t('About')}</h3>
+        <p className="text-xs text-muted-foreground">{t('Check version and updates')}</p>
+      </div>
       {api.isRemoteMode() ? (
         <p className="text-sm text-muted-foreground">{t('System settings are unavailable in remote mode')}</p>
       ) : (
@@ -1487,32 +1598,40 @@ export function SettingsPage() {
         <aside className="settings-modal-sidebar">
           <div className="settings-modal-sidebar-title">
             <p className="text-sm font-semibold tracking-tight">{t('Settings')}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{t('Organized by categories')}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{t('Pick required setup first, then optional improvements')}</p>
           </div>
 
-          <nav className="space-y-1">
-            {SETTINGS_SECTIONS.map(section => {
-              const Icon = section.icon
-              const selected = section.id === activeSection
-              return (
-                <button
-                  key={section.id}
-                  type="button"
-                  onClick={() => setActiveSection(section.id)}
-                  className={`settings-modal-nav-item ${selected ? 'settings-modal-nav-item-active' : ''}`}
-                >
-                  <Icon className="h-4 w-4" />
-                  <span className="flex-1 text-left text-sm font-medium">{t(section.labelKey)}</span>
-                </button>
-              )
-            })}
+          <nav className="space-y-3">
+            {groupedSections.map((group) => (
+              <div key={group.id} className="space-y-1">
+                <p className="px-3 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                  {t(group.labelKey)}
+                </p>
+                {group.sections.map((section) => {
+                  const Icon = section.icon
+                  const selected = section.id === activeSection
+                  return (
+                    <button
+                      key={section.id}
+                      type="button"
+                      onClick={() => setActiveSection(section.id)}
+                      className={`settings-modal-nav-item ${selected ? 'settings-modal-nav-item-active' : ''}`}
+                    >
+                      <Icon className="h-4 w-4" />
+                      <span className="flex-1 text-left text-sm font-medium">{t(section.labelKey)}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            ))}
           </nav>
         </aside>
 
         <section className="settings-modal-main">
           <header className="settings-modal-header">
             <div>
-              <h2 className="text-3xl font-semibold tracking-tight">{t(activeSectionMeta.labelKey)}</h2>
+              <span className="settings-header-chip">{t(activeSectionMeta.group === 'required' ? 'Must configure' : activeSectionMeta.group === 'optional' ? 'Optional enhancements' : 'Advanced tools')}</span>
+              <h2 className="mt-2 text-3xl font-semibold tracking-tight">{t(activeSectionMeta.labelKey)}</h2>
               <p className="mt-1 text-sm text-muted-foreground">{t(activeSectionMeta.hintKey)}</p>
             </div>
             <button

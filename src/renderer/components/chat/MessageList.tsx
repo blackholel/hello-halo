@@ -794,7 +794,7 @@ export function MessageList({
             {/* Positioned ABOVE StreamingBubble so user sees progress before text output */}
             {hasTasks && (
               <div className="mb-2">
-                <TaskPanel defaultExpanded={true} />
+                <TaskPanel defaultExpanded={false} />
               </div>
             )}
 
@@ -854,7 +854,7 @@ export function MessageList({
                 </div>
               </div>
             )}
-            <TaskPanel defaultExpanded={true} />
+            <TaskPanel defaultExpanded={false} />
           </div>
         </div>
       )}

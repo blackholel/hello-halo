@@ -53,13 +53,13 @@ module.exports = {
         sm: '8px',
       },
       boxShadow: {
-        'glass': '0 1px 2px rgba(0, 0, 0, 0.06)',
-        'glass-lg': '0 4px 12px rgba(0, 0, 0, 0.08)',
-        'glass-hover': '0 6px 16px rgba(0, 0, 0, 0.1)',
+        'glass': '0 1px 3px rgba(18, 23, 33, 0.06)',
+        'glass-lg': '0 3px 10px rgba(18, 23, 33, 0.08)',
+        'glass-hover': '0 4px 12px rgba(18, 23, 33, 0.1)',
         'glow': '0 0 0 rgba(0, 0, 0, 0)',
         'glow-lg': '0 0 0 rgba(0, 0, 0, 0)',
-        'soft': '0 1px 3px rgba(0, 0, 0, 0.08)',
-        'elevated': '0 2px 6px rgba(0, 0, 0, 0.1)',
+        'soft': '0 1px 3px rgba(18, 23, 33, 0.08)',
+        'elevated': '0 2px 8px rgba(18, 23, 33, 0.1)',
       },
       backdropBlur: {
         'glass': '20px',
@@ -73,18 +73,16 @@ module.exports = {
       keyframes: {
         'float': {
           '0%, 100%': { transform: 'translateY(0px)' },
-          '50%': { transform: 'translateY(-6px)' },
+          '50%': { transform: 'translateY(-2px)' },
         },
         'glow-pulse': {
-          '0%, 100%': { opacity: '0.4' },
-          '50%': { opacity: '0.8' },
+          '0%, 100%': { opacity: '0.25' },
+          '50%': { opacity: '0.45' },
         },
         'ambient-shift': {
-          '0%': { transform: 'translate(0%, 0%) rotate(0deg)' },
-          '25%': { transform: 'translate(5%, -5%) rotate(90deg)' },
-          '50%': { transform: 'translate(-3%, 3%) rotate(180deg)' },
-          '75%': { transform: 'translate(2%, -2%) rotate(270deg)' },
-          '100%': { transform: 'translate(0%, 0%) rotate(360deg)' },
+          '0%': { transform: 'translate(0%, 0%)' },
+          '50%': { transform: 'translate(-1.5%, 1.5%)' },
+          '100%': { transform: 'translate(0%, 0%)' },
         },
       },
     },

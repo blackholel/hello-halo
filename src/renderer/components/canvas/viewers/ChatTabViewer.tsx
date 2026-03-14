@@ -377,6 +377,7 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
         onSend={handleSend}
         onStop={handleStop}
         isGenerating={isGenerating}
+        hasConversationStarted={hasMessages}
         queueItems={queueItems}
         queueError={queueError}
         onSendQueueItem={(turnId) => {

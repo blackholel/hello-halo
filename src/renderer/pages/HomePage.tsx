@@ -31,17 +31,69 @@ import {
 import { SpaceGuide } from '../components/space/SpaceGuide'
 import { HomeActivityBar } from '../components/home/HomeActivityBar'
 import { ExtensionsView } from '../components/home/ExtensionsView'
-import { Monitor, ArrowRight, X, LayoutGrid, Puzzle } from 'lucide-react'
+import {
+  Monitor,
+  ArrowRight,
+  X,
+  LayoutGrid,
+  Puzzle,
+  Globe,
+  Table2,
+  PenSquare,
+  LayoutTemplate,
+  FolderCog,
+  Bot
+} from 'lucide-react'
 import { api } from '../api'
 import { useTranslation } from '../i18n'
 import { normalizeEnabledValues } from '../utils/resource-key'
 import { getAiSetupState } from '../../shared/types/ai-profile'
+import { useComposerStore } from '../stores/composer.store'
 
 // Check if running in web mode
 const isWebMode = api.isRemoteMode()
 // Legacy key kept for one-time migration from old versions.
 const LEGACY_HOME_ONBOARDING_VISIBILITY_KEY = 'kite-home-onboarding-visibility'
 const MODEL_SETUP_HINT_DISMISSED_KEY = 'kite-model-setup-hint-dismissed'
+
+const QUICK_ACTIONS = [
+  {
+    id: 'build-web',
+    icon: Globe,
+    titleKey: 'Build a web page',
+    promptKey: 'Create a clean one-page company website with hero, features, and contact section.'
+  },
+  {
+    id: 'analyze-table',
+    icon: Table2,
+    titleKey: 'Analyze a table',
+    promptKey: 'Analyze the uploaded CSV and summarize key trends with a short chart report.'
+  },
+  {
+    id: 'polish-copy',
+    icon: PenSquare,
+    titleKey: 'Polish copy',
+    promptKey: 'Rewrite this draft into concise, clear copy with a professional but friendly tone.'
+  },
+  {
+    id: 'build-prototype',
+    icon: LayoutTemplate,
+    titleKey: 'Build a prototype',
+    promptKey: 'Create a clickable product prototype page with key user flow and realistic dummy content.'
+  },
+  {
+    id: 'process-files',
+    icon: FolderCog,
+    titleKey: 'Process files',
+    promptKey: 'Batch process files in this folder: rename consistently and generate a summary index.'
+  },
+  {
+    id: 'automate-task',
+    icon: Bot,
+    titleKey: 'Automate a task',
+    promptKey: 'Design an automation workflow for this repeated task and output executable steps.'
+  }
+] as const
 
 function getLocalizedResourceName(item: { name: string; displayName?: string; namespace?: string }): string {
   const base = item.displayName || item.name
@@ -60,6 +112,7 @@ function directiveLookupKeys(ref: DirectiveRef): string[] {
 export function HomePage(): JSX.Element {
   const { t } = useTranslation()
   const { setView, config, setConfig } = useAppStore()
+  const requestInsert = useComposerStore(state => state.requestInsert)
   const {
     kiteSpace,
     spaces,
@@ -415,6 +468,16 @@ export function HomePage(): JSX.Element {
     setView('space')
   }
 
+  const handleQuickAction = (prompt: string): void => {
+    requestInsert(prompt)
+    if (kiteSpace) {
+      setCurrentSpace(kiteSpace)
+      setView('space')
+      return
+    }
+    setShowCreateDialog(true)
+  }
+
   // Handle create space
   const handleCreateSpace = async (): Promise<void> => {
     if (!newSpaceName.trim()) return
@@ -619,8 +682,37 @@ export function HomePage(): JSX.Element {
                   </div>
                 )}
                 <section className="space-y-4 mb-9">
+                  <div className="home-onboard-card stagger-item" style={{ animationDelay: '0ms' }}>
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                      <div className="rounded-xl border border-border/70 bg-card/80 p-4">
+                        <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground mb-1.5">
+                          {t('What can I do')}
+                        </p>
+                        <p className="text-sm font-medium leading-relaxed">
+                          {t('Describe your goal and Kite will produce files, drafts, code, and task steps.')}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-border/70 bg-card/80 p-4">
+                        <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground mb-1.5">
+                          {t('Where should I start')}
+                        </p>
+                        <p className="text-sm font-medium leading-relaxed">
+                          {t('Pick one starter task below, then iterate with plain language.')}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-border/70 bg-card/80 p-4">
+                        <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground mb-1.5">
+                          {t('What should I click now')}
+                        </p>
+                        <p className="text-sm font-medium leading-relaxed">
+                          {t('Use Enter Kite for quick start, or create a dedicated space for long projects.')}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
                   {!aiSetupState.configured && showModelSetupHint && (
-                    <div className="home-onboard-card stagger-item" style={{ animationDelay: '0ms' }}>
+                    <div className="home-onboard-card stagger-item" style={{ animationDelay: '30ms' }}>
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0">
                           <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground mb-2">
@@ -675,7 +767,7 @@ export function HomePage(): JSX.Element {
                       data-onboarding="kite-space"
                       onClick={() => handleSpaceClick(kiteSpace)}
                       className="kite-space-card rounded-2xl p-7 cursor-pointer stagger-item relative overflow-hidden"
-                      style={{ animationDelay: '0ms' }}
+                      style={{ animationDelay: '60ms' }}
                     >
                       <div className="home-hero-glow" />
                       <div className="flex items-start justify-between gap-4 relative z-10">
@@ -709,7 +801,7 @@ export function HomePage(): JSX.Element {
                   ) : (
                     <div
                       className="kite-space-card rounded-2xl p-7 stagger-item relative overflow-hidden"
-                      style={{ animationDelay: '0ms' }}
+                      style={{ animationDelay: '60ms' }}
                     >
                       <div className="home-hero-glow" />
                       <div className="relative z-10">
@@ -729,7 +821,7 @@ export function HomePage(): JSX.Element {
                   )}
 
                   {showHomeOnboarding && (
-                    <div className="home-onboard-card stagger-item" style={{ animationDelay: '60ms' }}>
+                    <div className="home-onboard-card stagger-item" style={{ animationDelay: '90ms' }}>
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0">
                           <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground mb-2">
@@ -786,6 +878,41 @@ export function HomePage(): JSX.Element {
                       </div>
                     </div>
                   )}
+
+                  <div className="stagger-item" style={{ animationDelay: '120ms' }}>
+                    <div className="mb-3 flex items-center justify-between">
+                      <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                        {t('Starter tasks')}
+                      </h3>
+                      <span className="text-xs text-muted-foreground">{t('Click once to insert a complete prompt')}</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                      {QUICK_ACTIONS.map((action, index) => {
+                        const Icon = action.icon
+                        return (
+                          <button
+                            key={action.id}
+                            type="button"
+                            onClick={() => handleQuickAction(t(action.promptKey))}
+                            className="space-card p-4 text-left group"
+                            style={{ animationDelay: `${120 + index * 35}ms` }}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-lg border border-border/70 bg-card/80 flex items-center justify-center">
+                                <Icon className="w-4 h-4 text-foreground/75" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium truncate">{t(action.titleKey)}</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                  {kiteSpace ? t('Insert and open') : t('Insert and create space')}
+                                </p>
+                              </div>
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
                 </section>
 
                 {/* Spaces Section Header */}
@@ -794,7 +921,7 @@ export function HomePage(): JSX.Element {
                   style={{ animationDelay: '120ms' }}
                 >
                   <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    {t('Dedicated Spaces')}
+                    {t('Recent work')}
                   </h3>
                   <button
                     onClick={() => setShowCreateDialog(true)}
