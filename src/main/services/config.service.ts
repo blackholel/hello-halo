@@ -1037,7 +1037,8 @@ export async function validateApiConnection(
   apiKey: string,
   apiUrl: string,
   provider: string,
-  protocol?: ProviderProtocol
+  protocol?: ProviderProtocol,
+  model?: string
 ): Promise<{ valid: boolean; message?: string; model?: string }> {
   try {
     const isProviderProtocol = (value: unknown): value is ProviderProtocol =>
@@ -1057,7 +1058,7 @@ export async function validateApiConnection(
 
     const resolveOpenAIProbeUrls = (
       endpointUrl: string
-    ): { endpoint: string; models: string } | null => {
+    ): { endpoint: string; models: string; endpointSuffix: '/chat/completions' | '/responses' } | null => {
       const normalizedEndpoint = trimSlash(endpointUrl.trim())
       let endpointSuffix: '/chat/completions' | '/responses' | null = null
       if (normalizedEndpoint.endsWith('/chat/completions')) {
@@ -1073,7 +1074,8 @@ export async function validateApiConnection(
       const baseV1 = hasV1Segment ? endpointBase : `${endpointBase}/v1`
       return {
         endpoint: normalizedEndpoint,
-        models: `${baseV1}/models`
+        models: `${baseV1}/models`,
+        endpointSuffix
       }
     }
 
@@ -1084,6 +1086,9 @@ export async function validateApiConnection(
       }
       return `${normalized}/v1/messages`
     }
+
+    const normalizedModel = typeof model === 'string' ? model.trim() : ''
+    const testModel = normalizedModel || undefined
 
     // OpenAI compatible validation:
     // 1) Probe configured endpoint directly (POST /chat/completions or /responses).
@@ -1105,14 +1110,26 @@ export async function validateApiConnection(
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json'
         },
-        // Intentionally send minimal body as a connection probe.
-        // For /responses and /chat/completions providers, 400/422 still proves
-        // endpoint reachability with authenticated request.
-        body: '{}'
+        // If test model is provided, probe with that model to catch model-level errors early.
+        body: testModel
+          ? JSON.stringify(
+            probeUrls.endpointSuffix === '/responses'
+              ? {
+                  model: testModel,
+                  input: 'ping',
+                  max_output_tokens: 1
+                }
+              : {
+                  model: testModel,
+                  messages: [{ role: 'user', content: 'ping' }],
+                  max_tokens: 1
+                }
+          )
+          : '{}'
       })
 
-      if (endpointResponse.ok || endpointResponse.status === 400 || endpointResponse.status === 422 || endpointResponse.status === 429) {
-        return { valid: true }
+      if (endpointResponse.ok) {
+        return { valid: true, model: testModel }
       }
 
       if (endpointResponse.status === 401 || endpointResponse.status === 403) {
@@ -1121,6 +1138,29 @@ export async function validateApiConnection(
           valid: false,
           message: authErrorText || `HTTP ${endpointResponse.status}`
         }
+      }
+
+      if (endpointResponse.status === 400 || endpointResponse.status === 422 || endpointResponse.status === 429) {
+        const endpointErrorText = await endpointResponse.text().catch(() => '')
+        if (testModel) {
+          const lower = endpointErrorText.toLowerCase()
+          const pointsToModel =
+            lower.includes('model') &&
+            (
+              lower.includes('not found') ||
+              lower.includes('does not exist') ||
+              lower.includes('unknown') ||
+              lower.includes('unsupported') ||
+              lower.includes('invalid')
+            )
+          if (pointsToModel) {
+            return {
+              valid: false,
+              message: endpointErrorText || `Model "${testModel}" is not available on this endpoint`
+            }
+          }
+        }
+        return { valid: true, model: testModel }
       }
 
       const modelsResponse = await fetch(probeUrls.models, {
@@ -1132,7 +1172,19 @@ export async function validateApiConnection(
 
       if (modelsResponse.ok) {
         const data: any = await modelsResponse.json().catch(() => ({}))
+        const availableModels = Array.isArray(data?.data)
+          ? data.data
+            .map((item: any) => (typeof item?.id === 'string' ? item.id.trim() : ''))
+            .filter((item: string) => item.length > 0)
+          : []
+        if (testModel && availableModels.length > 0 && !availableModels.includes(testModel)) {
+          return {
+            valid: false,
+            message: `Model "${testModel}" is not listed by provider`
+          }
+        }
         const modelId =
+          testModel ||
           data?.data?.[0]?.id ||
           data?.model ||
           undefined
@@ -1157,7 +1209,7 @@ export async function validateApiConnection(
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: DEFAULT_MODEL,
+        model: testModel || DEFAULT_MODEL,
         max_tokens: 10,
         messages: [{ role: 'user', content: 'Hi' }]
       })
@@ -1167,7 +1219,7 @@ export async function validateApiConnection(
       const data = await response.json()
       return {
         valid: true,
-        model: data.model || DEFAULT_MODEL
+        model: data.model || testModel || DEFAULT_MODEL
       }
     } else {
       const error = await response.json().catch(() => ({}))

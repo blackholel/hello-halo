@@ -49,10 +49,11 @@ export async function validateApi(
   apiKey: string,
   apiUrl: string,
   provider: string,
-  protocol?: ProviderProtocol
+  protocol?: ProviderProtocol,
+  model?: string
 ): Promise<ControllerResponse> {
   try {
-    const result = await serviceValidateApiConnection(apiKey, apiUrl, provider, protocol)
+    const result = await serviceValidateApiConnection(apiKey, apiUrl, provider, protocol, model)
     return {
       success: result.valid,
       data: { model: result.model },

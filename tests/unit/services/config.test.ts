@@ -130,7 +130,7 @@ describe('Config Service', () => {
     })
   })
 
-  describe('validateApiConnection (openai_compat)', () => {
+  describe('validateApiConnection', () => {
     const createFetchResponse = (status: number, body: unknown = '') => ({
       ok: status >= 200 && status < 300,
       status,
@@ -164,6 +164,58 @@ describe('Config Service', () => {
           method: 'POST'
         })
       )
+    })
+
+    it('should send test model in endpoint probe when model is provided', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        createFetchResponse(200, { id: 'ok' })
+      )
+      vi.stubGlobal('fetch', fetchMock as any)
+
+      const result = await validateApiConnection(
+        'sk-test',
+        'https://api.tabcode.cc/openai/responses',
+        'openai_compat',
+        'openai_compat',
+        'gpt-5.4'
+      )
+
+      expect(result.valid).toBe(true)
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://api.tabcode.cc/openai/responses',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            model: 'gpt-5.4',
+            input: 'ping',
+            max_output_tokens: 1
+          })
+        })
+      )
+    })
+
+    it('should fail when endpoint reports test model not found', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        createFetchResponse(400, {
+          error: {
+            message: 'Model gpt-unknown not found'
+          }
+        })
+      )
+      vi.stubGlobal('fetch', fetchMock as any)
+
+      const result = await validateApiConnection(
+        'sk-test',
+        'https://api.tabcode.cc/openai/responses',
+        'openai_compat',
+        'openai_compat',
+        'gpt-unknown'
+      )
+
+      expect(result.valid).toBe(false)
+      expect(result.message).toContain('not found')
+      expect(fetchMock).toHaveBeenCalledTimes(1)
     })
 
     it('should fail fast on 401 from configured endpoint', async () => {
@@ -204,6 +256,36 @@ describe('Config Service', () => {
         2,
         'https://api.tabcode.cc/openai/v1/models',
         expect.objectContaining({ method: 'GET' })
+      )
+    })
+
+    it('should use provided test model for anthropic-compatible validation', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        createFetchResponse(200, { model: 'glm-4.7' })
+      )
+      vi.stubGlobal('fetch', fetchMock as any)
+
+      const result = await validateApiConnection(
+        'sk-test',
+        'https://open.bigmodel.cn/api/anthropic',
+        'anthropic_compat',
+        'anthropic_compat',
+        'glm-4.7'
+      )
+
+      expect(result.valid).toBe(true)
+      expect(result.model).toBe('glm-4.7')
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://open.bigmodel.cn/api/anthropic/v1/messages',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            model: 'glm-4.7',
+            max_tokens: 10,
+            messages: [{ role: 'user', content: 'Hi' }]
+          })
+        })
       )
     })
   })

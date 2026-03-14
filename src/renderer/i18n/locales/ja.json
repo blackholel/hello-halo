@@ -528,5 +528,14 @@
   "Context message": "コンテキストメッセージ",
   "Remove": "削除",
   "No active run found for guided update.": "ガイド更新に使える実行中のランが見つかりません。",
-  "Guide update no longer matches the current run.": "このガイド更新は現在のランと一致しなくなりました。"
+  "Guide update no longer matches the current run.": "このガイド更新は現在のランと一致しなくなりました。",
+  "Enabled": "有効",
+  "Set as Default": "デフォルトに設定",
+  "Default": "デフォルト",
+  "Test Connection": "接続をテスト",
+  "Anthropic Official": "Anthropic 公式",
+  "Anthropic Compatible": "Anthropic互換",
+  "Vendor": "ベンダー",
+  "Protocol": "プロトコル",
+  "Connection successful": "接続成功"
 }

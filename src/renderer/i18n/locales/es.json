@@ -547,5 +547,14 @@
   "Context message": "Mensaje de contexto",
   "Remove": "Eliminar",
   "No active run found for guided update.": "No se encontró una ejecución activa para esta guía.",
-  "Guide update no longer matches the current run.": "Esta actualización guiada ya no coincide con la ejecución actual."
+  "Guide update no longer matches the current run.": "Esta actualización guiada ya no coincide con la ejecución actual.",
+  "Enabled": "Activado",
+  "Set as Default": "Establecer como predeterminado",
+  "Default": "Predeterminado",
+  "Test Connection": "Probar conexión",
+  "Anthropic Official": "Anthropic oficial",
+  "Anthropic Compatible": "Compatible con Anthropic",
+  "Vendor": "Proveedor",
+  "Protocol": "Protocolo",
+  "Connection successful": "Conexión exitosa"
 }

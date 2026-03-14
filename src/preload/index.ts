@@ -33,7 +33,8 @@ export interface KiteAPI {
     apiKey: string,
     apiUrl: string,
     provider: string,
-    protocol?: string
+    protocol?: string,
+    model?: string
   ) => Promise<IpcResponse>
 
   // Space
@@ -512,8 +513,8 @@ const api: KiteAPI = {
   // Config
   getConfig: () => ipcRenderer.invoke('config:get'),
   setConfig: (updates) => ipcRenderer.invoke('config:set', updates),
-  validateApi: (apiKey, apiUrl, provider, protocol) =>
-    ipcRenderer.invoke('config:validate-api', apiKey, apiUrl, provider, protocol),
+  validateApi: (apiKey, apiUrl, provider, protocol, model) =>
+    ipcRenderer.invoke('config:validate-api', apiKey, apiUrl, provider, protocol, model),
 
   // Space
   getKiteSpace: () => ipcRenderer.invoke('space:get-kite'),

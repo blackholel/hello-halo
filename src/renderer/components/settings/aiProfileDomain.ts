@@ -57,7 +57,7 @@ export const AI_PROFILE_TEMPLATES: AiProfileTemplate[] = [
     protocol: 'openai_compat',
     apiUrl: 'https://api.openai.com/v1/responses',
     defaultModel: 'gpt-4o-mini',
-    modelCatalog: ['gpt-4o-mini', 'gpt-4.1-mini', 'gpt-4.1', 'gpt-4o', 'gpt-5', 'gpt-5-codex', 'gpt-5.3-codex'],
+    modelCatalog: ['gpt-4o-mini', 'gpt-4.1-mini', 'gpt-4.1', 'gpt-4o', 'gpt-5', 'gpt-5.4', 'gpt-5-codex', 'gpt-5.3-codex'],
     docUrl: 'https://platform.openai.com/docs/api-reference/responses'
   },
   {

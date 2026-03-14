@@ -96,12 +96,13 @@ export const api = {
     apiKey: string,
     apiUrl: string,
     provider: string,
-    protocol?: string
+    protocol?: string,
+    model?: string
   ): Promise<ApiResponse> => {
     if (isElectron()) {
-      return window.kite.validateApi(apiKey, apiUrl, provider, protocol)
+      return window.kite.validateApi(apiKey, apiUrl, provider, protocol, model)
     }
-    return httpRequest('POST', '/api/config/validate', { apiKey, apiUrl, provider, protocol })
+    return httpRequest('POST', '/api/config/validate', { apiKey, apiUrl, provider, protocol, model })
   },
 
   // ===== Space =====

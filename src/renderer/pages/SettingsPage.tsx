@@ -13,7 +13,7 @@ import type {
   ProviderProtocol
 } from '../types'
 import type { LucideIcon } from 'lucide-react'
-import { Bot, Download, Eye, EyeOff, Info, Network, Palette, RefreshCw, ServerCog, Shield, SlidersHorizontal, X } from 'lucide-react'
+import { AlertCircle, ArrowLeft, Bot, CheckCircle2, Download, Eye, EyeOff, Info, Network, Palette, RefreshCw, ServerCog, Shield, SlidersHorizontal, X } from 'lucide-react'
 import { McpServerList } from '../components/settings/McpServerList'
 import { useTranslation, setLanguage, getCurrentLanguage, SUPPORTED_LOCALES, type LocaleCode } from '../i18n'
 import { ensureAiConfig } from '../../shared/types/ai-profile'
@@ -607,12 +607,14 @@ export function SettingsPage() {
 
     setIsValidating(true)
     setValidationResult(null)
+    const validateStartedAt = Date.now()
 
     try {
       let response = await api.validateApi(
         selectedProfile.apiKey.trim(),
         selectedProfile.apiUrl.trim(),
-        selectedProfile.protocol
+        selectedProfile.protocol,
+        selectedProfile.defaultModel.trim()
       )
       let parsed = parseValidationResult(response as { success: boolean; data?: unknown; error?: string })
 
@@ -621,9 +623,19 @@ export function SettingsPage() {
         response = await api.validateApi(
           selectedProfile.apiKey.trim(),
           selectedProfile.apiUrl.trim(),
-          'openai'
+          'openai',
+          selectedProfile.defaultModel.trim()
         )
         parsed = parseValidationResult(response as { success: boolean; data?: unknown; error?: string })
+      }
+
+      // 成功时保留最小加载时长，避免“瞬间闪过”导致反馈不明显。
+      if (parsed.valid) {
+        const SUCCESS_MIN_DURATION_MS = 900
+        const elapsed = Date.now() - validateStartedAt
+        if (elapsed < SUCCESS_MIN_DURATION_MS) {
+          await new Promise(resolve => setTimeout(resolve, SUCCESS_MIN_DURATION_MS - elapsed))
+        }
       }
 
       setValidationResult({
@@ -721,7 +733,7 @@ export function SettingsPage() {
       <div className="settings-model-grid">
         <aside className="settings-model-vendors">
           <div className="mb-2 flex items-center justify-between border-b border-border/70 pb-2">
-            <label className="text-xs font-medium text-muted-foreground">{t('供应商')}</label>
+            <label className="text-xs font-medium text-muted-foreground">{t('Vendor')}</label>
             <button
               type="button"
               onClick={handleAddProfileFromTemplate}
@@ -771,7 +783,7 @@ export function SettingsPage() {
                 <div>
                   <h3 className="text-3xl font-semibold tracking-tight">{selectedProfile.name}</h3>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    {selectedProfile.enabled ? t('已启用') : t('未启用')}
+                    {selectedProfile.enabled ? t('Enabled') : t('Disabled')}
                   </p>
                 </div>
                 <AppleToggle
@@ -794,7 +806,7 @@ export function SettingsPage() {
 
               <div>
                 <div className="mb-2 flex items-center justify-between">
-                  <p className="text-sm font-medium">{t('API 协议格式')}</p>
+                  <p className="text-sm font-medium">{t('Protocol')}</p>
                   <span className="text-xs text-muted-foreground">① {t('Step 1: Choose protocol')}</span>
                 </div>
                 <p className="mb-3 text-xs text-muted-foreground">{t('Protocol help')}</p>
@@ -808,7 +820,7 @@ export function SettingsPage() {
                         : 'border-border bg-background text-muted-foreground hover:bg-secondary/50'
                     }`}
                   >
-                    Anthropic 兼容
+                    {t('Anthropic Compatible')}
                   </button>
                   <button
                     type="button"
@@ -819,21 +831,21 @@ export function SettingsPage() {
                         : 'border-border bg-background text-muted-foreground hover:bg-secondary/50'
                     }`}
                   >
-                    OpenAI 兼容
+                    {t('OpenAI Compatible')}
                   </button>
                 </div>
               </div>
 
               {selectedProfile.enabled === false ? (
                 <div className="rounded-2xl border border-dashed border-border bg-secondary/35 py-10 text-center">
-                  <p className="text-base font-medium">{t('该供应商尚未启用')}</p>
-                  <p className="mt-2 text-sm text-muted-foreground">{t('先开启右上角开关，再配置 API 密钥和模型')}</p>
+                  <p className="text-base font-medium">{t('Disabled')}</p>
+                  <p className="mt-2 text-sm text-muted-foreground">{t('Please enable the AI provider in Settings')}</p>
                   <button
                     type="button"
                     onClick={() => handleSelectedProfileEnabledChange(true)}
                     className="mt-4 rounded-xl btn-apple px-4 py-2 text-sm"
                   >
-                    {t('启用')} {selectedProfile.name}
+                    {t('Enable')} {selectedProfile.name}
                   </button>
                 </div>
               ) : (
@@ -996,59 +1008,79 @@ export function SettingsPage() {
                 </div>
               )}
 
-              <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-4">
-                <button
-                  type="button"
-                  onClick={() => selectedProfile.enabled !== false && setDefaultProfileId(selectedProfile.id)}
-                  className={`rounded-xl px-4 py-2 text-sm ${
-                    selectedProfile.id === defaultProfileId
-                      ? 'bg-secondary text-foreground'
-                      : 'bg-secondary/60 text-foreground hover:bg-secondary'
-                  }`}
-                  disabled={selectedProfile.enabled === false}
-                >
-                  {selectedProfile.id === defaultProfileId ? t('Default') : t('Set as Default')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleValidateConnection()}
-                  className="rounded-xl bg-secondary px-4 py-2 text-sm hover:bg-secondary/80 disabled:opacity-50"
-                  disabled={isValidating || selectedProfile.enabled === false || selectedProfileUrlInvalid || !selectedProfile.apiKey.trim()}
-                >
-                  {isValidating ? t('Testing...') : t('Test Connection')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleSave()}
-                  className="rounded-xl btn-apple px-4 py-2 text-sm disabled:opacity-50"
-                  disabled={isValidating || selectedProfileUrlInvalid || (selectedProfile.enabled !== false && !selectedProfile.apiKey.trim())}
-                >
-                  {isValidating ? t('Saving...') : t('Save')}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleRemoveSelectedProfile}
-                  className="rounded-xl bg-red-500/15 px-4 py-2 text-sm text-red-500 hover:bg-red-500/20 disabled:opacity-50"
-                  disabled={profiles.length <= 1}
-                >
-                  {t('Delete')}
-                </button>
-              </div>
+              <div className="space-y-3 border-t border-border/60 pt-4">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <button
+                    type="button"
+                    onClick={() => selectedProfile.enabled !== false && setDefaultProfileId(selectedProfile.id)}
+                    className={`rounded-xl px-4 py-2.5 text-sm font-medium transition ${
+                      selectedProfile.id === defaultProfileId
+                        ? 'bg-secondary text-foreground ring-1 ring-border/80'
+                        : 'bg-secondary/55 text-foreground hover:bg-secondary'
+                    } disabled:cursor-not-allowed disabled:opacity-50`}
+                    disabled={selectedProfile.enabled === false}
+                  >
+                    {selectedProfile.id === defaultProfileId ? t('Default') : t('Set as Default')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleValidateConnection()}
+                    className="rounded-xl bg-secondary/85 px-4 py-2.5 text-sm font-medium text-foreground transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={isValidating || selectedProfile.enabled === false || selectedProfileUrlInvalid || !selectedProfile.apiKey.trim()}
+                  >
+                    {isValidating ? t('Testing...') : t('Test Connection')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleSave()}
+                    className="rounded-xl bg-foreground px-4 py-2.5 text-sm font-medium text-background transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={isValidating || selectedProfileUrlInvalid || (selectedProfile.enabled !== false && !selectedProfile.apiKey.trim())}
+                  >
+                    {isValidating ? t('Saving...') : t('Save')}
+                  </button>
+                </div>
 
-              {validationResult?.message && (
-                <p className={`text-sm ${validationResult.valid ? 'text-green-500' : 'text-red-500'}`}>
-                  {validationResult.message}
-                </p>
-              )}
-              {validationResult?.valid && (
-                <button
-                  type="button"
-                  onClick={goBack}
-                  className="inline-flex rounded-xl border border-border/70 px-4 py-2 text-sm hover:bg-secondary/50"
-                >
-                  {t('Return to conversation')}
-                </button>
-              )}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={handleRemoveSelectedProfile}
+                    className="rounded-xl bg-red-500/12 px-4 py-2 text-sm font-medium text-red-500 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={profiles.length <= 1}
+                  >
+                    {t('Delete')}
+                  </button>
+
+                  {validationResult?.valid && (
+                    <button
+                      type="button"
+                      onClick={goBack}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-border/70 px-4 py-2 text-sm font-medium text-foreground transition hover:bg-secondary/50"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                      {t('Return to conversation')}
+                    </button>
+                  )}
+                </div>
+
+                {validationResult?.message && (
+                  <div
+                    className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm ${
+                      validationResult.valid
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : 'border-red-200 bg-red-50 text-red-600'
+                    }`}
+                    role="status"
+                    aria-live="polite"
+                  >
+                    {validationResult.valid ? (
+                      <CheckCircle2 className="h-4 w-4 shrink-0" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4 shrink-0" />
+                    )}
+                    <span>{validationResult.message}</span>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </section>

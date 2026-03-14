@@ -528,5 +528,14 @@
   "Context message": "Kontextnachricht",
   "Remove": "Entfernen",
   "No active run found for guided update.": "Kein aktiver Lauf für dieses Leit-Update gefunden.",
-  "Guide update no longer matches the current run.": "Dieses Leit-Update passt nicht mehr zum aktuellen Lauf."
+  "Guide update no longer matches the current run.": "Dieses Leit-Update passt nicht mehr zum aktuellen Lauf.",
+  "Enabled": "Aktiviert",
+  "Set as Default": "Als Standard festlegen",
+  "Default": "Standard",
+  "Test Connection": "Verbindung testen",
+  "Anthropic Official": "Anthropic offiziell",
+  "Anthropic Compatible": "Anthropic-kompatibel",
+  "Vendor": "Anbieter",
+  "Protocol": "Protokoll",
+  "Connection successful": "Verbindung erfolgreich"
 }

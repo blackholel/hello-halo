@@ -710,7 +710,6 @@
   "Go to model settings": "去设置模型",
   "Model setup": "模型配置",
   "Connect model first, then start in 1 minute": "先连接模型，1 分钟即可开始",
-  "Later": "稍后再说",
   "Choose provider": "选择服务商",
   "Enter API Key": "填写 API Key",
   "Save and test connection": "保存并测试连接",
@@ -724,11 +723,11 @@
   "Protocol help": "大多数国内 AI 服务商（如智谱、硅基流动、DeepSeek）都支持这两种协议，选择任意一种即可",
   "API Key help": "API 密钥是您的身份凭证，可在服务商官网的控制台获取",
   "API URL help": "通常使用默认地址即可，除非服务商提供了特殊的接入地址",
-  "Default model help": "填写您想使用的模型名称，例如：claude-3-5-sonnet-20241022 或 gpt-4",
+  "Default model help": "填写您想使用的模型名称，例如：claude-3-5-sonnet-20241022 或 gpt-5.4",
   "Where to get API Key": "如何获取 API 密钥？",
   "API Key guide": "1. 访问服务商官网并注册账号\n2. 进入控制台或开发者中心\n3. 找到「API 密钥」或「访问凭证」\n4. 创建新密钥并复制到这里",
   "Common models": "常用模型示例",
-  "Model examples": "• Claude: claude-3-5-sonnet-20241022\n• GPT: gpt-4-turbo\n• 智谱: glm-4\n• DeepSeek: deepseek-chat",
+  "Model examples": "• Claude: claude-3-5-sonnet-20241022\n• GPT: gpt-5.4\n• 智谱: glm-4.7\n• DeepSeek: deepseek-chat",
   "Just complete these three items first: protocol, API Key, and default model.": "先完成这三项即可开始：协议、API Key、默认模型。",
   "Choose protocol": "选择协议",
   "Set default model": "设置默认模型",
@@ -744,5 +743,9 @@
   "Dismiss": "关闭",
   "Switch profile and model": "切换配置与模型",
   "Advanced options": "高级选项",
-  "Return to conversation": "返回会话"
+  "Enabled": "已启用",
+  "Set as Default": "设为默认",
+  "Default": "默认",
+  "Test Connection": "测试连接",
+  "Connection successful": "连接成功"
 }

@@ -37,10 +37,11 @@ export function registerConfigHandlers(): void {
       apiKey: string,
       apiUrl: string,
       provider: string,
-      protocol?: ProviderProtocol
+      protocol?: ProviderProtocol,
+      model?: string
     ) => {
       try {
-        const result = await validateApiConnection(apiKey, apiUrl, provider, protocol)
+        const result = await validateApiConnection(apiKey, apiUrl, provider, protocol, model)
         return { success: true, data: result }
       } catch (error: unknown) {
         const err = error as Error

@@ -557,5 +557,14 @@
   "Context message": "內容上下文訊息",
   "Remove": "移除",
   "No active run found for guided update.": "目前沒有可用於引導的活動執行。",
-  "Guide update no longer matches the current run.": "此引導更新已不再匹配目前執行。"
+  "Guide update no longer matches the current run.": "此引導更新已不再匹配目前執行。",
+  "Enabled": "已啟用",
+  "Set as Default": "設為預設",
+  "Default": "預設",
+  "Test Connection": "測試連線",
+  "Anthropic Official": "Anthropic 官方",
+  "Anthropic Compatible": "Anthropic 相容",
+  "Vendor": "供應商",
+  "Protocol": "協定",
+  "Connection successful": "連線成功"
 }
