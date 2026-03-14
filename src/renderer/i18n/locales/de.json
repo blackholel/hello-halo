@@ -155,7 +155,7 @@
   "Enable Remote Access": "Fernzugriff aktivieren",
   "Enable wrap": "Umbruch aktivieren",
   "Enter Kite": "Kite betreten",
-  "Enter OpenAI compatible service URL (supports /v1/chat/completions)": "OpenAI-kompatible Dienst-URL eingeben (unterstützt /v1/chat/completions)",
+  "Enter OpenAI compatible service URL (supports /v1/chat/completions)": "OpenAI-kompatible Dienst-URL eingeben (unterstützt /chat/completions oder /responses)",
   "Enter OpenAI compatible service model name": "OpenAI-kompatiblen Dienstmodellnamen eingeben",
   "Enter URL or search Bing...": "Geben Sie URL ein oder suchen Sie mit Bing...",
   "Enter conversation title...": "Unterhaltungstitel eingeben...",

@@ -7,6 +7,7 @@ import {
   API_URL_PLACEHOLDER_BY_PROTOCOL,
   isValidOpenAICompatEndpoint,
   normalizeModelCatalog,
+  normalizeModelCatalogForDefaultModelChange,
   PROTOCOL_LABELS,
   VENDOR_LABELS
 } from './aiProfileDomain'
@@ -156,10 +157,15 @@ export function ProfileEditor({
             type="text"
             value={profile.defaultModel}
             onChange={(event) => {
+              const previousDefaultModel = profile.defaultModel
               const nextDefaultModel = event.target.value
               onUpdate({
                 defaultModel: nextDefaultModel,
-                modelCatalog: normalizeModelCatalog(nextDefaultModel, catalog)
+                modelCatalog: normalizeModelCatalogForDefaultModelChange(
+                  nextDefaultModel,
+                  previousDefaultModel,
+                  catalog
+                )
               })
             }}
             className="w-full px-4 py-2.5 input-apple text-sm"

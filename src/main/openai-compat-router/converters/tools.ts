@@ -169,10 +169,11 @@ export function budgetTokensToReasoningEffort(budgetTokens: number | undefined):
 export function convertAnthropicThinkingToOpenAIReasoning(
   thinking: { type: 'enabled' | 'disabled'; budget_tokens?: number } | undefined
 ): { enabled?: boolean; effort?: 'low' | 'medium' | 'high' } | undefined {
-  if (!thinking) return undefined
+  if (!thinking || thinking.type !== 'enabled') return undefined
 
+  // Some OpenAI-compatible gateways reject `reasoning.enabled`
+  // and only accept `reasoning.effort`.
   return {
-    enabled: thinking.type === 'enabled',
     effort: budgetTokensToReasoningEffort(thinking.budget_tokens)
   }
 }
@@ -183,10 +184,11 @@ export function convertAnthropicThinkingToOpenAIReasoning(
 export function convertAnthropicThinkingToResponsesReasoning(
   thinking: { type: 'enabled' | 'disabled'; budget_tokens?: number } | undefined
 ): { effort?: 'low' | 'medium' | 'high'; enabled?: boolean } | undefined {
-  if (!thinking) return undefined
+  if (!thinking || thinking.type !== 'enabled') return undefined
 
+  // Some OpenAI-compatible gateways reject `reasoning.enabled`
+  // and only accept `reasoning.effort`.
   return {
-    enabled: thinking.type === 'enabled',
     effort: budgetTokensToReasoningEffort(thinking.budget_tokens)
   }
 }

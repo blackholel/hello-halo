@@ -1055,7 +1055,9 @@ export async function validateApiConnection(
 
     const resolvedProtocol = resolveProtocol(provider, protocol)
 
-    const resolveOpenAIModelsUrl = (endpointUrl: string): string | null => {
+    const resolveOpenAIProbeUrls = (
+      endpointUrl: string
+    ): { endpoint: string; models: string } | null => {
       const normalizedEndpoint = trimSlash(endpointUrl.trim())
       let endpointSuffix: '/chat/completions' | '/responses' | null = null
       if (normalizedEndpoint.endsWith('/chat/completions')) {
@@ -1069,7 +1071,10 @@ export async function validateApiConnection(
       const endpointBase = trimSlash(normalizedEndpoint.slice(0, -endpointSuffix.length))
       const hasV1Segment = endpointBase.endsWith('/v1') || endpointBase.includes('/v1/')
       const baseV1 = hasV1Segment ? endpointBase : `${endpointBase}/v1`
-      return `${baseV1}/models`
+      return {
+        endpoint: normalizedEndpoint,
+        models: `${baseV1}/models`
+      }
     }
 
     const resolveAnthropicMessagesUrl = (url: string): string => {
@@ -1080,25 +1085,53 @@ export async function validateApiConnection(
       return `${normalized}/v1/messages`
     }
 
-    // OpenAI compatible validation: GET /v1/models (does not depend on user-selected model)
+    // OpenAI compatible validation:
+    // 1) Probe configured endpoint directly (POST /chat/completions or /responses).
+    //    Many gateways do not expose GET /v1/models, but endpoint probe is still enough
+    //    to verify URL/key reachability.
+    // 2) Fallback to GET /v1/models for providers that do support model listing.
     if (resolvedProtocol === 'openai_compat') {
-      const modelsUrl = resolveOpenAIModelsUrl(apiUrl)
-      if (!modelsUrl) {
+      const probeUrls = resolveOpenAIProbeUrls(apiUrl)
+      if (!probeUrls) {
         return {
           valid: false,
           message: 'OpenAI compatible API URL must end with /chat/completions or /responses'
         }
       }
 
-      const response = await fetch(modelsUrl, {
+      const endpointResponse = await fetch(probeUrls.endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        // Intentionally send minimal body as a connection probe.
+        // For /responses and /chat/completions providers, 400/422 still proves
+        // endpoint reachability with authenticated request.
+        body: '{}'
+      })
+
+      if (endpointResponse.ok || endpointResponse.status === 400 || endpointResponse.status === 422 || endpointResponse.status === 429) {
+        return { valid: true }
+      }
+
+      if (endpointResponse.status === 401 || endpointResponse.status === 403) {
+        const authErrorText = await endpointResponse.text().catch(() => '')
+        return {
+          valid: false,
+          message: authErrorText || `HTTP ${endpointResponse.status}`
+        }
+      }
+
+      const modelsResponse = await fetch(probeUrls.models, {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${apiKey}`
         }
       })
 
-      if (response.ok) {
-        const data: any = await response.json().catch(() => ({}))
+      if (modelsResponse.ok) {
+        const data: any = await modelsResponse.json().catch(() => ({}))
         const modelId =
           data?.data?.[0]?.id ||
           data?.model ||
@@ -1106,10 +1139,11 @@ export async function validateApiConnection(
         return { valid: true, model: modelId }
       }
 
-      const errorText = await response.text().catch(() => '')
+      const endpointErrorText = await endpointResponse.text().catch(() => '')
+      const modelsErrorText = await modelsResponse.text().catch(() => '')
       return {
         valid: false,
-        message: errorText || `HTTP ${response.status}`
+        message: endpointErrorText || modelsErrorText || `HTTP ${modelsResponse.status}`
       }
     }
 

@@ -155,7 +155,7 @@
   "Enable Remote Access": "啟用遠端存取",
   "Enable wrap": "啟用自動換行",
   "Enter Kite": "進入 Kite",
-  "Enter OpenAI compatible service URL (supports /v1/chat/completions)": "輸入 OpenAI 相容服務網址(支援 /v1/chat/completions)",
+  "Enter OpenAI compatible service URL (supports /v1/chat/completions)": "輸入 OpenAI 相容服務網址（支援 /chat/completions 或 /responses）",
   "Enter OpenAI compatible service model name": "輸入 OpenAI 相容服務模型名稱",
   "Enter URL or search Bing...": "輸入網址或搜尋 Bing...",
   "Enter conversation title...": "輸入對話標題...",

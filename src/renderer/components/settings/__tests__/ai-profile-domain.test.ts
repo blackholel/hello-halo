@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { ApiProfile } from '../../../types'
 import {
+  AI_PROFILE_TEMPLATES,
   isValidAnthropicCompatEndpoint,
   isValidOpenAICompatEndpoint,
   normalizeModelCatalog,
+  normalizeModelCatalogForDefaultModelChange,
   normalizeProfileForSave
 } from '../aiProfileDomain'
 
@@ -23,6 +25,12 @@ describe('ai profile domain', () => {
   it('normalizeModelCatalog should keep default model and remove duplicates', () => {
     const catalog = normalizeModelCatalog('gpt-4o-mini', [' gpt-4o-mini ', 'gpt-4.1-mini', 'gpt-4.1-mini'])
     expect(catalog).toEqual(['gpt-4o-mini', 'gpt-4.1-mini'])
+  })
+
+  it('normalizeModelCatalogForDefaultModelChange should not accumulate intermediate default model values', () => {
+    const originalCatalog = ['gpt-5.4', 'gpt-4.1', 'gpt-4o-mini']
+    const afterChange = normalizeModelCatalogForDefaultModelChange('gpt-5.3-codex', 'gpt-5.4', originalCatalog)
+    expect(afterChange).toEqual(['gpt-5.3-codex', 'gpt-4.1', 'gpt-4o-mini'])
   })
 
   it('normalizeProfileForSave should trim fields and normalize catalog', () => {
@@ -48,5 +56,15 @@ describe('ai profile domain', () => {
       modelCatalog: ['gpt-4o-mini', 'gpt-4.1-mini'],
       docUrl: 'https://docs.example.com'
     })
+  })
+
+  it('OpenAI template should support responses endpoint and common model variants', () => {
+    const openaiTemplate = AI_PROFILE_TEMPLATES.find(item => item.key === 'openai')
+    expect(openaiTemplate).toBeDefined()
+    expect(openaiTemplate?.apiUrl).toContain('/responses')
+    expect(openaiTemplate?.modelCatalog).toEqual(
+      expect.arrayContaining(['gpt-4o-mini', 'gpt-4.1-mini', 'gpt-5', 'gpt-5-codex', 'gpt-5.3-codex'])
+    )
+    expect(AI_PROFILE_TEMPLATES.some(item => item.key === 'tabcode')).toBe(false)
   })
 })

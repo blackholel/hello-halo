@@ -22,6 +22,7 @@ import {
   API_URL_PLACEHOLDER_BY_PROTOCOL,
   isValidOpenAICompatEndpoint,
   normalizeModelCatalog,
+  normalizeModelCatalogForDefaultModelChange,
   PROTOCOL_LABELS,
   VENDOR_LABELS,
   type AiProfileTemplate
@@ -314,9 +315,16 @@ export function ApiSetup() {
               type="text"
               value={defaultModel}
               onChange={(event) => {
+                const previousDefaultModel = defaultModel
                 const nextDefaultModel = event.target.value
                 setDefaultModel(nextDefaultModel)
-                setModelCatalogInput(normalizeModelCatalog(nextDefaultModel, modelCatalogInput).join(', '))
+                setModelCatalogInput(
+                  normalizeModelCatalogForDefaultModelChange(
+                    nextDefaultModel,
+                    previousDefaultModel,
+                    modelCatalogInput
+                  ).join(', ')
+                )
               }}
               className="w-full px-4 py-2.5 input-apple text-sm"
             />

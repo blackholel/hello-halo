@@ -200,7 +200,7 @@
   "Enter Kite": "Enter Kite",
   "Enter official Claude model name": "Enter official Claude model name",
   "Enter OpenAI compatible service model name": "Enter OpenAI compatible service model name",
-  "Enter OpenAI compatible service URL (supports /v1/chat/completions)": "Enter OpenAI compatible service URL (supports /v1/chat/completions)",
+  "Enter OpenAI compatible service URL (supports /v1/chat/completions)": "Enter OpenAI compatible service URL (supports /chat/completions or /responses)",
   "Enter search content, press Enter to search": "Enter search content, press Enter to search",
   "Enter URL or search Bing...": "Enter URL or search Bing...",
   "Entering application...": "Entering application...",

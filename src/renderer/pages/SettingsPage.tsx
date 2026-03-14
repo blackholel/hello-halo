@@ -22,6 +22,7 @@ import {
   isValidAnthropicCompatEndpoint,
   isValidOpenAICompatEndpoint,
   normalizeModelCatalog,
+  normalizeModelCatalogForDefaultModelChange,
   normalizeProfileForSave
 } from '../components/settings/aiProfileDomain'
 
@@ -896,10 +897,15 @@ export function SettingsPage() {
                       type="text"
                       value={selectedProfile.defaultModel}
                       onChange={(event) => {
+                        const previousDefaultModel = selectedProfile.defaultModel
                         const nextDefaultModel = event.target.value
                         updateSelectedProfile({
                           defaultModel: nextDefaultModel,
-                          modelCatalog: normalizeModelCatalog(nextDefaultModel, selectedCatalog)
+                          modelCatalog: normalizeModelCatalogForDefaultModelChange(
+                            nextDefaultModel,
+                            previousDefaultModel,
+                            selectedCatalog
+                          )
                         })
                         setValidationResult(null)
                       }}

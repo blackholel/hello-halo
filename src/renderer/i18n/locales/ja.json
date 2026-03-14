@@ -155,7 +155,7 @@
   "Enable Remote Access": "リモートアクセスを有効化",
   "Enable wrap": "折り返しを有効化",
   "Enter Kite": "Kiteに入る",
-  "Enter OpenAI compatible service URL (supports /v1/chat/completions)": "OpenAI互換サービスのURLを入力（/v1/chat/completionsをサポート）",
+  "Enter OpenAI compatible service URL (supports /v1/chat/completions)": "OpenAI互換サービスのURLを入力（/chat/completions または /responses をサポート）",
   "Enter OpenAI compatible service model name": "OpenAI互換サービスのモデル名を入力",
   "Enter URL or search Bing...": "URLを入力するか、Bingで検索...",
   "Enter conversation title...": "会話のタイトルを入力...",

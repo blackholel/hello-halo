@@ -57,7 +57,7 @@ export const AI_PROFILE_TEMPLATES: AiProfileTemplate[] = [
     protocol: 'openai_compat',
     apiUrl: 'https://api.openai.com/v1/responses',
     defaultModel: 'gpt-4o-mini',
-    modelCatalog: ['gpt-4o-mini', 'gpt-4.1-mini'],
+    modelCatalog: ['gpt-4o-mini', 'gpt-4.1-mini', 'gpt-4.1', 'gpt-4o', 'gpt-5', 'gpt-5-codex', 'gpt-5.3-codex'],
     docUrl: 'https://platform.openai.com/docs/api-reference/responses'
   },
   {
@@ -106,7 +106,7 @@ export const API_KEY_PLACEHOLDER_BY_PROTOCOL: Record<ProviderProtocol, string> =
 export const API_URL_PLACEHOLDER_BY_PROTOCOL: Record<ProviderProtocol, string> = {
   anthropic_official: 'https://api.anthropic.com',
   anthropic_compat: 'https://provider.example.com/anthropic',
-  openai_compat: 'https://provider.example.com/v1/chat/completions or /v1/responses'
+  openai_compat: 'https://provider.example.com/chat/completions or /responses'
 }
 
 export function normalizeModelCatalog(defaultModel: string, rawCatalog: string[] | string): string[] {
@@ -131,6 +131,25 @@ export function normalizeModelCatalog(defaultModel: string, rawCatalog: string[]
   }
 
   return deduped
+}
+
+export function normalizeModelCatalogForDefaultModelChange(
+  nextDefaultModel: string,
+  previousDefaultModel: string,
+  rawCatalog: string[] | string
+): string[] {
+  const previous = previousDefaultModel.trim()
+  const baseCatalog = Array.isArray(rawCatalog)
+    ? rawCatalog
+    : rawCatalog
+      .split(',')
+      .map(item => item.trim())
+
+  const filteredCatalog = previous
+    ? baseCatalog.filter(item => item.trim() !== previous)
+    : baseCatalog
+
+  return normalizeModelCatalog(nextDefaultModel, filteredCatalog)
 }
 
 export function normalizeProfileForSave(profile: ApiProfile): ApiProfile {

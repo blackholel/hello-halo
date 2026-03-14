@@ -20,7 +20,8 @@ import {
   resolveSpacesRootFromConfigDir,
   resolveSeedDir,
   getConfigPath,
-  initializeApp
+  initializeApp,
+  validateApiConnection
 } from '../../../src/main/services/config.service'
 import { getTestDir } from '../setup'
 
@@ -126,6 +127,84 @@ describe('Config Service', () => {
       const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
       expect(config.api).toBeDefined()
       expect(config.permissions).toBeDefined()
+    })
+  })
+
+  describe('validateApiConnection (openai_compat)', () => {
+    const createFetchResponse = (status: number, body: unknown = '') => ({
+      ok: status >= 200 && status < 300,
+      status,
+      json: vi.fn(async () => (typeof body === 'string' ? {} : body)),
+      text: vi.fn(async () => (typeof body === 'string' ? body : JSON.stringify(body)))
+    })
+
+    afterEach(() => {
+      vi.restoreAllMocks()
+      vi.unstubAllGlobals()
+    })
+
+    it('should treat 400 from configured endpoint as valid for openai_compat', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        createFetchResponse(400, { detail: 'Input must be a list' })
+      )
+      vi.stubGlobal('fetch', fetchMock as any)
+
+      const result = await validateApiConnection(
+        'sk-test',
+        'https://api.tabcode.cc/openai/responses',
+        'openai_compat',
+        'openai_compat'
+      )
+
+      expect(result.valid).toBe(true)
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://api.tabcode.cc/openai/responses',
+        expect.objectContaining({
+          method: 'POST'
+        })
+      )
+    })
+
+    it('should fail fast on 401 from configured endpoint', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        createFetchResponse(401, 'Missing or invalid API Key')
+      )
+      vi.stubGlobal('fetch', fetchMock as any)
+
+      const result = await validateApiConnection(
+        'sk-bad',
+        'https://api.tabcode.cc/openai/responses',
+        'openai_compat',
+        'openai_compat'
+      )
+
+      expect(result.valid).toBe(false)
+      expect(result.message).toContain('Missing or invalid API Key')
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('should fallback to /models when endpoint probe fails', async () => {
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(createFetchResponse(404, 'Cannot POST /openai/responses'))
+        .mockResolvedValueOnce(createFetchResponse(200, { data: [{ id: 'gpt-5.3-codex' }] }))
+      vi.stubGlobal('fetch', fetchMock as any)
+
+      const result = await validateApiConnection(
+        'sk-test',
+        'https://api.tabcode.cc/openai/responses',
+        'openai_compat',
+        'openai_compat'
+      )
+
+      expect(result.valid).toBe(true)
+      expect(result.model).toBe('gpt-5.3-codex')
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        2,
+        'https://api.tabcode.cc/openai/v1/models',
+        expect.objectContaining({ method: 'GET' })
+      )
     })
   })
 

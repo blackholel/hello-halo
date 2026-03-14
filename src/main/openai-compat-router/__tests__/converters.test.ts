@@ -156,7 +156,6 @@ describe('Request Converters', () => {
       const result = convertAnthropicToOpenAIChat(request)
 
       expect(result.request.reasoning).toEqual({
-        enabled: true,
         effort: 'high'
       })
     })

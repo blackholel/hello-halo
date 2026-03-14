@@ -160,7 +160,7 @@
   "Enable Remote Access": "启用远程访问",
   "Enable wrap": "启用换行",
   "Enter Kite": "进入 Kite",
-  "Enter OpenAI compatible service URL (supports /v1/chat/completions)": "输入 OpenAI 兼容服务 URL(支持 /v1/chat/completions)",
+  "Enter OpenAI compatible service URL (supports /v1/chat/completions)": "输入 OpenAI 兼容服务 URL（支持 /chat/completions 或 /responses）",
   "Enter OpenAI compatible service model name": "输入 OpenAI 兼容服务模型名称",
   "Enter URL or search Bing...": "输入网址或搜索必应...",
   "Enter conversation title...": "输入对话标题...",
