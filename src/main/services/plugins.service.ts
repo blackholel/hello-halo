@@ -5,8 +5,8 @@
  * - Kite mode: ~/.kite
  */
 
-import { join } from 'path'
-import { existsSync, readFileSync, statSync } from 'fs'
+import { basename, join } from 'path'
+import { existsSync, readdirSync, readFileSync, statSync } from 'fs'
 import { isPathWithinBasePaths, isValidDirectoryPath } from '../utils/path-validation'
 import { FileCache } from '../utils/file-cache'
 import { getLockedConfigSourceMode, getLockedUserConfigRootDir } from './config-source-mode.service'
@@ -89,6 +89,111 @@ function getInstalledPluginRegistryPaths(): string[] {
   return existsSync(registryPath) ? [registryPath] : []
 }
 
+function isAllowedPluginInstallPath(installPath: string, allowedBase: string): boolean {
+  if (!isPathWithinBasePaths(installPath, [allowedBase])) {
+    return false
+  }
+  return isValidDirectoryPath(installPath, 'Plugins')
+}
+
+function resolveVersionedCacheInstallPath(cachePluginRoot: string): { installPath: string; version: string } | null {
+  if (!isValidDirectoryPath(cachePluginRoot, 'Plugins')) return null
+
+  const candidates = readdirSync(cachePluginRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => join(cachePluginRoot, entry.name))
+    .filter((candidatePath) => isValidDirectoryPath(candidatePath, 'Plugins'))
+
+  if (candidates.length === 0) {
+    return {
+      installPath: cachePluginRoot,
+      version: 'unknown'
+    }
+  }
+
+  const sortedByMtime = candidates
+    .map((candidatePath) => {
+      let mtimeMs = 0
+      try {
+        mtimeMs = statSync(candidatePath).mtimeMs
+      } catch {
+        // Ignore stat failures and keep default.
+      }
+      return { candidatePath, mtimeMs }
+    })
+    .sort((a, b) => b.mtimeMs - a.mtimeMs)
+
+  const selectedPath = sortedByMtime[0].candidatePath
+  return {
+    installPath: selectedPath,
+    version: basename(selectedPath)
+  }
+}
+
+function resolveEnabledPluginInstallPath(
+  name: string,
+  marketplace: string,
+  allowedBase: string
+): { installPath: string; version: string } | null {
+  const directPath = join(allowedBase, name)
+  if (isAllowedPluginInstallPath(directPath, allowedBase)) {
+    return {
+      installPath: directPath,
+      version: 'unknown'
+    }
+  }
+
+  const cachePluginRoot = join(allowedBase, 'cache', marketplace, name)
+  const cacheResolution = resolveVersionedCacheInstallPath(cachePluginRoot)
+  if (cacheResolution && isAllowedPluginInstallPath(cacheResolution.installPath, allowedBase)) {
+    return cacheResolution
+  }
+
+  const marketplacePluginPath = join(allowedBase, 'marketplaces', marketplace, 'plugins', name)
+  if (isAllowedPluginInstallPath(marketplacePluginPath, allowedBase)) {
+    return {
+      installPath: marketplacePluginPath,
+      version: 'unknown'
+    }
+  }
+
+  return null
+}
+
+function recoverEnabledPluginsFromFilesystem(installedPlugins: PluginInfo[], allowedBase: string): PluginInfo[] {
+  const { map, hasConfig } = getEnabledPluginsFromActiveSettings()
+  if (!hasConfig) return installedPlugins
+
+  const existingFullNames = new Set(installedPlugins.map((plugin) => plugin.fullName))
+  const recoveredPlugins: PluginInfo[] = []
+
+  for (const [fullName, enabled] of Object.entries(map)) {
+    if (enabled !== true) continue
+    if (existingFullNames.has(fullName)) continue
+    if (isExcludedPluginFullName(fullName)) continue
+
+    const [name, marketplace] = fullName.split('@')
+    if (!name || !marketplace) continue
+
+    const resolved = resolveEnabledPluginInstallPath(name, marketplace, allowedBase)
+    if (!resolved) continue
+
+    recoveredPlugins.push({
+      name,
+      marketplace,
+      fullName,
+      version: resolved.version,
+      installPath: resolved.installPath,
+      scope: 'user'
+    })
+    existingFullNames.add(fullName)
+    console.warn(`[Plugins] Recovered enabled plugin from filesystem: ${fullName} -> ${resolved.installPath}`)
+  }
+
+  if (recoveredPlugins.length === 0) return installedPlugins
+  return [...installedPlugins, ...recoveredPlugins]
+}
+
 /**
  * Load plugins from a single registry file
  */
@@ -162,19 +267,21 @@ function getCombinedMtime(paths: string[]): number {
 export function loadInstalledPlugins(): PluginInfo[] {
   const mode = getLockedConfigSourceMode()
   const registryPaths = getInstalledPluginRegistryPaths()
-  if (registryPaths.length === 0) {
-    return []
-  }
+  const settingsPath = getSettingsPath()
+  const allowedBase = join(getLockedUserConfigRootDir(), 'plugins')
 
-  const signature = `${mode}|${registryPaths.join('|')}|${getSettingsPath()}`
+  const signature = `${mode}|${registryPaths.join('|')}|${settingsPath}`
 
   // Check cache
-  const currentMtime = getCombinedMtime(registryPaths)
+  const currentMtime = getCombinedMtime([...registryPaths, settingsPath])
   if (pluginsCache && pluginsCache.mtime === currentMtime && pluginsCache.signature === signature) {
     return pluginsCache.plugins
   }
 
-  const allPlugins = loadPluginsFromRegistry(registryPaths[0])
+  const pluginsFromRegistry = registryPaths.length > 0
+    ? loadPluginsFromRegistry(registryPaths[0])
+    : []
+  const allPlugins = recoverEnabledPluginsFromFilesystem(pluginsFromRegistry, allowedBase)
 
   pluginsCache = { plugins: allPlugins, mtime: currentMtime, signature }
 

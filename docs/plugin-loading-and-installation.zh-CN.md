@@ -108,6 +108,34 @@
 3. `installPath` 指向 symlink 会被安全校验拒绝。
 4. `settings.json.enabledPlugins` 一旦存在，只有显式 `true` 的插件会被加载；缺失项默认不会启用。
 
+## 5.1 故障规则：`Enabled plugins not installed` 持续刷屏
+
+典型日志：
+
+```text
+[Plugins] Enabled plugins not installed: superpowers@superpowers-dev, demo-plugin@demo-market
+```
+
+这类问题通常不是“插件目录没了”，而是“`installed_plugins.json` 记录和真实目录失配”：
+
+1. `settings.json.enabledPlugins` 里开着插件；
+2. `plugins/installed_plugins.json` 缺失对应条目，或条目 `installPath` 无效；
+3. 结果是 enabled 集合与 installed 集合长期不一致，日志反复告警。
+
+从 `2026-03-13` 起，运行时增加了自愈回退规则（`plugins.service.ts`）：
+
+1. 当注册表条目缺失/失效时，按 `enabledPlugins` 到文件系统回补安装项；
+2. 回补路径优先级：
+   - `~/.kite/plugins/<name>`
+   - `~/.kite/plugins/cache/<marketplace>/<name>/<version>`
+   - `~/.kite/plugins/marketplaces/<marketplace>/plugins/<name>`
+3. 仍然保留安全约束：必须位于 `~/.kite/plugins` 下，且必须是真实目录（非 symlink）。
+
+处理建议：
+
+1. 先修复/重建 `installed_plugins.json`，回到“注册表和磁盘一致”的状态；
+2. 回退逻辑用于兜底，避免因为注册表脏数据把正常插件全拦掉。
+
 ## 6. 预置插件首启注入规则（新安装）
 
 1. 首启注入是一次性的（写入 `~/.kite/.seed-state.json` 后不再重复）。
