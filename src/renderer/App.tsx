@@ -37,6 +37,7 @@ import type {
 // These pages contain complex components (chat, markdown, code highlighting, etc.)
 const HomePage = lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })))
 const SpacePage = lazy(() => import('./pages/SpacePage').then(m => ({ default: m.SpacePage })))
+const UnifiedPage = lazy(() => import('./pages/UnifiedPage').then(m => ({ default: m.UnifiedPage })))
 const SettingsPage = lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })))
 
 // Page loading fallback - minimal spinner that matches app style
@@ -608,6 +609,12 @@ export default function App() {
         return (
           <Suspense fallback={<PageLoader />}>
             <SpacePage />
+          </Suspense>
+        )
+      case 'unified':
+        return (
+          <Suspense fallback={<PageLoader />}>
+            <UnifiedPage />
           </Suspense>
         )
       case 'settings':

@@ -424,11 +424,68 @@ export function ChatTabViewer({ tab }: ChatTabViewerProps) {
 // Empty state for chat tab
 function EmptyState() {
   const { t } = useTranslation()
+  const capabilities = [
+    { icon: '💻', title: t('Programming Development') },
+    { icon: '📄', title: t('File Processing') },
+    { icon: '🔍', title: t('Information Retrieval') },
+    { icon: '✨', title: t('Content Creation') },
+  ]
+
   return (
-    <div className="h-full flex flex-col items-center justify-center text-center px-4">
-      <Sparkles className="w-8 h-8 text-primary/70" />
-      <p className="mt-4 text-sm text-muted-foreground">
-        {t('Ask Kite anything, / for commands')}
+    <div className="h-full flex flex-col items-center justify-center text-center px-4 relative">
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-[24%] left-1/2 -translate-x-1/2 w-52 h-52 rounded-full bg-foreground/5 blur-3xl" />
+        <div className="absolute bottom-[20%] left-1/2 -translate-x-1/2 w-72 h-28 rounded-full bg-[hsl(var(--space-accent)/0.08)] blur-3xl" />
+      </div>
+
+      <div className="relative mb-7 space-studio-reveal" style={{ animationDelay: '0ms' }}>
+        <div className="w-16 h-16 rounded-[28px] border border-border/80 bg-background/75 shadow-[0_18px_32px_rgba(24,22,20,0.12)] flex items-center justify-center">
+          <Sparkles className="w-7 h-7 text-foreground/90" />
+        </div>
+        <div className="absolute -inset-3 rounded-[2.2rem] border border-border/40 animate-pulse-gentle" />
+      </div>
+
+      <p className="space-studio-empty-badge text-[11px] tracking-[0.36em] uppercase text-muted-foreground/70 space-studio-reveal" style={{ animationDelay: '30ms' }}>
+        Workspace
+      </p>
+
+      <h2
+        className="mt-3 leading-none font-semibold tracking-tight text-foreground space-studio-reveal text-[34px]"
+        style={{ animationDelay: '80ms' }}
+      >
+        {t('Ready to start')}
+      </h2>
+
+      <p
+        className="mt-2 font-medium text-muted-foreground/80 space-studio-reveal text-xl"
+        style={{ animationDelay: '120ms' }}
+      >
+        {t('Kite Space')}
+      </p>
+
+      <p className="mt-4 text-sm text-muted-foreground max-w-md leading-relaxed space-studio-reveal" style={{ animationDelay: '160ms' }}>
+        {t('Kite, not just chat, can help you get things done')}
+      </p>
+
+      <div className="mt-8 flex flex-wrap items-center justify-center gap-2.5 max-w-xl space-studio-reveal" style={{ animationDelay: '220ms' }}>
+        {capabilities.map((cap, i) => (
+          <div key={i} className="space-studio-chip !cursor-default rounded-full px-3.5 py-2.5 text-left">
+            <span className="text-xs text-muted-foreground/90">
+              <span className="mr-1.5">{cap.icon}</span>
+              <span className="font-medium">{cap.title}</span>
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-8 space-studio-reveal" style={{ animationDelay: '260ms' }}>
+        <p className="text-[11px] tracking-[0.16em] uppercase text-muted-foreground/60">
+          {t('Powered by Claude Code with full Agent capabilities')}
+        </p>
+      </div>
+
+      <p className="mt-3 text-[11px] text-muted-foreground/45 space-studio-reveal" style={{ animationDelay: '300ms' }}>
+        {t('Kite has full access to the current space')}
       </p>
     </div>
   )

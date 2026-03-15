@@ -21,6 +21,11 @@ import type { Space, CreateSpaceInput, SpaceIconId, DirectiveRef } from '../type
 import { formatDirectiveName } from '../utils/directive-helpers'
 import { resolveSpacePathKind, shortenDisplayPath } from '../utils/space-path'
 import {
+  persistWorkspaceViewMode,
+  readWorkspaceViewMode,
+  type WorkspaceViewMode
+} from '../utils/workspace-view-mode'
+import {
   SpaceIcon,
   Sparkles,
   Plus,
@@ -169,6 +174,7 @@ export function HomePage(): JSX.Element {
   const [showHomeOnboardingDialog, setShowHomeOnboardingDialog] = useState(false)
   const [showModelSetupHint, setShowModelSetupHint] = useState(true)
   const [createSpaceSuccessPath, setCreateSpaceSuccessPath] = useState<string | null>(null)
+  const [preferredWorkspaceView, setPreferredWorkspaceView] = useState<WorkspaceViewMode>(() => readWorkspaceViewMode())
   const aiSetupState = useMemo(() => getAiSetupState(config), [config])
   const createSpacePathPreview = useMemo(() => {
     if (useCustomPath && customPath) return customPath
@@ -462,17 +468,25 @@ export function HomePage(): JSX.Element {
     setCustomPath(null)
   }
 
+  const applyPreferredWorkspaceView = useCallback((mode: WorkspaceViewMode) => {
+    setPreferredWorkspaceView(mode)
+    persistWorkspaceViewMode(mode)
+  }, [])
+
+  const openSpaceByPreference = useCallback((space: Space) => {
+    setCurrentSpace(space)
+    setView(preferredWorkspaceView === 'unified' ? 'unified' : 'space')
+  }, [preferredWorkspaceView, setCurrentSpace, setView])
+
   // Handle space click
   const handleSpaceClick = (space: Space): void => {
-    setCurrentSpace(space)
-    setView('space')
+    openSpaceByPreference(space)
   }
 
   const handleQuickAction = (prompt: string): void => {
     requestInsert(prompt)
     if (kiteSpace) {
-      setCurrentSpace(kiteSpace)
-      setView('space')
+      openSpaceByPreference(kiteSpace)
       return
     }
     setShowCreateDialog(true)
@@ -923,13 +937,39 @@ export function HomePage(): JSX.Element {
                   <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     {t('Recent work')}
                   </h3>
-                  <button
-                    onClick={() => setShowCreateDialog(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-foreground hover:bg-secondary rounded-xl transition-all duration-200 font-medium"
-                  >
-                    <Plus className="w-4 h-4" />
-                    {t('New')}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center rounded-lg border border-border/80 bg-card/70 p-0.5">
+                      <button
+                        onClick={() => applyPreferredWorkspaceView('classic')}
+                        className={`px-2.5 py-1 text-xs rounded-md transition-colors ${
+                          preferredWorkspaceView === 'classic'
+                            ? 'bg-secondary text-foreground'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                        title={t('Open spaces in current-space view')}
+                      >
+                        {t('Current space')}
+                      </button>
+                      <button
+                        onClick={() => applyPreferredWorkspaceView('unified')}
+                        className={`px-2.5 py-1 text-xs rounded-md transition-colors ${
+                          preferredWorkspaceView === 'unified'
+                            ? 'bg-secondary text-foreground'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                        title={t('Open spaces in all-spaces view')}
+                      >
+                        {t('All spaces')}
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => setShowCreateDialog(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-foreground hover:bg-secondary rounded-xl transition-all duration-200 font-medium"
+                    >
+                      <Plus className="w-4 h-4" />
+                      {t('New')}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Space Guide */}

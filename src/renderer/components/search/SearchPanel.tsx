@@ -21,6 +21,7 @@ import { useChatStore } from '@/stores/chat.store'
 import { useSpaceStore } from '@/stores/space.store'
 import { useSearchStore } from '@/stores/search.store'
 import { useTranslation } from '@/i18n'
+import { navigateToConversationContext } from '@/utils/space-conversation-navigation'
 import { shallow } from 'zustand/shallow'
 
 export type SearchScope = 'conversation' | 'space' | 'global'
@@ -94,7 +95,7 @@ export function SearchPanel({ isOpen, onClose }: SearchPanelProps) {
     currentSpaceId,
     currentConversationId,
     selectConversation,
-    setCurrentSpace,
+    setCurrentSpace: setChatCurrentSpace,
     loadConversations
   } = useChatStore((state) => ({
     currentSpaceId: state.currentSpaceId,
@@ -274,42 +275,24 @@ export function SearchPanel({ isOpen, onClose }: SearchPanelProps) {
     try {
       if (!isTaskActive()) return
 
-      // Step 1: If switching spaces, update BOTH stores to keep UI and chat state in sync
-      if (result.spaceId !== currentSpaceId) {
-        console.log(`[Search] Switching to space: ${result.spaceId}`)
-
-        // Find the space object
-        let targetSpace = null
-        if (result.spaceId === 'kite-temp' && kiteSpace) {
-          targetSpace = kiteSpace
-        } else {
-          targetSpace = spaces.find(s => s.id === result.spaceId)
-        }
-
-        if (!targetSpace) {
-          console.error(`[Search] Space not found: ${result.spaceId}`)
-          return
-        }
-
-        // Update spaceStore (this will trigger UI updates)
-        if (!isTaskActive()) return
-        console.log(`[Search] Updating spaceStore.currentSpace to: ${targetSpace.name}`)
-        setSpaceStoreCurrentSpace(targetSpace)
-
-        // Update chatStore currentSpaceId
-        console.log(`[Search] Updating chatStore.currentSpaceId to: ${result.spaceId}`)
-        setCurrentSpace(result.spaceId)
+      // Step 1-3: Switch space + load conversations + select conversation
+      console.log(`[Search] Navigating to space/conversation: space=${result.spaceId}, conv=${result.conversationId}`)
+      const navigationResult = await navigateToConversationContext({
+        targetSpaceId: result.spaceId,
+        targetConversationId: result.conversationId,
+        currentSpaceId,
+        spaces,
+        kiteSpace,
+        setSpaceStoreCurrentSpace,
+        setChatCurrentSpace,
+        loadConversations,
+        selectConversation,
+        shouldContinue: isTaskActive
+      })
+      if (!navigationResult.success) {
+        console.error('[Search] Navigation failed:', navigationResult.error)
+        return
       }
-
-      // Step 2: Load conversations in the target space
-      console.log(`[Search] Loading conversations in space: ${result.spaceId}`)
-      await loadConversations(result.spaceId)
-      if (!isTaskActive()) return
-      console.log(`[Search] Conversations loaded`)
-
-      // Step 3: Navigate to conversation
-      console.log(`[Search] Selecting conversation: ${result.conversationId}`)
-      await selectConversation(result.conversationId)
       if (!isTaskActive()) return
       console.log(`[Search] Conversation selected`)
 

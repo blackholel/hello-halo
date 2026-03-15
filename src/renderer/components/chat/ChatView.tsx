@@ -579,7 +579,6 @@ export function ChatView({ isCompact = false }: ChatViewProps) {
             <LoadingState />
           ) : !hasMessages ? (
             <EmptyState
-              isTemp={currentSpace?.isTemp || false}
               isCompact={isCompact}
               isAiConfigured={aiSetupState.configured}
               onOpenSettings={() => setView('settings')}
@@ -739,12 +738,10 @@ function LoadingState() {
 
 // Empty state component - Editorial workspace style
 function EmptyState({
-  isTemp,
   isCompact = false,
   isAiConfigured,
   onOpenSettings
 }: {
-  isTemp: boolean
   isCompact?: boolean
   isAiConfigured: boolean
   onOpenSettings: () => void
@@ -772,19 +769,6 @@ function EmptyState({
     )
   }
 
-  if (isCompact) {
-    return (
-      <div className="h-full flex flex-col items-center justify-center text-center px-4">
-        <div className="w-11 h-11 rounded-2xl border border-border/70 bg-background/80 flex items-center justify-center">
-          <Sparkles className="w-5 h-5 text-foreground/80" />
-        </div>
-        <p className="mt-3 text-sm text-muted-foreground/90">
-          {t('Ask Kite anything, / for commands')}
-        </p>
-      </div>
-    )
-  }
-
   const capabilities = [
     { icon: '💻', title: t('Programming Development') },
     { icon: '📄', title: t('File Processing') },
@@ -793,15 +777,23 @@ function EmptyState({
   ]
 
   return (
-    <div className="h-full flex flex-col items-center justify-center text-center px-8 relative">
+    <div className={`h-full flex flex-col items-center justify-center text-center relative ${
+      isCompact ? 'px-4' : 'px-8'
+    }`}>
       <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-[24%] left-1/2 -translate-x-1/2 w-80 h-80 rounded-full bg-foreground/5 blur-3xl" />
-        <div className="absolute bottom-[20%] left-1/2 -translate-x-1/2 w-96 h-40 rounded-full bg-[hsl(var(--space-accent)/0.08)] blur-3xl" />
+        <div className={`absolute top-[24%] left-1/2 -translate-x-1/2 rounded-full bg-foreground/5 blur-3xl ${
+          isCompact ? 'w-52 h-52' : 'w-80 h-80'
+        }`} />
+        <div className={`absolute bottom-[20%] left-1/2 -translate-x-1/2 rounded-full bg-[hsl(var(--space-accent)/0.08)] blur-3xl ${
+          isCompact ? 'w-72 h-28' : 'w-96 h-40'
+        }`} />
       </div>
 
       <div className="relative mb-7 space-studio-reveal" style={{ animationDelay: '0ms' }}>
-        <div className="w-20 h-20 rounded-[28px] border border-border/80 bg-background/75 shadow-[0_18px_32px_rgba(24,22,20,0.12)] flex items-center justify-center">
-          <Sparkles className="w-9 h-9 text-foreground/90" />
+        <div className={`rounded-[28px] border border-border/80 bg-background/75 shadow-[0_18px_32px_rgba(24,22,20,0.12)] flex items-center justify-center ${
+          isCompact ? 'w-16 h-16' : 'w-20 h-20'
+        }`}>
+          <Sparkles className={`${isCompact ? 'w-7 h-7' : 'w-9 h-9'} text-foreground/90`} />
         </div>
         <div className="absolute -inset-3 rounded-[2.2rem] border border-border/40 animate-pulse-gentle" />
       </div>
@@ -810,18 +802,23 @@ function EmptyState({
         Workspace
       </p>
 
-      <h2 className="mt-3 text-[44px] leading-none font-semibold tracking-tight text-foreground space-studio-reveal" style={{ animationDelay: '80ms' }}>
+      <h2
+        className={`mt-3 leading-none font-semibold tracking-tight text-foreground space-studio-reveal ${
+          isCompact ? 'text-[34px]' : 'text-[44px]'
+        }`}
+        style={{ animationDelay: '80ms' }}
+      >
         {t('Ready to start')}
       </h2>
 
-      <p className="mt-2 text-2xl font-medium text-muted-foreground/80 space-studio-reveal" style={{ animationDelay: '120ms' }}>
-        {isTemp ? 'kite' : t('Kite Space')}
+      <p className={`mt-2 font-medium text-muted-foreground/80 space-studio-reveal ${
+        isCompact ? 'text-xl' : 'text-2xl'
+      }`} style={{ animationDelay: '120ms' }}>
+        {t('Kite Space')}
       </p>
 
       <p className="mt-4 text-sm text-muted-foreground max-w-md leading-relaxed space-studio-reveal" style={{ animationDelay: '160ms' }}>
-        {isTemp
-          ? t('Aimless time, ideas will crystallize here')
-          : t('Kite, not just chat, can help you get things done')}
+        {t('Kite, not just chat, can help you get things done')}
       </p>
 
       <div className="mt-8 flex flex-wrap items-center justify-center gap-2.5 max-w-xl space-studio-reveal" style={{ animationDelay: '220ms' }}>

@@ -788,7 +788,7 @@ export type AgentEvent =
 // App State Types
 // ============================================
 
-export type AppView = 'splash' | 'gitBashSetup' | 'setup' | 'home' | 'space' | 'settings';
+export type AppView = 'splash' | 'gitBashSetup' | 'setup' | 'home' | 'space' | 'unified' | 'settings';
 
 export interface AppState {
   view: AppView;

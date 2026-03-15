@@ -37,6 +37,7 @@ import { shallow } from 'zustand/shallow'
 import { SearchIcon } from '../components/search/SearchIcon'
 import { useSearchShortcuts } from '../hooks/useSearchShortcuts'
 import { useTranslation } from '../i18n'
+import { persistWorkspaceViewMode } from '../utils/workspace-view-mode'
 import { SkillDetailModal } from '../components/skills/SkillDetailModal'
 import { SkillEditorModal } from '../components/skills/SkillEditorModal'
 import { AgentDetailModal } from '../components/agents/AgentDetailModal'
@@ -515,6 +516,10 @@ export function SpacePage() {
     localStorage.setItem('kite-layout-mode', layoutMode)
   }, [layoutMode])
 
+  useEffect(() => {
+    persistWorkspaceViewMode('classic')
+  }, [])
+
   // Canvas state - use precise selectors to minimize re-renders
   const isCanvasOpen = useCanvasIsOpen()
   const isCanvasMaximized = useCanvasIsMaximized()
@@ -986,6 +991,27 @@ export function SpacePage() {
                 <Columns2 className="w-[18px] h-[18px]" />
               )}
             </button>
+
+            <div className="flex items-center rounded-lg border border-border/80 bg-card/70 p-0.5">
+              <button
+                className="px-2.5 py-1 text-xs rounded-md bg-secondary text-foreground"
+                title={t('Current space')}
+                aria-label={t('Current space')}
+              >
+                {t('Current space')}
+              </button>
+              <button
+                onClick={() => {
+                  persistWorkspaceViewMode('unified')
+                  setView('unified')
+                }}
+                className="px-2.5 py-1 text-xs rounded-md text-muted-foreground hover:text-foreground transition-colors"
+                title={t('All spaces')}
+                aria-label={t('All spaces')}
+              >
+                {t('All spaces')}
+              </button>
+            </div>
 
             {/* Settings */}
             <button
